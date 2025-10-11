@@ -219,7 +219,7 @@ def write_model(
         params = json.load(f)
 
     params = params.get("model", params)
-    torch_dtype = "bfloat16"
+    dtype = "bfloat16"
 
     # ------------------------------------------------------------
     # Text model params and config
@@ -285,7 +285,7 @@ def write_model(
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
         tie_word_embeddings=False,  # Constant set to False
-        torch_dtype=torch_dtype,
+        dtype=dtype,
     )
 
     # ------------------------------------------------------------
@@ -323,11 +323,11 @@ def write_model(
         image_size=vision_tile_size,
         max_num_tiles=vision_max_num_tiles,
         supported_aspect_ratios=vision_supported_aspect_ratios,
-        torch_dtype=torch_dtype,
+        dtype=dtype,
     )
 
     # save config
-    config = MllamaConfig(vision_config=vision_config, text_config=text_config, torch_dtype=torch_dtype)
+    config = MllamaConfig(vision_config=vision_config, text_config=text_config, dtype=dtype)
     config.architectures = ["MllamaForConditionalGeneration"]
     config.save_pretrained(model_path)
     print("Model config saved successfully...")
@@ -454,7 +454,7 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    MllamaForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    MllamaForConditionalGeneration.from_pretrained(model_path, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
     # generation config
@@ -496,7 +496,7 @@ class MllamaConverter(TikTokenConverter):
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     model_max_length = CONTEXT_LENGTH
-    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"  # noqa: W605
+    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"
 
     # Special tokens
     num_reserved_special_tokens = 256

@@ -21,7 +21,8 @@
 
 import math
 import warnings
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -36,7 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from .configuration_sew import SEWConfig
 
 
@@ -237,22 +238,21 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
-
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -298,7 +298,6 @@ class SEWAttention(nn.Module):
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
@@ -337,7 +336,6 @@ class SEWAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             output_attentions=output_attentions,
-            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -529,8 +527,6 @@ class SEWPreTrainedModel(PreTrainedModel):
             )
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()

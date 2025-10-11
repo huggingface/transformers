@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import AutoTokenizer, MobileBertConfig, MobileBertForMaskedLM, is_torch_available
@@ -282,7 +283,7 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # won't be maintained
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -360,7 +361,9 @@ TOLERANCE = 1e-3
 class MobileBertModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = MobileBertModel.from_pretrained("google/mobilebert-uncased").to(torch_device)
+        model = MobileBertModel.from_pretrained("google/mobilebert-uncased", attn_implementation="eager").to(
+            torch_device
+        )
         input_ids = _long_tensor([[101, 7110, 1005, 1056, 2023, 11333, 17413, 1029, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
@@ -386,10 +389,13 @@ class MobileBertModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(lower_bound and upper_bound)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        from transformers.integrations.executorch import TorchExportableModuleForEncoderOnlyLM
 
         mobilebert_model = "google/mobilebert-uncased"
         device = "cpu"
@@ -414,13 +420,15 @@ class MobileBertModelIntegrationTests(unittest.TestCase):
         eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
         self.assertEqual(eg_predicted_mask.split(), ["carpenter", "waiter", "mechanic", "teacher", "clerk"])
 
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
+        exportable_module = TorchExportableModuleForEncoderOnlyLM(model)
+        exported_program = exportable_module.export(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
             strict=True,
         )
 
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        result = exported_program.module().forward(
+            input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
+        )
         ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
         self.assertEqual(eg_predicted_mask, ep_predicted_mask)

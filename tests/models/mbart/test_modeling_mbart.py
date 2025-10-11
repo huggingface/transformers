@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import MBartConfig, is_torch_available
 from transformers.testing_utils import (
@@ -26,7 +27,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -232,7 +232,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     is_encoder_decoder = True
     fx_compatible = False  # Fix me Michael
-    test_pruning = False
+
     test_missing_keys = False
 
     # TODO: Fix the failed tests
@@ -713,7 +713,7 @@ class MBartStandaloneDecoderModelTester:
 @require_torch
 class MBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MBartDecoder, MBartForCausalLM) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(

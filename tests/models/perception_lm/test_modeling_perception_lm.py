@@ -19,6 +19,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     PerceptionLMConfig,
     PerceptionLMForConditionalGeneration,
     PerceptionLMModel,
@@ -177,8 +178,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         if is_torch_available()
         else ()
     )
-    test_pruning = False
-    test_head_masking = False
+
     _is_composite = True
 
     def setUp(self):
@@ -253,6 +253,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
             if model_class == PerceptionLMModel:
                 continue
             model = model_class(config).to(torch_device)
+            model.eval()
             _ = model(**input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
@@ -293,10 +294,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_can_init_all_missing_weights(self):
         pass
 
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(
         reason="PE/TIMM's attention implementation is self configured and won't raise ValueError on global attention implementation."
     )
@@ -311,10 +308,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
     @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
     def test_can_be_initialized_on_meta(self):
-        pass
-
-    @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
-    def test_can_load_with_meta_device_context_manager(self):
         pass
 
     @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
@@ -426,7 +419,7 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test(self):
         model = PerceptionLMForConditionalGeneration.from_pretrained(
-            TEST_MODEL_PATH, load_in_4bit=True, cache_dir="./"
+            TEST_MODEL_PATH, quantization_config=BitsAndBytesConfig(load_in_4bit=True), cache_dir="./"
         )
 
         inputs = self.processor.apply_chat_template(
@@ -436,7 +429,6 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            video_load_backend="decord",
             padding=True,
             padding_side="left",
         ).to(torch_device)
@@ -453,7 +445,9 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batched(self):
-        model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
+        model = PerceptionLMForConditionalGeneration.from_pretrained(
+            TEST_MODEL_PATH, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
         inputs = processor.apply_chat_template(
             [self.conversation1, self.conversation2],
@@ -462,7 +456,6 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            video_load_backend="decord",
             padding=True,
             padding_side="left",
         ).to(torch_device)
@@ -480,7 +473,9 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def test_generation_no_images(self):
         # model_id = "facebook/Perception-LM-1B"
-        model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
+        model = PerceptionLMForConditionalGeneration.from_pretrained(
+            TEST_MODEL_PATH, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
 
         # Prepare inputs with no images

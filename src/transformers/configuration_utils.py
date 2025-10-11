@@ -46,11 +46,11 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-# type hinting: specifying the type of config class that inherits from PretrainedConfig
-SpecificPretrainedConfigType = TypeVar("SpecificPretrainedConfigType", bound="PretrainedConfig")
+# type hinting: specifying the type of config class that inherits from PreTrainedConfig
+SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="PreTrainedConfig")
 
 
-class PretrainedConfig(PushToHubMixin):
+class PreTrainedConfig(PushToHubMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -70,7 +70,7 @@ class PretrainedConfig(PushToHubMixin):
     - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
       Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
       (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
-      two or more configs of type [`~transformers.PretrainedConfig`].
+      two or more configs of type [`~transformers.PreTrainedConfig`].
     - **keys_to_ignore_at_inference** (`list[str]`) -- A list of keys to ignore by default when looking at dictionary
       outputs of the model during inference.
     - **attribute_map** (`dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
@@ -100,9 +100,8 @@ class PretrainedConfig(PushToHubMixin):
 
     Arg:
         name_or_path (`str`, *optional*, defaults to `""`):
-            Store the string that was passed to [`PreTrainedModel.from_pretrained`] or
-            [`TFPreTrainedModel.from_pretrained`] as `pretrained_model_name_or_path` if the configuration was created
-            with such a method.
+            Store the string that was passed to [`PreTrainedModel.from_pretrained`] as `pretrained_model_name_or_path`
+            if the configuration was created with such a method.
         output_hidden_states (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return all hidden-states.
         output_attentions (`bool`, *optional*, defaults to `False`):
@@ -124,11 +123,6 @@ class PretrainedConfig(PushToHubMixin):
         tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
-        prune_heads (`dict[int, list[int]]`, *optional*, defaults to `{}`):
-            Pruned heads of the model. The keys are the selected layer indices and the associated values, the list of
-            heads to prune in said layer.
-
-            For instance `{1: [0, 2], 2: [2, 3]}` will prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
         chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
@@ -140,8 +134,7 @@ class PretrainedConfig(PushToHubMixin):
         architectures (`list[str]`, *optional*):
             Model architectures that can be used with the model pretrained weights.
         finetuning_task (`str`, *optional*):
-            Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow
-            or PyTorch) checkpoint.
+            Name of the task used to fine-tune the model.
         id2label (`dict[int, str]`, *optional*):
             A map from index (for instance prediction index, or target index) to label.
         label2id (`dict[str, int]`, *optional*):
@@ -179,25 +172,21 @@ class PretrainedConfig(PushToHubMixin):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
             model has a output word embedding layer.
-        torch_dtype (`str`, *optional*):
+        dtype (`str`, *optional*):
             The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
             (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
             model is `float16`, ideally we want to load it back using the minimal amount of memory needed to load
-            `float16` weights. Since the config object is stored in plain text, this attribute contains just the
-            floating type string without the `torch.` prefix. For example, for `torch.float16` ``torch_dtype` is the
-            `"float16"` string.
-
-            This attribute is currently not being used during model loading time, but this may change in the future
-            versions. But we can already start preparing for the future by saving the dtype with save_pretrained.
+            `float16` weights.
     """
 
     model_type: str = ""
     base_config_key: str = ""
-    sub_configs: dict[str, type["PretrainedConfig"]] = {}
+    sub_configs: dict[str, type["PreTrainedConfig"]] = {}
     has_no_defaults_at_init: bool = False
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
     base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
+    base_model_ep_plan: Optional[dict[str, tuple[list[str]]]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
@@ -218,9 +207,8 @@ class PretrainedConfig(PushToHubMixin):
         output_attentions: bool = False,
         return_dict: bool = True,
         torchscript: bool = False,
-        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
+        dtype: Optional[Union[str, "torch.dtype"]] = None,
         # Common arguments
-        pruned_heads: Optional[dict[int, list[int]]] = None,
         tie_word_embeddings: bool = True,
         chunk_size_feed_forward: int = 0,
         is_encoder_decoder: bool = False,
@@ -265,22 +253,26 @@ class PretrainedConfig(PushToHubMixin):
                 f"The config parameter `problem_type` was not understood: received {problem_type} "
                 "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
             )
-        if torch_dtype is not None and isinstance(torch_dtype, str) and is_torch_available():
-            # we will start using self.torch_dtype in v5, but to be consistent with
-            # from_pretrained's torch_dtype arg convert it to an actual torch.dtype object
+        # BC for the `torch_dtype` argument instead of the simpler `dtype`
+        # Do not warn, as it would otherwise always be triggered since most configs on the hub have `torch_dtype`
+        if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
+            # If both are provided, keep `dtype`
+            dtype = dtype if dtype is not None else torch_dtype
+        if dtype is not None and isinstance(dtype, str) and is_torch_available():
+            # we will start using self.dtype in v5, but to be consistent with
+            # from_pretrained's dtype arg convert it to an actual torch.dtype object
             import torch
 
-            torch_dtype = getattr(torch, torch_dtype)
+            dtype = getattr(torch, dtype)
 
         # Attributes common for all models
         self.return_dict = return_dict
         self.output_hidden_states = output_hidden_states
         self.torchscript = torchscript
-        self.torch_dtype = torch_dtype
+        self.dtype = dtype
         self._output_attentions = output_attentions  # has public property
 
         # Less common kwargs, only used by some models
-        self.pruned_heads = pruned_heads if pruned_heads is not None else {}
         self.tie_word_embeddings = tie_word_embeddings
         self.chunk_size_feed_forward = chunk_size_feed_forward
 
@@ -345,10 +337,6 @@ class PretrainedConfig(PushToHubMixin):
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
-        # TODO: remove later, deprecated arguments for TF models
-        self.tf_legacy_loss = kwargs.pop("tf_legacy_loss", False)
-        self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
-
     def _create_id_label_maps(self, num_labels: int):
         self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
         self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
@@ -370,7 +358,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @output_attentions.setter
     def output_attentions(self, value: bool):
-        # If we set `output_attentions` explictily before the attn implementation, dispatch eager
+        # If we set `output_attentions` explicitly before the attn implementation, dispatch eager
         if value and self._attn_implementation is None:
             self._attn_implementation = "eager"
         if value and self._attn_implementation != "eager":
@@ -410,22 +398,34 @@ class PretrainedConfig(PushToHubMixin):
     def _attn_implementation(self, value: Optional[Union[str, dict]]):
         """We set it recursively on the sub-configs as well"""
         # Set if for current config
-        attn_implementation = value if not isinstance(value, dict) else value.get("", self._attn_implementation)
+        current_attn = getattr(self, "_attn_implementation", None)
+        attn_implementation = value if not isinstance(value, dict) else value.get("", current_attn)
         self._attn_implementation_internal = attn_implementation
 
         # Set it recursively on the subconfigs
         for subconfig_key in self.sub_configs:
             subconfig = getattr(self, subconfig_key, None)
             if subconfig is not None:
+                current_subconfig_attn = getattr(subconfig, "_attn_implementation", None)
                 sub_implementation = (
-                    value if not isinstance(value, dict) else value.get(subconfig_key, subconfig._attn_implementation)
+                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_attn)
                 )
                 subconfig._attn_implementation = sub_implementation
+
+    @property
+    def torch_dtype(self):
+        logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+        return self.dtype
+
+    @torch_dtype.setter
+    def torch_dtype(self, value):
+        logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+        self.dtype = value
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
-        [`~PretrainedConfig.from_pretrained`] class method.
+        [`~PreTrainedConfig.from_pretrained`] class method.
 
         Args:
             save_directory (`str` or `os.PathLike`):
@@ -515,7 +515,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls: type[SpecificPretrainedConfigType],
+        cls: type[SpecificPreTrainedConfigType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -523,9 +523,9 @@ class PretrainedConfig(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ) -> SpecificPretrainedConfigType:
+    ) -> SpecificPreTrainedConfigType:
         r"""
-        Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
+        Instantiate a [`PreTrainedConfig`] (or a derived class) from a pretrained model configuration.
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -534,7 +534,7 @@ class PretrainedConfig(PushToHubMixin):
                 - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
                   huggingface.co.
                 - a path to a *directory* containing a configuration file saved using the
-                  [`~PretrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
+                  [`~PreTrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
@@ -542,9 +542,6 @@ class PretrainedConfig(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the configuration files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -577,12 +574,12 @@ class PretrainedConfig(PushToHubMixin):
                 by the `return_unused_kwargs` keyword parameter.
 
         Returns:
-            [`PretrainedConfig`]: The configuration object instantiated from this pretrained model.
+            [`PreTrainedConfig`]: The configuration object instantiated from this pretrained model.
 
         Examples:
 
         ```python
-        # We can't instantiate directly the base class *PretrainedConfig* so let's show the examples on a
+        # We can't instantiate directly the base class *PreTrainedConfig* so let's show the examples on a
         # derived class: BertConfig
         config = BertConfig.from_pretrained(
             "google-bert/bert-base-uncased"
@@ -632,7 +629,7 @@ class PretrainedConfig(PushToHubMixin):
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
-        [`PretrainedConfig`] using `from_dict`.
+        [`PreTrainedConfig`] using `from_dict`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -667,7 +664,6 @@ class PretrainedConfig(PushToHubMixin):
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -711,7 +707,6 @@ class PretrainedConfig(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -759,20 +754,20 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_dict(
-        cls: type[SpecificPretrainedConfigType], config_dict: dict[str, Any], **kwargs
-    ) -> SpecificPretrainedConfigType:
+        cls: type[SpecificPreTrainedConfigType], config_dict: dict[str, Any], **kwargs
+    ) -> SpecificPreTrainedConfigType:
         """
-        Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
+        Instantiates a [`PreTrainedConfig`] from a Python dictionary of parameters.
 
         Args:
             config_dict (`dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
-                retrieved from a pretrained checkpoint by leveraging the [`~PretrainedConfig.get_config_dict`] method.
+                retrieved from a pretrained checkpoint by leveraging the [`~PreTrainedConfig.get_config_dict`] method.
             kwargs (`dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
-            [`PretrainedConfig`]: The configuration object instantiated from those parameters.
+            [`PreTrainedConfig`]: The configuration object instantiated from those parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
         # Those arguments may be passed along for our internal telemetry.
@@ -783,13 +778,16 @@ class PretrainedConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
+        # For BC on the old `torch_dtype`
+        if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
+            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+            # If both are present, use `dtype`
+            kwargs["dtype"] = kwargs.get("dtype", torch_dtype)
+
         # We remove it from kwargs so that it does not appear in `return_unused_kwargs`.
         config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
 
         config = cls(**config_dict)
-
-        if hasattr(config, "pruned_heads"):
-            config.pruned_heads = {int(key): value for key, value in config.pruned_heads.items()}
 
         # Update config with kwargs if needed
         if "num_labels" in kwargs and "id2label" in kwargs:
@@ -806,10 +804,13 @@ class PretrainedConfig(PushToHubMixin):
             if hasattr(config, key):
                 current_attr = getattr(config, key)
                 # To authorize passing a custom subconfig as kwarg in models that have nested configs.
-                if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
-                    value = current_attr.__class__(**value)
+                # We need to update only custom kwarg values instead and keep other attributes in subconfig.
+                if isinstance(current_attr, PreTrainedConfig) and isinstance(value, dict):
+                    current_attr_updated = current_attr.to_dict()
+                    current_attr_updated.update(value)
+                    value = current_attr.__class__(**current_attr_updated)
                 setattr(config, key, value)
-                if key != "torch_dtype":
+                if key != "dtype":
                     to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
@@ -822,17 +823,17 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_json_file(
-        cls: type[SpecificPretrainedConfigType], json_file: Union[str, os.PathLike]
-    ) -> SpecificPretrainedConfigType:
+        cls: type[SpecificPreTrainedConfigType], json_file: Union[str, os.PathLike]
+    ) -> SpecificPreTrainedConfigType:
         """
-        Instantiates a [`PretrainedConfig`] from the path to a JSON file of parameters.
+        Instantiates a [`PreTrainedConfig`] from the path to a JSON file of parameters.
 
         Args:
             json_file (`str` or `os.PathLike`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            [`PretrainedConfig`]: The configuration object instantiated from that JSON file.
+            [`PreTrainedConfig`]: The configuration object instantiated from that JSON file.
 
         """
         config_dict = cls._dict_from_json_file(json_file)
@@ -845,7 +846,7 @@ class PretrainedConfig(PushToHubMixin):
         return json.loads(text)
 
     def __eq__(self, other):
-        return isinstance(other, PretrainedConfig) and (self.__dict__ == other.__dict__)
+        return isinstance(other, PreTrainedConfig) and (self.__dict__ == other.__dict__)
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
@@ -865,7 +866,7 @@ class PretrainedConfig(PushToHubMixin):
         config_dict = self.to_dict()
 
         # Get the default config dict (from a fresh PreTrainedConfig instance)
-        default_config_dict = PretrainedConfig().to_dict()
+        default_config_dict = PreTrainedConfig().to_dict()
 
         # get class specific config dict
         class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
@@ -876,10 +877,9 @@ class PretrainedConfig(PushToHubMixin):
         # except always keep the 'config' attribute.
         for key, value in config_dict.items():
             if (
-                isinstance(getattr(self, key, None), PretrainedConfig)
+                isinstance(getattr(self, key, None), PreTrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
-                or key in self.sub_configs
             ):
                 # For nested configs we need to clean the diff recursively
                 diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
@@ -909,7 +909,7 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-        self.dict_torch_dtype_to_str(serializable_config_dict)
+        self.dict_dtype_to_str(serializable_config_dict)
 
         return serializable_config_dict
 
@@ -929,7 +929,7 @@ class PretrainedConfig(PushToHubMixin):
 
         for key, value in output.items():
             # Deal with nested configs like CLIP
-            if isinstance(value, PretrainedConfig):
+            if isinstance(value, PreTrainedConfig):
                 value = value.to_dict()
                 del value["transformers_version"]
 
@@ -943,7 +943,7 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-        self.dict_torch_dtype_to_str(output)
+        self.dict_dtype_to_str(output)
 
         return output
 
@@ -953,7 +953,7 @@ class PretrainedConfig(PushToHubMixin):
 
         Args:
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                If set to `True`, only the difference between the config instance and the default `PreTrainedConfig()`
                 is serialized to JSON string.
 
         Returns:
@@ -973,7 +973,7 @@ class PretrainedConfig(PushToHubMixin):
             json_file_path (`str` or `os.PathLike`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                If set to `True`, only the difference between the config instance and the default `PreTrainedConfig()`
                 is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
@@ -1027,20 +1027,22 @@ class PretrainedConfig(PushToHubMixin):
 
             setattr(self, k, v)
 
-    def dict_torch_dtype_to_str(self, d: dict[str, Any]) -> None:
+    def dict_dtype_to_str(self, d: dict[str, Any]) -> None:
         """
-        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        Checks whether the passed dictionary and its nested dicts have a *dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype") is not None:
-            if isinstance(d["torch_dtype"], dict):
-                d["torch_dtype"] = {k: str(v).split(".")[-1] for k, v in d["torch_dtype"].items()}
-            elif not isinstance(d["torch_dtype"], str):
-                d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        if d.get("dtype") is not None:
+            if isinstance(d["dtype"], dict):
+                d["dtype"] = {k: str(v).split(".")[-1] for k, v in d["dtype"].items()}
+            # models like Emu3 can have "dtype" as token in config's vocabulary map,
+            # so we also exclude int type here to avoid error in this special case.
+            elif not isinstance(d["dtype"], (str, int)):
+                d["dtype"] = str(d["dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
-                self.dict_torch_dtype_to_str(value)
+                self.dict_dtype_to_str(value)
 
     def _remove_keys_not_serialized(self, d: dict[str, Any]) -> None:
         """
@@ -1099,8 +1101,6 @@ class PretrainedConfig(PushToHubMixin):
             "do_sample": False,
             "early_stopping": False,
             "num_beams": 1,
-            "num_beam_groups": 1,
-            "diversity_penalty": 0.0,
             "temperature": 1.0,
             "top_k": 50,
             "top_p": 1.0,
@@ -1119,20 +1119,23 @@ class PretrainedConfig(PushToHubMixin):
             "exponential_decay_length_penalty": None,
             "suppress_tokens": None,
             "begin_suppress_tokens": None,
+            # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
+            "num_beam_groups": 1,
+            "diversity_penalty": 0.0,
         }
 
     def _get_non_default_generation_parameters(self) -> dict[str, Any]:
         """
-        Gets the non-default generation parameters on the PretrainedConfig instance
+        Gets the non-default generation parameters on the PreTrainedConfig instance
         """
         non_default_generation_parameters = {}
         decoder_attribute_name = None
 
-        # Composite models don't have a default config, use their decoder config as a fallback for default values
+        # Some composite models don't have a default config, use their decoder config as a fallback for default values
         # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
-        try:
+        if not self.has_no_defaults_at_init:
             default_config = self.__class__()
-        except ValueError:
+        else:
             decoder_config = self.get_text_config(decoder=True)
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
@@ -1165,21 +1168,34 @@ class PretrainedConfig(PushToHubMixin):
 
         return non_default_generation_parameters
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+    def get_text_config(self, decoder=None, encoder=None) -> "PreTrainedConfig":
         """
-        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
-        itself. On specific composite models, it is under a set of valid names.
+        Returns the text config related to the text input (encoder) or text output (decoder) of the model. The
+        `decoder` and `encoder` input arguments can be used to specify which end of the model we are interested in,
+        which is useful on models that have both text input and output modalities.
+
+        There are three possible outcomes of using this method:
+        1. On most models, it returns the original config instance itself.
+        2. On newer (2024+) composite models, it returns the text section of the config, which is nested under a set
+            of valid names.
+        3. On older (2023-) composite models, it discards decoder-only parameters when `encoder=True` and vice-versa.
 
         Args:
-            decoder (`Optional[bool]`, *optional*, defaults to `False`):
+            decoder (`Optional[bool]`, *optional*):
                 If set to `True`, then only search for decoder config names.
+            encoder (`Optional[bool]`, *optional*):
+                If set to `True`, then only search for encoder config names.
         """
+        return_both = decoder == encoder  # both unset or both set -> search all possible names
+
         decoder_possible_text_config_names = ("decoder", "generator", "text_config")
         encoder_possible_text_config_names = ("text_encoder",)
-        if decoder:
+        if return_both:
+            possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
+        elif decoder:
             possible_text_config_names = decoder_possible_text_config_names
         else:
-            possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
+            possible_text_config_names = encoder_possible_text_config_names
 
         valid_text_config_names = []
         for text_config_name in possible_text_config_names:
@@ -1191,49 +1207,44 @@ class PretrainedConfig(PushToHubMixin):
         if len(valid_text_config_names) > 1:
             raise ValueError(
                 f"Multiple valid text configs were found in the model config: {valid_text_config_names}. In this "
-                "case, using `get_text_config()` would be ambiguous. Please specify the desied text config directly."
+                "case, using `get_text_config()` would be ambiguous. Please specify the desired text config directly, "
+                "e.g. `text_config = config.sub_config_name`"
             )
         elif len(valid_text_config_names) == 1:
             config_to_return = getattr(self, valid_text_config_names[0])
         else:
             config_to_return = self
+
+        # handle legacy models with flat config structure, when we only want one of the configs
+        if not return_both and len(valid_text_config_names) == 0 and config_to_return.is_encoder_decoder:
+            config_to_return = copy.deepcopy(config_to_return)
+            prefix_to_discard = "encoder" if decoder else "decoder"
+            prefix_to_keep = "decoder" if decoder else "encoder"
+            for key in config_to_return.to_dict():
+                # NOTE: We don't want to discard the key if it is mapped from a different attribute name at read time
+                if key.startswith(prefix_to_discard) and key not in config_to_return.attribute_map.values():
+                    delattr(config_to_return, key)
+                if key.startswith(prefix_to_keep):
+                    # [encoder/decoder]_layers -> num_hidden_layers
+                    if key == prefix_to_keep + "_layers":
+                        new_key = "num_hidden_layers"
+                    # [encoder/decoder]_attention_heads -> num_attention_heads
+                    elif key == prefix_to_keep + "_attention_heads":
+                        new_key = "num_attention_heads"
+                    # e.g. encoder_hidden_act -> hidden_act
+                    else:
+                        new_key = key[len(prefix_to_keep) + 1 :]
+
+                    # Does the class map the new key into a different attribute name at read time? if so, let's write
+                    # into that attribute instead
+                    if new_key in config_to_return.attribute_map:
+                        new_key = config_to_return.attribute_map[new_key]
+
+                    value = getattr(config_to_return, key)
+                    delattr(config_to_return, key)
+                    setattr(config_to_return, new_key, value)
+
         return config_to_return
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config, vision_config, **kwargs):
-        r"""
-        Instantiate a model config (or a derived class) from text model configuration and vision model
-        configuration.
-
-        Returns:
-            [`PreTrainedConfig`]: An instance of a configuration object
-        """
-
-        warnings.warn(
-            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
-            FutureWarning,
-        )
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    @classmethod
-    def from_text_audio_configs(cls, text_config, audio_config, **kwargs):
-        r"""
-        Instantiate a model config (or a derived class) from text model configuration and audio model
-        configuration.
-
-        Returns:
-            [`PreTrainedConfig`]: An instance of a configuration object
-        """
-
-        warnings.warn(
-            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
-            FutureWarning,
-        )
-
-        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
 
 
 def get_configuration_file(configuration_files: list[str]) -> str:
@@ -1277,7 +1288,7 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
         obj_value = getattr(config_obj, str(key), None)
-        if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
+        if isinstance(obj_value, PreTrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
             diff[key] = diff_value
         elif key not in dict_b or (value != default[key]):
@@ -1285,11 +1296,15 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     return diff
 
 
-PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)
-if PretrainedConfig.push_to_hub.__doc__ is not None:
-    PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
+PreTrainedConfig.push_to_hub = copy_func(PreTrainedConfig.push_to_hub)
+if PreTrainedConfig.push_to_hub.__doc__ is not None:
+    PreTrainedConfig.push_to_hub.__doc__ = PreTrainedConfig.push_to_hub.__doc__.format(
         object="config", object_class="AutoConfig", object_files="configuration file"
     )
+
+
+# The alias is only here for BC - we did not have the correct CamelCasing before
+PretrainedConfig = PreTrainedConfig
 
 
 ALLOWED_LAYER_TYPES = (
@@ -1300,7 +1315,12 @@ ALLOWED_LAYER_TYPES = (
 )
 
 
-def layer_type_validation(layer_types: list[str]):
-    """Check that each entry in `layer_types` are allowed."""
+def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None):
+    """Check that `layer_types` is correctly defined."""
     if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
         raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+    if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
+        raise ValueError(
+            f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "
+            f"({len(layer_types)})"
+        )

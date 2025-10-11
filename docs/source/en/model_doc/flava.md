@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-12-08 and added to Hugging Face Transformers on 2022-05-11.*
 
 # FLAVA
 
@@ -62,10 +63,6 @@ This model was contributed by [aps](https://huggingface.co/aps). The original co
 ## FlavaProcessor
 
 [[autodoc]] FlavaProcessor
-
-## FlavaFeatureExtractor
-
-[[autodoc]] FlavaFeatureExtractor
 
 ## FlavaImageProcessor
 

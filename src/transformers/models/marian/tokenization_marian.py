@@ -204,7 +204,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
@@ -230,7 +230,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.

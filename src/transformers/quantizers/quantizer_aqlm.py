@@ -53,19 +53,19 @@ class AqlmHfQuantizer(HfQuantizer):
         if not is_aqlm_available():
             raise ImportError("Using `aqlm` quantization requires AQLM: `pip install aqlm[gpu,cpu]`")
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
             if torch.cuda.is_available():
-                torch_dtype = torch.float16
+                dtype = torch.float16
                 logger.info(
-                    "CUDA available. Assuming AQLM inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
+                    "CUDA available. Assuming AQLM inference on GPU and loading the model in `torch.float16`. To overwrite it, set `dtype` manually."
                 )
             else:
-                torch_dtype = torch.float32
+                dtype = torch.float32
                 logger.info(
-                    "CUDA is unavailable. Assuming AQLM inference on CPU and loading the model in `torch.float32`. To overwrite it, set `torch_dtype` manually."
+                    "CUDA is unavailable. Assuming AQLM inference on CPU and loading the model in `torch.float32`. To overwrite it, set `dtype` manually."
                 )
-        return torch_dtype
+        return dtype
 
     def _process_model_before_weight_loading(
         self,

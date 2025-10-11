@@ -21,14 +21,10 @@ import unittest
 import numpy as np
 import requests
 from parameterized import parameterized
-from pytest import mark
 
 from transformers import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.testing_utils import (
-    is_flaky,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
@@ -46,7 +42,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
-    require_torch_sdpa,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -64,7 +59,6 @@ if is_vision_available():
 
 
 class SiglipModelTesterMixin(ModelTesterMixin):
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -99,13 +93,13 @@ class SiglipVisionModelTester:
         self,
         parent,
         batch_size=12,
-        image_size=30,
+        image_size=4,
         patch_size=2,
         num_channels=3,
         is_training=True,
         hidden_size=64,
         num_hidden_layers=2,
-        num_attention_heads=4,
+        num_attention_heads=2,
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
@@ -182,9 +176,8 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (SiglipVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
     # in the dispatch_model function
@@ -246,10 +239,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip-base-patch16-224"
@@ -257,8 +246,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
-    @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
@@ -276,7 +263,7 @@ class SiglipTextModelTester:
         vocab_size=99,
         hidden_size=64,
         num_hidden_layers=2,
-        num_attention_heads=4,
+        num_attention_heads=2,
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
@@ -355,8 +342,7 @@ class SiglipTextModelTester:
 class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     all_model_classes = (SiglipTextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
@@ -392,10 +378,6 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Siglip does not use inputs_embeds")
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_inputs_embeds
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @slow
@@ -462,8 +444,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     all_model_classes = (SiglipModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": SiglipModel} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -504,10 +485,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     @unittest.skip(reason="SiglipModel does not have input/output embeddings")
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_get_set_embeddings
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest._create_and_check_torchscript with CLIP->Siglip
@@ -604,89 +581,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
         model = SiglipModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
-                dummy_input_ids = inputs_dict["input_ids"]
-
-                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
-                )
-
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
-                    f"Image logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
-                )
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
-                    f"Text logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
-                )
-
-                # Test with attention mask
-                dummy_attention_mask = inputs_dict["attention_mask"]
-
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask[:, 1:] = 1
-                    dummy_attention_mask[:, :1] = 0
-
-                outputs = model(
-                    pixel_values=dummy_pixel_values,
-                    input_ids=dummy_input_ids,
-                    attention_mask=dummy_attention_mask,
-                    output_hidden_states=True,
-                )
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values,
-                    input_ids=dummy_input_ids,
-                    attention_mask=dummy_attention_mask,
-                    output_hidden_states=True,
-                )
-
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
-                    f"Logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
-                )
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
-                    f"Logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
-                )
-
-                # check with inference + dropout
-                model.train()
-                _ = model_fa(
-                    pixel_values=dummy_pixel_values,
-                    input_ids=dummy_input_ids,
-                    attention_mask=dummy_attention_mask,
-                    output_hidden_states=True,
-                )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("SigLIP does not support right padding")
-
 
 class SiglipForImageClassificationModelTester(SiglipModelTester):
     def __init__(self, parent):
@@ -714,8 +608,7 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     all_model_classes = (SiglipForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": SiglipForImageClassification} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -747,10 +640,6 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
 
     @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
 

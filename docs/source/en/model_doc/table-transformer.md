@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-09-30 and added to Hugging Face Transformers on 2022-10-18.*
 
 # Table Transformer
 
@@ -42,8 +43,8 @@ alt="drawing" width="600"/>
 
 <small> Table detection and table structure recognition clarified. Taken from the <a href="https://huggingface.co/papers/2110.00061">original paper</a>. </small>
 
-The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in 
-documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition) 
+The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in
+documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition)
 (the task of recognizing the individual rows, columns etc. in a table).
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be

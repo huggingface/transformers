@@ -19,7 +19,7 @@
 # limitations under the License.
 """GraniteMoe model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -27,14 +27,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeConfig(PretrainedConfig):
+class GraniteMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteMoeModel`]. It is used to instantiate an GraniteMoe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GraniteMoe-3B.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -166,8 +166,6 @@ class GraniteMoeConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        # this model has rope embedding type, hardcoded for BC
-        self.position_embedding_type = "rope"
 
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout

@@ -34,10 +34,7 @@ _import_structure = {
     "bitsandbytes": [
         "dequantize_and_replace",
         "get_keys_to_not_convert",
-        "replace_8bit_linear",
         "replace_with_bnb_linear",
-        "set_module_8bit_tensor_to_device",
-        "set_module_quantized_tensor_to_device",
         "validate_bnb_backend_availability",
     ],
     "deepspeed": [
@@ -55,7 +52,7 @@ _import_structure = {
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
     "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
-    "fsdp": ["is_fsdp_managed_module"],
+    "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
         "GGUF_TOKENIZER_MAPPING",
@@ -108,7 +105,6 @@ _import_structure = {
         "is_optuna_available",
         "is_ray_available",
         "is_ray_tune_available",
-        "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
         "is_trackio_available",
@@ -116,7 +112,6 @@ _import_structure = {
         "rewrite_logs",
         "run_hp_search_optuna",
         "run_hp_search_ray",
-        "run_hp_search_sigopt",
         "run_hp_search_wandb",
     ],
     "mxfp4": [
@@ -126,6 +121,7 @@ _import_structure = {
         "load_and_swizzle_mxfp4",
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
+        "swizzle_mxfp4",
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
@@ -183,10 +179,7 @@ if TYPE_CHECKING:
     from .bitsandbytes import (
         dequantize_and_replace,
         get_keys_to_not_convert,
-        replace_8bit_linear,
         replace_with_bnb_linear,
-        set_module_8bit_tensor_to_device,
-        set_module_quantized_tensor_to_device,
         validate_bnb_backend_availability,
     )
     from .deepspeed import (
@@ -204,7 +197,7 @@ if TYPE_CHECKING:
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
     from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
-    from .fsdp import is_fsdp_managed_module
+    from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
     from .ggml import (
         GGUF_CONFIG_MAPPING,
         GGUF_TOKENIZER_MAPPING,
@@ -252,7 +245,6 @@ if TYPE_CHECKING:
         is_optuna_available,
         is_ray_available,
         is_ray_tune_available,
-        is_sigopt_available,
         is_swanlab_available,
         is_tensorboard_available,
         is_trackio_available,
@@ -260,7 +252,6 @@ if TYPE_CHECKING:
         rewrite_logs,
         run_hp_search_optuna,
         run_hp_search_ray,
-        run_hp_search_sigopt,
         run_hp_search_wandb,
     )
     from .mxfp4 import (
@@ -269,6 +260,7 @@ if TYPE_CHECKING:
         load_and_swizzle_mxfp4,
         quantize_to_mxfp4,
         replace_with_mxfp4_linear,
+        swizzle_mxfp4,
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers

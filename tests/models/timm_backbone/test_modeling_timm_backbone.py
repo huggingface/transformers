@@ -86,12 +86,11 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     all_model_classes = (TimmBackbone,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": TimmBackbone} if is_torch_available() else {}
     test_resize_embeddings = False
-    test_head_masking = False
-    test_pruning = False
+
     has_attentions = False
 
     def setUp(self):
-        # self.config_class = PretrainedConfig
+        # self.config_class = PreTrainedConfig
         self.config_class = TimmBackboneConfig
         self.model_tester = TimmBackboneModelTester(self)
         self.config_tester = ConfigTester(
@@ -140,10 +139,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_can_init_all_missing_weights(self):
         pass
 
-    @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="TimmBackbone models doesn't have inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -169,7 +164,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
-    def test_can_load_with_meta_device_context_manager(self):
+    def test_cannot_load_with_meta_device_context_manager(self):
         pass
 
     @unittest.skip(reason="model weights aren't tied in TimmBackbone.")

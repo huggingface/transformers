@@ -19,7 +19,6 @@ from huggingface_hub import ImageClassificationOutputElement
 
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     PreTrainedTokenizerBase,
     is_torch_available,
     is_vision_available,
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_torch,
-    require_torch_or_tf,
     require_vision,
     slow,
 )
@@ -52,11 +50,10 @@ else:
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 @require_vision
 class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     _dataset = None
 
     @classmethod
@@ -76,7 +73,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         image_classifier = ImageClassificationPipeline(
             model=model,
@@ -84,7 +81,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             top_k=2,
         )
         examples = [
@@ -187,7 +184,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_torch_float16_pipeline(self):
         image_classifier = pipeline(
-            "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.float16
+            "image-classification", model="hf-internal-testing/tiny-random-vit", dtype=torch.float16
         )
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
 
@@ -199,7 +196,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_torch_bfloat16_pipeline(self):
         image_classifier = pipeline(
-            "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.bfloat16
+            "image-classification", model="hf-internal-testing/tiny-random-vit", dtype=torch.bfloat16
         )
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
 

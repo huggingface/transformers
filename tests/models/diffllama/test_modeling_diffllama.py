@@ -21,7 +21,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, DiffLlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, BitsAndBytesConfig, DiffLlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -198,8 +197,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
+
     fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -219,12 +217,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_diffllama_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -445,7 +437,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         """
         model = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             device_map={"": 0},
         )
 
@@ -463,7 +455,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         model = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             device_map={"": 0},
             attn_implementation="flash_attention_2",
         )
@@ -488,7 +480,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model.save_pretrained(tmp_dir)
 
                 new_model = DiffLlamaForCausalLM.from_pretrained(
-                    tmp_dir, attn_implementation="flash_attention_2", torch_dtype=torch.float16
+                    tmp_dir, attn_implementation="flash_attention_2", dtype=torch.float16
                 ).to("cuda")
 
                 self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
@@ -501,7 +493,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 if not has_flash:
                     raise ValueError("The flash model should have flash attention layers")
 
-    @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
@@ -513,14 +504,14 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         model_sdpa = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             attn_implementation="eager",
         ).to(torch_device)
 
@@ -570,6 +561,7 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_read_token
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
@@ -595,7 +587,7 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
             "kajuma/DiffLlama-0.3B-handcut", pad_token="</s>", padding_side="right"
         )
         model = DiffLlamaForCausalLM.from_pretrained(
-            "kajuma/DiffLlama-0.3B-handcut", device_map=torch_device, torch_dtype=torch.float16
+            "kajuma/DiffLlama-0.3B-handcut", device_map=torch_device, dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -632,7 +624,7 @@ class Mask4DTestHard(unittest.TestCase):
         model_name = "kajuma/DiffLlama-0.3B-handcut"
         self.model_dtype = torch.float32
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = DiffLlamaForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+        self.model = DiffLlamaForCausalLM.from_pretrained(model_name, dtype=self.model_dtype).to(torch_device)
 
     def get_test_data(self):
         template = "my favorite {}"

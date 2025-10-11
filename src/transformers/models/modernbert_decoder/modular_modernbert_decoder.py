@@ -22,13 +22,16 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...models.modernbert.modeling_modernbert import (
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
+from ..modernbert.modeling_modernbert import (
     ModernBertEmbeddings,
     ModernBertMLP,
     ModernBertPredictionHead,
@@ -36,24 +39,20 @@ from ...models.modernbert.modeling_modernbert import (
     ModernBertRotaryEmbedding,
     apply_rotary_pos_emb,
 )
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs
 
 
 logger = logging.get_logger(__name__)
 
 
-class ModernBertDecoderConfig(PretrainedConfig):
+class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
     decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ModernBERT-base decoder.
     e.g. [blab-jhu/test-32m-dec](https://huggingface.co/blab-jhu/test-32m-dec)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50368):
@@ -228,6 +227,18 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.sliding_window = local_attention // 2 if local_attention else -1
 
 
+class ModernBertDecoderEmbeddings(ModernBertEmbeddings):
+    pass
+
+
+class ModernBertDecoderMLP(ModernBertMLP):
+    pass
+
+
+class ModernBertDecoderRotaryEmbedding(ModernBertRotaryEmbedding):
+    pass
+
+
 def eager_attention_forward(
     module: "ModernBertDecoderAttention",
     query: torch.Tensor,
@@ -291,7 +302,6 @@ class ModernBertDecoderAttention(nn.Module):
 
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -350,9 +360,8 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         )
         self.attn = ModernBertDecoderAttention(config=config, layer_idx=layer_idx)
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-        self.mlp = ModernBertMLP(config)
+        self.mlp = ModernBertDecoderMLP(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -395,16 +404,15 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class ModernBertDecoderPredictionHead(ModernBertPredictionHead):
+    pass
+
+
 @auto_docstring
 class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
-    config: ModernBertDecoderConfig
-    base_model_prefix = "model"
     _skip_keys_device_placement = ["past_key_values"]
     _no_split_modules = ["ModernBertDecoderLayer"]
-    _supports_flash_attn = True
-    _supports_sdpa = False
-    _supports_gradient_checkpointing = True
-    _can_compile_fullgraph = False
+    _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": ModernBertDecoderLayer,
@@ -436,9 +444,9 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
             "final_out": self.config.hidden_size**-0.5,
         }
 
-        if isinstance(module, ModernBertEmbeddings):
+        if isinstance(module, ModernBertDecoderEmbeddings):
             init_weight(module.tok_embeddings, stds["embedding"])
-        elif isinstance(module, ModernBertMLP):
+        elif isinstance(module, ModernBertDecoderMLP):
             init_weight(module.Wi, stds["in"])
             init_weight(module.Wo, stds["out"])
         elif isinstance(module, ModernBertDecoderAttention):
@@ -446,7 +454,7 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
             init_weight(module.k_proj, stds["in"])
             init_weight(module.v_proj, stds["in"])
             init_weight(module.Wo, stds["out"])
-        elif isinstance(module, ModernBertPredictionHead):
+        elif isinstance(module, ModernBertDecoderPredictionHead):
             init_weight(module.dense, stds["out"])
         elif isinstance(module, ModernBertDecoderForSequenceClassification):
             init_weight(module.classifier, stds["final_out"])
@@ -457,21 +465,30 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
+    def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check):
+        raise AttributeError("No need to inherit!")
+
+    def _maybe_set_compile(self):
+        raise AttributeError("No need to inherit!")
+
+    def resize_token_embeddings(self, *args, **kwargs):
+        raise AttributeError("No need to inherit!")
+
 
 @auto_docstring
 class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
     def __init__(self, config: ModernBertDecoderConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = ModernBertEmbeddings(config)
+        self.embeddings = ModernBertDecoderEmbeddings(config)
         self.layers = nn.ModuleList(
             [ModernBertDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.final_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.gradient_checkpointing = False
 
-        self.global_rotary_emb = ModernBertRotaryEmbedding(config=config)
-        self.local_rotary_emb = ModernBertRotaryEmbedding(config=config)
+        self.global_rotary_emb = ModernBertDecoderRotaryEmbedding(config=config)
+        self.local_rotary_emb = ModernBertDecoderRotaryEmbedding(config=config)
 
         self.post_init()
 
@@ -481,7 +498,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -505,7 +522,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
 
         # Handle past_key_values and cache setup
         if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -574,7 +591,7 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
         super().__init__(config)
         self.config = config
         self.model = ModernBertDecoderModel(config)
-        self.lm_head = ModernBertPredictionHead(config)
+        self.lm_head = ModernBertDecoderPredictionHead(config)
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=config.decoder_bias)
 
         # Initialize weights and apply final processing
@@ -649,7 +666,6 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
             loss_fct = CrossEntropyLoss()
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
@@ -682,7 +698,7 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
         self.num_labels = config.num_labels
         self.model = ModernBertDecoderModel(config)
 
-        self.head = ModernBertPredictionHead(config)
+        self.head = ModernBertDecoderPredictionHead(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels, bias=config.classifier_bias)
         self.drop = torch.nn.Dropout(config.classifier_dropout)
 

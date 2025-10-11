@@ -95,9 +95,6 @@ class GPTBigCodeModelTester:
         self.pad_token_id = vocab_size - 3
         self.multi_query = multi_query
 
-    def get_large_model_config(self):
-        return GPTBigCodeConfig.from_pretrained("bigcode/gpt_bigcode-santacoder")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -398,7 +395,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     )
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     test_torchscript = False
     multi_query = True
 
@@ -422,14 +419,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @unittest.skip(reason="MQA models does not support retain_grad")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip(reason="CPU offload seems to be broken for some reason - tiny models keep hitting corner cases")

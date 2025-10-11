@@ -14,14 +14,14 @@
 # limitations under the License.
 """DPR model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DPRConfig(PretrainedConfig):
+class DPRConfig(PreTrainedConfig):
     r"""
     [`DPRConfig`] is the configuration class to store the configuration of a *DPRModel*.
 
@@ -64,12 +64,6 @@ class DPRConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         projection_dim (`int`, *optional*, defaults to 0):
             Dimension of the projection for the context and question encoders. If it is set to zero (default), then no
             projection is done.
@@ -106,7 +100,6 @@ class DPRConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        position_embedding_type="absolute",
         projection_dim: int = 0,
         **kwargs,
     ):
@@ -125,7 +118,6 @@ class DPRConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.projection_dim = projection_dim
-        self.position_embedding_type = position_embedding_type
 
 
 __all__ = ["DPRConfig"]

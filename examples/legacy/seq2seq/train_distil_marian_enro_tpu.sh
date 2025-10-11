@@ -16,13 +16,11 @@ export WANDB_PROJECT=distil-marian
 export BS=64
 export m=sshleifer/student_marian_en_ro_6_3
 export MAX_LEN=128
-export TPU_NUM_CORES=8
 
-python xla_spawn.py --num_cores $TPU_NUM_CORES \
-    finetune_trainer.py \
+python xla_spawn.py finetune_trainer.py \
     --tokenizer_name $m --model_name_or_path $m \
     --data_dir $ENRO_DIR \
-    --output_dir marian_en_ro_6_3 --overwrite_output_dir \
+    --output_dir marian_en_ro_6_3 \
     --learning_rate=3e-4 \
     --warmup_steps 500 \
     --per_device_train_batch_size=$BS --per_device_eval_batch_size=$BS \

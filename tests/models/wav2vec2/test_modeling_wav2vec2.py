@@ -97,7 +97,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
     try:
         _ = in_queue.get(timeout=timeout)
 
-        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
+        ds = load_dataset("fixie-ai/common_voice_17_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -118,8 +118,9 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
         with CaptureLogger(pyctcdecode.decoder.logger) as cl, multiprocessing.get_context("spawn").Pool(1) as pool:
             transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
 
+        expected_transcription = "el resto de los equipos se mantienen en su sede"
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
+        unittest.TestCase().assertEqual(transcription[0], expected_transcription)
 
         # force batch_decode to internally create a spawn pool, which should trigger a warning if different than fork
         multiprocessing.set_start_method("spawn", force=True)
@@ -127,7 +128,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
             transcription = processor.batch_decode(logits.cpu().numpy()).text
 
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
+        unittest.TestCase().assertEqual(transcription[0], expected_transcription)
     except Exception:
         error = f"{traceback.format_exc()}"
 
@@ -497,8 +498,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     fx_compatible = True
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
@@ -605,40 +604,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "codevectors",
-                    "quantizer.weight_proj.weight",
-                    "project_hid.weight",
-                    "project_hid.bias",
-                    "project_q.weight",
-                    "project_q.bias",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                    "objective.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
@@ -829,8 +794,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(
@@ -949,40 +912,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "codevectors",
-                    "quantizer.weight_proj.weight",
-                    "project_hid.weight",
-                    "project_hid.bias",
-                    "project_q.weight",
-                    "project_q.bias",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                    "objective.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
@@ -1828,7 +1757,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm(self):
-        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
+        ds = load_dataset("fixie-ai/common_voice_17_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1847,12 +1776,13 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         transcription = processor.batch_decode(logits.cpu().numpy()).text
 
-        self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
+        expected_transcription = "el resto de los equipos se mantienen en su sede"
+        self.assertEqual(transcription[0], expected_transcription)
 
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm_pool(self):
-        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
+        ds = load_dataset("fixie-ai/common_voice_17_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1873,7 +1803,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         with multiprocessing.get_context("fork").Pool(2) as pool:
             transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
 
-        self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
+        expected_transcription = "el resto de los equipos se mantienen en su sede"
+        self.assertEqual(transcription[0], expected_transcription)
 
         # user-managed pool + num_processes should trigger a warning
         with (
@@ -1885,7 +1816,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertIn("num_process", cl.out)
         self.assertIn("it will be ignored", cl.out)
 
-        self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
+        self.assertEqual(transcription[0], expected_transcription)
 
     @require_pyctcdecode
     @require_torchaudio
@@ -1951,7 +1882,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         LANG_MAP = {"it": "ita", "es": "spa", "fr": "fra", "en": "eng"}
 
         def run_model(lang):
-            ds = load_dataset("mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True)
+            ds = load_dataset("fixie-ai/common_voice_17_0", lang, split="test", streaming=True)
             sample = next(iter(ds))
 
             wav2vec2_lang = LANG_MAP[lang]
@@ -1976,9 +1907,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             return transcription
 
         TRANSCRIPTIONS = {
-            "it": "il libro ha suscitato molte polemiche a causa dei suoi contenuti",
-            "es": "habitan aguas poco profundas y rocosas",
-            "fr": "ce dernier est volé tout au long de l'histoire romaine",
+            "it": "viaggiarono in italia dove lavorarono con hamilton",
+            "es": "el resto de los equipos se mantienen en su sede",
+            "fr": "il a obtenu son batchelor of lows",
             "en": "joe keton disapproved of films and buster also had reservations about the media",
         }
 
@@ -1990,7 +1921,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @mark.flash_attn_test
     def test_inference_ctc_fa2(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(
-            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
+            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", dtype=torch.bfloat16
         )
         model_fa.to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
@@ -2012,7 +1943,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @mark.flash_attn_test
     def test_inference_ctc_fa2_batched(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(
-            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
+            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", dtype=torch.bfloat16
         )
         model_fa.to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)

@@ -165,7 +165,7 @@ class EvollaProcessor(ProcessorMixin):
         if isinstance(messages_list, (list, tuple)):
             for messages in messages_list:
                 if not isinstance(messages, (list, tuple)):
-                    raise ValueError(f"Each messages in messages_list should be a list instead of {type(messages)}.")
+                    raise TypeError(f"Each messages in messages_list should be a list instead of {type(messages)}.")
                 if not all(isinstance(m, dict) for m in messages):
                     raise ValueError(
                         "Each message in messages_list should be a list of dictionaries, but not all elements are dictionaries."
@@ -226,7 +226,7 @@ class EvollaProcessor(ProcessorMixin):
 
         return outputs
 
-    # overwirte to load the protein tokenizer from a separate folder
+    # overwrite to load the protein tokenizer from a separate folder
     # Adapted from instructblip.processing_instructblip.py (https://github.com/huggingface/transformers/blob/9b479a245b793cac2a8b2e87c6d8e81bb24e20c4/src/transformers/models/instructblip/processing_instructblip.py#L191-L221)
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):

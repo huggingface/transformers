@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from datasets import Audio, load_dataset
 from pytest import mark
 
@@ -51,9 +52,6 @@ def prepare_inputs_dict(
     decoder_input_ids=None,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if input_ids is not None:
         encoder_dict = {"input_ids": input_ids}
@@ -165,8 +163,7 @@ class MimiModelTester:
 class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (MimiModel,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
+
     test_resize_embeddings = False
     test_torchscript = False
 
@@ -388,21 +385,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = ["conv", "input_proj", "output_proj"]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     # Copied from transformers.tests.encodec.test_modeling_encodec.MimiModelTest.test_identity_shortcut
     def test_identity_shortcut(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -422,11 +404,11 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -446,6 +428,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

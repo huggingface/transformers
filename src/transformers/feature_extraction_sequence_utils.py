@@ -20,7 +20,7 @@ from typing import Optional, Union
 import numpy as np
 
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from .utils import PaddingStrategy, TensorType, is_tf_tensor, is_torch_tensor, logging, to_numpy
+from .utils import PaddingStrategy, TensorType, is_torch_tensor, logging, to_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -74,7 +74,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         <Tip>
 
-        If the `processed_features` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        If the `processed_features` passed are dictionary of numpy arrays or PyTorch tensors  the
         result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
         PyTorch tensors, you will lose the specific device of your tensors however.
 
@@ -87,7 +87,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 list[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function.
 
-                Instead of `list[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
+                Instead of `list[float]` you can have tensors (numpy arrays or PyTorch tensors),
                 see the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -116,7 +116,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """
@@ -145,7 +144,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 processed_features["attention_mask"] = []
             return processed_features
 
-        # If we have PyTorch/TF tensors or lists as inputs, we cast them as Numpy arrays
+        # If we have PyTorch tensors or lists as inputs, we cast them as Numpy arrays
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
@@ -159,16 +158,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 first_element = required_input[index][0]
 
         if return_tensors is None:
-            if is_tf_tensor(first_element):
-                return_tensors = "tf"
-            elif is_torch_tensor(first_element):
+            if is_torch_tensor(first_element):
                 return_tensors = "pt"
             elif isinstance(first_element, (int, float, list, tuple, np.ndarray)):
                 return_tensors = "np"
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    "Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, or pytorch object."
                 )
 
         for key, value in processed_features.items():

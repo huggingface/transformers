@@ -15,7 +15,6 @@
 
 # This file is based on the tokenization_llama_fast.py file in transformers
 
-import pickle
 from typing import Literal, Union
 
 from tokenizers import processors
@@ -147,16 +146,11 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
         self.tool_use_template = kwargs.pop("tool_use_template", None)
 
-        # TODO @ArthurZucker this can only work one way for now, to update later-on. Tests should also properly
-        # check this as they were green before.
-        pre_tok_state = pickle.dumps(self.backend_tokenizer.pre_tokenizer)
-        decoder_state = pickle.dumps(self.backend_tokenizer.decoder)
-
-        if add_prefix_space:
-            pre_tok_state = pre_tok_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
-            decoder_state = decoder_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
-        self.backend_tokenizer.pre_tokenizer = pickle.loads(pre_tok_state)
-        self.backend_tokenizer.decoder = pickle.loads(decoder_state)
+        # This is a `tokenizers.pre_tokenizers.Sequence`
+        for pre_tokenizer in self.backend_tokenizer.pre_tokenizer:
+            if hasattr(pre_tokenizer, "add_prefix_space"):
+                pre_tokenizer.add_prefix_space = add_prefix_space
+        self.backend_tokenizer.decoder.add_prefix_space = add_prefix_space
 
         self.add_prefix_space = add_prefix_space
 
@@ -227,7 +221,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def apply_tool_use_template(
         self,
-        conversation: Union[list[dict[str, str]]],
+        conversation: list[dict[str, str]],
         tools: list[dict],
         **kwargs,
     ) -> Union[str, list[int]]:
@@ -244,7 +238,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         You can override the default template using the `tool_use_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[list[dict[str, str]]]): A list of dicts
+            conversation (list[dict[str, str]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
             tools (list[Dict]): a list of tools to render into the prompt for the model to choose from.
                 See an example at the bottom of the docstring.
@@ -276,10 +270,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
                 values are:
-                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
             return_dict (`bool`, *optional*, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
@@ -382,7 +374,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def apply_grounded_generation_template(
         self,
-        conversation: Union[list[dict[str, str]]],
+        conversation: list[dict[str, str]],
         documents: list[dict],
         citation_mode: Literal["fast", "accurate"] = "accurate",
         **kwargs,
@@ -400,7 +392,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         You can override the default template using the `grounded_generation_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[list[dict[str, str]]]): A list of dicts
+            conversation (list[dict[str, str]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
             documents (list[dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
                 generation on. A document is a semistructured dict, with a string to string mapping. Common fields are
@@ -424,10 +416,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
                 values are:
-                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
             return_dict (`bool`, *optional*, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
