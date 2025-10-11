@@ -88,10 +88,12 @@ class ConvNextImageProcessingTester:
 class ConvNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ConvNextImageProcessor if is_vision_available() else None
     fast_image_processing_class = ConvNextImageProcessorFast if is_torchvision_available() else None
+    image_processor_list = [image_processing_class, fast_image_processing_class]
 
     def setUp(self):
         super().setUp()
         self.image_processor_tester = ConvNextImageProcessingTester(self)
+
 
     @property
     def image_processor_dict(self):
