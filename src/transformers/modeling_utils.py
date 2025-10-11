@@ -56,7 +56,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel, load_and_register_kernel
+from .integrations.hub_kernels import is_kernel, load_and_register_attn_kernel
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
@@ -118,7 +118,7 @@ from .utils.import_utils import (
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
 )
-from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
+from .utils.quantization_config import QuantizationMethod
 
 
 if is_accelerate_available():
@@ -761,21 +761,17 @@ def _load_state_dict_into_meta_model(
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
                 if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    param_name = hf_quantizer.update_param_name(param_name)
+                    param_name = hf_quantizer.get_param_name(param_name)
                     module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
-                    # special case for gpt_oss model, we wait for the param to be leave the meta device before casting it to cpu
-                    if model.config.model_type == "gpt_oss" and value.device.type == "meta":
+                    # We need to wait until the quantized value is created
+                    if value.device.type == "meta":
                         continue
-                    param_to = "cpu"
-                    if is_fsdp_enabled() and not is_local_dist_rank_0():
-                        param_to = "meta"
-                    val_kwargs = {}
-                    if (hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params") or (
-                        value.dtype == torch.uint8 or value.dtype == torch.int8
-                    ):
+                    val_kwargs = value.__dict__
+                    if not value.is_floating_point():
                         val_kwargs["requires_grad"] = False
-                    value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
+                    device = "meta" if is_fsdp_enabled() and not is_local_dist_rank_0() else "cpu"
+                    value = type(value)(value.data.to(device), **val_kwargs)
                     setattr(module, param_type, value)
 
         # Remove the param from the state dict if it was not loaded on the fly to avoid wasting memory
@@ -2553,7 +2549,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_kernel(applicable_attn_implementation)
+                load_and_register_attn_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
                 if attn_implementation.startswith("flash_attention"):
                     logger.warning_once(
@@ -4381,10 +4377,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Whether or not to offload the buffers with the model parameters.
             quantization_config (`Union[QuantizationConfigMixin,Dict]`, *optional*):
                 A dictionary of configuration parameters or a QuantizationConfigMixin object for quantization (e.g
-                bitsandbytes, gptq). There may be other quantization-related kwargs, including `load_in_4bit` and
-                `load_in_8bit`, which are parsed by QuantizationConfigParser. Supported only for bitsandbytes
-                quantizations and not preferred. consider inserting all such arguments into quantization_config
-                instead.
+                bitsandbytes, gptq).
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -4447,8 +4440,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
         offload_buffers = kwargs.pop("offload_buffers", False)
-        load_in_8bit = kwargs.pop("load_in_8bit", False)
-        load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
@@ -4625,25 +4616,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` "
                     "requires `accelerate`. You can install it with `pip install accelerate`"
                 )
-
-        # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
-        if load_in_4bit or load_in_8bit:
-            if quantization_config is not None:
-                raise ValueError(
-                    "You can't pass `load_in_4bit`or `load_in_8bit` as a kwarg when passing "
-                    "`quantization_config` argument at the same time."
-                )
-
-            # preparing BitsAndBytesConfig from kwargs
-            config_dict = {k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters}
-            config_dict = {**config_dict, "load_in_4bit": load_in_4bit, "load_in_8bit": load_in_8bit}
-            quantization_config, kwargs = BitsAndBytesConfig.from_dict(
-                config_dict=config_dict, return_unused_kwargs=True, **kwargs
-            )
-            logger.warning(
-                "The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. "
-                "Please, pass a `BitsAndBytesConfig` object in `quantization_config` argument instead."
-            )
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -5776,7 +5748,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         # For example in the case of MXFP4 quantization, we need to update the param name to the original param name
         # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
         if hf_quantizer is not None:
-            param_name = hf_quantizer.update_param_name(param_name)
+            param_name = hf_quantizer.get_param_name(param_name)
 
         try:
             param = model.get_parameter_or_buffer(param_name)

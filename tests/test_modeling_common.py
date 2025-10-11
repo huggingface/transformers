@@ -34,6 +34,7 @@ from pytest import mark
 from transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
+    BitsAndBytesConfig,
     PreTrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -3585,7 +3586,7 @@ class ModelTesterMixin:
                     tmpdirname,
                     dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    load_in_4bit=True,
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
                 )
 
                 for _, param in model.named_parameters():
