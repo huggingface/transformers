@@ -18,10 +18,9 @@ import json
 import os
 from typing import Optional
 
-import regex
-
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging, requires_backends
+from ...utils.safe import regex
 
 
 logger = logging.get_logger(__name__)

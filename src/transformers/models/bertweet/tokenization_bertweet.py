@@ -21,10 +21,9 @@ import re
 from shutil import copyfile
 from typing import Optional
 
-import regex
-
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.safe import regex
 
 
 logger = logging.get_logger(__name__)
