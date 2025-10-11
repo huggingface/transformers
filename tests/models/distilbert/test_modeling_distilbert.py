@@ -223,8 +223,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
-    test_pruning = True
+    fx_compatible = False  # won't be maintained
     test_resize_embeddings = True
     test_resize_position_embeddings = True
 
@@ -383,7 +382,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
 
 @require_torch
-class DistilBertModelIntergrationTest(unittest.TestCase):
+class DistilBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
         model = DistilBertModel.from_pretrained("distilbert-base-uncased")
@@ -404,6 +403,8 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        from transformers.integrations.executorch import TorchExportableModuleForEncoderOnlyLM
 
         distilbert_model = "distilbert-base-uncased"
         device = "cpu"
@@ -431,13 +432,15 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
             ["capital", "birthplace", "northernmost", "centre", "southernmost"],
         )
 
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
+        exportable_module = TorchExportableModuleForEncoderOnlyLM(model)
+        exported_program = exportable_module.export(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
             strict=True,
         )
 
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        result = exported_program.module().forward(
+            input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
+        )
         exported_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
         self.assertEqual(eager_predicted_mask, exported_predicted_mask)

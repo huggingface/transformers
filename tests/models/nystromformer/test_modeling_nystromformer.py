@@ -239,8 +239,6 @@ class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = NystromformerModelTester(self)
@@ -252,12 +250,6 @@ class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

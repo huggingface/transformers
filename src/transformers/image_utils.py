@@ -19,19 +19,15 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import Optional, Union
 
+import httpx
 import numpy as np
-import requests
-from packaging import version
 
 from .utils import (
     ExplicitEnum,
-    is_jax_tensor,
     is_numpy_array,
-    is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
     is_torchvision_available,
-    is_torchvision_v2_available,
     is_vision_available,
     logging,
     requires_backends,
@@ -51,18 +47,13 @@ if is_vision_available():
     import PIL.Image
     import PIL.ImageOps
 
-    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
-        PILImageResampling = PIL.Image.Resampling
-    else:
-        PILImageResampling = PIL.Image
+    PILImageResampling = PIL.Image.Resampling
 
     if is_torchvision_available():
         from torchvision.transforms import InterpolationMode
 
         pil_torch_interpolation_mapping = {
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT
-            if is_torchvision_v2_available()
-            else InterpolationMode.NEAREST,
+            PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT,
             PILImageResampling.BOX: InterpolationMode.BOX,
             PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
@@ -82,7 +73,7 @@ logger = logging.get_logger(__name__)
 
 ImageInput = Union[
     "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
-]  # noqa
+]
 
 
 class ChannelDimension(ExplicitEnum):
@@ -111,8 +102,6 @@ class ImageType(ExplicitEnum):
     PIL = "pillow"
     TORCH = "torch"
     NUMPY = "numpy"
-    TENSORFLOW = "tensorflow"
-    JAX = "jax"
 
 
 def get_image_type(image):
@@ -122,15 +111,11 @@ def get_image_type(image):
         return ImageType.TORCH
     if is_numpy_array(image):
         return ImageType.NUMPY
-    if is_tf_tensor(image):
-        return ImageType.TENSORFLOW
-    if is_jax_tensor(image):
-        return ImageType.JAX
     raise ValueError(f"Unrecognized image type {type(image)}")
 
 
 def is_valid_image(img):
-    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img) or is_tf_tensor(img) or is_jax_tensor(img)
+    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img)
 
 
 def is_valid_list_of_images(images: list):
@@ -209,8 +194,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> list[ImageInput]:
             )
         return images
     raise ValueError(
-        "Invalid image type. Expected either PIL.Image.Image, numpy.ndarray, torch.Tensor, tf.Tensor or "
-        f"jax.ndarray, but got {type(images)}."
+        f"Invalid image type. Expected either PIL.Image.Image, numpy.ndarray, or torch.Tensor, but got {type(images)}."
     )
 
 
@@ -363,7 +347,7 @@ def get_channel_dimension_axis(
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
+def get_image_size(image: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 
@@ -475,7 +459,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
             # like http_huggingface_co.png
-            image = PIL.Image.open(BytesIO(requests.get(image, timeout=timeout).content))
+            image = PIL.Image.open(BytesIO(httpx.get(image, timeout=timeout, follow_redirects=True).content))
         elif os.path.isfile(image):
             image = PIL.Image.open(image)
         else:
@@ -490,9 +474,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
                 raise ValueError(
                     f"Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got {image}. Failed with {e}"
                 )
-    elif isinstance(image, PIL.Image.Image):
-        image = image
-    else:
+    elif not isinstance(image, PIL.Image.Image):
         raise TypeError(
             "Incorrect format used for image. Should be an url linking to an image, a base64 string, a local path, or a PIL image."
         )
@@ -529,7 +511,7 @@ def validate_preprocess_arguments(
     image_mean: Optional[Union[float, list[float]]] = None,
     image_std: Optional[Union[float, list[float]]] = None,
     do_pad: Optional[bool] = None,
-    size_divisibility: Optional[int] = None,
+    pad_size: Optional[Union[dict[str, int], int]] = None,
     do_center_crop: Optional[bool] = None,
     crop_size: Optional[dict[str, int]] = None,
     do_resize: Optional[bool] = None,
@@ -548,10 +530,15 @@ def validate_preprocess_arguments(
     if do_rescale and rescale_factor is None:
         raise ValueError("`rescale_factor` must be specified if `do_rescale` is `True`.")
 
-    if do_pad and size_divisibility is None:
-        # Here, size_divisor might be passed as the value of size
+    if do_pad and pad_size is None:
+        # Processors pad images using different args depending on the model, so the below check is pointless
+        # but we keep it for BC for now. TODO: remove in v5
+        # Usually padding can be called with:
+        #   - "pad_size/size" if we're padding to specific values
+        #   - "size_divisor" if we're padding to any value divisible by X
+        #   - "None" if we're padding to the maximum size image in batch
         raise ValueError(
-            "Depending on the model, `size_divisibility`, `size_divisor`, `pad_size` or `size` must be specified if `do_pad` is `True`."
+            "Depending on the model, `size_divisor` or `pad_size` or `size` must be specified if `do_pad` is `True`."
         )
 
     if do_normalize and (image_mean is None or image_std is None):
@@ -569,7 +556,6 @@ def validate_preprocess_arguments(
         raise ValueError("`size` and `resample/interpolation` must be specified if `do_resize` is `True`.")
 
 
-# In the future we can add a TF implementation here when we have TF models.
 class ImageFeatureExtractionMixin:
     """
     Mixin that contain utilities for preparing image features.
@@ -578,7 +564,7 @@ class ImageFeatureExtractionMixin:
     def _ensure_format_supported(self, image):
         if not isinstance(image, (PIL.Image.Image, np.ndarray)) and not is_torch_tensor(image):
             raise ValueError(
-                f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.array` and "
+                f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.ndarray` and "
                 "`torch.Tensor` are."
             )
 

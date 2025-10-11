@@ -13,12 +13,13 @@
 # limitations under the License.
 import inspect
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -120,9 +121,8 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SuperGlueForKeypointMatching,) if is_torch_available() else ()
 
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = True
 
     def setUp(self):

@@ -289,7 +289,7 @@ class ProcessorTesterMixin:
         if "videos" in inputs_dict:
             processing_kwargs["do_sample_frames"] = False
 
-        # Firts call processor with all inputs and use nested input type, which is the format supported by all multimodal processors
+        # First call processor with all inputs and use nested input type, which is the format supported by all multimodal processors
         image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
         video_inputs_nested = [[video] for video in video_inputs]
         inputs_dict_nested = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
@@ -332,7 +332,9 @@ class ProcessorTesterMixin:
                             {"type": "text", "text": "What is the capital of France?"},
                             {
                                 "type": "image",
-                                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                                "url": url_to_local_path(
+                                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+                                ),
                             },
                         ],
                     },
@@ -381,7 +383,7 @@ class ProcessorTesterMixin:
 
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         """
-        We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
+        We use do_rescale=True, rescale_factor=-1.0 to ensure that image_processor kwargs are preserved in the processor.
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
@@ -389,7 +391,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
-            "image_processor", do_rescale=True, rescale_factor=-1
+            "image_processor", do_rescale=True, rescale_factor=-1.0
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -435,7 +437,9 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
+        inputs = processor(
+            text=input_str, images=image_input, do_rescale=True, rescale_factor=-1.0, return_tensors="pt"
+        )
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs(self):
@@ -453,7 +457,7 @@ class ProcessorTesterMixin:
             images=image_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="max_length",
             max_length=76,
         )
@@ -476,7 +480,7 @@ class ProcessorTesterMixin:
             images=image_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="longest",
             max_length=76,
         )
@@ -501,7 +505,7 @@ class ProcessorTesterMixin:
             _ = processor(
                 text=input_str,
                 images=image_input,
-                images_kwargs={"do_rescale": True, "rescale_factor": -1},
+                images_kwargs={"do_rescale": True, "rescale_factor": -1.0},
                 do_rescale=True,
                 return_tensors="pt",
             )
@@ -532,7 +536,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -555,7 +559,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -681,7 +685,7 @@ class ProcessorTesterMixin:
 
     def test_video_processor_defaults_preserved_by_video_kwargs(self):
         """
-        We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
+        We use do_rescale=True, rescale_factor=-1.0 to ensure that image_processor kwargs are preserved in the processor.
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
@@ -689,7 +693,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["video_processor"] = self.get_component(
-            "video_processor", do_rescale=True, rescale_factor=-1
+            "video_processor", do_rescale=True, rescale_factor=-1.0
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=167, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -745,7 +749,7 @@ class ProcessorTesterMixin:
             videos=video_input,
             do_sample_frames=False,
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             return_tensors="pt",
         )
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
@@ -766,7 +770,7 @@ class ProcessorTesterMixin:
             do_sample_frames=False,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="max_length",
             max_length=176,
         )
@@ -790,7 +794,7 @@ class ProcessorTesterMixin:
             do_sample_frames=False,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="longest",
             max_length=176,
         )
@@ -816,7 +820,7 @@ class ProcessorTesterMixin:
                 text=input_str,
                 videos=video_input,
                 do_sample_frames=False,
-                videos_kwargs={"do_rescale": True, "rescale_factor": -1},
+                videos_kwargs={"do_rescale": True, "rescale_factor": -1.0},
                 do_rescale=True,
                 return_tensors="pt",
             )
@@ -835,7 +839,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 
@@ -858,7 +862,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 
@@ -873,7 +877,8 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(modalities="image")
@@ -1132,7 +1137,9 @@ class ProcessorTesterMixin:
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
@@ -1154,7 +1161,7 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
 
         # Load with `fps` arg
-        fps = 1
+        fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -1165,10 +1172,11 @@ class ProcessorTesterMixin:
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), fps * 10)
+        # 3 frames are inferred from input video's length and FPS, so can be hardcoded
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
 
-        # Whan `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
-        fps = 1
+        # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
+        fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -1180,7 +1188,7 @@ class ProcessorTesterMixin:
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 300)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 11)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -1202,16 +1210,18 @@ class ProcessorTesterMixin:
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 300)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 11)
 
         # Load video as a list of frames (i.e. images).
         # NOTE: each frame should have same size because we assume they come from one video
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-            ],
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                )
+            ]
+            * 2,
         }
         out_dict_with_video = processor.apply_chat_template(
             messages,

@@ -125,8 +125,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     """
 
     all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
@@ -145,7 +143,7 @@ class MllamaVisionText2TextModelTester:
             "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 4,
             "intermediate_size": 37,
@@ -166,7 +164,7 @@ class MllamaVisionText2TextModelTester:
             "intermediate_layers_indices": [0],
             "vision_output_dim": 32,
             "projection_dim": 32,
-            "num_hidden_layers": 6,
+            "num_hidden_layers": 2,
             "num_global_layers": 2,
             "num_attention_heads": 4,
             "intermediate_size": 37,
@@ -280,8 +278,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
+
     test_torchscript = False
     _is_composite = True
 
@@ -368,16 +365,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="Mllama cache type doesn't allow correct check on output `past_key_values` due to `Cache.crop()`"
-    )
-    def test_contrastive_generate_dict_outputs_use_cache(self, assistant_type):
-        pass
-
-    @unittest.skip(reason="Mllama can't do low memory due to `Cache.crop()`")
-    def test_contrastive_generate_low_memory(self, assistant_type):
-        pass
-
     @unittest.skip(reason="Mllama can't assisted decoding due to cache format and `Cache.crop()`")
     def test_assisted_decoding_with_num_logits_to_keep(self):
         pass
@@ -410,90 +397,21 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @pytest.mark.generate
-    # overridden because mllama is not an encoder-decoder model, but has encoder-decoder-like cache
-    def test_past_key_values_format(self):
-        # Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test. Having a
-        # standard KV cache format is important for a consistent API (and for advanced generation methods).
-        for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-            model = model_class(config).to(torch_device)
-            if "use_cache" not in inputs:
-                inputs["use_cache"] = True
-            outputs = model(**inputs)
-
-            text_config = config.get_text_config()
-            num_hidden_layers = (
-                getattr(text_config, "decoder_layers", None)
-                or getattr(text_config, "num_decoder_layers", None)
-                or text_config.num_hidden_layers
-            )
-            num_attention_heads = getattr(text_config, "decoder_attention_heads", text_config.num_attention_heads)
-            embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
-            per_head_embed_dim = embed_dim // num_attention_heads
-
-            # some models have different num-head for query vs key/value so we need to assign correct value
-            # BUT only after `per_head_embed_dim` is set
-            num_attention_heads = (
-                text_config.num_key_value_heads
-                if getattr(text_config, "num_key_value_heads", None) is not None
-                else num_attention_heads
-            )
-
-            past_kv = outputs["past_key_values"]
-            self.assertEqual(len(past_kv), num_hidden_layers)
-            batch_size, seq_length = inputs["input_ids"].shape
-            for i in range(num_hidden_layers):
-                self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
-                if i in self.model_tester.text_config["cross_attention_layers"]:
-                    self.assertEqual(
-                        past_kv[i][0].shape,
-                        (batch_size, num_attention_heads, self.model_tester.image_length, per_head_embed_dim),
-                    )
-                    self.assertEqual(
-                        past_kv[i][1].shape,
-                        (batch_size, num_attention_heads, self.model_tester.image_length, per_head_embed_dim),
-                    )
-                else:
-                    self.assertEqual(
-                        past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
-                    )
-                    self.assertEqual(
-                        past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
-                    )
-
     # overridden because mllama has special cache for self and cross attentions
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, Cache)
-        self.assertListEqual(
-            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
-            [True] * len(decoder_past_key_values),
-        )
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Cache)
 
-        for layer_idx, layer_past_key_values in enumerate(decoder_past_key_values):
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+
+        for layer_idx in range(len(past_key_values)):
             if layer_idx in self.model_tester.text_config["cross_attention_layers"]:
-                expected_shape = (
-                    batch_size,
-                    config.num_key_value_heads
-                    if hasattr(config, "num_key_value_heads")
-                    else config.num_attention_heads,
-                    self.model_tester.image_length,
-                    config.hidden_size // config.num_attention_heads,
-                )
+                expected_shape = (batch_size, num_heads, self.model_tester.image_length, head_dim)
             else:
-                # (batch, head, cache_length, head_features)
-                expected_shape = (
-                    batch_size,
-                    config.num_key_value_heads
-                    if hasattr(config, "num_key_value_heads")
-                    else config.num_attention_heads,
-                    cache_length,
-                    config.hidden_size // config.num_attention_heads,
-                )
+                expected_shape = (batch_size, num_heads, seq_length, head_dim)
             # check shape key, value
-            self.assertListEqual([layer_past_key_values[0].shape], [expected_shape])
-            self.assertListEqual([layer_past_key_values[1].shape], [expected_shape])
+            self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_shape)
+            self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_shape)
 
     def test_generate_text_only_with_cache(self):
         """
@@ -514,6 +432,25 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             del inputs["pixel_values"]
 
             model.generate(input_ids, use_cache=True)
+
+    @pytest.mark.generate
+    def test_left_padding_compatibility(self):
+        # Overwrite -- mllama needs to prepare `cross_attention_mask`, and it must be padded accordingly
+        _, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
+        cross_attention_mask = inputs_dict["cross_attention_mask"]
+
+        pad_cross_attn_size = (input_ids.shape[0], 32, *cross_attention_mask.shape[2:])
+        extra_cross_attn_mask = torch.zeros(pad_cross_attn_size, dtype=cross_attention_mask.dtype, device=torch_device)
+        padded_cross_attention_mask = torch.cat([extra_cross_attn_mask, cross_attention_mask], dim=1)
+
+        # `cross_attention_mask` is randomly generated in `prepare_config_and_inputs_for_generate`, and it must match
+        # its padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"cross_attention_mask": cross_attention_mask}
+        padded_custom_inputs = {"cross_attention_mask": padded_cross_attention_mask}
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
 
 
 @require_torch
@@ -677,7 +614,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>This image shows",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device
@@ -734,7 +676,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Prepare inputs
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         conversation = [
             {

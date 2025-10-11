@@ -19,6 +19,7 @@ import hashlib
 import importlib
 import importlib.metadata
 import importlib.util
+import keyword
 import os
 import re
 import shutil
@@ -45,6 +46,41 @@ from .utils.import_utils import VersionComparison, split_package_version
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+
+def _sanitize_module_name(name: str) -> str:
+    r"""
+    Tries to sanitize a module name so that it can be used as a Python module.
+
+    The following transformations are applied:
+
+    1. Replace `.` in module names with `_dot_`.
+    2. Replace `-` in module names with `_hyphen_`.
+    3. If the module name starts with a digit, prepend it with `_`.
+    4. Warn if the sanitized name is a Python reserved keyword or not a valid identifier.
+
+    If the input name is already a valid identifier, it is returned unchanged.
+    """
+    # We not replacing `\W` characters with `_` to avoid collisions. Because `_` is a very common
+    # separator used in module names, replacing `\W` with `_` would create too many collisions.
+    # Once a module is imported, it is cached in `sys.modules` and the second import would return
+    # the first module, which might not be the expected behavior if name collisions happen.
+    new_name = name.replace(".", "_dot_").replace("-", "_hyphen_")
+    if new_name and new_name[0].isdigit():
+        new_name = f"_{new_name}"
+    if keyword.iskeyword(new_name):
+        logger.warning(
+            f"The module name {new_name} (originally {name}) is a reserved keyword in Python. "
+            "Please rename the original module to avoid import issues."
+        )
+    elif not new_name.isidentifier():
+        logger.warning(
+            f"The module name {new_name} (originally {name}) is not a valid Python identifier. "
+            "Please rename the original module to avoid import issues."
+        )
+    return new_name
+
+
 _HF_REMOTE_CODE_LOCK = threading.Lock()
 
 
@@ -249,8 +285,7 @@ def get_class_in_module(
         `typing.Type`: The class looked for.
     """
     name = os.path.normpath(module_path)
-    if name.endswith(".py"):
-        name = name[:-3]
+    name = name.removesuffix(".py")
     name = name.replace(os.path.sep, ".")
     module_file: Path = Path(HF_MODULES_CACHE) / module_path
     with _HF_REMOTE_CODE_LOCK:
@@ -283,7 +318,6 @@ def get_cached_module_file(
     module_file: str,
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -313,9 +347,6 @@ def get_cached_module_file(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -358,9 +389,9 @@ def get_cached_module_file(
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
     is_local = os.path.isdir(pretrained_model_name_or_path)
     if is_local:
-        submodule = os.path.basename(pretrained_model_name_or_path)
+        submodule = _sanitize_module_name(os.path.basename(pretrained_model_name_or_path))
     else:
-        submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
+        submodule = os.path.sep.join(map(_sanitize_module_name, pretrained_model_name_or_path.split("/")))
         cached_module = try_to_load_from_cache(
             pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
@@ -374,7 +405,6 @@ def get_cached_module_file(
             cache_dir=cache_dir,
             force_download=force_download,
             proxies=proxies,
-            resume_download=resume_download,
             local_files_only=local_files_only,
             token=token,
             revision=revision,
@@ -395,7 +425,7 @@ def get_cached_module_file(
     full_submodule = TRANSFORMERS_DYNAMIC_MODULE_NAME + os.path.sep + submodule
     create_dynamic_module(full_submodule)
     submodule_path = Path(HF_MODULES_CACHE) / full_submodule
-    if submodule == os.path.basename(pretrained_model_name_or_path):
+    if submodule == _sanitize_module_name(os.path.basename(pretrained_model_name_or_path)):
         # We copy local files to avoid putting too many folders in sys.path. This copy is done when the file is new or
         # has changed since last copy.
         if not (submodule_path / module_file).exists() or not filecmp.cmp(
@@ -434,7 +464,6 @@ def get_cached_module_file(
                     f"{Path(module_file).parent / module_needed}.py",
                     cache_dir=cache_dir,
                     force_download=force_download,
-                    resume_download=resume_download,
                     proxies=proxies,
                     token=token,
                     revision=revision,
@@ -461,7 +490,6 @@ def get_class_from_dynamic_module(
     pretrained_model_name_or_path: Union[str, os.PathLike],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -504,9 +532,6 @@ def get_class_from_dynamic_module(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -571,7 +596,6 @@ def get_class_from_dynamic_module(
         module_file + ".py",
         cache_dir=cache_dir,
         force_download=force_download,
-        resume_download=resume_download,
         proxies=proxies,
         token=token,
         revision=code_revision,
@@ -589,7 +613,7 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
     Args:
         obj (`Any`): The object for which to save the module files.
         folder (`str` or `os.PathLike`): The folder where to save.
-        config (`PretrainedConfig` or dictionary, `optional`):
+        config (`PreTrainedConfig` or dictionary, `optional`):
             A config in which to register the auto_map corresponding to this custom object.
 
     Returns:

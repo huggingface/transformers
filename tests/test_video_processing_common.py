@@ -342,6 +342,13 @@ class VideoProcessingTestMixin:
             self.assertEqual(encoded_videos.shape[1], 6)
             self.assertEqual(encoded_videos_batched.shape[1], 6)
 
+            # The same as above but uses a `VideoMetadata` object in the input
+            metadata = [[VideoMetadata(duration=2.0, total_num_frames=8, fps=4)]]
+            batched_metadata = metadata * len(video_inputs)
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
+                self.input_name
+            ]
+
             # We should raise error when asked to sample more frames than there are in input video
             with self.assertRaises(ValueError):
                 encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=10)[self.input_name]
@@ -391,8 +398,8 @@ class VideoProcessingTestMixin:
                 video_inputs[0],
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=0.0,
+                image_std=1.0,
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             if video_processor.do_convert_rgb:
@@ -405,8 +412,8 @@ class VideoProcessingTestMixin:
                 video_inputs,
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=0.0,
+                image_std=1.0,
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             if video_processor.do_convert_rgb:

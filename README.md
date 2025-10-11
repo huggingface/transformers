@@ -48,9 +48,11 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
     </p>
 </h4>
 
@@ -62,12 +64,11 @@ limitations under the License.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_as_a_model_definition.png"/>
 </h3>
 
+Transformers acts as the model-definition framework for state-of-the-art machine learning models in text, computer
+vision, audio, video, and multimodal model, for both inference and training.
 
-Transformers acts as the model-definition framework for state-of-the-art machine learning models in text, computer 
-vision, audio, video, and multimodal model, for both inference and training. 
-
-It centralizes the model definition so that this definition is agreed upon across the ecosystem. `transformers` is the 
-pivot across frameworks: if a model definition is supported, it will be compatible with the majority of training 
+It centralizes the model definition so that this definition is agreed upon across the ecosystem. `transformers` is the
+pivot across frameworks: if a model definition is supported, it will be compatible with the majority of training
 frameworks (Axolotl, Unsloth, DeepSpeed, FSDP, PyTorch-Lightning, ...), inference engines (vLLM, SGLang, TGI, ...),
 and adjacent modeling libraries (llama.cpp, mlx, ...) which leverage the model definition from `transformers`.
 
@@ -80,7 +81,7 @@ Explore the [Hub](https://huggingface.com/) today to find a model and use Transf
 
 ## Installation
 
-Transformers works with Python 3.9+ [PyTorch](https://pytorch.org/get-started/locally/) 2.1+, [TensorFlow](https://www.tensorflow.org/install/pip) 2.6+, and [Flax](https://flax.readthedocs.io/en/latest/) 0.4.1+.
+Transformers works with Python 3.9+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.1+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
@@ -110,10 +111,10 @@ git clone https://github.com/huggingface/transformers.git
 cd transformers
 
 # pip
-pip install .[torch]
+pip install '.[torch]'
 
 # uv
-uv pip install .[torch]
+uv pip install '.[torch]'
 ```
 
 ## Quickstart
@@ -192,7 +193,6 @@ pipeline("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.pn
 
 <details>
 <summary>Visual question answering</summary>
-
 
 <h3 align="center">
     <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg"></a>

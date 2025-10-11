@@ -17,9 +17,10 @@ import re
 import subprocess
 import textwrap
 from argparse import ArgumentParser, Namespace
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
@@ -755,7 +756,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
         )
         add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
 
-    def __init__(self, path_to_repo=None, *args):
+    def __init__(self, path_to_repo=None, **kwargs):
         (
             self.old_model_infos,
             self.new_lowercase_name,

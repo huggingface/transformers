@@ -39,7 +39,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     ids_tensor,
 )
 
@@ -143,8 +142,7 @@ class CsmModelTester:
 
 class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
-    test_headmasking = False
+
     test_resize_embeddings = False
     test_resize_embeddings_untied = False
 
@@ -189,25 +187,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
             )
 
         return logits_processor_kwargs
-
-    def test_initialization(self):
-        """
-        Overrides [ModelTesterMixin.test_initialization] because of specificities of Mimi codec model.
-        See https://github.com/huggingface/transformers/blob/1077603410cd73ba71d64a522033574d66d64b55/tests/models/mimi/test_modeling_mimi.py#L384-L397
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = ["conv", "input_proj", "output_proj"]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _check_similar_generate_outputs(self, output_1, output_2, atol=1e-5, rtol=1e-5):
         """
@@ -362,7 +341,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate(self):
         """
         Tests the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/d25577a357ddcf8f4a8cd0d00baca551, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/d25577a357ddcf8f4a8cd0d00baca551, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         prompt = "<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"
@@ -406,7 +385,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate_no_audio(self):
         """
         Tests the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/aed822f765e928b9612e01b0d8836d69, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/aed822f765e928b9612e01b0d8836d69, which is a script that infers the original model.
         """
 
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
@@ -467,7 +446,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate_multiple_audio(self):
         """
         Test the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/0c94de002e1325abb61d32217f74c0f8, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/0c94de002e1325abb61d32217f74c0f8, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
@@ -526,7 +505,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate_batched(self):
         """
         Test the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/bcc532b53161bc31da3d66cb07ae193f, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/bcc532b53161bc31da3d66cb07ae193f, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 

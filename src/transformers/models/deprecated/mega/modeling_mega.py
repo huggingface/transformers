@@ -19,11 +19,11 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
+from ....cache_utils import Cache
 from ....modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -41,7 +41,6 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_mega import MegaConfig
 
 
@@ -154,8 +153,6 @@ class MegaRotaryRelativePositionalBias(nn.Module):
         self.sine, self.cosine = MegaRotaryRelativePositionalBias.get_sinusoid_embeddings(
             config.max_positions, self.embed_dim
         )
-        # alpha and beta parameters for the rotary bias; beta renamed to b_param to avoid clashes with tf/flax weight handling
-        # in loading pretrained weights
         self.alpha = nn.Parameter(torch.Tensor(1, self.embed_dim))
         self.b_param = nn.Parameter(torch.Tensor(1, self.embed_dim))
         self.register_buffer("_float_tensor", torch.FloatTensor([0.0]))
@@ -625,7 +622,7 @@ class MegaGatedCrossAttention(nn.Module):
         key: Optional[torch.Tensor],
         value: Optional[torch.Tensor],
         key_padding_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -910,7 +907,7 @@ class MegaMovingAverageGatedAttention(nn.Module):
         input,
         padding_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions=False,
         use_cache=False,
     ):
@@ -1174,7 +1171,6 @@ class MegaBlock(nn.Module):
         else:
             self.cross_attn = None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1182,7 +1178,7 @@ class MegaBlock(nn.Module):
         causal_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: bool = False,
     ) -> tuple[torch.Tensor]:
@@ -1490,7 +1486,7 @@ class MegaModel(MegaPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1675,7 +1671,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1785,14 +1781,6 @@ class MegaForCausalLM(MegaPreTrainedModel):
             input_ids = input_ids[:, -1:]
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @add_start_docstrings("""MEGA Model with a `language modeling` head on top.""", MEGA_START_DOCSTRING)

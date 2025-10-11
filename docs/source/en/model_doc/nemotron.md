@@ -57,13 +57,14 @@ The following code provides an example of how to load the Minitron-4B model and 
 
 ```python
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, infer_device
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from accelerate import Accelerator
 
 # Load the tokenizer and model
 model_path = 'nvidia/Minitron-4B-Base'
 tokenizer  = AutoTokenizer.from_pretrained(model_path)
 
-device = infer_device()
+device = Accelerator().device
 dtype  = torch.bfloat16
 model  = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, device_map=device)
 
@@ -97,7 +98,6 @@ Minitron is released under the [NVIDIA Open Model License Agreement](https://dev
 | :------------- | :------------- | :------------- | :------------- | :------------- |
 | 75.0 | 74.0 | 24.1  | 50.9 | 29.5
 
-
 *Code generation performance*. Evaluated using [HumanEval](https://github.com/openai/human-eval):
 
 | p@1, 0-Shot |
@@ -109,7 +109,8 @@ Please refer to our [paper](https://huggingface.co/papers/2407.14679) for the fu
 ### Citation
 
 If you find our work helpful, please consider citing our paper:
-```
+
+```bibtex
 @article{minitron2024,
       title={Compact Language Models via Pruning and Knowledge Distillation},
       author={Saurav Muralidharan and Sharath Turuvekere Sreenivas and Raviraj Joshi and Marcin Chochowski and Mostofa Patwary and Mohammad Shoeybi and Bryan Catanzaro and Jan Kautz and Pavlo Molchanov},
@@ -123,12 +124,10 @@ If you find our work helpful, please consider citing our paper:
 
 [[autodoc]] NemotronConfig
 
-
 ## NemotronModel
 
 [[autodoc]] NemotronModel
     - forward
-
 
 ## NemotronForCausalLM
 
@@ -140,12 +139,10 @@ If you find our work helpful, please consider citing our paper:
 [[autodoc]] NemotronForSequenceClassification
     - forward
 
-
 ## NemotronForQuestionAnswering
 
 [[autodoc]] NemotronForQuestionAnswering
     - forward
-
 
 ## NemotronForTokenClassification
 

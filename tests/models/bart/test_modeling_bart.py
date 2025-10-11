@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 import timeout_decorator  # noqa
 
@@ -28,7 +29,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -422,7 +422,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     is_encoder_decoder = True
     fx_compatible = False  # Fix me Michael
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = BartModelTester(self)
@@ -1506,7 +1505,7 @@ class BartStandaloneDecoderModelTester:
 class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BartDecoder, BartForCausalLM) if is_torch_available() else ()
     fx_comptatible = True
-    test_pruning = False
+
     is_encoder_decoder = False
     test_missing_keys = False
 

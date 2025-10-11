@@ -28,7 +28,6 @@ from ...utils import is_torch_available, logging
 if is_torch_available():
     import torch
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -74,9 +73,9 @@ class ColPaliProcessor(PaliGemmaProcessor):
         visual_prompt_prefix: str = "Describe the image.",
         query_prefix: str = "Question: ",
     ):
-        super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
         self.visual_prompt_prefix = visual_prompt_prefix
         self.query_prefix = query_prefix
+        super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
 
     @property
     def query_augmentation_token(self) -> str:
@@ -89,10 +88,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -118,10 +115,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -139,7 +134,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = suffix is not None
+        return_token_type_ids = True
 
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
@@ -170,7 +165,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             inputs = self.tokenizer(
                 input_strings,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -200,7 +195,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             batch_query = self.tokenizer(
                 texts_query,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -208,7 +203,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
     def process_images(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -225,10 +220,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -260,10 +253,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

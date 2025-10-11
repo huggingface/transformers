@@ -14,22 +14,22 @@
 # limitations under the License.
 """RoCBert model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class RoCBertConfig(PretrainedConfig):
+class RoCBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RoCBertModel`]. It is used to instantiate a
     RoCBert model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RoCBert
     [weiweishi/roc-bert-base-zh](https://huggingface.co/weiweishi/roc-bert-base-zh) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -65,12 +65,6 @@ class RoCBertConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
         enable_pronunciation (`bool`, *optional*, defaults to `True`):
@@ -124,7 +118,6 @@ class RoCBertConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         use_cache=True,
         pad_token_id=0,
-        position_embedding_type="absolute",
         classifier_dropout=None,
         enable_pronunciation=True,
         enable_shape=True,
@@ -155,7 +148,6 @@ class RoCBertConfig(PretrainedConfig):
         self.shape_embed_dim = shape_embed_dim
         self.shape_vocab_size = shape_vocab_size
         self.concat_input = concat_input
-        self.position_embedding_type = position_embedding_type
         self.classifier_dropout = classifier_dropout
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

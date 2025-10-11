@@ -18,11 +18,10 @@ from typing import Optional, Union
 
 import numpy as np
 
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_vision_available, logging
 
 
@@ -37,13 +36,13 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
     box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
     color: Optional[str]
-    num_image_tokens: Optional[int]
-    multi_page: Optional[bool]
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
+    num_image_tokens: int
+    multi_page: bool
 
 
 class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -136,15 +135,13 @@ class GotOcr2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
         is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
-        `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwrags` arguments to
+        `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
         GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 
         Args:
@@ -177,10 +174,8 @@ class GotOcr2Processor(ProcessorMixin):
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

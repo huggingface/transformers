@@ -77,8 +77,10 @@ for result in results:
         box = [round(i, 2) for i in box.tolist()]
         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
 ```
+
 This should output
-```
+
+```text
 cat: 0.87 [14.7, 49.39, 320.52, 469.28]
 remote: 0.86 [41.08, 72.37, 173.39, 117.2]
 cat: 0.86 [344.45, 19.43, 639.85, 367.86]
@@ -89,6 +91,7 @@ couch: 0.59 [-0.04, 1.34, 639.9, 477.09]
 There are three other ways to instantiate a DAB-DETR model (depending on what you prefer):
 
 Option 1: Instantiate DAB-DETR with pre-trained weights for entire model
+
 ```py
 >>> from transformers import DabDetrForObjectDetection
 
@@ -96,18 +99,20 @@ Option 1: Instantiate DAB-DETR with pre-trained weights for entire model
 ```
 
 Option 2: Instantiate DAB-DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
+
 ```py
 >>> from transformers import DabDetrConfig, DabDetrForObjectDetection
 
 >>> config = DabDetrConfig()
 >>> model = DabDetrForObjectDetection(config)
 ```
+
 Option 3: Instantiate DAB-DETR with randomly initialized weights for backbone + Transformer
+
 ```py
 >>> config = DabDetrConfig(use_pretrained_backbone=False)
 >>> model = DabDetrForObjectDetection(config)
 ```
-
 
 ## DabDetrConfig
 
