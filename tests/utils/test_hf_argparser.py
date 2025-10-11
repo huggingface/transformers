@@ -22,7 +22,7 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Optional, Union, get_args, get_origin
+from typing import Any, Literal, Optional, Union, get_args, get_origin
 from unittest.mock import patch
 
 import yaml
@@ -490,3 +490,7 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(TrainingArguments)
         training_args = parser.parse_args_into_dataclasses()[0]
         self.assertEqual(training_args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)
+
+    @require_torch
+    def test_17_union_dict_str_parsing(self):
+        self.assertIsNotNone(HfArgumentParser(TrainingArguments))
