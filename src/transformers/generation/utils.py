@@ -1807,7 +1807,7 @@ class GenerationMixin(ContinuousMixin):
             cache_position = torch.ones(seq_length, dtype=torch.int64, device=device).cumsum(0) - 1
 
         past_length = 0
-        if model_kwargs.get("past_key_values") is not None:
+        if model_kwargs.get("past_key_values", None) is not None:
             cache = model_kwargs["past_key_values"]
             past_length = 0
             # Support for BC tuple cache format
