@@ -1104,9 +1104,11 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if past_key_values is not None or (input_ids is not None and input_ids.shape[1] == 1):
+            logits = self.lm_head(hidden_states[:, -1:, :])
+        else:
+            # Prefill or training: compute logits for all tokens
+            logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
