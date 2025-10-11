@@ -16,7 +16,10 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import ClassVar, Optional
 
+from huggingface_hub.dataclasses import strict
 from packaging import version
 
 from ...configuration_utils import PreTrainedConfig
@@ -28,6 +31,8 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class ResNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
@@ -84,37 +89,30 @@ class ResNetConfig(BackboneConfigMixin, PreTrainedConfig):
     """
 
     model_type = "resnet"
-    layer_types = ["basic", "bottleneck"]
+    layer_types: ClassVar[list[str]] = ["basic", "bottleneck"]
 
-    def __init__(
-        self,
-        num_channels=3,
-        embedding_size=64,
-        hidden_sizes=[256, 512, 1024, 2048],
-        depths=[3, 4, 6, 3],
-        layer_type="bottleneck",
-        hidden_act="relu",
-        downsample_in_first_stage=False,
-        downsample_in_bottleneck=False,
-        out_features=None,
-        out_indices=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        if layer_type not in self.layer_types:
-            raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
-        self.num_channels = num_channels
-        self.embedding_size = embedding_size
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.layer_type = layer_type
-        self.hidden_act = hidden_act
-        self.downsample_in_first_stage = downsample_in_first_stage
-        self.downsample_in_bottleneck = downsample_in_bottleneck
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+    num_channels: Optional[int] = 3
+    embedding_size: Optional[int] = 64
+    hidden_sizes: Optional[list[int]] = field(default_factory=lambda: [256, 512, 1024, 2048])
+    depths: Optional[list[int]] = field(default_factory=lambda: [3, 4, 6, 3])
+    layer_type: Optional[str] = "bottleneck"
+    hidden_act: Optional[str] = "relu"
+    downsample_in_first_stage: Optional[bool] = False
+    downsample_in_bottleneck: Optional[bool] = False
+    out_features: Optional[list[str]] = None
+    out_indices: Optional[list[int]] = None
+
+    def __post_init__(self, **kwargs):
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+            out_features=self.out_features, out_indices=self.out_indices, stage_names=self.stage_names
         )
+        super().__post_init__(**kwargs)
+
+    def validate_layer_type(self):
+        """Check that `layer_types` is correctly defined."""
+        if self.layer_type not in self.layer_types:
+            raise ValueError(f"layer_type={self.layer_type} is not one of {','.join(self.layer_types)}")
 
 
 class ResNetOnnxConfig(OnnxConfig):

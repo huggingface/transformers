@@ -20,7 +20,6 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
 class ArceeConfig(PreTrainedConfig):
@@ -188,7 +187,6 @@ class ArceeConfig(PreTrainedConfig):
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

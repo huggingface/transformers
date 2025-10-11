@@ -20,7 +20,6 @@
 """Granite model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -190,8 +189,6 @@ class GraniteConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        rope_config_validation(self)
 
 
 __all__ = ["GraniteConfig"]

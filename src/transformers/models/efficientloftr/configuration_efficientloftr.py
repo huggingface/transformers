@@ -14,7 +14,6 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
 class EfficientLoFTRConfig(PreTrainedConfig):
@@ -189,7 +188,6 @@ class EfficientLoFTRConfig(PreTrainedConfig):
 
         # for compatibility with "default" rope type
         self.partial_rotary_factor = partial_rotary_factor
-        rope_config_validation(self)
 
         self.initializer_range = initializer_range
 

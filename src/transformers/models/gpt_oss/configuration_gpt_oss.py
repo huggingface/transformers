@@ -14,8 +14,7 @@
 # limitations under the License.
 """openai model configuration"""
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
 
 
 class GptOssConfig(PreTrainedConfig):
@@ -103,7 +102,6 @@ class GptOssConfig(PreTrainedConfig):
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.attention_bias = True
         self.max_position_embeddings = max_position_embeddings
@@ -115,7 +113,6 @@ class GptOssConfig(PreTrainedConfig):
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

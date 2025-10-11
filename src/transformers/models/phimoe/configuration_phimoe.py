@@ -16,7 +16,6 @@
 """PyTorch Phi-MoE model."""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -186,8 +185,6 @@ class PhimoeConfig(PreTrainedConfig):
                 )
             if not isinstance(rope_scaling_long_mscale, (int, float)):
                 raise TypeError(f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}")
-
-        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

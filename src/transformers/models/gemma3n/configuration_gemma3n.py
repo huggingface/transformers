@@ -22,8 +22,7 @@
 from collections.abc import Sequence
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
 from ...utils import is_timm_available, logging, requires_backends
 
 
@@ -268,7 +267,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
-        rope_config_validation(self)
 
         if layer_types is None:
             self.layer_types = [
@@ -276,8 +274,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
             ]
         else:
             self.layer_types = layer_types
-
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers

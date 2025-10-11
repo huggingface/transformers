@@ -19,8 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
 
 
 class Olmo3Config(PreTrainedConfig):
@@ -214,13 +213,11 @@ class Olmo3Config(PreTrainedConfig):
             self.layer_types = [
                 "sliding_attention" if (i + 1) % 4 != 0 else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
 
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
         """
-        rope_config_validation(self)
 
 
 __all__ = ["Olmo3Config"]

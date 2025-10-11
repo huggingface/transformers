@@ -16,7 +16,6 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -285,7 +284,6 @@ class MllamaTextConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.rope_scaling = rope_scaling
         self.max_position_embeddings = max_position_embeddings
-        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

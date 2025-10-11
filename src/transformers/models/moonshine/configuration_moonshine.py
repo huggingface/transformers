@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
 class MoonshineConfig(PreTrainedConfig):
@@ -216,7 +215,6 @@ class MoonshineConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_config_validation(self)
 
         super().__init__(
             bos_token_id=bos_token_id,

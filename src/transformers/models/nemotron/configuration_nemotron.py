@@ -16,7 +16,6 @@
 """Nemotron model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -139,7 +138,7 @@ class NemotronConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.partial_rotary_factor = partial_rotary_factor
-        rope_config_validation(self)
+
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
