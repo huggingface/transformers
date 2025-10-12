@@ -16,15 +16,15 @@ rendered properly in your Markdown viewer.
 
 # 비디오 프로세서[[video-processor]]
 
-**Video Processor**는 비디오 모델의 입력으로 사용될 특성 값들을 준비하고, 모델 출력의 후처리를 지원하는 유틸리티입니다. 크기 조정, 정규화, PyTorch 텐서 변환 등의 기능을 제공합니다.
+**비디오 프로세서(Video Processor)**는 비디오 모델의 입력으로 사용될 특성 값들을 준비하고, 모델 출력의 후처리를 지원하는 유틸리티입니다. 크기 조정, 정규화, PyTorch 텐서 변환 등의 기능을 제공합니다.
 
-비디오 프로세서는 이미지 프로세서의 기능을 확장하여, 모델이 영상을 처리할 때 이미지와는 구별되는 별도의 인수를 사용할 수 있도록 합니다. 또한 원본 비디오 데이터와 모델 사이를 연결하는 역할을 하며, 입력 특성 값들이 VLM에 최적화되도록 보장합니다. 
+비디오 프로세서는 이미지 프로세서의 기능을 확장하여, 모델이 영상을 처리할 때 이미지와는 구별되는 별도의 인수를 사용할 수 있도록 합니다. 또한 원본 비디오 데이터와 모델 사이를 연결하는 역할을 하며, 입력 특성 값들이 VLM에 최적화되도록 보장합니다.
 
 [`~BaseVideoProcessor.from_pretrained`]를 사용하면 Hugging Face [Hub](https://hf.co) 또는 로컬 디렉터리에 있는 비디오 모델로부터 비디오 프로세서 설정(이미지 크기, 정규화 및 리스케일 여부 등)을 불러올 수 있습니다. 각 사전 학습된 모델의 설정은 [video_preprocessor_config.json] 파일에 저장되어야 하지만, 일부 오래된 모델의 경우 [preprocessor_config.json](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf/blob/main/preprocessor_config.json) 파일에 저장되어 있을 수도 있습니다. 후자의 경우는 권장되지 않으며 향후 제거될 예정입니다.
 
 ### 사용 예시[[usage-example]]
 
-다음은 [`llava-hf/llava-onevision-qwen2-0.5b-ov-hf`](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf) 모델과 함께 비디오 프로세서를 로드하는 예시입니다:
+다음은 [`llava-hf/llava-onevision-qwen2-0.5b-ov-hf`](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf) 모델과 함께 비디오 프로세서를 로드하는 예시입니다.
 
 ```python
 from transformers import AutoVideoProcessor
