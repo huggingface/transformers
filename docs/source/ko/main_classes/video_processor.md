@@ -87,6 +87,6 @@ print(processed_video_inputs.pixel_values_videos.shape)
 >>> [10, 3, 384, 384]
 ```
 
-## 기본 비디오 프로세서 [[basevideoprocessor]]
+## 기본 비디오 프로세서 [[transformers.BaseVideoProcessor]]
 
 [[autodoc]] video_processing_utils.BaseVideoProcessor
