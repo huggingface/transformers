@@ -247,28 +247,12 @@ class DinoDetrConfig(PretrainedConfig):
         pe_temperatureW=20,
         **kwargs,
     ):
-        if use_timm_backbone:
-            if backbone_kwargs is None:
-                backbone_kwargs = {}
-            if dilation:
-                backbone_kwargs["output_stride"] = 16
-            if "out_indices" not in backbone_kwargs:
-                backbone_kwargs["out_indices"] = (
-                    list(range(num_feature_levels + 1))[-3:] if num_feature_levels > 1 else [num_feature_levels]
-                )
-            backbone_kwargs["in_chans"] = num_channels
-
-        elif not use_timm_backbone and backbone in (None, "resnet50"):
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
-        if not isinstance(num_patterns, int):
-            Warning(f"num_patterns should be int but {type(num_patterns)}")
-            num_patterns = 0
+        if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet50` backbone.")
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         verify_backbone_config_arguments(
             use_timm_backbone=use_timm_backbone,
@@ -283,100 +267,62 @@ class DinoDetrConfig(PretrainedConfig):
         self.num_heads = num_heads
         self.decoder_n_points = decoder_n_points
         self.disable_custom_kernels = disable_custom_kernels
-
         self.use_timm_backbone = use_timm_backbone
-        self.num_feature_levels = num_feature_levels
         self.num_channels = num_channels
         self.dilation = dilation
         self.backbone = backbone
         self.backbone_config = backbone_config
         self.backbone_kwargs = backbone_kwargs
         self.use_pretrained_backbone = use_pretrained_backbone
-
         self.position_embedding_type = position_embedding_type
-
         self.encoder_n_points = encoder_n_points
         self.dropout = dropout
         self.activation_function = activation_function
         self.activation_dropout = activation_dropout
         self.encoder_ffn_dim = encoder_ffn_dim
-
         self.module_seq = module_seq
-        self.num_heads = num_heads
-        self.decoder_n_points = decoder_n_points
-        self.dropout = dropout
-        self.d_model = d_model
         self.d_ffn = d_ffn
         self.activation = activation
         self.key_aware_type = key_aware_type
         self.decoder_sa_type = decoder_sa_type
-
         self.num_queries = num_queries
-        self.d_model = d_model
         self.enc_layer_dropout_prob = enc_layer_dropout_prob
         self.two_stage_type = two_stage_type
-
         self.query_dim = query_dim
-        self.num_feature_levels = num_feature_levels
         self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
-        self.query_dim = query_dim
-        self.d_model = d_model
         self.dec_layer_number = dec_layer_number
         self.dec_layer_dropout_prob = dec_layer_dropout_prob
-
         self.decoder_layer_noise = decoder_layer_noise
         self.dln_xy_noise = dln_xy_noise
         self.dln_hw_noise = dln_hw_noise
-        self.num_feature_levels = num_feature_levels
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
         self.two_stage_keep_all_tokens = two_stage_keep_all_tokens
-        self.num_queries = num_queries
         self.random_refpoints_xy = random_refpoints_xy
-        self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
-        self.query_dim = query_dim
-        self.decoder_sa_type = decoder_sa_type
-        self.d_model = d_model
         self.normalize_before = normalize_before
         self.num_patterns = num_patterns
         self.embed_init_tgt = embed_init_tgt
-        self.two_stage_type = two_stage_type
         self.two_stage_pat_embed = two_stage_pat_embed
         self.two_stage_add_query_num = two_stage_add_query_num
         self.two_stage_learn_wh = two_stage_learn_wh
         self.rm_self_attn_layers = rm_self_attn_layers
         self.dec_detach = dec_detach
-
         self.init_std = init_std
-
-        self.num_queries = num_queries
         self.num_classes = num_classes
-        self.num_feature_levels = num_feature_levels
         self.dn_labelbook_size = dn_labelbook_size
-        self.query_dim = query_dim
-        self.random_refpoints_xy = random_refpoints_xy
-        self.num_patterns = num_patterns
         self.dn_number = dn_number
         self.dn_box_noise_scale = dn_box_noise_scale
         self.dn_label_noise_ratio = dn_label_noise_ratio
-        self.dn_labelbook_size = dn_labelbook_size
-        self.two_stage_type = two_stage_type
         self.auxiliary_loss = auxiliary_loss
         self.dec_pred_class_embed_share = dec_pred_class_embed_share
         self.dec_pred_bbox_embed_share = dec_pred_bbox_embed_share
-        self.num_classes = num_classes
-        self.two_stage_add_query_num = two_stage_add_query_num
         self.two_stage_bbox_embed_share = two_stage_bbox_embed_share
         self.two_stage_class_embed_share = two_stage_class_embed_share
-        self.decoder_sa_type = decoder_sa_type
-
         self.use_dn = use_dn
         self.use_masks = use_masks
-
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
-
         self.mask_loss_coefficient = mask_loss_coefficient
         self.dice_loss_coefficient = dice_loss_coefficient
         self.cls_loss_coefficient = cls_loss_coefficient
@@ -385,11 +331,8 @@ class DinoDetrConfig(PretrainedConfig):
         self.interm_loss_coef = interm_loss_coef
         self.no_interm_box_loss = no_interm_box_loss
         self.focal_alpha = focal_alpha
-        self.disable_custom_kernels = disable_custom_kernels
-
         self.enc_layer_share = enc_layer_share
         self.dec_layer_share = dec_layer_share
-
         self.pe_temperatureH = pe_temperatureH
         self.pe_temperatureW = pe_temperatureW
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
