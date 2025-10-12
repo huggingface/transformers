@@ -434,13 +434,16 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        num_logits_to_keep: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        Example:
+        num_logits_to_keep (`int`, *optional*, defaults to 0):
+            Number of logits to keep from the end of the sequence. If 0, compute all logits.
+            Useful for memory efficiency during generation.
 
-        ```python
+        Example:
+    ```python
         >>> from transformers import AutoTokenizer, LlamaForCausalLM
 
         >>> model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
@@ -453,7 +456,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
+    ```"""
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -466,9 +469,12 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        
+        # Only compute necessary logits for memory efficiency
+        if num_logits_to_keep > 0:
+            hidden_states = hidden_states[:, -num_logits_to_keep:, :]
+        
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -481,7 +487,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
 
 class LlamaForSequenceClassification(GenericForSequenceClassification, LlamaPreTrainedModel): ...
 

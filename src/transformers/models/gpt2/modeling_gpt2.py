@@ -778,7 +778,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        num_logits_to_keep: int = 0,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
@@ -798,6 +798,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        num_logits_to_keep (`int`, *optional*, defaults to 0):
+            Number of logits to keep from the end of the sequence. If 0, compute all logits. 
+            Useful for memory efficiency during generation.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -818,8 +821,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         )
         hidden_states = transformer_outputs[0]
 
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        # Only compute necessary logits for memory efficiency
+        if num_logits_to_keep > 0:
+            hidden_states = hidden_states[:, -num_logits_to_keep:, :]
+
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -843,7 +849,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
             attentions=transformer_outputs.attentions,
             cross_attentions=transformer_outputs.cross_attentions,
         )
-
 
 @auto_docstring(
     custom_intro="""
