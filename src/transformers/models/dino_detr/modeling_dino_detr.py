@@ -1458,7 +1458,7 @@ def inverse_sigmoid(x: torch.FloatTensor, eps: float = 1e-3):
     return torch.log(x1 / x2)
 
 
-def gen_sineembed_for_position(reference_points: torch.FloatTensor, d_model: int):
+def gen_sine_position_embeddings(reference_points: torch.FloatTensor, d_model: int):
     """
     Generates sine-based positional embeddings for the given reference points.
 
@@ -1658,7 +1658,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                 )  # nq, bs, nlevel, 4
             elif reference_points.shape[-1] == 2:
                 reference_points_input = reference_points[:, :, None] * valid_ratios[None, :]
-            query_sine_embed = gen_sineembed_for_position(
+            query_sine_embed = gen_sine_position_embeddings(
                 reference_points_input[:, :, 0, :], d_model=self.d_model
             )  # nq, bs, 256*2
 
