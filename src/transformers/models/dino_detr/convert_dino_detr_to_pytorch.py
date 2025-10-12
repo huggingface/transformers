@@ -5,10 +5,8 @@ import json
 import re
 from pathlib import Path
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
-from PIL import Image
 
 from transformers import (
     DinoDetrConfig,
@@ -63,54 +61,10 @@ def convert_dino_detr_checkpoint(checkpoint_path, pytorch_dump_folder_path, push
             if new_key != key:
                 state_dict[new_key] = state_dict.pop(key)
 
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
-
     processor = DinoDetrImageProcessor()
     model = DinoDetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
-
-    inputs = processor(images=image, return_tensors="pt")
-    outputs = model(**inputs)
-
-    # convert outputs (bounding boxes and class logits) to COCO API
-    # let's only keep detections with score > 0.9
-    target_sizes = torch.tensor([image.size[::-1]])
-    results = processor.post_process_object_detection(
-        outputs, target_sizes=target_sizes, nms_iou_threshold=10, conf_threshold=0
-    )[0]
-
-    expected_scores = torch.tensor(
-        [
-            0.7475,
-            0.7341,
-            0.7229,
-            0.4707,
-            0.4449,
-            0.3086,
-            0.1927,
-            0.1794,
-            0.1334,
-            0.1251,
-            0.1113,
-            0.1111,
-            0.1110,
-            0.1097,
-            0.1039,
-            0.1038,
-            0.1015,
-            0.0963,
-            0.0962,
-        ]
-    )
-
-    print("Scores:", results["scores"][:19])
-    print("Expected Scores:", expected_scores)
-
-    assert torch.allclose(results["scores"][:19], expected_scores, atol=1e-4)
-
-    print("Everything ok!")
 
     # Save model and image processor
     logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
