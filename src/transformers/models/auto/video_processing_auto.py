@@ -61,8 +61,8 @@ else:
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
             ("sam2_video", "Sam2VideoVideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
-            ("videomae", "VideoMAEVideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
+            ("videomae", "VideoMAEVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
         ]
     )
