@@ -888,22 +888,6 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.level_embed)
 
 
-def _get_activation_fn(activation: str):
-    """Return an activation function given a string"""
-    if activation == "relu":
-        return F.relu
-    if activation == "gelu":
-        return F.gelu
-    if activation == "glu":
-        return F.glu
-    if activation == "prelu":
-        return nn.PReLU()
-    if activation == "selu":
-        return F.selu
-
-    raise RuntimeError(f"activation should be relu/gelu/glu/prelu/selu, not {activation}.")
-
-
 class DinoDetrDecoderLayer(nn.Module):
     """
     A single layer of the Dino DETR decoder.
@@ -968,7 +952,7 @@ class DinoDetrDecoderLayer(nn.Module):
 
         # Fully Connected Layer
         self.linear1 = nn.Linear(config.d_model, config.d_ffn)
-        self.activation = _get_activation_fn(config.activation)
+        self.activation = ACT2FN[config.activation]
         self.dropout3 = nn.Dropout(config.dropout)
         self.linear2 = nn.Linear(config.d_ffn, config.d_model)
         self.dropout4 = nn.Dropout(config.dropout)
