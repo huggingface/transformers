@@ -3834,8 +3834,14 @@ class Trainer:
             if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
                 kwargs["learning_rate"] = self._get_learning_rate()
 
+            # Multi-GPU loss aggregation:
+            # - If num_items_in_batch is provided, each device returns loss normalized by
+            #   total items across ALL devices, so we sum the per-device losses
+            # - Otherwise, each device returns unnormalized loss, so we average
             if self.args.n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+                loss = loss.sum() if num_items_in_batch is not None else loss.mean()
+            else:
+                loss = loss.mean() if loss.ndim > 0 else loss
 
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
             if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
