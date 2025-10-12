@@ -34,7 +34,8 @@ from pytest import mark
 from transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
-    PretrainedConfig,
+    BitsAndBytesConfig,
+    PreTrainedConfig,
     PreTrainedModel,
     is_torch_available,
     logging,
@@ -509,7 +510,7 @@ def _config_zero_init(config):
     for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
-        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+        if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
@@ -523,10 +524,6 @@ def _mock_init_weights(self, module):
 
 
 def _mock_all_init_weights(self):
-    # Prune heads if needed
-    if self.config.pruned_heads:
-        self.prune_heads(self.config.pruned_heads)
-
     import transformers.modeling_utils
 
     if transformers.modeling_utils._init_weights:
@@ -571,7 +568,6 @@ class ModelTesterMixin:
     all_model_classes = ()
     fx_compatible = False
     test_torchscript = True
-    test_pruning = True
     test_resize_embeddings = True
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
@@ -1021,28 +1017,6 @@ class ModelTesterMixin:
                 torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=False)
                 check_equal(load_state_dict(pt_checkpoint_path))
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=copy.deepcopy(configs_no_init))
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    data = torch.flatten(param.data)
-                    n_elements = torch.numel(data)
-                    # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
-                    # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
-                    n_elements_to_skip_on_each_side = int(n_elements * 0.025)
-                    data_to_check = torch.sort(data).values
-                    if n_elements_to_skip_on_each_side > 0:
-                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
-                    self.assertIn(
-                        ((data_to_check.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1203,8 +1177,16 @@ class ModelTesterMixin:
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
-                        if v.requires_grad:
-                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                        if v.requires_grad and v.grad is None:
+                            if "expert" in k:
+                                print(
+                                    f"None for {k}, Probaby running a MOE, make sure grad is not NONE on EVERY layer. At LEAST 1 of the expert layer should have grads!"
+                                )
+                            else:
+                                with self.subTest(f"{k}"):
+                                    self.assertTrue(
+                                        v.grad is not None, f"{k} in {model_class.__name__} has no gradient!"
+                                    )
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -1276,7 +1258,8 @@ class ModelTesterMixin:
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             for k in config.sub_configs:
-                getattr(config, k).output_attentions = True
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_attentions = True
 
             model = model_class(config)
             model.to(torch_device)
@@ -1620,7 +1603,7 @@ class ModelTesterMixin:
                             )
                             for i in range(model.config.num_hidden_layers)
                         )
-                        non_empty_pkv = DynamicCache.from_legacy_cache(non_empty_pkv)
+                        non_empty_pkv = DynamicCache(non_empty_pkv)
 
                         inps = copy.deepcopy(inputs_to_test[0])
 
@@ -1704,161 +1687,6 @@ class ModelTesterMixin:
                 # (Even with this call, there are still memory leak by ~0.04MB)
                 self.clear_torch_jit_class_registry()
 
-    def test_head_pruning(self):
-        if not self.test_pruning:
-            self.skipTest(reason="Pruning is not activated")
-
-        for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
-            config._attn_implementation = "eager"
-            model = model_class(config=config)
-            model.to(torch_device)
-            model.eval()
-            model.set_attn_implementation("eager")
-            heads_to_prune = {
-                0: list(range(1, self.model_tester.num_attention_heads)),
-                -1: [0],
-            }
-            model.prune_heads(heads_to_prune)
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], 1)
-            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
-            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
-
-    def test_head_pruning_save_load_from_pretrained(self):
-        if not self.test_pruning:
-            self.skipTest(reason="Pruning is not activated")
-
-        for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
-            config._attn_implementation = "eager"
-            model = model_class(config=config)
-            model.to(torch_device)
-            model.eval()
-            model.set_attn_implementation("eager")
-            heads_to_prune = {
-                0: list(range(1, self.model_tester.num_attention_heads)),
-                -1: [0],
-            }
-            model.prune_heads(heads_to_prune)
-
-            with tempfile.TemporaryDirectory() as temp_dir_name:
-                model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
-                model.to(torch_device)
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-            self.assertEqual(attentions[0].shape[-3], 1)
-            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
-            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
-
-    def test_head_pruning_save_load_from_config_init(self):
-        if not self.test_pruning:
-            self.skipTest(reason="Pruning is not activated")
-
-        for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
-            config._attn_implementation = "eager"
-
-            heads_to_prune = {
-                0: list(range(1, self.model_tester.num_attention_heads)),
-                -1: [0],
-            }
-            config.pruned_heads = heads_to_prune
-
-            model = model_class(config=config)
-            model.to(torch_device)
-            model.eval()
-            model.set_attn_implementation("eager")
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], 1)
-            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
-            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
-
-    def test_head_pruning_integration(self):
-        if not self.test_pruning:
-            self.skipTest(reason="Pruning is not activated")
-
-        for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
-            config._attn_implementation = "eager"
-
-            heads_to_prune = {1: [1, 2]}
-            config.pruned_heads = heads_to_prune
-
-            model = model_class(config=config)
-            model.to(torch_device)
-            model.eval()
-            model.set_attn_implementation("eager")
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 0)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-
-            with tempfile.TemporaryDirectory() as temp_dir_name:
-                model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
-                model.to(torch_device)
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 0)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-
-            heads_to_prune = {0: [0], 1: [1, 2]}
-            model.prune_heads(heads_to_prune)
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-
-            self.assertDictEqual(model.config.pruned_heads, {0: [0], 1: [1, 2]})
-
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
@@ -1910,20 +1738,23 @@ class ModelTesterMixin:
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
             for k in config.sub_configs:
-                getattr(config, k).output_hidden_states = True
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for k in config.sub_configs:
-            getattr(config, k).output_hidden_states = True
+            if getattr(config, k) is not None:
+                getattr(config, k).output_hidden_states = True
 
         config.output_hidden_states = True
         config.output_attentions = self.has_attentions
 
         for k in config.sub_configs:
-            getattr(config, k).output_attentions = self.has_attentions
+            if getattr(config, k) is not None:
+                getattr(config, k).output_attentions = self.has_attentions
 
         # force eager attention to support output attentions
         if self.has_attentions:
@@ -2785,7 +2616,7 @@ class ModelTesterMixin:
             param_device = device_map[param_name]
             if param_device in ["cpu", "disk"]:
                 self.assertEqual(param.device, torch.device("meta"))
-            elif param_device in ["mps"]:
+            elif param_device == "mps":
                 self.assertEqual(param.device, torch.device("mps"))
             else:
                 # when loaded with device_map, `param_device` are integer values for cuda/xpu/hpu/npu/mlu
@@ -3362,13 +3193,15 @@ class ModelTesterMixin:
             # we just need to test if passing 'attn_implementation' as a dict fails or not
             attn_implementation_per_subconfig = {"": "eager"}
             for key in config.sub_configs:
-                attn_implementation_per_subconfig[key] = "eager"
+                if getattr(config, key) is not None:
+                    attn_implementation_per_subconfig[key] = "eager"
 
             config._attn_implementation = attn_implementation_per_subconfig
             model = model_class(config)
             for key in config.sub_configs:
-                sub_config = getattr(model.config, key)
-                self.assertTrue(sub_config._attn_implementation == "eager")
+                if getattr(config, key) is not None:
+                    sub_config = getattr(model.config, key)
+                    self.assertTrue(sub_config._attn_implementation == "eager")
 
             for name, submodule in model.named_modules():
                 class_name = submodule.__class__.__name__
@@ -3524,7 +3357,7 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["paligemma"]:
+            if config.model_type == "paligemma":
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
@@ -3552,7 +3385,7 @@ class ModelTesterMixin:
                 )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
-            if config.model_type in ["sam"]:
+            if config.model_type == "sam":
                 self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
 
             model = model_class(config)
@@ -3606,7 +3439,7 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["dbrx"]:
+            if config.model_type == "dbrx":
                 self.skipTest(
                     "DBRX (transformers==4.40) requires a modification to support dynamic shapes with compile."
                 )
@@ -3693,7 +3526,7 @@ class ModelTesterMixin:
                         tmpdirname, dtype=dtype, attn_implementation=attn_implementation
                     )
                     for key in model_fa.config:
-                        if isinstance(getattr(model_fa.config, key), PretrainedConfig):
+                        if isinstance(getattr(model_fa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_fa.config, key)
                             self.assertTrue(sub_config._attn_implementation == attn_implementation)
 
@@ -3753,7 +3586,7 @@ class ModelTesterMixin:
                     tmpdirname,
                     dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    load_in_4bit=True,
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
                 )
 
                 for _, param in model.named_parameters():
@@ -3981,7 +3814,7 @@ class ModelTesterMixin:
         Test if model can be exported with torch.export.export()
 
         Args:
-            config (PretrainedConfig):
+            config (PreTrainedConfig):
                 Config to use for the model, if None, use default config from model_tester
             inputs_dict (dict):
                 Inputs to use for the model, if None, use default inputs from model_tester
@@ -4108,8 +3941,9 @@ class ModelTesterMixin:
         # Update config values
         update_config_headdim(config, requested_dim)
         for key in config.sub_configs:
-            sub_config = getattr(config, key)
-            update_config_headdim(sub_config, requested_dim)
+            if getattr(config, key) is not None:
+                sub_config = getattr(config, key)
+                update_config_headdim(sub_config, requested_dim)
 
         return config
 
@@ -4260,21 +4094,30 @@ class ModelTesterMixin:
     def test_config_attn_implementation_setter(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        def check_attn_implementation_setter(config: PretrainedConfig, attn_implementation: str):
+        def check_attn_implementation_setter(config: PreTrainedConfig, attn_implementation: str):
             if not config._attn_implementation == attn_implementation:
                 raise ValueError(
                     f"Unexpected attn_implementation for config {config.__class__.__name__}: "
                     f"{config._attn_implementation} != {attn_implementation}"
                 )
             for attribute_value in config.__dict__.values():
-                if isinstance(attribute_value, PretrainedConfig):
+                if isinstance(attribute_value, PreTrainedConfig):
                     check_attn_implementation_setter(attribute_value, attn_implementation)
+
+        # Check that attention implementation can be passed with init args
+        config_dict = config.to_diff_dict()
+        config_dict.pop("_attn_implementation_internal", None)
+        config_dict.pop("_attn_implementation", None)
+        config_dict["attn_implementation"] = "eager"
+        config = type(config)(**config_dict)
+        check_attn_implementation_setter(config, "eager")
+
+        # Check that attention implementation can be set to different value
+        config._attn_implementation = "sdpa"
+        check_attn_implementation_setter(config, "sdpa")
 
         config._attn_implementation = "eager"
         check_attn_implementation_setter(config, "eager")
-
-        config._attn_implementation = "sdpa"
-        check_attn_implementation_setter(config, "sdpa")
 
     def test_internal_model_config_and_subconfig_are_same(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4293,7 +4136,10 @@ class ModelTesterMixin:
                     for subconfig_key in subconfig_keys:
                         # Get the subconfig from the model config
                         subconfig_from_model_config = getattr(model.config, subconfig_key)
-                        if subconfig_from_model_config.__class__ == subconfig_from_model_internal.__class__:
+                        if (
+                            subconfig_from_model_config is not None
+                            and subconfig_from_model_config.__class__ == subconfig_from_model_internal.__class__
+                        ):
                             # Since some composite models have different submodels parameterized by 2 of the same config
                             # class instances, we need to check against a list of matching classes, and check that at least
                             # 1 is the exact object (instead of checking immediately for similar object)
@@ -4324,7 +4170,8 @@ class ModelTesterMixin:
             # sanity check to make sure everything is correctly eager
             self.assertTrue(model.config._attn_implementation == "eager")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
 
             if not all(
                 submodule._can_set_attn_implementation()
@@ -4344,7 +4191,8 @@ class ModelTesterMixin:
             # Check everything was correctly changed
             self.assertTrue(model.config._attn_implementation == "sdpa")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
 
             # Check we cannot set it to random values, and it raises an error
             with self.assertRaisesRegex(ValueError, 'Specified `attn_implementation="foo"` is not supported'):
@@ -4353,7 +4201,8 @@ class ModelTesterMixin:
             # Should still be sdpa everywhere
             self.assertTrue(model.config._attn_implementation == "sdpa")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
 
     def test_can_set_attention_dynamically_composite_model(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4372,7 +4221,8 @@ class ModelTesterMixin:
             # sanity check to make sure everything is correctly eager
             self.assertTrue(model.config._attn_implementation == "eager")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
 
             if not all(
                 submodule._can_set_attn_implementation()
@@ -4387,7 +4237,8 @@ class ModelTesterMixin:
             # Check only top-most was correctly changed
             self.assertTrue(model.config._attn_implementation == "sdpa")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
 
     @require_torch
     def test_bc_torch_dtype(self):

@@ -22,7 +22,6 @@ from ...cache_utils import Cache
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     get_size_dict,
     group_images_by_shape,
     reorder_images,
@@ -43,7 +42,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
@@ -87,8 +86,8 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
     with the defaults will yield a similar configuration to that of the DeepseekVLHybrid
     [deepseek-community/deepseek-vl-7b-chat](https://huggingface.co/deepseek-community/deepseek-vl-7b-chat) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
@@ -126,13 +125,6 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
         image_token_id: int = 100015,
         **kwargs,
     ):
-        super().__init__(
-            text_config=text_config,
-            vision_config=vision_config,
-            image_token_id=image_token_id,
-            **kwargs,
-        )
-
         if high_res_vision_config is None:
             high_res_vision_config = {}
             logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
@@ -142,6 +134,13 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
             high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
 
         self.high_res_vision_config = high_res_vision_config
+
+        super().__init__(
+            text_config=text_config,
+            vision_config=vision_config,
+            image_token_id=image_token_id,
+            **kwargs,
+        )
 
 
 class DeepseekVLHybridBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -430,6 +429,32 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         return model_inputs
 
 
+class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+     high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
+        Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
+        method.
+    high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
+        overridden by the `high_res_resample` parameter in the `preprocess` method.
+    high_res_image_mean (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
+        Mean to use if normalizing the high resolution image. This is a float or list of floats the length of the number of
+        channels in the image. Can be overridden by the `high_res_image_mean` parameter in the `preprocess` method.
+    high_res_image_std (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
+        Standard deviation to use if normalizing the high resolution image. This is a float or list of floats the length of the
+        number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
+    """
+
+    min_size: int
+    high_res_size: dict
+    high_res_resample: Union["PILImageResampling", int]
+    high_res_image_mean: Union[float, list[float], tuple[float, ...]]
+    high_res_image_std: Union[float, list[float], tuple[float, ...]]
+
+
 class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     r"""
     Constructs a DEEPSEEK_VL_HYBRID image processor.
@@ -483,6 +508,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     """
 
     model_input_names = ["pixel_values", "high_res_pixel_values"]
+    valid_kwargs = DeepseekVLHybridImageProcessorKwargs
 
     def __init__(
         self,
@@ -727,32 +753,6 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-class DeepseekVLHybridFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-     high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
-        Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
-        method.
-    high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-        Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-        overridden by the `high_res_resample` parameter in the `preprocess` method.
-    high_res_image_mean (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
-        Mean to use if normalizing the high resolution image. This is a float or list of floats the length of the number of
-        channels in the image. Can be overridden by the `high_res_image_mean` parameter in the `preprocess` method.
-    high_res_image_std (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
-        Standard deviation to use if normalizing the high resolution image. This is a float or list of floats the length of the
-        number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
-    """
-
-    min_size: int
-    high_res_size: dict
-    high_res_resample: "PILImageResampling"
-    high_res_image_mean: list[float]
-    high_res_image_std: list[float]
-
-
 class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
     high_res_image_mean = OPENAI_CLIP_MEAN
     high_res_image_std = OPENAI_CLIP_STD
@@ -760,11 +760,11 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
     high_res_resample = PILImageResampling.BICUBIC
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
-    def __init__(self, **kwargs: Unpack[DeepseekVLHybridFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
-            background_color = tuple([int(x * 255) for x in kwargs.get("image_mean")])
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
         if kwargs.get("high_res_image_mean") is None:
             high_res_background_color = (127, 127, 127)
         else:

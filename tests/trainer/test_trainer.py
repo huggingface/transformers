@@ -14,7 +14,6 @@
 
 import dataclasses
 import gc
-import importlib
 import json
 import math
 import os
@@ -33,7 +32,6 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 from huggingface_hub import ModelCard, create_branch, list_repo_commits, list_repo_files
-from packaging import version
 from parameterized import parameterized
 
 from transformers import (
@@ -41,9 +39,10 @@ from transformers import (
     AutoImageProcessor,
     AutoProcessor,
     AutoTokenizer,
+    BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     IntervalStrategy,
-    PretrainedConfig,
+    PreTrainedConfig,
     TrainerCallback,
     TrainingArguments,
     default_data_collator,
@@ -89,7 +88,6 @@ from transformers.testing_utils import (
     require_ray,
     require_schedulefree,
     require_sentencepiece,
-    require_sigopt,
     require_tensorboard,
     require_tokenizers,
     require_torch,
@@ -163,9 +161,6 @@ if is_datasets_available():
     import datasets
 
 # for version specific tests in TrainerIntegrationTest
-require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
-require_accelerate_version_min_0_30 = partial(require_accelerate, min_version="0.30")
-GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
 if is_accelerate_available():
     from accelerate import Accelerator
     from accelerate.state import AcceleratorState
@@ -351,7 +346,7 @@ class AlmostAccuracyBatched:
             return result
 
 
-class RegressionModelConfig(PretrainedConfig):
+class RegressionModelConfig(PreTrainedConfig):
     def __init__(self, a=0, b=0, double_output=False, random_torch=True, **kwargs):
         super().__init__(**kwargs)
         self.a = a
@@ -1442,9 +1437,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         args = TrainingArguments(tmp_dir, report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
         for key in dict1:
-            # Logging dir can be slightly different as they default to something with the time.
-            if key != "logging_dir":
-                self.assertEqual(dict1[key], dict2[key])
+            self.assertEqual(dict1[key], dict2[key])
 
     def test_number_of_steps_in_training(self):
         # Regular training has n_epochs * len(train_dl) steps
@@ -1491,7 +1484,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # QLoRA + torch compile is not really supported yet, but we should at least support the model
         # loading and let torch throw the
         tiny_model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-LlamaForCausalLM", load_in_4bit=True
+            "hf-internal-testing/tiny-random-LlamaForCausalLM",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         peft_config = LoraConfig(
@@ -1764,7 +1758,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
 
     def test_train_and_eval_dataloaders(self):
-        if torch_device in ["cuda"]:
+        if torch_device == "cuda":
             n_gpu = max(1, backend_device_count(torch_device))
         else:
             # DP is deprecated by PyTorch, accelerators like XPU doesn't support DP
@@ -2863,56 +2857,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-    def test_evaluate_with_jit(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), jit_mode_eval=True, output_dir=tmp_dir
-            )
-            # Make sure the trainer doesn't pass num_items_in_batch to the model's forward method,
-            # since it's not in the model forward's signature when using JIT
-            trainer.model_accepts_loss_kwargs = False
-            results = trainer.evaluate()
-
-            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-            pred = 1.5 * x + 2.5
-            expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
-            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-            # With a number of elements not a round multiple of the batch size
-            trainer = get_regression_trainer(
-                a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracy(), jit_mode_eval=True, output_dir=tmp_dir
-            )
-            trainer.model_accepts_loss_kwargs = False
-            results = trainer.evaluate()
-
-            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-            pred = 1.5 * x + 2.5
-            expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
-            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-            # With logits preprocess
-            trainer = get_regression_trainer(
-                a=1.5,
-                b=2.5,
-                compute_metrics=AlmostAccuracy(),
-                preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
-                jit_mode_eval=True,
-                output_dir=tmp_dir,
-            )
-            trainer.model_accepts_loss_kwargs = False
-            results = trainer.evaluate()
-
-            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-            pred = 1.5 * x + 2.5
-            expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
-            expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
-            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
     def test_predict(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(a=1.5, b=2.5, output_dir=tmp_dir)
@@ -3036,52 +2980,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 batch_eval_metrics=True,
                 output_dir=tmp_dir,
             )
-            outputs = trainer.predict(trainer.eval_dataset)
-            preds = outputs.predictions
-            labels = outputs.label_ids
-            x = trainer.eval_dataset.x
-            self.assertEqual(len(preds), 2)
-            self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-            self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
-            self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
-            self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
-
-    def test_predict_with_jit(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(a=1.5, b=2.5, jit_mode_eval=True, output_dir=tmp_dir)
-            # Make sure the trainer doesn't pass num_items_in_batch to the model's forward method,
-            # since it's not in the model forward's signature when using JIT
-            trainer.model_accepts_loss_kwargs = False
-            preds = trainer.predict(trainer.eval_dataset).predictions
-            x = trainer.eval_dataset.x
-            self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
-
-            # With a number of elements not a round multiple of the batch size
-            trainer = get_regression_trainer(a=1.5, b=2.5, eval_len=66, jit_mode_eval=True, output_dir=tmp_dir)
-            trainer.model_accepts_loss_kwargs = False
-            preds = trainer.predict(trainer.eval_dataset).predictions
-            x = trainer.eval_dataset.x
-            self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
-
-            # With more than one output of the model
-            trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True, jit_mode_eval=True, output_dir=tmp_dir)
-            trainer.model_accepts_loss_kwargs = False
-            preds = trainer.predict(trainer.eval_dataset).predictions
-            x = trainer.eval_dataset.x
-            self.assertEqual(len(preds), 2)
-            self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-            self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
-
-            # With more than one output/label of the model
-            trainer = get_regression_trainer(
-                a=1.5,
-                b=2.5,
-                double_output=True,
-                label_names=["labels", "labels_2"],
-                jit_mode_eval=True,
-                output_dir=tmp_dir,
-            )
-            trainer.model_accepts_loss_kwargs = False
             outputs = trainer.predict(trainer.eval_dataset)
             preds = outputs.predictions
             labels = outputs.label_ids
@@ -3478,7 +3376,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             checkpoints = [d for d in os.listdir(tmp_dir) if d.startswith("checkpoint-")]
             # There should be one checkpoint per epoch.
             self.assertEqual(len(checkpoints), 3)
-            checkpoint_dir = sorted(checkpoints, key=lambda x: int(x.replace("checkpoint-", "")))[0]
+            checkpoint_dir = min(checkpoints, key=lambda x: int(x.replace("checkpoint-", "")))
 
             trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, checkpoint_dir))
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
@@ -4459,7 +4357,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "1",
                 "--output_dir",
                 tmpdir,
-                "--overwrite_output_dir",
                 "--do_train",
                 "--max_train_samples",
                 "64",
@@ -4499,10 +4396,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
-
-            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
-                # gradient accumulation kwargs configures gradient_state
-                self.assertNotIn("sync_each_batch", trainer.accelerator.gradient_state.plugin_kwargs)
+            # gradient accumulation kwargs configures gradient_state
+            self.assertNotIn("sync_each_batch", trainer.accelerator.gradient_state.plugin_kwargs)
 
     def test_accelerator_config_from_dict(self):
         # Checks that accelerator kwargs can be passed through
@@ -4518,8 +4413,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "even_batches": False,
                 "use_seedable_sampler": True,
             }
-            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
-                accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
+            accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
 
             # Leaves all options as something *not* basic
             args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=accelerator_config)
@@ -4575,7 +4469,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
 
-    @require_accelerate_version_min_0_28
     def test_accelerate_config_from_dataclass_grad_accum(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively
@@ -4632,7 +4525,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             _ = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config={"use_configured_state": True})
         AcceleratorState._reset_state(reset_partial_state=True)
 
-    @require_accelerate_version_min_0_28
     def test_accelerator_config_from_dict_grad_accum_num_steps(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = RegressionModelConfig(a=1.5, b=2.5)
@@ -4728,7 +4620,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.assertIn("dtype", args_dict)
                 self.assertEqual(args_dict["dtype"], dtype)
 
-    @require_accelerate_version_min_0_30
     def test_eval_use_gather_object(self):
         train_dataset = RegressionDataset()
         eval_dataset = RegressionDataset()
@@ -5540,7 +5431,6 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 num_train_epochs=4,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
-                logging_dir="runs",
                 run_name="test",
                 model_init=model_init,
             )
@@ -5589,7 +5479,6 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 num_train_epochs=10,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
-                logging_dir="runs",
                 run_name="test",
                 model_init=model_init,
                 compute_metrics=AlmostAccuracy(),
@@ -5679,7 +5568,6 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 num_train_epochs=4,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
-                logging_dir="runs",
                 run_name="test",
                 model_init=model_init,
             )
@@ -5697,58 +5585,6 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
         with ray_start_client_server():
             assert ray.util.client.ray.is_connected()
             self.ray_hyperparameter_search()
-
-
-@slow
-@require_torch
-@require_sigopt
-class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        args = TrainingArguments("..")
-        self.n_epochs = args.num_train_epochs
-        self.batch_size = args.train_batch_size
-
-    def test_hyperparameter_search(self):
-        class MyTrialShortNamer(TrialShortNamer):
-            DEFAULTS = {"a": 0, "b": 0}
-
-        def hp_space(trial):
-            return [
-                {"bounds": {"min": -4, "max": 4}, "name": "a", "type": "int"},
-                {"bounds": {"min": -4, "max": 4}, "name": "b", "type": "int"},
-            ]
-
-        def model_init(trial):
-            if trial is not None:
-                a = trial.assignments["a"]
-                b = trial.assignments["b"]
-            else:
-                a = 0
-                b = 0
-            config = RegressionModelConfig(a=a, b=b, double_output=False)
-
-            return RegressionPreTrainedModel(config).to(torch_device)
-
-        def hp_name(trial):
-            return MyTrialShortNamer.shortname(trial.assignments)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=tmp_dir,
-                learning_rate=0.1,
-                logging_steps=1,
-                eval_strategy=IntervalStrategy.EPOCH,
-                save_strategy=IntervalStrategy.EPOCH,
-                num_train_epochs=4,
-                disable_tqdm=True,
-                load_best_model_at_end=True,
-                logging_dir="runs",
-                run_name="test",
-                model_init=model_init,
-            )
-            trainer.hyperparameter_search(
-                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="sigopt", n_trials=4
-            )
 
 
 optim_test_params = []
@@ -5865,35 +5701,34 @@ if is_torch_available():
             )
         )
 
-        if version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.44.0"):
-            optim_test_params.append(
-                (
-                    OptimizerNames.ADEMAMIX,
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
+        optim_test_params.append(
+            (
+                OptimizerNames.ADEMAMIX,
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
             )
-            optim_test_params.append(
-                (
-                    OptimizerNames.ADEMAMIX_8BIT,
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
+        )
+        optim_test_params.append(
+            (
+                OptimizerNames.ADEMAMIX_8BIT,
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
             )
-            optim_test_params.append(
-                (
-                    OptimizerNames.PAGED_ADEMAMIX_8BIT,
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
+        )
+        optim_test_params.append(
+            (
+                OptimizerNames.PAGED_ADEMAMIX_8BIT,
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
             )
-            optim_test_params.append(
-                (
-                    OptimizerNames.PAGED_ADEMAMIX,
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
+        )
+        optim_test_params.append(
+            (
+                OptimizerNames.PAGED_ADEMAMIX,
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
             )
+        )
 
     if is_torchdistx_available():
         import torchdistx
@@ -5917,7 +5752,7 @@ if is_torch_available():
         )
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_8BIT, output_dir="None"),
+                OptimizerNames.ADAMW_TORCH_8BIT,
                 AdamW8bit,
                 default_adam_kwargs,
             )
@@ -5974,6 +5809,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
+    @require_bitsandbytes
     def test_bnb_adam8bit(self):
         # Pretend that Bits and Bytes is installed and mock bnb.optim.Adam8bit exists.
         # Trainer.get_optimizer_cls_and_kwargs does not use Adam8bit. It only has to return the
@@ -5993,6 +5829,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_adam_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_adam8bit_alias(self):
         mock = Mock()
         modules = {
@@ -6008,6 +5845,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_adam_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_adam(self):
         mock = Mock()
         modules = {
@@ -6023,6 +5861,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_adam_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_adam8bit(self):
         mock = Mock()
         modules = {
@@ -6038,6 +5877,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_adam_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_ademamix(self):
         mock = Mock()
         modules = {
@@ -6053,6 +5893,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_ademamix_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_ademamix8bit(self):
         mock = Mock()
         modules = {
@@ -6068,6 +5909,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_ademamix_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_ademamix(self):
         mock = Mock()
         modules = {
@@ -6083,6 +5925,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_ademamix_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_ademamix8bit(self):
         mock = Mock()
         modules = {
@@ -6098,6 +5941,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_ademamix_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_lion(self):
         mock = Mock()
         modules = {
@@ -6113,6 +5957,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_lion_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_lion8bit(self):
         mock = Mock()
         modules = {
@@ -6128,6 +5973,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_lion_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_lion8bit(self):
         mock = Mock()
         modules = {
@@ -6143,6 +5989,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_lion_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_lion(self):
         mock = Mock()
         modules = {
@@ -6165,7 +6012,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_adam_no_bnb(self):
@@ -6175,7 +6022,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_adam8bit_no_bnb(self):
@@ -6185,7 +6032,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_ademamix_no_bnb(self):
@@ -6195,7 +6042,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_ademamix8bit_no_bnb(self):
@@ -6205,7 +6052,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_ademamix_no_bnb(self):
@@ -6215,7 +6062,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_ademamix8bit_no_bnb(self):
@@ -6225,7 +6072,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_lion_no_bnb(self):
@@ -6235,7 +6082,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_lion8bit_no_bnb(self):
@@ -6245,7 +6092,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_anyprecision_adamw(self):
@@ -6318,7 +6165,6 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
                 num_train_epochs=4,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
-                logging_dir="runs",
                 run_name="test",
                 model_init=model_init,
             )

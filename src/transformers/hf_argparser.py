@@ -18,12 +18,12 @@ import os
 import sys
 import types
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from copy import copy
 from enum import Enum
 from inspect import isclass
 from pathlib import Path
-from typing import Any, Callable, Literal, NewType, Optional, Union, get_type_hints
+from typing import Any, Literal, NewType, Optional, Union, get_type_hints
 
 import yaml
 

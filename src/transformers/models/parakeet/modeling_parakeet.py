@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -32,7 +33,6 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 
@@ -231,7 +231,6 @@ class ParakeetEncoderAttention(nn.Module):
         # global positional bias
         self.bias_v = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -507,7 +506,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @check_model_inputs()
     @can_return_tuple
     def forward(
         self,

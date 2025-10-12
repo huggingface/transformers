@@ -463,9 +463,9 @@ class NopTokenizer(transformers.PreTrainedTokenizer):
 """
 
         nop_config_code = """
-from transformers import PretrainedConfig
+from transformers import PreTrainedConfig
 
-class NopConfig(PretrainedConfig):
+class NopConfig(PreTrainedConfig):
     model_type = "test_unregistered_dynamic"
 
     def __init__(self, **kwargs):
