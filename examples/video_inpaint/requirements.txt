@@ -1,0 +1,5 @@
+diffusers
+transformers
+torch
+opencv-python
+imageio-ffmpeg
