@@ -1218,13 +1218,13 @@ class ModularFileMapper(ModuleMapper):
             return
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
+                # If we match here, it's an import from 3rd party lib that we need to skip
                 if any(external_file["name"] in import_statement for external_file in self.excluded_external_files):
-                    _import = None
-                else:
-                    _import = re.search(
-                        rf"(?:transformers\.models\.)|(?:\.\.\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*",
-                        import_statement,
-                    )
+                    continue
+                _import = re.search(
+                    rf"(?:transformers\.models\.)|(?:\.\.\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*",
+                    import_statement,
+                )
                 if _import:
                     source = _import.group(1)
                     if source == "modeling" and "Config" in self.python_module.code_for_node(imported_):
