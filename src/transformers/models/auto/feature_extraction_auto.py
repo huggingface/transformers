@@ -59,6 +59,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("musicgen", "EncodecFeatureExtractor"),
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
+        ("parakeet_tdt", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("pe_audio", "PeAudioFeatureExtractor"),
         ("pe_audio_video", "PeAudioFeatureExtractor"),
