@@ -25,7 +25,6 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import (
-    ROPE_INIT_FUNCTIONS,
     RopeParameters,
     dynamic_rope_update,
     rope_config_validation,
@@ -219,49 +218,23 @@ class Cohere2Config(PreTrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
 
 class Cohere2RotaryEmbedding(CohereRotaryEmbedding):
-    def __init__(self, config: Cohere2Config, device=None):
-        nn.Module.__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.layer_types = list(set(config.layer_types))
-        self.rope_type = {}
-        for layer_type in self.layer_types:
-            rope_params = self.config.rope_parameters[layer_type]
-            if rope_params is None:
-                continue
-
-            self.rope_type[layer_type] = rope_params["rope_type"]
-            rope_init_fn: Callable = self.compute_default_rope_parameters
-            if self.rope_type[layer_type] != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
-            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
-
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
-        inv_freq = getattr(self, f"{layer_type}_inv_freq")
-        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-
-        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -427,15 +400,13 @@ class Cohere2Model(Gemma2Model):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = {}
-        for layer_type in self.config.layer_types:
-            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_embeddings=position_embeddings[decoder_layer.attention_type],
+                position_embeddings=position_embeddings,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,

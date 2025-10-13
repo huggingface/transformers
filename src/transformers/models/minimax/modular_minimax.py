@@ -257,7 +257,7 @@ class MiniMaxConfig(PreTrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = getattr(self, "rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "linear_attention": rope_theta})
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
         super().__init__(
             pad_token_id=pad_token_id,
@@ -572,9 +572,7 @@ class MiniMaxModel(MixtralModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = {}
-        for layer_type in self.config.layer_types:
-            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers:
             if decoder_layer.layer_type == "full_attention":
@@ -586,7 +584,7 @@ class MiniMaxModel(MixtralModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=input_attention_mask,
-                position_embeddings=position_embeddings[decoder_layer.layer_type],
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

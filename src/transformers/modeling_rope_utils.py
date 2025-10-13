@@ -37,8 +37,8 @@ def standardize_rope_params(config, rope_theta: Optional[Union[float, dict[str, 
     if rope_theta is None:
         rope_theta = getattr(config, "rope_theta", None)
 
-    # Case 1: one RoPE dict per model without nesting
-    if layer_types is None:
+    # Case 1: one RoPE theat = one RoPE param per model without nesting
+    if not isinstance(rope_theta, dict):
         if rope_parameters is None:
             rope_parameters = {"rope_type": "default", "rope_theta": rope_theta}
         else:
@@ -48,41 +48,33 @@ def standardize_rope_params(config, rope_theta: Optional[Union[float, dict[str, 
             rope_parameters.update({"rope_theta": rope_theta, "rope_type": rope_type})
         config.rope_parameters = rope_parameters
 
-    # Case 2: different RoPE for each layer type as nested dict
+    # Case 2: different RoPE for each layer as nested dict
     else:
         rope_parameters_per_layer_type = {}
         for layer_type in layer_types:
             if rope_parameters is None:
-                if rope_theta[layer_type] is not None:
-                    rope_parameters_per_layer_type[layer_type] = {
-                        "rope_type": "default",
-                        "rope_theta": rope_theta[layer_type],
-                    }
-                else:
-                    rope_parameters_per_layer_type[layer_type] = None
+                rope_parameters_per_layer_type[layer_type] = {
+                    "rope_type": "default",
+                    "rope_theta": rope_theta[layer_type],
+                }
             else:
                 is_field_in_new_format = any(layer_type in rope_parameters for layer_type in layer_types)
                 if not is_field_in_new_format:
                     curr_rope_type = rope_parameters.get("rope_type", rope_parameters.get("type"))
-                    curr_rope_theta = rope_parameters.get("rope_theta") or rope_theta[layer_type]
                     rope_parameters_per_layer_type[layer_type] = {
                         **rope_parameters,
                         "rope_type": curr_rope_type,
-                        "rope_theta": curr_rope_theta,
+                        "rope_theta": rope_theta[layer_type],
                     }
-                # Do not do anything if rope scaling is in new format and the rope params are set to `None` by users
-                elif rope_parameters[layer_type] is not None:
-                    curr_rope_theta = rope_parameters[layer_type].get("rope_theta") or rope_theta[layer_type]
+                else:
                     curr_rope_type = rope_parameters[layer_type].get(
                         "rope_type", rope_parameters[layer_type].get("type")
                     )
                     rope_parameters_per_layer_type[layer_type] = {
                         **rope_parameters[layer_type],
                         "rope_type": curr_rope_type,
-                        "rope_theta": curr_rope_theta,
+                        "rope_theta": rope_theta[layer_type],
                     }
-                else:
-                    rope_parameters_per_layer_type[layer_type] = None
             config.rope_parameters = rope_parameters_per_layer_type
 
 
@@ -869,20 +861,14 @@ def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] 
     if rope_parameters_dict is None:
         return
 
-    if getattr(config, "layer_types", None) is not None:
-        missing_rope_keys = set(config.layer_types) - set(rope_parameters_dict.keys())
-        if missing_rope_keys:
-            raise KeyError(
-                f"Missing required keys in `rope_parameters`: {missing_rope_keys}. The `rope_parameters` dict should "
-                "contain keys for all types in `config.layer_types`"
-            )
+    if getattr(config, "layer_types", None) is not None and all(
+        key in config.layer_types for key in rope_parameters_dict.keys()
+    ):
+        pass
     else:
         rope_parameters_dict = {"full_attention": rope_parameters_dict}
 
     for rope_parameters in rope_parameters_dict.values():
-        if rope_parameters is None:
-            continue
-
         rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
         validation_fn = ROPE_VALIDATION_FUNCTIONS.get(rope_type)
 

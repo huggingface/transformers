@@ -233,7 +233,7 @@ class MiniMaxConfig(PreTrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = getattr(self, "rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "linear_attention": rope_theta})
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
         super().__init__(
             pad_token_id=pad_token_id,

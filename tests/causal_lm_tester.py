@@ -19,7 +19,6 @@ import pytest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, PreTrainedConfig, set_seed
-from transformers.modeling_rope_utils import rope_config_validation
 from transformers.models.auto.auto_factory import getattribute_from_module
 from transformers.testing_utils import (
     _COMMON_MODEL_NAMES_MAP,
@@ -462,39 +461,6 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    def test_model_rope_with_layer_types(self):
-        """
-        Tests that we can initialize a model with different RoPE scaling per each layer type
-        and run a forward pass.
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        if getattr(config, "layer_types", None) is None or len(set(config.layer_types)) == 1:
-            self.skipTest("This model does not have different layer types")
-
-        dummy_input = ids_tensor([1, 10], config.vocab_size)
-
-        # Simple forward run with dummy config - should pass
-        original_model = self.model_tester_class.base_model_class(config).eval().to(torch_device)
-        _ = original_model(dummy_input)
-
-        # If the config does not have rope params defined for each layer type - it fails
-        type_to_drop = config.layer_types[0]
-        flat_rope_dict = config.rope_parameters.pop(type_to_drop)  # save for later
-        with self.assertRaises(KeyError):
-            self.model_tester_class.base_model_class(config).eval().to(torch_device)
-
-        with self.assertRaises(KeyError):
-            rope_config_validation(config)
-
-        with self.assertRaises(KeyError):
-            self.model_tester.config_class(**config.to_dict())
-
-        # If the config is old-style and has a flat rope param dict - handles BC and passes
-        config.rope_parameters = flat_rope_dict
-        old_format_model = self.model_tester_class.base_model_class(config).eval().to(torch_device)
-        old_format_model(dummy_input)
-
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -528,13 +494,12 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
         position_ids_long = position_ids_long.unsqueeze(0)
-        kwargs = {"layer_type": config.layer_types[0]} if hasattr(config, "layer_types") else {}
 
         # Sanity check original RoPE
         _set_config_rope_params(config, {"rope_type": "default", "rope_theta": 10_000.0})
         original_rope = rope_class(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short, **kwargs)
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long, **kwargs)
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
 
@@ -542,8 +507,8 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # New position "x" should match original position with index "x/scaling_factor"
         _set_config_rope_params(config, {"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0})
         linear_scaling_rope = rope_class(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, **kwargs)
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, **kwargs)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
         for new_position in range(0, long_input_length, scaling_factor):
@@ -556,31 +521,22 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # with scaling_factor (or that `inv_freq` decreases)
         _set_config_rope_params(config, {"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0})
         ntk_scaling_rope = rope_class(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, **kwargs)
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, **kwargs)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
         torch.testing.assert_close(ntk_sin_short, original_sin_short)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        if hasattr(config, "layer_types"):
-            for layer_type in config.layer_types:
-                self.assertTrue(
-                    (
-                        getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
-                        <= getattr(original_rope, f"{layer_type}_inv_freq")
-                    ).all()
-                )
-        else:
-            self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
         _set_config_rope_params(config, {"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0})
         yarn_scaling_rope = rope_class(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, **kwargs)
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, **kwargs)
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
         with self.assertRaises(AssertionError):
@@ -655,7 +611,7 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
     config.rope_parameters = rope_params
-    if hasattr(config, "layer_types"):
+    if any(name in config.__class__.__name__.lower() for name in ["gemma3", "modernbert"]):
         config.rope_parameters = {layer_type: config.rope_parameters.copy() for layer_type in config.layer_types}
 
     for sub_config in config.sub_configs.keys():

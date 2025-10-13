@@ -188,7 +188,7 @@ class T5GemmaModuleConfig(PreTrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
 

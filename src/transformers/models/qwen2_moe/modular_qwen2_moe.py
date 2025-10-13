@@ -208,9 +208,7 @@ class Qwen2MoeModel(MixtralModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = {}
-        for layer_type in self.config.layer_types:
-            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type=layer_type)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
@@ -220,7 +218,7 @@ class Qwen2MoeModel(MixtralModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings[self.config.layer_types[i]],
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

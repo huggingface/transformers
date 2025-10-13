@@ -368,7 +368,7 @@ class Llama4TextConfig(PreTrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "chunked_attention": rope_theta})
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
 

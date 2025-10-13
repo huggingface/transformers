@@ -220,7 +220,7 @@ class SmolLM3Config(PreTrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = getattr(self, "rope_theta", 2000000.0)
-        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
 

@@ -217,7 +217,7 @@ class Exaone4Config(PreTrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         super().__init__(
@@ -385,9 +385,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
-        position_embeddings = {}
-        for layer_type in self.config.layer_types:
-            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers):
             layer_type = self.config.layer_types[i]
@@ -398,7 +396,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings[layer_type],
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

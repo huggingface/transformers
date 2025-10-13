@@ -38,7 +38,7 @@ from ...modeling_rope_utils import RopeParameters, rope_config_validation, stand
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
-from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding, apply_rotary_pos_emb
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb
 
 
 if is_flash_attn_2_available():
@@ -524,8 +524,9 @@ class ModernBertMLP(nn.Module):
         return self.Wo(self.drop(self.act(input) * gate))
 
 
-class ModernBertRotaryEmbedding(Gemma2RotaryEmbedding):
-    pass
+class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
+    def __init__(self, config: ModernBertConfig, device=None):
+        pass
 
 
 def eager_attention_forward(

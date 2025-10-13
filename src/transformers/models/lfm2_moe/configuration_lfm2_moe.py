@@ -163,7 +163,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
-        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "conv": None})
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys

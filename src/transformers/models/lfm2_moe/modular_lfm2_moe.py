@@ -182,7 +182,7 @@ class Lfm2MoeModel(MixtralModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids, layer_type="full_attention")
+        position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:

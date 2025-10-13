@@ -32,8 +32,7 @@ class CwmConfigTest(unittest.TestCase):
         # Llama3 defaults
         self.assertEqual(config.vocab_size, 128256)
         self.assertIsNotNone(config.rope_parameters)
-        self.assertEqual(config.rope_parameters["full_attention"]["rope_type"], "llama3")
-        self.assertEqual(config.rope_parameters["sliding_attention"]["rope_type"], "llama3")
+        self.assertEqual(config.rope_parameters["rope_type"], "llama3")
 
     def test_custom_sliding_window_config(self):
         config = CwmConfig(sliding_window=4096)
@@ -87,9 +86,7 @@ class CwmConfigTest(unittest.TestCase):
 
         config = CwmConfig(rope_scaling=custom_rope_scaling)
 
-        self.assertEqual(
-            config.rope_scaling, {"full_attention": custom_rope_scaling, "sliding_attention": custom_rope_scaling}
-        )
+        self.assertEqual(config.rope_scaling, custom_rope_scaling)
 
     def test_config_serialization(self):
         config = CwmConfig(
