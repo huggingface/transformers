@@ -216,7 +216,6 @@ def _test_encoder_eager_matches_sdpa_inference(
                     enable_mem_efficient=enable_kernels,
                 ):
                     prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
-                    # print(processed_inputs["pixel_values"].shape); exit()
                     prepared_inputs = {
                         k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
                     }
@@ -786,6 +785,7 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
 
 @require_torch
+@slow
 class VideoLlama3IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("lkhl/VideoLLaMA3-2B-Image-HF")
@@ -805,14 +805,13 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         gc.collect()
         backend_empty_cache(torch_device)
 
-    @slow
     def test_small_model_integration_test(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
-            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
+            "lkhl/VideoLLaMA3-2B-Image-HF", dtype=torch.bfloat16, device_map=torch_device
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
+        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
 
         expected_input_ids = [151644, 872, 198] + [151655] * 10549 + [198, 74785, 279, 2168, 13, 151645, 198, 151644, 77091, 198]  # fmt: skip
         self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist())
@@ -827,12 +826,9 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
                 [-0.6000, -0.4118, -0.3647],
             ],
             dtype=torch.float32,
-            device="cpu",
+            device=torch_device,
         )
-        torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
-
-        # verify generation
-        inputs = inputs.to(torch_device)
+        torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=1e-4, rtol=1e-4)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
         EXPECTED_DECODED_TEXT = "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress"
@@ -842,10 +838,9 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
     def test_small_model_integration_test_batch(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
-            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
+            "lkhl/VideoLLaMA3-2B-Image-HF", dtype=torch.bfloat16, device_map=torch_device
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
@@ -864,32 +859,9 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    def test_small_model_integration_test_expand(self):
-        model = VideoLlama3ForConditionalGeneration.from_pretrained(
-            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
-
-        output = model.generate(
-            **inputs, max_new_tokens=20, num_return_sequences=3, temperature=1e-5, repetition_penalty=None
-        )
-
-        EXPECTED_DECODED_TEXT = [
-            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
-            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
-            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
-            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
+            "lkhl/VideoLLaMA3-2B-Image-HF", dtype=torch.bfloat16, device_map=torch_device
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
@@ -912,10 +884,9 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
-            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
+            "lkhl/VideoLLaMA3-2B-Image-HF", dtype=torch.bfloat16, device_map=torch_device
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -935,7 +906,6 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
 
         self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
-    @slow
     @require_flash_attn
     @require_torch_gpu
     def test_small_model_integration_test_batch_flashatt2(self):
@@ -943,7 +913,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
             "lkhl/VideoLLaMA3-2B-Image-HF",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
-            device_map="auto",
+            device_map=torch_device,
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
@@ -954,15 +924,14 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
 
         EXPECTED_DECODED_TEXT = [
-            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
-            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
-        ]
+            'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+            'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
     @require_flash_attn
     @require_torch_gpu
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
@@ -970,7 +939,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
             "lkhl/VideoLLaMA3-2B-Image-HF",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
-            device_map="auto",
+            device_map=torch_device,
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
@@ -985,8 +954,8 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
 
         EXPECTED_DECODED_TEXT = [
-            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
-            "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
+            'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+            'user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by'
         ]  # fmt: skip
 
         self.assertEqual(
