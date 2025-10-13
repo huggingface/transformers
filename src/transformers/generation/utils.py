@@ -366,7 +366,7 @@ class GenerationMixin(ContinuousMixin):
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
-    def adjust_generation_function(
+    def adjust_generation_fn(
         self,
         generation_config,
         from_auto_class,
