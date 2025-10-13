@@ -167,7 +167,11 @@ qwen3_schema = {
                             "arguments": {
                                 "type": "object",
                                 "x-regex-key-value": r"<parameter=(?P<key>\w+)>\n(?P<value>.*?)\n</parameter>",
-                                "additionalProperties": {"type": "any", "x-parser": "json", "x-parser-args": {"allow_non_json": True}},
+                                "additionalProperties": {
+                                    "type": "any",
+                                    "x-parser": "json",
+                                    "x-parser-args": {"allow_non_json": True},
+                                },
                             },
                         },
                     },
@@ -329,6 +333,18 @@ class ChatSchemaParserTest(unittest.TestCase):
         parsed_chat = recursive_parse(model_out, qwen3_schema)
         self.assertEqual(
             parsed_chat,
-            {'tool_calls': [{'type': 'function', 'function': {'name': 'get_weather', 'arguments': {
-                'locations': [{'country': 'France', 'city': 'Paris'}], 'temp_units': 'celsius'}}}]}
+            {
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": {
+                                "locations": [{"country": "France", "city": "Paris"}],
+                                "temp_units": "celsius",
+                            },
+                        },
+                    }
+                ]
+            },
         )
