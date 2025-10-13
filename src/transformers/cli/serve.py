@@ -1548,7 +1548,6 @@ class serve:
         self.last_messages = messages
         return req_continues_last_messages
 
-    @staticmethod
     def get_quantization_config(self) -> Optional["BitsAndBytesConfig"]:
         """
         Returns the quantization config for the given CLI arguments.

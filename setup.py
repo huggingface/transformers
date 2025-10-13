@@ -429,12 +429,7 @@ setup(
     package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
-    entry_points={
-        "console_scripts": [
-            "transformers=transformers.cli.transformers:main",
-            "transformers-legacy=transformers.commands.transformers_cli:main",
-        ]
-    },
+    entry_points={"console_scripts": ["transformers=transformers.cli.transformers:main"]},
     python_requires=">=3.10.0",
     install_requires=list(install_requires),
     classifiers=[
