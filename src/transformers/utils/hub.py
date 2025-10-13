@@ -23,7 +23,7 @@ import tempfile
 import warnings
 from concurrent import futures
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, TypedDict, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -74,6 +74,18 @@ CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+
+class DownloadKwargs(TypedDict, total=False):
+    cache_dir: Optional[Union[str, os.PathLike]]
+    force_download: bool
+    proxies: Optional[dict[str, str]]
+    local_files_only: bool
+    token: Optional[Union[str, bool]]
+    revision: Optional[str]
+    subfolder: str
+    commit_hash: Optional[str]
+
 
 _is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
 

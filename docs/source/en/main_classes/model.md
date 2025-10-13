@@ -42,7 +42,3 @@ set this to `False`.
 ## Pushing to the Hub
 
 [[autodoc]] utils.PushToHubMixin
-
-## Sharded checkpoints
-
-[[autodoc]] modeling_utils.load_sharded_checkpoint

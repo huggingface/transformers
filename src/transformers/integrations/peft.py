@@ -12,21 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
+import importlib.metadata
 import inspect
+import json
+import os
 import re
 from typing import Any, Optional, Union
 
 from packaging import version
 
 from ..utils import (
+    CONFIG_NAME,
+    cached_file,
     check_peft_version,
+    extract_commit_hash,
     find_adapter_config_file,
     is_accelerate_available,
     is_peft_available,
     is_torch_available,
     logging,
 )
+from ..utils.hub import DownloadKwargs
 
 
 if is_torch_available():
@@ -249,7 +255,7 @@ class PeftAdapterMixin:
             else:
                 new_key = key
 
-            if key_mapping:
+            if key_mapping:  # TODO dynamic weight loader for adapters
                 for pattern, replacement in key_mapping.items():
                     new_key, n_replace = re.subn(pattern, replacement, new_key)
                     # Early exit of the loop
@@ -614,3 +620,54 @@ class PeftAdapterMixin:
         if len(self.peft_config) == 0:
             del self.peft_config
             self._hf_peft_config_loaded = False
+
+
+def maybe_load_adapters(
+    pretrained_model_name_or_path,
+    download_kwargs: DownloadKwargs,
+    **adapter_kwargs,
+):
+    if pretrained_model_name_or_path is None or not is_peft_available():
+        return None, pretrained_model_name_or_path
+
+    token = download_kwargs.get("token")
+
+    if download_kwargs.get("commit_hash") is None:
+        resolved_config_file = cached_file(
+            pretrained_model_name_or_path,
+            CONFIG_NAME,
+            cache_dir=download_kwargs.get("cache_dir"),
+            force_download=bool(download_kwargs.get("force_download", False)),
+            proxies=download_kwargs.get("proxies"),
+            local_files_only=bool(download_kwargs.get("local_files_only", False)),
+            token=token,
+            revision=download_kwargs.get("revision"),
+            subfolder=download_kwargs.get("subfolder"),
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+        )
+        download_kwargs["commit_hash"] = extract_commit_hash(resolved_config_file, None)
+
+    _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
+
+    if _adapter_model_path is None:
+        _adapter_model_path = find_adapter_config_file(
+            pretrained_model_name_or_path,
+            cache_dir=download_kwargs.get("cache_dir"),
+            force_download=bool(download_kwargs.get("force_download", False)),
+            proxies=download_kwargs.get("proxies"),
+            token=token,
+            revision=download_kwargs.get("revision"),
+            local_files_only=bool(download_kwargs.get("local_files_only", False)),
+            subfolder=download_kwargs.get("subfolder", ""),
+            _commit_hash=download_kwargs.get("commit_hash"),
+            **adapter_kwargs,
+        )
+
+    if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
+        with open(_adapter_model_path, "r", encoding="utf-8") as f:
+            _adapter_model_path = pretrained_model_name_or_path
+            pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+
+    return _adapter_model_path, pretrained_model_name_or_path

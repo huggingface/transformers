@@ -88,9 +88,6 @@ class QuarkHfQuantizer(HfQuantizer):
 
         _load_parameter_into_model(model, param_name, param.to(param_device))
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     def is_serializable(self, safe_serialization=None):
         return False
 
