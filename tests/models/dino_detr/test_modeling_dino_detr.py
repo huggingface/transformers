@@ -746,8 +746,6 @@ class DinoDetrModelIntegrationTests(unittest.TestCase):
         target_sizes = torch.tensor(pixel_values.shape[-2:]).unsqueeze(0).to(torch_device)
         results = image_processor.post_process_object_detection(
             outputs,
-            nms_iou_threshold=10,
-            conf_threshold=0.3,
             target_sizes=target_sizes,
         )[0]
         expected_scores = torch.tensor([0.7475, 0.7341, 0.7229, 0.4707, 0.4449, 0.3086]).to(torch_device)

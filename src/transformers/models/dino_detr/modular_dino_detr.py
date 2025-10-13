@@ -3,7 +3,7 @@ import math
 import random
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from transformers.modeling_outputs import ModelOutput
 from transformers.modeling_utils import PreTrainedModel
@@ -12,11 +12,13 @@ from transformers.utils import add_start_docstrings, add_start_docstrings_to_mod
 
 from ...activations import ACT2FN
 from ...utils import (
+    TensorType,
     is_scipy_available,
     is_timm_available,
     is_torch_available,
     is_torchvision_available,
     is_vision_available,
+    logging,
 )
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrConvEncoder,
@@ -27,6 +29,9 @@ from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.modeling_detr import DetrConvModel, DetrFrozenBatchNorm2d, DetrMLPPredictionHead
 from ..rt_detr.modeling_rt_detr import get_contrastive_denoising_training_group
 from .configuration_dino_detr import DinoDetrConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class DinoDetrEncoderLayer(DeformableDetrEncoderLayer):
@@ -59,7 +64,7 @@ if is_torch_available():
     from torch import nn
 
 if is_torchvision_available():
-    from torchvision.ops.boxes import nms
+    pass
 
 if is_vision_available():
     pass
@@ -2506,83 +2511,61 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
 
 class DinoDetrImageProcessor(DetrImageProcessor):
     def post_process_object_detection(
-        self,
-        outputs,
-        target_sizes,
-        not_to_xyxy=False,
-        test=False,
-        num_select=300,
-        conf_threshold=0.3,
-        nms_iou_threshold=-1,
+        self, outputs, threshold: float = 0.3, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 300
     ):
         """
-        Post-processes the outputs of the model for object detection.
+        Converts the raw output of [`DinoDetrForObjectDetection`] into final bounding boxes in (top_left_x,
+        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
-            outputs (`torch.Tensor`):
-                Raw outputs of the model, containing logits and predicted bounding boxes.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size of each image in the batch. For evaluation, this must be the original image
-                size (before any data augmentation). For visualization, this should be the image size after data
-                augmentation but before padding.
-            not_to_xyxy (`bool`, *optional*, defaults to `False`):
-                If `True`, the bounding boxes are not converted to the `[x_min, y_min, x_max, y_max]` format.
-            test (`bool`, *optional*, defaults to `False`):
-                If `True`, adjusts the bounding boxes to represent width and height instead of absolute coordinates.
-            num_select (`int`, *optional*, defaults to `300`):
-                Number of top predictions to select based on confidence scores.
-            conf_threshold (`float`, *optional*, defaults to `0.3`):
-                Confidence threshold to filter predictions.
-            nms_iou_threshold (`float`, *optional*, defaults to `-1`):
-                IoU threshold for non-maximum suppression. If set to a value greater than 0, NMS is applied.
+            outputs ([`DinoDetrObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            top_k (`int`, *optional*, defaults to 100):
+                Keep only top k bounding boxes before filtering by thresholding.
 
         Returns:
-            `List[Dict[str, torch.Tensor]]`: A list of dictionaries, each containing:
-                - **scores** (`torch.Tensor`): Confidence scores of the selected predictions.
-                - **labels** (`torch.Tensor`): Class labels of the selected predictions.
-                - **boxes** (`torch.Tensor`): Bounding boxes of the selected predictions in absolute coordinates.
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
-        prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), num_select, dim=1)
-        scores = topk_values
-        topk_boxes = topk_indexes // out_logits.shape[2]
-        labels = topk_indexes % out_logits.shape[2]
-        if not_to_xyxy:
-            boxes = out_bbox
-        else:
-            boxes = center_to_corners_format(out_bbox)
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
 
-        if test:
-            boxes[:, :, 2:] = boxes[:, :, 2:] - boxes[:, :, :2]
+        prob = out_logits.sigmoid()
+        prob = prob.view(out_logits.shape[0], -1)
+        k_value = min(top_k, prob.size(1))
+        topk_values, topk_indexes = torch.topk(prob, k_value, dim=1)
+        scores = topk_values
+        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
+        labels = topk_indexes % out_logits.shape[2]
+        boxes = center_to_corners_format(out_bbox)
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
         # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
-        boxes = boxes * scale_fct[:, None, :]
+        if target_sizes is not None:
+            if isinstance(target_sizes, list):
+                img_h = torch.Tensor([i[0] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
 
-        if nms_iou_threshold > 0:
-            item_indices = [nms(b, s, iou_threshold=nms_iou_threshold) for b, s in zip(boxes, scores)]
-
-            results = [
-                {
-                    "scores": s[i][s[i] > conf_threshold],
-                    "labels": l[i][s[i] > conf_threshold],
-                    "boxes": b[i][s[i] > conf_threshold],
-                }
-                for s, l, b, i in zip(scores, labels, boxes, item_indices)
-            ]
-        else:
-            results = [
-                {
-                    "scores": s[s > conf_threshold],
-                    "labels": l[s > conf_threshold],
-                    "boxes": b[s > conf_threshold],
-                }
-                for s, l, b in zip(scores, labels, boxes)
-            ]
+        results = []
+        for s, l, b in zip(scores, labels, boxes):
+            score = s[s > threshold]
+            label = l[s > threshold]
+            box = b[s > threshold]
+            results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
 
