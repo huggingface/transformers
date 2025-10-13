@@ -15,6 +15,7 @@
 """Mixtral model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from ...core_model_loading import WeightConversion
 from ...utils import logging
 
 
@@ -115,9 +116,9 @@ class MixtralConfig(PreTrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.block_sparse_moe.gate": "colwise_rep",  # we need to replicate here to correctly route experts
-        "layers.*.block_sparse_moe.experts.*.w1": "colwise",
-        "layers.*.block_sparse_moe.experts.*.w2": "rowwise",
-        "layers.*.block_sparse_moe.experts.*.w3": "colwise",
+        "layers.*.block_sparse_moe.experts.w1": "colwise",
+        "layers.*.block_sparse_moe.experts.w2": "rowwise",
+        "layers.*.block_sparse_moe.experts.w3": "colwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -126,6 +127,23 @@ class MixtralConfig(PreTrainedConfig):
     }
     attribute_map = {
         "num_experts": "num_local_experts",
+    }
+    checkpoint_conversion_mapping = {
+        r"^(model\.layers\.\d+\.block_sparse_moe)\.experts\.\d+\.w1\.weight$": WeightConversion(
+            new_key=r"\1.experts.w1",
+            function="merge_module_list",
+            dim=0,
+        ),
+        r"^(model\.layers\.\d+\.block_sparse_moe)\.experts\.\d+\.w2\.weight$": WeightConversion(
+            new_key=r"\1.experts.w2",
+            function="merge_module_list",
+            dim=0,
+        ),
+        r"^(model\.layers\.\d+\.block_sparse_moe)\.experts\.\d+\.w3\.weight$": WeightConversion(
+            new_key=r"\1.experts.w3",
+            function="merge_module_list",
+            dim=0,
+        ),
     }
 
     def __init__(
