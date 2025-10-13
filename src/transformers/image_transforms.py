@@ -803,19 +803,25 @@ def _cast_tensor_to_float(x):
     return x.float()
 
 
-def _group_images_by_shape(nested_images, is_nested: bool = False):
-    """Helper function to flatten a single level of nested image structures and group by shape."""
+def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = False):
+    """Helper function to flatten a single level of nested image and batch structures and group by shape."""
     grouped_images = defaultdict(list)
     grouped_images_index = {}
     nested_images = [nested_images] if not is_nested else nested_images
-    for i, sublist in enumerate(nested_images):
-        for j, image in enumerate(sublist):
+    paired_inputs_lists = []
+    paired_grouped_values = [defaultdict(list) for _ in paired_inputs]
+    for paired_input in paired_inputs:
+        paired_inputs_lists.append([paired_input]) if not is_nested else paired_inputs_lists.append(paired_input)
+    for i, (sublist, *paired_sublists) in enumerate(zip(nested_images, *paired_inputs_lists)):
+        for j, (image, *paired_values) in enumerate(zip(sublist, *paired_sublists)):
             key = (i, j) if is_nested else j
             shape = image.shape[1:]
             grouped_images[shape].append(image)
+            for paired_index, paired_value in enumerate(paired_values):
+                paired_grouped_values[paired_index][shape].append(paired_value)
             grouped_images_index[key] = (shape, len(grouped_images[shape]) - 1)
 
-    return grouped_images, grouped_images_index
+    return grouped_images, *paired_grouped_values, grouped_images_index
 
 
 def _reconstruct_nested_structure(indices, processed_images):
@@ -846,11 +852,10 @@ def _reconstruct_nested_structure(indices, processed_images):
 
 def group_images_by_shape(
     images: Union[list["torch.Tensor"], "torch.Tensor"],
+    *paired_inputs,
     disable_grouping: bool,
     is_nested: bool = False,
-) -> tuple[
-    dict[tuple[int, int], list["torch.Tensor"]], dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]
-]:
+) -> tuple[dict, ...]:
     """
     Groups images by shape.
     Returns a dictionary with the shape as key and a list of images with that shape as value,
@@ -862,6 +867,11 @@ def group_images_by_shape(
     Args:
         images (Union[list["torch.Tensor"], "torch.Tensor"]):
             A list of images or a single tensor
+        *paired_inputs (Any):
+            Zero or more lists that mirror the structure of `images` (flat list, or list of lists when
+            `is_nested=True`). Each element is paired 1:1 with the corresponding image so it can be grouped by the
+            same shape key. These paired values are grouped alongside `images` but are not stacked in the output, so
+            they do not need to be tensors.
         disable_grouping (bool):
             Whether to disable grouping. If None, will be set to True if the images are on CPU, and False otherwise.
             This choice is based on empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
@@ -869,8 +879,10 @@ def group_images_by_shape(
             Whether the images are nested.
 
     Returns:
-        tuple[dict[tuple[int, int], list["torch.Tensor"]], dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]]:
-            - A dictionary with shape as key and list of images with that shape as value
+        tuple[dict, ...]:
+            - A dictionary with shape as key and list/batch of images with that shape as value
+            - Zero or more dictionaries (one per argument in `*paired_inputs`) grouped consistently with `images`; these carry
+              the corresponding per-item values and are not stacked
             - A dictionary mapping original indices to (shape, index) tuples
     """
     # If disable grouping is not explicitly provided, we favor disabling it if the images are on CPU, and enabling it otherwise.
@@ -880,19 +892,34 @@ def group_images_by_shape(
 
     if disable_grouping:
         if is_nested:
-            return {(i, j): images[i][j].unsqueeze(0) for i in range(len(images)) for j in range(len(images[i]))}, {
-                (i, j): ((i, j), 0) for i in range(len(images)) for j in range(len(images[i]))
-            }
+            return (
+                {(i, j): images[i][j].unsqueeze(0) for i in range(len(images)) for j in range(len(images[i]))},
+                *[
+                    {
+                        (i, j): paired_list[i][j].unsqueeze(0)
+                        for i in range(len(paired_list))
+                        for j in range(len(paired_list[i]))
+                    }
+                    for paired_list in paired_inputs
+                ],
+                {(i, j): ((i, j), 0) for i in range(len(images)) for j in range(len(images[i]))},
+            )
         else:
-            return {i: images[i].unsqueeze(0) for i in range(len(images))}, {i: (i, 0) for i in range(len(images))}
+            return (
+                {i: images[i].unsqueeze(0) for i in range(len(images))},
+                *[{i: paired_list[i].unsqueeze(0) for i in range(len(paired_list))} for paired_list in paired_inputs],
+                {i: (i, 0) for i in range(len(images))},
+            )
 
     # Handle single level nested structure
-    grouped_images, grouped_images_index = _group_images_by_shape(images, is_nested)
+    grouped_images, *paired_grouped_values, grouped_images_index = _group_images_by_shape(
+        images, *paired_inputs, is_nested=is_nested
+    )
 
     # Stack images with the same shape
     grouped_images = {shape: torch.stack(images_list, dim=0) for shape, images_list in grouped_images.items()}
 
-    return grouped_images, grouped_images_index
+    return grouped_images, *paired_grouped_values, grouped_images_index
 
 
 def reorder_images(
