@@ -19,12 +19,14 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 
 from ...activations import ACT2FN
+from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...utils import (
     is_timm_available,
     is_torch_available,
     requires_backends,
+    torch_int,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_dino_detr import DinoDetrConfig
@@ -2165,156 +2167,127 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
         )
 
 
-def prepare_for_cdn(
-    dn_args: torch.FloatTensor,
-    training: bool,
-    num_queries: int,
-    num_classes: int,
-    d_model: int,
-    label_enc: Callable,
-    device: torch.device,
+def get_contrastive_denoising_training_group(
+    targets,
+    num_classes,
+    num_queries,
+    class_embed,
+    num_denoising_queries=100,
+    label_noise_ratio=0.5,
+    box_noise_scale=1.0,
 ):
     """
-    Prepares the input queries and attention masks for the Conditional Denoising (CDN) task.
-
-    This function generates noisy labels and bounding boxes for the denoising task during training. It also creates
-    the corresponding attention masks and metadata required for the decoder.
+    Creates a contrastive denoising training group using ground-truth samples. It adds noise to labels and boxes.
 
     Args:
-        dn_args (`torch.FloatTensor`):
-            A tuple containing the following elements:
-            - `targets` (list of dict): Ground truth targets with keys "class_labels" and "boxes".
-            - `dn_number` (int): Number of denoising groups.
-            - `label_noise_ratio` (float): Ratio of label noise to be applied.
-            - `box_noise_scale` (float): Scale of noise to be applied to bounding boxes.
-        training (`bool`):
-            Whether the model is in training mode.
-        num_queries (`int`):
-            Number of queries used in the decoder.
+        targets (`list[dict]`):
+            The target objects, each containing 'class_labels' and 'boxes' for objects in an image.
         num_classes (`int`):
-            Number of classes for classification.
-        d_model (`int`):
-            Dimension of the model's hidden states.
-        label_enc (`Callable`):
-            A callable function to encode class labels into embeddings.
-        device (`torch.device`):
-            The device on which the tensors will be allocated.
-
+            Total number of classes in the dataset.
+        num_queries (`int`):
+            Number of query slots in the transformer.
+        class_embed (`callable`):
+            A function or a model layer to embed class labels.
+        num_denoising_queries (`int`, *optional*, defaults to 100):
+            Number of denoising queries.
+        label_noise_ratio (`float`, *optional*, defaults to 0.5):
+            Ratio of noise applied to labels.
+        box_noise_scale (`float`, *optional*, defaults to 1.0):
+            Scale of noise applied to bounding boxes.
     Returns:
-        `Tuple[torch.FloatTensor, torch.FloatTensor, torch.BoolTensor, dict]`:
-            A tuple containing:
-            - `input_query_label` (`torch.FloatTensor`): The input query embeddings for labels.
-            - `input_query_bbox` (`torch.FloatTensor`): The input query embeddings for bounding boxes.
-            - `attn_mask` (`torch.BoolTensor`): The attention mask for the decoder.
-            - `dn_meta` (`dict`): Metadata containing information about padding size and number of denoising groups.
+        `tuple` comprising various elements:
+        - **input_query_class** (`torch.FloatTensor`) --
+          Class queries with applied label noise.
+        - **input_query_bbox** (`torch.FloatTensor`) --
+          Bounding box queries with applied box noise.
+        - **attn_mask** (`torch.FloatTensor`) --
+           Attention mask for separating denoising and reconstruction queries.
+        - **denoising_meta_values** (`dict`) --
+          Metadata including denoising positive indices, number of groups, and split sizes.
     """
-    if training:
-        targets, dn_number, label_noise_ratio, box_noise_scale = dn_args
-        dn_number = dn_number * 2
-        known = [(torch.ones_like(t["class_labels"])).to(device) for t in targets]
-        batch_size = len(known)
-        known_num = [sum(k) for k in known]
-        if int(max(known_num)) == 0:
-            dn_number = 1
-        else:
-            if dn_number >= 100:
-                dn_number = dn_number // (int(max(known_num) * 2))
-            elif dn_number < 1:
-                dn_number = 1
-        if dn_number == 0:
-            dn_number = 1
-        unmask_bbox = unmask_label = torch.cat(known)
-        labels = torch.cat([t["class_labels"] for t in targets])
-        boxes = torch.cat([t["boxes"] for t in targets])
-        batch_idx = torch.cat([torch.full_like(t["class_labels"].long(), i) for i, t in enumerate(targets)])
 
-        known_indice = torch.nonzero(unmask_label + unmask_bbox)
-        known_indice = known_indice.view(-1)
+    if num_denoising_queries <= 0:
+        return None, None, None, None
 
-        known_indice = known_indice.repeat(2 * dn_number, 1).view(-1)
-        known_labels = labels.repeat(2 * dn_number, 1).view(-1)
-        known_bid = batch_idx.repeat(2 * dn_number, 1).view(-1)
-        known_bboxs = boxes.repeat(2 * dn_number, 1)
-        known_labels_expaned = known_labels.clone()
-        known_bbox_expand = known_bboxs.clone()
+    num_ground_truths = [len(t["class_labels"]) for t in targets]
+    device = targets[0]["class_labels"].device
 
-        if label_noise_ratio > 0:
-            p = torch.rand_like(known_labels_expaned.float())
-            chosen_indice = torch.nonzero(p < (label_noise_ratio * 0.5)).view(-1)
-            new_label = torch.randint_like(chosen_indice, 0, num_classes)
-            known_labels_expaned.scatter_(0, chosen_indice, new_label)
-        single_pad = int(max(known_num))
+    max_gt_num = max(num_ground_truths)
+    if max_gt_num == 0:
+        return None, None, None, None
 
-        pad_size = int(single_pad * 2 * dn_number)
-        positive_idx = torch.tensor(range(len(boxes))).long().to(device).unsqueeze(0).repeat(dn_number, 1)
-        positive_idx += (torch.tensor(range(dn_number)) * len(boxes) * 2).long().to(device).unsqueeze(1)
-        positive_idx = positive_idx.flatten()
-        negative_idx = positive_idx + len(boxes)
-        if box_noise_scale > 0:
-            known_bbox_ = torch.zeros_like(known_bboxs)
-            known_bbox_[:, :2] = known_bboxs[:, :2] - known_bboxs[:, 2:] / 2
-            known_bbox_[:, 2:] = known_bboxs[:, :2] + known_bboxs[:, 2:] / 2
+    num_groups_denoising_queries = num_denoising_queries // max_gt_num
+    num_groups_denoising_queries = 1 if num_groups_denoising_queries == 0 else num_groups_denoising_queries
+    # pad gt to max_num of a batch
+    batch_size = len(num_ground_truths)
 
-            diff = torch.zeros_like(known_bboxs)
-            diff[:, :2] = known_bboxs[:, 2:] / 2
-            diff[:, 2:] = known_bboxs[:, 2:] / 2
+    input_query_class = torch.full([batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device)
+    input_query_bbox = torch.zeros([batch_size, max_gt_num, 4], device=device)
+    pad_gt_mask = torch.zeros([batch_size, max_gt_num], dtype=torch.bool, device=device)
 
-            rand_sign = torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32) * 2.0 - 1.0
-            rand_part = torch.rand_like(known_bboxs)
-            rand_part[negative_idx] += 1.0
-            rand_part *= rand_sign
-            known_bbox_ = known_bbox_ + torch.mul(rand_part, diff).to(device) * box_noise_scale
-            known_bbox_ = known_bbox_.clamp(min=0.0, max=1.0)
-            known_bbox_expand[:, :2] = (known_bbox_[:, :2] + known_bbox_[:, 2:]) / 2
-            known_bbox_expand[:, 2:] = known_bbox_[:, 2:] - known_bbox_[:, :2]
+    for i in range(batch_size):
+        num_gt = num_ground_truths[i]
+        if num_gt > 0:
+            input_query_class[i, :num_gt] = targets[i]["class_labels"]
+            input_query_bbox[i, :num_gt] = targets[i]["boxes"]
+            pad_gt_mask[i, :num_gt] = 1
+    # each group has positive and negative queries.
+    input_query_class = input_query_class.tile([1, 2 * num_groups_denoising_queries])
+    input_query_bbox = input_query_bbox.tile([1, 2 * num_groups_denoising_queries, 1])
+    pad_gt_mask = pad_gt_mask.tile([1, 2 * num_groups_denoising_queries])
+    # positive and negative mask
+    negative_gt_mask = torch.zeros([batch_size, max_gt_num * 2, 1], device=device)
+    negative_gt_mask[:, max_gt_num:] = 1
+    negative_gt_mask = negative_gt_mask.tile([1, num_groups_denoising_queries, 1])
+    positive_gt_mask = 1 - negative_gt_mask
+    # contrastive denoising training positive index
+    positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
+    denoise_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
+    denoise_positive_idx = torch.split(
+        denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
+    )
+    # total denoising queries
+    num_denoising_queries = torch_int(max_gt_num * 2 * num_groups_denoising_queries)
 
-        m = known_labels_expaned.long().to(device)
-        input_label_embed = label_enc(m)
-        input_bbox_embed = inverse_sigmoid(known_bbox_expand)
+    if label_noise_ratio > 0:
+        mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
+        # randomly put a new one here
+        new_label = torch.randint_like(mask, 0, num_classes, dtype=input_query_class.dtype)
+        input_query_class = torch.where(mask & pad_gt_mask, new_label, input_query_class)
 
-        padding_label = torch.zeros(pad_size, d_model).to(device)
-        padding_bbox = torch.zeros(pad_size, 4).to(device)
+    if box_noise_scale > 0:
+        known_bbox = center_to_corners_format(input_query_bbox)
+        diff = torch.tile(input_query_bbox[..., 2:] * 0.5, [1, 1, 2]) * box_noise_scale
+        rand_sign = torch.randint_like(input_query_bbox, 0, 2) * 2.0 - 1.0
+        rand_part = torch.rand_like(input_query_bbox)
+        rand_part = (rand_part + 1.0) * negative_gt_mask + rand_part * (1 - negative_gt_mask)
+        rand_part *= rand_sign
+        known_bbox += rand_part * diff
+        known_bbox.clip_(min=0.0, max=1.0)
+        input_query_bbox = corners_to_center_format(known_bbox)
+        input_query_bbox = inverse_sigmoid(input_query_bbox)
 
-        input_query_label = padding_label.repeat(batch_size, 1, 1)
-        input_query_bbox = padding_bbox.repeat(batch_size, 1, 1)
+    input_query_class = class_embed(input_query_class)
 
-        map_known_indice = torch.tensor([]).to(device)
-        if known_num:
-            map_known_indice = torch.cat([torch.tensor(range(num)) for num in known_num])
-            map_known_indice = torch.cat([map_known_indice + single_pad * i for i in range(2 * dn_number)]).long()
-        if len(known_bid):
-            input_query_label[(known_bid.long(), map_known_indice)] = input_label_embed
-            input_query_bbox[(known_bid.long(), map_known_indice)] = input_bbox_embed
+    target_size = num_denoising_queries + num_queries
+    attn_mask = torch.full([target_size, target_size], 0, dtype=torch.float, device=device)
+    # match query cannot see the reconstruction
+    attn_mask[num_denoising_queries:, :num_denoising_queries] = -torch.inf
 
-        tgt_size = pad_size + num_queries
-        attn_mask = torch.ones(tgt_size, tgt_size).to(device) < 0
-        attn_mask[pad_size:, :pad_size] = True
-        for i in range(dn_number):
-            if i == 0:
-                attn_mask[
-                    single_pad * 2 * i : single_pad * 2 * (i + 1),
-                    single_pad * 2 * (i + 1) : pad_size,
-                ] = True
-            if i == dn_number - 1:
-                attn_mask[single_pad * 2 * i : single_pad * 2 * (i + 1), : single_pad * i * 2] = True
-            else:
-                attn_mask[
-                    single_pad * 2 * i : single_pad * 2 * (i + 1),
-                    single_pad * 2 * (i + 1) : pad_size,
-                ] = True
-                attn_mask[single_pad * 2 * i : single_pad * 2 * (i + 1), : single_pad * 2 * i] = True
+    # reconstructions cannot see each other
+    for i in range(num_groups_denoising_queries):
+        idx_block_start = max_gt_num * 2 * i
+        idx_block_end = max_gt_num * 2 * (i + 1)
+        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = -torch.inf
+        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = -torch.inf
 
-        dn_meta = {
-            "pad_size": pad_size,
-            "num_dn_group": dn_number,
-        }
-    else:
-        input_query_label = None
-        input_query_bbox = None
-        attn_mask = None
-        dn_meta = None
+    denoising_meta_values = {
+        "dn_positive_idx": denoise_positive_idx,
+        "dn_num_group": num_groups_denoising_queries,
+        "dn_num_split": [num_denoising_queries, num_queries],
+    }
 
-    return input_query_label, input_query_bbox, attn_mask, dn_meta
+    return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
 
 
 def build_position_encoding(config):
@@ -2598,20 +2571,15 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 masks.append(mask)
                 position_embeddings.append(additional_position_embedding)
 
-        if self.config.dn_number > 0 and labels is not None:
-            queries, query_reference_points, attn_mask, dn_meta = prepare_for_cdn(
-                dn_args=(
-                    labels,
-                    self.config.dn_number,
-                    self.config.dn_label_noise_ratio,
-                    self.config.dn_box_noise_scale,
-                ),
-                training=self.training,
-                num_queries=self.config.num_queries,
+        if self.training and self.config.dn_number > 0 and labels is not None:
+            queries, query_reference_points, attn_mask, dn_meta = get_contrastive_denoising_training_group(
+                targets=labels,
                 num_classes=self.config.num_classes,
-                d_model=self.config.d_model,
-                label_enc=self.label_enc,
-                device=device,
+                num_queries=self.config.num_queries,
+                class_embed=self.label_enc,
+                num_denoising_queries=self.config.dn_number,
+                label_noise_ratio=self.config.dn_label_noise_ratio,
+                box_noise_scale=self.config.dn_box_noise_scale,
             )
         else:
             queries = query_reference_points = attn_mask = dn_meta = None
@@ -2734,11 +2702,11 @@ def dn_post_process(
             - `outputs_class` (`torch.FloatTensor`): Classification logits after removing the known queries.
             - `outputs_coord` (`torch.FloatTensor`): Bounding box coordinates after removing the known queries.
     """
-    if dn_meta and dn_meta["pad_size"] > 0:
-        output_known_class = outputs_class[:, :, : dn_meta["pad_size"], :]
-        output_known_coord = outputs_coord[:, :, : dn_meta["pad_size"], :]
-        outputs_class = outputs_class[:, :, dn_meta["pad_size"] :, :]
-        outputs_coord = outputs_coord[:, :, dn_meta["pad_size"] :, :]
+    if dn_meta and dn_meta["dn_num_split"][0] > 0:
+        output_known_class = outputs_class[:, :, : dn_meta["dn_num_split"][0], :]
+        output_known_coord = outputs_coord[:, :, : dn_meta["dn_num_split"][0], :]
+        outputs_class = outputs_class[:, :, dn_meta["dn_num_split"][0] :, :]
+        outputs_coord = outputs_coord[:, :, dn_meta["dn_num_split"][0] :, :]
         out = {
             "logits": output_known_class[-1],
             "pred_boxes": output_known_coord[-1],
