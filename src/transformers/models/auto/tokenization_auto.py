@@ -1094,7 +1094,7 @@ class AutoTokenizer:
                     config = AutoConfig.from_pretrained(
                         pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                     )
-            config_tokenizer_class = config.tokenizer_class
+            config_tokenizer_class = getattr(config, "tokenizer_class", None)
             if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
                 tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
