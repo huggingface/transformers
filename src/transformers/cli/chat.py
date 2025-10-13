@@ -14,7 +14,6 @@
 
 
 import asyncio
-import copy
 import json
 import os
 import platform
@@ -22,16 +21,14 @@ import re
 import string
 import time
 from collections.abc import AsyncIterator
-from threading import Thread
 from typing import Annotated, Optional
 
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 
-from transformers import AutoTokenizer, GenerationConfig, PreTrainedTokenizer
-from transformers.cli.serve import serve
-from transformers.utils import is_rich_available, is_torch_available
+from transformers import GenerationConfig
+from transformers.utils import is_rich_available
 
 
 try:
@@ -47,14 +44,6 @@ if is_rich_available():
     from rich.console import Console
     from rich.live import Live
     from rich.markdown import Markdown
-
-if is_torch_available():
-    import torch
-
-    from transformers import (
-        AutoModelForCausalLM,
-        BitsAndBytesConfig,
-    )
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
