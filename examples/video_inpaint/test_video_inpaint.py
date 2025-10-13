@@ -2,7 +2,8 @@
 
 import numpy as np
 
-from examples.video_inpaint.video_inpaint_pipeline import load_synthetic_video, VideoInpaintPipeline
+from examples.video_inpaint.video_inpaint_pipeline import (
+    VideoInpaintPipeline, load_synthetic_video)
 
 
 def test_video_inpaint_runs_and_returns_same_length(tmp_path):
