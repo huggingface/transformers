@@ -53,7 +53,7 @@ class TrOCRProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         **kwargs: Unpack[TrOCRProcessorKwargs],
     ) -> BatchFeature:
         """

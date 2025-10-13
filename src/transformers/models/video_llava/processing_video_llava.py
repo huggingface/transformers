@@ -93,8 +93,8 @@ class VideoLlavaProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         videos: Optional[ImageInput] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length=None,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
+        max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """

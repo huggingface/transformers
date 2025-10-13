@@ -20,7 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -123,9 +123,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput = None,
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        audio: AudioInput = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs,
     ) -> BatchFeature:
         """

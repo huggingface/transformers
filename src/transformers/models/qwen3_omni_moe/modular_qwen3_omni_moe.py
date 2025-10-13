@@ -2673,9 +2673,9 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
     def __call__(
         self,
         text: TextInput = None,
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        audio: AudioInput = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs,
     ):
         """
