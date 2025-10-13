@@ -1,5 +1,4 @@
-import os
-import tempfile
+"""Unit tests for examples/video_inpaint."""
 
 import numpy as np
 

@@ -29,7 +29,7 @@ import argparse
 import os
 import tempfile
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -46,7 +46,7 @@ except Exception:
 
 @dataclass
 class VideoResult:
-    frames: List[np.ndarray]
+    frames: list[np.ndarray]
     fps: float = 10.0
 
     def save(self, path: str):
@@ -64,7 +64,7 @@ class MockInpaintPipeline:
     def __init__(self):
         pass
 
-    def __call__(self, image: np.ndarray, mask: Optional[np.ndarray], prompt: Optional[str] = None):
+    def __call__(self, image: np.ndarray, mask: np.ndarray | None, prompt: str | None = None):
         out = image.copy()
         if mask is not None:
             # Simple effect: blur masked area
@@ -89,7 +89,7 @@ class VideoInpaintPipeline:
         self.use_flow = use_flow and (cv2 is not None)
 
     @classmethod
-    def from_pretrained(cls, model_id_or_path: str = None, use_flow: bool = True, **kwargs):
+    def from_pretrained(cls, model_id_or_path: str | None = None, use_flow: bool = True, **kwargs: Any):
         """Factory that mirrors `diffusers` pipelines.
 
         If Diffusers and a StableDiffusionInpaintPipeline are available, this
@@ -134,16 +134,18 @@ class VideoInpaintPipeline:
         remapped = cv2.remap(prev_latent.astype(np.float32), flow_map[..., 0], flow_map[..., 1], cv2.INTER_LINEAR)
         return remapped.astype(prev_latent.dtype)
 
-    def __call__(self, frames: List[np.ndarray], masks: Optional[List[np.ndarray]] = None, prompt: Optional[str] = None, **kwargs) -> VideoResult:
+    def __call__(self, frames: list[np.ndarray], masks: list[np.ndarray] | None = None, prompt: str | None = None, **kwargs) -> VideoResult:
         n = len(frames)
         masks = masks or [None] * n
         out_frames = []
         prev_latent = None
+        prev_frame: np.ndarray | None = None
         for i in range(n):
             frame = frames[i]
             mask = masks[i]
             if prev_latent is not None:
                 # warp prev_latent to current frame as init (mocked)
+                assert prev_frame is not None
                 warped = self._flow_warp(prev_frame, frame, prev_latent)
                 # In a real implementation we'd pass warped latents into the denoiser.
                 # Here, we just blend warped and frame slightly to simulate reuse.
