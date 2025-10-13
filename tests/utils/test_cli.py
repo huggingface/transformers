@@ -11,67 +11,55 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import os
-import shutil
+import tempfile
 import unittest
-from unittest.mock import patch
 
-from transformers.testing_utils import CaptureStd, require_torch
+from typer.testing import CliRunner
+
+import transformers.cli.transformers as cli
+from transformers.testing_utils import require_torch
+
+
+def invoke(*args):
+    runner = CliRunner()
+    return runner.invoke(cli.app, list(args))
 
 
 class CLITest(unittest.TestCase):
-    @patch("sys.argv", ["fakeprogrampath", "env"])
     def test_cli_env(self):
-        # test transformers env
-        import transformers.commands.transformers_cli
-
-        with CaptureStd() as cs:
-            transformers.commands.transformers_cli.main()
-        self.assertIn("Python version", cs.out)
-        self.assertIn("Platform", cs.out)
-        self.assertIn("Using distributed or parallel set-up in script?", cs.out)
+        output = invoke("env")
+        assert output.exit_code == 0
+        assert "Python version" in output.output
+        assert "Platform" in output.output
+        assert "Using distributed or parallel set-up in script?" in output.output
 
     @require_torch
-    @patch("sys.argv", ["fakeprogrampath", "download", "hf-internal-testing/tiny-random-gptj", "--cache-dir", "/tmp"])
     def test_cli_download(self):
-        import transformers.commands.transformers_cli
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = invoke("download", "hf-internal-testing/tiny-random-gptj", "--cache-dir", tmpdir)
+            assert output.exit_code == 0
 
-        # # remove any previously downloaded model to start clean
-        shutil.rmtree("/tmp/models--hf-internal-testing--tiny-random-gptj", ignore_errors=True)
-
-        # run the command
-        transformers.commands.transformers_cli.main()
-
-        # check if the model files are downloaded correctly on /tmp/models--hf-internal-testing--tiny-random-gptj
-        self.assertTrue(os.path.exists("/tmp/models--hf-internal-testing--tiny-random-gptj/blobs"))
-        self.assertTrue(os.path.exists("/tmp/models--hf-internal-testing--tiny-random-gptj/refs"))
-        self.assertTrue(os.path.exists("/tmp/models--hf-internal-testing--tiny-random-gptj/snapshots"))
+            # check if the model files are downloaded correctly
+            model_dir = os.path.join(tmpdir, "models--hf-internal-testing--tiny-random-gptj")
+            assert os.path.exists(os.path.join(model_dir, "blobs"))
+            assert os.path.exists(os.path.join(model_dir, "refs"))
+            assert os.path.exists(os.path.join(model_dir, "snapshots"))
 
     @require_torch
-    @patch(
-        "sys.argv",
-        [
-            "fakeprogrampath",
-            "download",
-            "hf-internal-testing/test_dynamic_model_with_tokenizer",
-            "--trust-remote-code",
-            "--cache-dir",
-            "/tmp",
-        ],
-    )
     def test_cli_download_trust_remote(self):
-        import transformers.commands.transformers_cli
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = invoke(
+                "download",
+                "hf-internal-testing/test_dynamic_model_with_tokenizer",
+                "--trust-remote-code",
+                "--cache-dir",
+                tmpdir,
+            )
+            assert output.exit_code == 0
 
-        # # remove any previously downloaded model to start clean
-        shutil.rmtree("/tmp/models--hf-internal-testing--test_dynamic_model_with_tokenizer", ignore_errors=True)
-
-        # run the command
-        transformers.commands.transformers_cli.main()
-
-        # check if the model files are downloaded correctly on /tmp/models--hf-internal-testing--test_dynamic_model_with_tokenizer
-        self.assertTrue(os.path.exists("/tmp/models--hf-internal-testing--test_dynamic_model_with_tokenizer/blobs"))
-        self.assertTrue(os.path.exists("/tmp/models--hf-internal-testing--test_dynamic_model_with_tokenizer/refs"))
-        self.assertTrue(
-            os.path.exists("/tmp/models--hf-internal-testing--test_dynamic_model_with_tokenizer/snapshots")
-        )
+            # check if the model files are downloaded correctly
+            model_dir = os.path.join(tmpdir, "models--hf-internal-testing--test_dynamic_model_with_tokenizer")
+            assert os.path.exists(os.path.join(model_dir, "blobs"))
+            assert os.path.exists(os.path.join(model_dir, "refs"))
+            assert os.path.exists(os.path.join(model_dir, "snapshots"))

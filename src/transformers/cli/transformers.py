@@ -13,7 +13,7 @@
 # limitations under the License.
 """Transformers CLI."""
 
-from huggingface_hub.cli._cli_utils import typer_factory  # TODO: import public method once exposed by huggingface_hub
+from huggingface_hub import typer_factory
 
 from transformers.cli.add_fast_image_processor import add_fast_image_processor
 from transformers.cli.add_new_model_like import add_new_model_like
