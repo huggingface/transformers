@@ -1539,6 +1539,23 @@ class HeliumConverter(SpmConverter):
             ],
         )
 
+class VideoPrismConverter(SpmConverter):
+    def vocab(self, proto):
+        num_extra_ids = self.original_tokenizer._extra_ids
+        vocab = [(piece.piece, piece.score) for piece in proto.pieces]
+        vocab += [(f"<extra_id_{i}>", 0.0) for i in range(num_extra_ids - 1, -1, -1)]
+        return vocab
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=["","$A"],
+            pair=["$A", "</s>", "$B", "</s>"], #Todo check the repo or ask Gary Zhao
+            special_tokens=[
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+                ("", 262)
+            ],
+        )
+
 
 class ParakeetConverter(SpmConverter):
     handle_byte_fallback = True
@@ -1750,6 +1767,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "CodeLlamaTokenizer": LlamaConverter,
     "GemmaTokenizer": GemmaConverter,
     "Phi3Tokenizer": LlamaConverter,
+    "VideoPrismTokenizer": VideoPrismConverter,
 }
 
 
@@ -1777,6 +1795,8 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     else:
         try:
             logger.info("Converting from Tiktoken")
+            print(transformer_tokenizer.vocab_file)
+            print(transformer_tokenizer.additional_special_tokens)
             return TikTokenConverter(
                 vocab_file=transformer_tokenizer.vocab_file,
                 additional_special_tokens=transformer_tokenizer.additional_special_tokens,
