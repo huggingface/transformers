@@ -310,8 +310,8 @@ docs/source/en/training.md
 docs/source/en/troubleshooting.md
 src/transformers/activations.py
 src/transformers/audio_utils.py
-src/transformers/cli/add_new_model_like.py
 src/transformers/cli/add_fast_image_processor.py
+src/transformers/cli/add_new_model_like.py
 src/transformers/cli/chat.py
 src/transformers/cli/download.py
 src/transformers/cli/run.py
