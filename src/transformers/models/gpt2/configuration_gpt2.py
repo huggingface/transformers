@@ -160,8 +160,10 @@ class GPT2Config(PreTrainedConfig):
         eos_token_id=50256,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.n_positions = n_positions
         self.n_embd = n_embd

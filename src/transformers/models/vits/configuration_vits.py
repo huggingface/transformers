@@ -194,6 +194,7 @@ class VitsConfig(PreTrainedConfig):
         noise_scale=0.667,
         noise_scale_duration=0.8,
         sampling_rate=16_000,
+        pad_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -240,6 +241,7 @@ class VitsConfig(PreTrainedConfig):
         self.noise_scale = noise_scale
         self.noise_scale_duration = noise_scale_duration
         self.sampling_rate = sampling_rate
+        self.pad_token_id = pad_token_id
 
         if len(upsample_kernel_sizes) != len(upsample_rates):
             raise ValueError(

@@ -202,6 +202,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         layer_types=None,
         attention_dropout=0.0,
         rope_scaling=None,
+        pad_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -248,6 +249,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self, ignore_keys={"mrope_section"})
         self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
         super().__init__(**kwargs)
 
 

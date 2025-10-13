@@ -115,10 +115,12 @@ class TrOCRConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        cross_attention_hidden_size=None,
         is_decoder=False,
         add_cross_attention=False,
         **kwargs,
     ):
+        self.cross_attention_hidden_size = cross_attention_hidden_size
         self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size

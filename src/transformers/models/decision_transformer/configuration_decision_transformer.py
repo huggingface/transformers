@@ -125,8 +125,10 @@ class DecisionTransformerConfig(PreTrainedConfig):
         eos_token_id=50256,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.add_cross_attention = add_cross_attention
         self.state_dim = state_dim
         self.act_dim = act_dim
         self.hidden_size = hidden_size

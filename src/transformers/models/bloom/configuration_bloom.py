@@ -139,7 +139,7 @@ class BloomConfig(PreTrainedConfig):
         self.eos_token_id = eos_token_id
         self.slow_but_exact = slow_but_exact
 
-        super().__init__(*kwargs)
+        super().__init__(**kwargs)
 
 
 class BloomOnnxConfig(OnnxConfigWithPast):

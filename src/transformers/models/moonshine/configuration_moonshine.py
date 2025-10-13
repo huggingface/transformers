@@ -182,6 +182,7 @@ class MoonshineConfig(PreTrainedConfig):
         attention_dropout=0.0,
         bos_token_id=1,
         eos_token_id=2,
+        pad_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -214,17 +215,15 @@ class MoonshineConfig(PreTrainedConfig):
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
 
         # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["MoonshineConfig"]

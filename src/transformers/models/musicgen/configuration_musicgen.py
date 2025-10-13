@@ -103,8 +103,12 @@ class MusicgenDecoderConfig(PreTrainedConfig):
         tie_word_embeddings=False,
         is_decoder=False,
         add_cross_attention=False,
+        cross_attention_hidden_size=None,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.cross_attention_hidden_size = cross_attention_hidden_size
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -212,6 +216,7 @@ class MusicgenConfig(PreTrainedConfig):
         self.audio_encoder = audio_encoder
         self.decoder = decoder
         self.initializer_factor = self.decoder.initializer_factor
+        self.tie_encoder_decoder = kwargs.get("tie_encoder_decoder", False)
 
         kwargs["is_encoder_decoder"] = True
         super().__init__(**kwargs)

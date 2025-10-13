@@ -100,10 +100,12 @@ class T5Config(PreTrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         classifier_dropout=0.0,
+        tie_word_embeddings=True,
         is_decoder=False,
         add_cross_attention=False,
         **kwargs,
     ):
+        self.tie_word_embeddings = tie_word_embeddings
         self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size

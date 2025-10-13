@@ -425,6 +425,7 @@ class CsmConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = False
         super().__init__(**kwargs)
 
 
