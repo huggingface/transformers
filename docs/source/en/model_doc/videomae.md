@@ -90,6 +90,11 @@ to fine-tune a VideoMAE model on a custom dataset.
 [[autodoc]] VideoMAEImageProcessor
     - preprocess
 
+## VideoMAEVideoProcessor
+
+[[autodoc]] VideoMAEVideoProcessor
+    - preprocess
+
 ## VideoMAEModel
 
 [[autodoc]] VideoMAEModel
