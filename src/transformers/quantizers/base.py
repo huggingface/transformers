@@ -18,6 +18,7 @@ from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
 from .quantizers_utils import get_module_from_name
 
+
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
