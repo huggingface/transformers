@@ -204,8 +204,8 @@ class PagedAttentionCache:
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
-        # We add one extra token to the cache to handle padding and generally discard unwanted tokens
-        self.cache_shape = (num_blocks * self.block_size + 1, self.num_key_value_heads, self.head_dim)
+        # We add two extra tokens to the cache to handle padding and generally discard unwanted tokens
+        self.cache_shape = (num_blocks * self.block_size + 2, self.num_key_value_heads, self.head_dim)
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
             new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -290,7 +290,6 @@ class PagedAttentionCache:
         layer_idx: int,
         read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
         write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
-        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
         """Update the cache with new key-value states for a specific layer. This method writes new KV states to the
         appropriate cache locations. The behavior differs based on the layer's attention type:
@@ -324,11 +323,11 @@ class PagedAttentionCache:
         # the only case where you may write over cache you need to use
         else:
             # Add the cache to the key and value states
-            mask = layer_read_index == -1  # TODO: can this can be efficiently precomputed?
+            mask = (layer_read_index == -1).unsqueeze(-1).unsqueeze(-1)  # TODO: should this be precomputed?
             key_states_with_cache = k_cache[layer_read_index, :, :]
-            key_states_with_cache[mask] = key_states
+            key_states_with_cache.masked_scatter_(mask, key_states)
             value_states_with_cache = v_cache[layer_read_index, :, :]
-            value_states_with_cache[mask] = value_states
+            value_states_with_cache.masked_scatter_(mask, value_states)
             # Write new KV values to the cache
             k_cache[layer_write_index, :, :] = key_states
             v_cache[layer_write_index, :, :] = value_states
