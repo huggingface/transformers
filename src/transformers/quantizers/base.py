@@ -18,7 +18,6 @@ from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
 from .quantizers_utils import get_module_from_name
 
-
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
@@ -32,6 +31,8 @@ logger = logging.get_logger(__file__)
 
 
 def _assign_original_dtype(module, original_dtype):
+    from ..modeling_utils import PreTrainedModel
+
     for child in module.children():
         if isinstance(child, PreTrainedModel):
             child.config._pre_quantization_dtype = original_dtype
