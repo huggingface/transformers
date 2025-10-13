@@ -109,9 +109,6 @@ class SwitchTransformersModelTester:
         self.expert_capacity = expert_capacity
         self.router_jitter_noise = router_jitter_noise
 
-    def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -763,9 +760,6 @@ class SwitchTransformersEncoderOnlyModelTester:
         self.is_encoder_decoder = is_encoder_decoder
         self.scope = None
         self.is_training = is_training
-
-    def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)

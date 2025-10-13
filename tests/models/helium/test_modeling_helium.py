@@ -31,9 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HeliumForCausalLM,
-        HeliumForSequenceClassification,
-        HeliumForTokenClassification,
         HeliumModel,
     )
 
@@ -45,20 +42,8 @@ class HeliumModelTester(CausalLMModelTester):
 
 @require_torch
 class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": HeliumModel,
-            "text-classification": HeliumForSequenceClassification,
-            "token-classification": HeliumForTokenClassification,
-            "text-generation": HeliumForCausalLM,
-            "zero-shot": HeliumForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-
     model_tester_class = HeliumModelTester
 
 

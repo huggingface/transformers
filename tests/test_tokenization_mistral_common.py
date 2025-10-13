@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import gc
+import io
 import tempfile
 import unittest
 
@@ -31,6 +33,7 @@ if is_mistral_common_available():
     import mistral_common.tokens.tokenizers
     from mistral_common.exceptions import InvalidMessageStructureException
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
+    from mistral_common.protocol.transcription.request import TranscriptionRequest
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
 
@@ -258,6 +261,31 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.decode`."
         ):
             self.tokenizer.decode(tokens_ids, skip_special_tokens=False, unk_args="")
+
+    def test_decode_transcription_mode(self):
+        # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
+        # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
+        # we made the explicit choice of skipping "lang:xx" it to ease users life, see `[~MistralCommonTokenizer.decode]`
+        expected_string = "lang:en[TRANSCRIBE]"
+
+        openai_transcription_request = {
+            "model": None,
+            "language": "en",
+            "file": io.BytesIO(base64.b64decode(AUDIO_BASE_64)),
+        }
+        transcription_request = TranscriptionRequest.from_openai(openai_transcription_request)
+        tokenized_transcription_request = self.ref_tokenizer_audio.encode_transcription(transcription_request)
+
+        # without skip_special_tokens
+        self.assertEqual(
+            self.tokenizer_audio.decode(tokenized_transcription_request.tokens, skip_special_tokens=False)[
+                -len(expected_string) :
+            ],
+            expected_string,
+        )
+
+        # with skip_special_tokens
+        self.assertEqual(self.tokenizer.decode(tokenized_transcription_request.tokens, skip_special_tokens=True), "")
 
     def test_batch_decode(self):
         string = "Hello, world!"
@@ -919,7 +947,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 conversation, tokenize=True, return_dict=True, return_tensors="pt"
             )
 
-    def test_appsly_chat_template_with_truncation(self):
+    def test_apply_chat_template_with_truncation(self):
         conversation = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hi!"},
