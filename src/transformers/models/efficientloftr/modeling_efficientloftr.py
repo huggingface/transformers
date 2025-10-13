@@ -21,7 +21,7 @@ from torch import nn
 from ...activations import ACT2CLS, ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -95,7 +95,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
     # Ignore copy
     def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()
-        standardize_rope_params(config)
+
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
@@ -108,6 +108,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self.original_inv_freq = inv_freq
 
     @staticmethod
+    # Ignore copy
     def compute_default_rope_parameters(
         config: Optional[EfficientLoFTRConfig] = None,
         device: Optional["torch.device"] = None,
@@ -131,7 +132,6 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-        standardize_rope_params(config)
 
         base = (
             config.rope_parameters[layer_type]["rope_theta"]

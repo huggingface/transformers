@@ -42,7 +42,6 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     dynamic_rope_update,
-    standardize_rope_params,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -72,7 +71,6 @@ class StableLmRotaryEmbedding(nn.Module):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        standardize_rope_params(config)
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
@@ -85,6 +83,7 @@ class StableLmRotaryEmbedding(nn.Module):
         self.original_inv_freq = inv_freq
 
     @staticmethod
+    # Ignore copy
     def compute_default_rope_parameters(
         config: Optional[StableLmConfig] = None,
         device: Optional["torch.device"] = None,
@@ -108,7 +107,6 @@ class StableLmRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-        standardize_rope_params(config)
 
         base = (
             config.rope_parameters[layer_type]["rope_theta"]

@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
-from ...modeling_rope_utils import dynamic_rope_update, standardize_rope_params
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_torchdynamo_compiling
@@ -66,7 +66,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
     # Ignore copy
     def __init__(self, config: RecurrentGemmaConfig, device=None):
         super().__init__()
-        standardize_rope_params(config)
+
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
@@ -81,6 +81,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         self.original_inv_freq = inv_freq
 
     @staticmethod
+    # Ignore copy
     def compute_default_rope_parameters(
         config: Optional[RecurrentGemmaConfig] = None,
         device: Optional["torch.device"] = None,
@@ -104,7 +105,6 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-        standardize_rope_params(config)
 
         base = (
             config.rope_parameters[layer_type]["rope_theta"]

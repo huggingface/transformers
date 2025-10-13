@@ -228,7 +228,7 @@ class Cohere2RotaryEmbedding(CohereRotaryEmbedding):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-        standardize_rope_params(config)
+
         self.config = config
 
         self.layer_types = list(set(config.layer_types))

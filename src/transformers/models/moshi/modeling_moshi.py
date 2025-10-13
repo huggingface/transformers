@@ -30,7 +30,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput, Seq2SeqLMOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, standardize_rope_params
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from ..auto.modeling_auto import AutoModel
@@ -278,7 +278,6 @@ class MoshiRotaryEmbedding(nn.Module):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        standardize_rope_params(config)
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
@@ -314,16 +313,13 @@ class MoshiRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-        standardize_rope_params(config)
 
         base = (
             config.rope_parameters[layer_type]["rope_theta"]
             if layer_type is not None
             else config.rope_parameters["rope_theta"]
         )
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
 

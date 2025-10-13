@@ -34,10 +34,10 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralPreTrainedModel,
-    MistralRotaryEmbedding,
     eager_attention_forward,
     rotate_half,
 )
+from ..phi.modeling_phi import PhiRotaryEmbedding
 from .configuration_phi3 import Phi3Config
 
 
@@ -65,7 +65,7 @@ class Phi3MLP(nn.Module):
         return self.down_proj(up_states)
 
 
-class Phi3RotaryEmbedding(MistralRotaryEmbedding):
+class Phi3RotaryEmbedding(PhiRotaryEmbedding):
     pass
 
 

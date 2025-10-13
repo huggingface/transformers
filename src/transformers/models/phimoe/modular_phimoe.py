@@ -23,7 +23,7 @@ from torch import nn
 from ...modeling_layers import (
     GenericForSequenceClassification,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils.generic import OutputRecorder
 from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
@@ -44,7 +44,6 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        standardize_rope_params(config)
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]

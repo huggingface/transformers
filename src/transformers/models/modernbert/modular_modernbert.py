@@ -688,7 +688,6 @@ class ModernBertAttention(nn.Module):
             max_position_embeddings = config.max_position_embeddings
 
         if config._attn_implementation == "flash_attention_2":
-            standardize_rope_params(config)
             rope_parameters_dict = (
                 self.config.rope_parameters[layer_type] if layer_type is not None else self.config.rope_parameters
             )

@@ -22,7 +22,7 @@ from torch import nn
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
-from ..cohere.modeling_cohere import CohereAttention, CohereRotaryEmbedding
+from ..cohere.modeling_cohere import CohereAttention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
@@ -32,6 +32,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
     DeepseekV3TopkRouter,
 )
+from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
 
 
@@ -222,7 +223,7 @@ class Glm4MoeConfig(PreTrainedConfig):
         )
 
 
-class Glm4MoeRotaryEmbedding(CohereRotaryEmbedding):
+class Glm4MoeRotaryEmbedding(GlmRotaryEmbedding):
     pass
 
 

@@ -25,7 +25,7 @@ from transformers.utils import (
     logging,
 )
 
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
@@ -138,7 +138,6 @@ class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        standardize_rope_params(config)
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
