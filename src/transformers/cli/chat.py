@@ -104,25 +104,19 @@ Available example names: `{"`, `".join(DEFAULT_EXAMPLES.keys())}`
 settings are separated by a space). Accepts the same flags and format as the `generate_flags` CLI argument.
 If you're a new user, check this basic flag guide: https://huggingface.co/docs/transformers/llm_tutorial#common-options
 - **!save {{SAVE_NAME}} (optional)**: saves the current chat and settings to file by default to
-`./chat_history/{{MODEL_NAME}}/chat_{{DATETIME}}.yaml` or `{{SAVE_NAME}}` if provided
+`./chat_history/{{MODEL_ID}}/chat_{{DATETIME}}.yaml` or `{{SAVE_NAME}}` if provided
 - **!exit**: closes the interface
 """
 
 
 class RichInterface:
-    def __init__(self, model_name: Optional[str] = None, user_name: Optional[str] = None):
+    def __init__(self, model_id: str, user_id: str):
         self._console = Console()
-        if model_name is None:
-            self.model_name = "assistant"
-        else:
-            self.model_name = model_name
-        if user_name is None:
-            self.user_name = "user"
-        else:
-            self.user_name = user_name
+        self.model_id = model_id
+        self.user_id = user_id
 
     async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, int]:
-        self._console.print(f"[bold blue]<{self.model_name}>:")
+        self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
             async for token in await stream:
@@ -169,7 +163,7 @@ class RichInterface:
 
     def input(self) -> str:
         """Gets user input from the console."""
-        input = self._console.input(f"[bold red]<{self.user_name}>:\n")
+        input = self._console.input(f"[bold red]<{self.user_id}>:\n")
         self._console.print()
         return input
 
@@ -179,7 +173,7 @@ class RichInterface:
 
     def print_user_message(self, text: str):
         """Prints a user message to the console."""
-        self._console.print(f"[bold red]<{self.user_name}>:[/ bold red]\n{text}")
+        self._console.print(f"[bold red]<{self.user_id}>:[/ bold red]\n{text}")
         self._console.print()
 
     def print_color(self, text: str, color: str):
@@ -192,12 +186,10 @@ class RichInterface:
         self._console.print(Markdown(HELP_STRING_MINIMAL if minimal else HELP_STRING))
         self._console.print()
 
-    def print_status(self, model_name: str, generation_config: GenerationConfig, model_kwargs: dict):
+    def print_status(self, config: GenerationConfig):
         """Prints the status of the model and generation settings to the console."""
-        self._console.print(f"[bold blue]Model: {model_name}\n")
-        if model_kwargs:
-            self._console.print(f"[bold blue]Model kwargs: {model_kwargs}")
-        self._console.print(f"[bold blue]{generation_config}")
+        self._console.print(f"[bold blue]Model: {self.model_id}\n")
+        self._console.print(f"[bold blue]{config}")
         self._console.print()
 
 
@@ -208,29 +200,21 @@ class chat:
     # TODO: refactor into a proper module with helpers + 1 main method
     def __init__(
         self,
-        model_name_or_path_or_address: Annotated[
-            str,
-            typer.Argument(help="Name of the pre-trained model or address to connect to."),
-        ],
+        base_url: Annotated[str, typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")],
+        model_id: Annotated[str, typer.Argument(help="ID of the model to use (e.g. 'HuggingFaceTB/SmolLM3-3B').")],
         generate_flags: Annotated[
             Optional[list[str]],
             typer.Argument(
                 help=(
                     "Flags to pass to `generate`, using a space as a separator between flags. Accepts booleans, numbers, "
                     "and lists of integers, more advanced parameterization should be set through --generation-config. "
-                    "Example: `transformers chat <model_repo> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`. "
+                    "Example: `transformers chat <base_url> <model_id> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`. "
                     "If you're a new user, check this basic flag guide: "
                     "https://huggingface.co/docs/transformers/llm_tutorial#common-options"
                 )
             ),
         ] = None,
         # General settings
-        model_id: Annotated[
-            Optional[str],
-            typer.Option(
-                help="Name of the pre-trained model. To use if `model_name_or_path_or_address` is a server address.",
-            ),
-        ] = None,
         user: Annotated[
             Optional[str],
             typer.Option(help="Username to display in chat interface. Defaults to the current user's name."),
@@ -238,7 +222,6 @@ class chat:
         system_prompt: Annotated[Optional[str], typer.Option(help="System prompt.")] = None,
         save_folder: Annotated[str, typer.Option(help="Folder to save chat history.")] = "./chat_history/",
         examples_path: Annotated[Optional[str], typer.Option(help="Path to a yaml file with examples.")] = None,
-        verbose: Annotated[bool, typer.Option(help="Whether to show runtime warnings in the chat interface.")] = False,
         # Generation settings
         generation_config: Annotated[
             Optional[str],
@@ -246,295 +229,37 @@ class chat:
                 help="Path to a local generation config file or to a HuggingFace repo containing a `generation_config.json` file. Other generation settings passed as CLI arguments will be applied on top of this generation config."
             ),
         ] = None,
-        # Model loading
-        model_revision: Annotated[
-            str, typer.Option(help="Specific model version to use (can be a branch name, tag name or commit id).")
-        ] = "main",
-        device: Annotated[str, typer.Option(help="Device to use for inference.")] = "auto",
-        dtype: Annotated[
-            Optional[str],
-            typer.Option(
-                help="Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, the dtype will be automatically derived from the model's weights."
-            ),
-        ] = "auto",
-        trust_remote_code: Annotated[
-            bool, typer.Option(help="Whether to trust remote code when loading a model.")
-        ] = False,
-        attn_implementation: Annotated[
-            Optional[str],
-            typer.Option(
-                help="Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
-            ),
-        ] = None,
-        load_in_8bit: Annotated[
-            bool, typer.Option(help="Whether to use 8 bit precision for the base model - works only with LoRA.")
-        ] = False,
-        load_in_4bit: Annotated[
-            bool, typer.Option(help="Whether to use 4 bit precision for the base model - works only with LoRA.")
-        ] = False,
-        bnb_4bit_quant_type: Annotated[str, typer.Option(help="Quantization type.")] = "nf4",
-        use_bnb_nested_quant: Annotated[bool, typer.Option(help="Whether to use nested quantization.")] = False,
-        # Serving settings
-        host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
-        port: Annotated[int, typer.Option(help="Port the server will listen to.")] = 8000,
     ) -> None:
         """Chat with a model from the command line."""
-        # Save input arguments
-        self.model_name_or_path_or_address = model_name_or_path_or_address
-        self.generate_flags = generate_flags
-        self.user = user
+        self.base_url = base_url
+        self.model_id = model_id
         self.system_prompt = system_prompt
         self.save_folder = save_folder
-        self.examples_path = examples_path
-        self.verbose = verbose
-        self.generation_config = generation_config
-        self.model_revision = model_revision
-        self.device = device
-        self.dtype = dtype
-        self.trust_remote_code = trust_remote_code
-        self.attn_implementation = attn_implementation
-        self.load_in_8bit = load_in_8bit
-        self.load_in_4bit = load_in_4bit
-        self.bnb_4bit_quant_type = bnb_4bit_quant_type
-        self.use_bnb_nested_quant = use_bnb_nested_quant
-        self.host = host
-        self.port = port
 
-        self.settings = vars(self)
+        # Generation settings
+        config = load_generation_config(generation_config)
+        config.update(**{"do_sample": True, "max_new_tokens": 256})  # some default values
+        config.update(**parse_generate_flags(generate_flags))
+        self.config = config
 
-        # Check mode
-        if model_name_or_path_or_address is not None:
-            if model_name_or_path_or_address.startswith(("http", "https", "localhost")):
-                if host != "localhost" or port != 8000:
-                    raise ValueError(
-                        "Looks like you’ve set both a server address and a custom host/port. "
-                        "Please pick just one way to specify the server."
-                    )
+        self.settings = {"base_url": base_url, "model_id": model_id, "config": self.config.to_dict()}
 
-                host, port = model_name_or_path_or_address.rsplit(":", 1)
-                if model_id is None:
-                    raise ValueError(
-                        "When connecting to a server, please specify a model name with the --model-id flag."
-                    )
+        # User settings
+        self.user = user if user is not None else get_username()
 
-                self.spawn_backend = False
-                self.model_name_or_path = model_id
-            else:
-                self.spawn_backend = True
-                self.model_name_or_path = model_name_or_path_or_address
-                if model_id is not None:
-                    raise ValueError(
-                        "When loading a local model, please do not specify a model name with the --model-id flag, only with `model_name_or_path_or_address`."
-                    )
+        # Load examples
+        if examples_path:
+            with open(examples_path) as f:
+                self.examples = yaml.safe_load(f)
+        else:
+            self.examples = DEFAULT_EXAMPLES
 
-        if not is_rich_available() and (not is_torch_available() and self.spawn_backend):
-            raise ImportError(
-                "You need to install rich to use the chat interface. Additionally, you have not specified a remote "
-                "endpoint and are therefore spawning a backend. Torch is required for this: (`pip install rich torch`)"
-            )
-        elif not is_rich_available():
+        # Check requirements
+        if not is_rich_available():
             raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
-        elif not is_torch_available() and self.spawn_backend:
-            raise ImportError(
-                "You have not specified a remote endpoint and are therefore spawning a backend. Torch is required "
-                "for this: (`pip install rich torch`)"
-            )
 
         # Run chat session
         asyncio.run(self._inner_run())
-
-    # -----------------------------------------------------------------------------------------------------------------
-    # Chat session methods
-    @staticmethod
-    def get_username() -> str:
-        """Returns the username of the current user."""
-        if platform.system() == "Windows":
-            return os.getlogin()
-        else:
-            return pwd.getpwuid(os.getuid()).pw_name
-
-    @staticmethod
-    def save_chat(
-        save_folder: str,
-        model_name_or_path_or_address: str,
-        chat: list[dict],
-        settings: dict,
-        filename: Optional[str] = None,
-    ) -> str:
-        """Saves the chat history to a file."""
-        output_dict = {}
-        output_dict["settings"] = settings
-        output_dict["chat_history"] = chat
-
-        if filename is None:
-            time_str = time.strftime("%Y-%m-%d_%H-%M-%S")
-            filename = os.path.join(save_folder, model_name_or_path_or_address, f"chat_{time_str}.json")
-
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
-        with open(filename, "w") as f:
-            json.dump(output_dict, f, indent=4)
-        return os.path.abspath(filename)
-
-    @staticmethod
-    def clear_chat_history(system_prompt: Optional[str] = None) -> list[dict]:
-        """Clears the chat history."""
-        if system_prompt is None:
-            chat = []
-        else:
-            chat = [{"role": "system", "content": system_prompt}]
-        return chat
-
-    # -----------------------------------------------------------------------------------------------------------------
-    # Input parsing methods
-    @staticmethod
-    def parse_generate_flags(generate_flags: Optional[list[str]]) -> dict:
-        """Parses the generate flags from the user input into a dictionary of `generate` kwargs."""
-        if generate_flags is None or len(generate_flags) == 0:
-            return {}
-
-        # Assumption: `generate_flags` is a list of strings, each string being a `flag=value` pair, that can be parsed
-        # into a json string if we:
-        # 1. Add quotes around each flag name
-        generate_flags_as_dict = {'"' + flag.split("=")[0] + '"': flag.split("=")[1] for flag in generate_flags}
-
-        # 2. Handle types:
-        # 2. a. booleans should be lowercase, None should be null
-        generate_flags_as_dict = {
-            k: v.lower() if v.lower() in ["true", "false"] else v for k, v in generate_flags_as_dict.items()
-        }
-        generate_flags_as_dict = {k: "null" if v == "None" else v for k, v in generate_flags_as_dict.items()}
-
-        # 2. b. strings should be quoted
-        def is_number(s: str) -> bool:
-            # handle negative numbers
-            s = s.removeprefix("-")
-            return s.replace(".", "", 1).isdigit()
-
-        generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
-        # 2. c. [no processing needed] lists are lists of ints because `generate` doesn't take lists of strings :)
-        # We also mention in the help message that we only accept lists of ints for now.
-
-        # 3. Join the result into a comma separated string
-        generate_flags_string = ", ".join([f"{k}: {v}" for k, v in generate_flags_as_dict.items()])
-
-        # 4. Add the opening/closing brackets
-        generate_flags_string = "{" + generate_flags_string + "}"
-
-        # 5. Remove quotes around boolean/null and around lists
-        generate_flags_string = generate_flags_string.replace('"null"', "null")
-        generate_flags_string = generate_flags_string.replace('"true"', "true")
-        generate_flags_string = generate_flags_string.replace('"false"', "false")
-        generate_flags_string = generate_flags_string.replace('"[', "[")
-        generate_flags_string = generate_flags_string.replace(']"', "]")
-
-        # 6. Replace the `=` with `:`
-        generate_flags_string = generate_flags_string.replace("=", ":")
-
-        try:
-            processed_generate_flags = json.loads(generate_flags_string)
-        except json.JSONDecodeError:
-            raise ValueError(
-                "Failed to convert `generate_flags` into a valid JSON object."
-                "\n`generate_flags` = {generate_flags}"
-                "\nConverted JSON string = {generate_flags_string}"
-            )
-        return processed_generate_flags
-
-    def get_generation_parameterization(
-        self, model_generation_config: GenerationConfig
-    ) -> tuple[GenerationConfig, dict]:
-        """
-        Returns a GenerationConfig object holding the generation parameters for the CLI command.
-        """
-        # No generation config arg provided -> use model's default generation config, then apply CLI defaults
-        if self.generation_config is not None:
-            if ".json" in self.generation_config:  # is a local file
-                dirname = os.path.dirname(self.generation_config)
-                filename = os.path.basename(self.generation_config)
-                generation_config = GenerationConfig.from_pretrained(dirname, filename)
-            else:
-                generation_config = GenerationConfig.from_pretrained(self.generation_config)
-        else:
-            # !!!!!!!!!
-            # This is a chat session, so we have a few non-standard defaults
-            # !!!!!!!!!
-            generation_config = copy.deepcopy(model_generation_config)
-            generation_config.update(**{"do_sample": True, "max_new_tokens": 256})
-
-        # Finally: parse and apply `generate_flags`
-        parsed_generate_flags = self.parse_generate_flags(self.generate_flags)
-        model_kwargs = generation_config.update(**parsed_generate_flags)
-        # `model_kwargs` contain non-generation flags in `parsed_generate_flags` that should be passed directly to
-        # `generate`
-        return generation_config, model_kwargs
-
-    @staticmethod
-    def parse_eos_tokens(
-        tokenizer: PreTrainedTokenizer,
-        generation_config: GenerationConfig,
-        eos_tokens: Optional[str],
-        eos_token_ids: Optional[str],
-    ) -> tuple[int, list[int]]:
-        """Retrieves the pad token ID and all possible EOS token IDs."""
-        if generation_config.pad_token_id is None:
-            pad_token_id = generation_config.eos_token_id
-        else:
-            pad_token_id = generation_config.pad_token_id
-
-        all_eos_token_ids = []
-
-        if eos_tokens is not None:
-            all_eos_token_ids.extend(tokenizer.convert_tokens_to_ids(eos_tokens.split(",")))
-
-        if eos_token_ids is not None:
-            all_eos_token_ids.extend([int(token_id) for token_id in eos_token_ids.split(",")])
-
-        if len(all_eos_token_ids) == 0:
-            all_eos_token_ids.append(generation_config.eos_token_id)
-
-        return pad_token_id, all_eos_token_ids
-
-    # -----------------------------------------------------------------------------------------------------------------
-    # Model loading and performance automation methods
-    def get_quantization_config(self) -> Optional[BitsAndBytesConfig]:
-        if self.load_in_4bit:
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `dtype`
-                bnb_4bit_compute_dtype=self.dtype,
-                bnb_4bit_quant_type=self.bnb_4bit_quant_type,
-                bnb_4bit_use_double_quant=self.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=self.dtype,
-            )
-        elif self.load_in_8bit:
-            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-        else:
-            quantization_config = None
-
-        return quantization_config
-
-    def load_model_and_tokenizer(self) -> tuple["AutoModelForCausalLM", AutoTokenizer]:
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.model_name_or_path, revision=self.model_revision, trust_remote_code=self.trust_remote_code
-        )
-
-        dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
-        quantization_config = self.get_quantization_config(self)
-        model_kwargs = {
-            "revision": self.model_revision,
-            "attn_implementation": self.attn_implementation,
-            "dtype": dtype,
-            "device_map": "auto",
-            "quantization_config": quantization_config,
-        }
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_name_or_path, trust_remote_code=self.trust_remote_code, **model_kwargs
-        )
-
-        if getattr(model, "hf_device_map", None) is None:
-            model = model.to(self.device)
-
-        return model, tokenizer
 
     # -----------------------------------------------------------------------------------------------------------------
     # User commands
@@ -543,10 +268,9 @@ class chat:
         user_input: str,
         interface: RichInterface,
         examples: dict[str, dict[str, str]],
-        generation_config: GenerationConfig,
-        model_kwargs: dict,
+        config: GenerationConfig,
         chat: list[dict],
-    ) -> tuple[list[dict], GenerationConfig, dict]:
+    ) -> tuple[list[dict], GenerationConfig]:
         """
         Handles all user commands except for `!exit`. May update the chat history (e.g. reset it) or the
         generation config (e.g. set a new flag).
@@ -554,7 +278,7 @@ class chat:
         valid_command = True
 
         if user_input == "!clear":
-            chat = self.clear_chat_history(self.system_prompt)
+            chat = new_chat_history(self.system_prompt)
             interface.clear()
 
         elif user_input == "!help":
@@ -562,19 +286,13 @@ class chat:
 
         elif user_input.startswith("!save") and len(user_input.split()) < 2:
             split_input = user_input.split()
-
-            if len(split_input) == 2:
-                filename = split_input[1]
-            else:
-                filename = None
-            filename = self.save_chat(
-                save_folder=self.save_folder,
-                model_name_or_path_or_address=self.model_name_or_path_or_address,
-                chat=chat,
-                settings=self.settings,
-                filename=filename,
+            filename = (
+                split_input[1]
+                if len(split_input) == 2
+                else os.path.join(self.save_folder, self.model_id, f"chat_{time.strftime('%Y-%m-%d_%H-%M-%S')}.json")
             )
-            interface.print_color(text=f"Chat saved in {filename}!", color="green")
+            save_chat(filename=filename, chat=chat, settings=self.settings)
+            interface.print_color(text=f"Chat saved to {filename}!", color="green")
 
         elif user_input.startswith("!set"):
             # splits the new args into a list of strings, each string being a `flag=value` pair (same format as
@@ -593,10 +311,8 @@ class chat:
                     )
                     break
             else:
-                # parses the new args into a dictionary of `generate` kwargs, and updates the corresponding variables
-                parsed_new_generate_flags = self.parse_generate_flags(new_generate_flags)
-                new_model_kwargs = generation_config.update(**parsed_new_generate_flags)
-                model_kwargs.update(**new_model_kwargs)
+                # Update config from user flags
+                config.update(**parse_generate_flags(new_generate_flags))
 
         elif user_input.startswith("!example") and len(user_input.split()) == 2:
             example_name = user_input.split()[1]
@@ -612,98 +328,112 @@ class chat:
                 interface.print_color(text=example_error, color="red")
 
         elif user_input == "!status":
-            interface.print_status(
-                model_name=self.model_name_or_path,
-                generation_config=generation_config,
-                model_kwargs=model_kwargs,
-            )
+            interface.print_status(config=config)
 
         else:
             valid_command = False
             interface.print_color(text=f"'{user_input}' is not a valid command. Showing help message.", color="red")
             interface.print_help()
 
-        return chat, valid_command, generation_config, model_kwargs
+        return chat, valid_command, config
 
     # -----------------------------------------------------------------------------------------------------------------
     # Main logic
 
     async def _inner_run(self):
-        if self.spawn_backend:
-            thread = Thread(
-                target=serve,
-                kwargs={
-                    "device": self.device,
-                    "dtype": self.dtype,
-                    "trust_remote_code": self.trust_remote_code,
-                    "attn_implementation": self.attn_implementation,
-                    "load_in_8bit": self.load_in_8bit,
-                    "load_in_4bit": self.load_in_4bit,
-                    "bnb_4bit_quant_type": self.bnb_4bit_quant_type,
-                    "use_bnb_nested_quant": self.use_bnb_nested_quant,
-                    "host": self.host,
-                    "port": self.port,
-                    "log_level": "error",
-                },
-            )
-            thread.daemon = True
-            thread.start()
-
-        model = self.model_name_or_path + "@" + self.model_revision
-        host = "http://localhost" if self.host == "localhost" else self.host
-
-        if self.examples_path is None:
-            examples = DEFAULT_EXAMPLES
-        else:
-            with open(self.examples_path) as f:
-                examples = yaml.safe_load(f)
-
-        if self.user is None:
-            user = self.get_username()
-        else:
-            user = self.user
-
-        model_generation_config = GenerationConfig.from_pretrained(self.model_name_or_path)
-        generation_config, model_kwargs = self.get_generation_parameterization(model_generation_config)
-
-        interface = RichInterface(model_name=self.model_name_or_path, user_name=user)
+        interface = RichInterface(model_id=self.model_id, user_id=self.user)
         interface.clear()
-        chat = self.clear_chat_history(self.system_prompt)
+        chat = new_chat_history(self.system_prompt)
 
         # Starts the session with a minimal help message at the top, so that a user doesn't get stuck
         interface.print_help(minimal=True)
 
-        async with AsyncInferenceClient(f"{host}:{self.port}") as client:
+        config = self.config
+
+        async with AsyncInferenceClient(base_url=self.base_url) as client:
             while True:
                 try:
                     user_input = interface.input()
 
                     # User commands
-                    if user_input.startswith("!"):
-                        # `!exit` is special, it breaks the loop
-                        if user_input == "!exit":
-                            break
-                        else:
-                            chat, valid_command, generation_config, model_kwargs = self.handle_non_exit_user_commands(
-                                user_input=user_input,
-                                interface=interface,
-                                examples=examples,
-                                generation_config=generation_config,
-                                model_kwargs=model_kwargs,
-                                chat=chat,
+                    if user_input == "!exit":
+                        break
+
+                    elif user_input == "!clear":
+                        chat = new_chat_history(self.system_prompt)
+                        interface.clear()
+                        continue
+
+                    elif user_input == "!help":
+                        interface.print_help()
+                        continue
+
+                    elif user_input.startswith("!save") and len(user_input.split()) < 2:
+                        split_input = user_input.split()
+                        filename = (
+                            split_input[1]
+                            if len(split_input) == 2
+                            else os.path.join(
+                                self.save_folder, self.model_id, f"chat_{time.strftime('%Y-%m-%d_%H-%M-%S')}.json"
                             )
-                        # `!example` sends a user message to the model
-                        if not valid_command or not user_input.startswith("!example"):
-                            continue
+                        )
+                        save_chat(filename=filename, chat=chat, settings=self.settings)
+                        interface.print_color(text=f"Chat saved to {filename}!", color="green")
+                        continue
+
+                    elif user_input.startswith("!set"):
+                        # splits the new args into a list of strings, each string being a `flag=value` pair (same format as
+                        # `generate_flags`)
+                        new_generate_flags = user_input[4:].strip()
+                        new_generate_flags = new_generate_flags.split()
+                        # sanity check: each member in the list must have an =
+                        for flag in new_generate_flags:
+                            if "=" not in flag:
+                                interface.print_color(
+                                    text=(
+                                        f"Invalid flag format, missing `=` after `{flag}`. Please use the format "
+                                        "`arg_1=value_1 arg_2=value_2 ...`."
+                                    ),
+                                    color="red",
+                                )
+                                break
+                        else:
+                            # Update config from user flags
+                            config.update(**parse_generate_flags(new_generate_flags))
+                        continue
+
+                    elif user_input.startswith("!example") and len(user_input.split()) == 2:
+                        example_name = user_input.split()[1]
+                        if example_name in self.examples:
+                            interface.clear()
+                            chat = []
+                            interface.print_user_message(self.examples[example_name]["text"])
+                            chat.append({"role": "user", "content": self.examples[example_name]["text"]})
+                        else:
+                            example_error = f"Example {example_name} not found in list of available examples: {list(self.examples.keys())}."
+                            interface.print_color(text=example_error, color="red")
+
+                    elif user_input == "!status":
+                        interface.print_status(config=config)
+                        continue
+
+                    elif user_input.startswith("!"):
+                        interface.print_color(
+                            text=f"'{user_input}' is not a valid command. Showing help message.", color="red"
+                        )
+                        interface.print_help()
+                        continue
+
                     else:
                         chat.append({"role": "user", "content": user_input})
 
                     stream = client.chat_completion(
                         chat,
                         stream=True,
+                        model=self.model_id,
                         extra_body={
-                            "generation_config": generation_config.to_json_string(),
-                            "model": model,
+                            "generation_config": config.to_json_string(),
+                            "model": self.model_id,
                         },
                     )
 
@@ -712,6 +442,93 @@ class chat:
                     chat.append({"role": "assistant", "content": model_output})
                 except KeyboardInterrupt:
                     break
+
+
+def load_generation_config(generation_config: Optional[str]) -> GenerationConfig:
+    if generation_config is None:
+        return GenerationConfig()
+
+    if ".json" in generation_config:  # is a local file
+        dirname = os.path.dirname(generation_config)
+        filename = os.path.basename(generation_config)
+        return GenerationConfig.from_pretrained(dirname, filename)
+    else:
+        return GenerationConfig.from_pretrained(generation_config)
+
+
+def parse_generate_flags(generate_flags: Optional[list[str]]) -> dict:
+    """Parses the generate flags from the user input into a dictionary of `generate` kwargs."""
+    if generate_flags is None or len(generate_flags) == 0:
+        return {}
+
+    # Assumption: `generate_flags` is a list of strings, each string being a `flag=value` pair, that can be parsed
+    # into a json string if we:
+    # 1. Add quotes around each flag name
+    generate_flags_as_dict = {'"' + flag.split("=")[0] + '"': flag.split("=")[1] for flag in generate_flags}
+
+    # 2. Handle types:
+    # 2. a. booleans should be lowercase, None should be null
+    generate_flags_as_dict = {
+        k: v.lower() if v.lower() in ["true", "false"] else v for k, v in generate_flags_as_dict.items()
+    }
+    generate_flags_as_dict = {k: "null" if v == "None" else v for k, v in generate_flags_as_dict.items()}
+
+    # 2. b. strings should be quoted
+    def is_number(s: str) -> bool:
+        # handle negative numbers
+        s = s.removeprefix("-")
+        return s.replace(".", "", 1).isdigit()
+
+    generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
+    # 2. c. [no processing needed] lists are lists of ints because `generate` doesn't take lists of strings :)
+    # We also mention in the help message that we only accept lists of ints for now.
+
+    # 3. Join the result into a comma separated string
+    generate_flags_string = ", ".join([f"{k}: {v}" for k, v in generate_flags_as_dict.items()])
+
+    # 4. Add the opening/closing brackets
+    generate_flags_string = "{" + generate_flags_string + "}"
+
+    # 5. Remove quotes around boolean/null and around lists
+    generate_flags_string = generate_flags_string.replace('"null"', "null")
+    generate_flags_string = generate_flags_string.replace('"true"', "true")
+    generate_flags_string = generate_flags_string.replace('"false"', "false")
+    generate_flags_string = generate_flags_string.replace('"[', "[")
+    generate_flags_string = generate_flags_string.replace(']"', "]")
+
+    # 6. Replace the `=` with `:`
+    generate_flags_string = generate_flags_string.replace("=", ":")
+
+    try:
+        processed_generate_flags = json.loads(generate_flags_string)
+    except json.JSONDecodeError:
+        raise ValueError(
+            "Failed to convert `generate_flags` into a valid JSON object."
+            "\n`generate_flags` = {generate_flags}"
+            "\nConverted JSON string = {generate_flags_string}"
+        )
+    return processed_generate_flags
+
+
+def new_chat_history(system_prompt: Optional[str] = None) -> list[dict]:
+    """Returns a new chat conversation."""
+    return [{"role": "system", "content": system_prompt}] if system_prompt else []
+
+
+def save_chat(filename: str, chat: list[dict], settings: dict) -> str:
+    """Saves the chat history to a file."""
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    with open(filename, "w") as f:
+        json.dump({"settings": settings, "chat_history": chat}, f, indent=4)
+    return os.path.abspath(filename)
+
+
+def get_username() -> str:
+    """Returns the username of the current user."""
+    if platform.system() == "Windows":
+        return os.getlogin()
+    else:
+        return pwd.getpwuid(os.getuid()).pw_name
 
 
 if __name__ == "__main__":

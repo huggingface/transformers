@@ -15,7 +15,7 @@ import json
 import os
 import tempfile
 
-from transformers.cli.chat import chat
+from transformers.cli.chat import new_chat_history, parse_generate_flags, save_chat
 
 
 def test_help(cli):
@@ -26,7 +26,8 @@ def test_help(cli):
 
 def test_save_and_clear_chat():
     with tempfile.TemporaryDirectory() as tmp_path:
-        filename = chat.save_chat(tmp_path, "test-model", [{"role": "user", "content": "hi"}], {"foo": "bar"})
+        filename = os.path.join(tmp_path, "chat.json")
+        save_chat(filename, [{"role": "user", "content": "hi"}], {"foo": "bar"})
         assert os.path.isfile(filename)
         with open(filename, "r") as f:
             data = json.load(f)
@@ -34,12 +35,12 @@ def test_save_and_clear_chat():
             assert data["settings"] == {"foo": "bar"}
 
 
-def test_clear_chat_history():
-    assert chat.clear_chat_history() == []
-    assert chat.clear_chat_history("prompt") == [{"role": "system", "content": "prompt"}]
+def test_new_chat_history():
+    assert new_chat_history() == []
+    assert new_chat_history("prompt") == [{"role": "system", "content": "prompt"}]
 
 
 def test_parse_generate_flags():
-    parsed = chat.parse_generate_flags(["temperature=0.5", "max_new_tokens=10"])
+    parsed = parse_generate_flags(["temperature=0.5", "max_new_tokens=10"])
     assert parsed["temperature"] == 0.5
     assert parsed["max_new_tokens"] == 10
