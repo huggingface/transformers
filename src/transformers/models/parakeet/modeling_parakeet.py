@@ -29,12 +29,19 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
+from .configuration_parakeet import (
+    ParakeetCTCConfig,
+    ParakeetEncoderConfig,
+    ParakeetTDTConfig,
+    ParakeetTDTDecoderConfig,
+    ParakeetTDTJointConfig,
+    PreTrainedConfig,
+)
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
@@ -120,12 +127,22 @@ class ParakeetEncoderConvolutionModule(nn.Module):
             kernel_size = module_config["kernel_size"]
             self.activation = ACT2FN[module_config.get("activation", "silu")]
         self.padding = (kernel_size - 1) // 2
-        self.pointwise_conv1 = nn.Conv1d(channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=True)
+        self.pointwise_conv1 = nn.Conv1d(
+            channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=config.attention_bias
+        )
         self.depthwise_conv = nn.Conv1d(
-            channels, channels, kernel_size, stride=1, padding=self.padding, groups=channels, bias=True
+            channels,
+            channels,
+            kernel_size,
+            stride=1,
+            padding=self.padding,
+            groups=channels,
+            bias=config.attention_bias,
         )
         self.norm = nn.BatchNorm1d(channels)
-        self.pointwise_conv2 = nn.Conv1d(channels, channels, kernel_size=1, stride=1, padding=0, bias=True)
+        self.pointwise_conv2 = nn.Conv1d(
+            channels, channels, kernel_size=1, stride=1, padding=0, bias=config.attention_bias
+        )
 
     def forward(self, hidden_states, attention_mask=None):
         """
@@ -225,7 +242,9 @@ class ParakeetEncoderAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         # W_{k,R} projection
-        self.relative_k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.relative_k_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
         # global content bias
         self.bias_u = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
         # global positional bias
@@ -415,7 +434,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class ParakeetPreTrainedModel(PreTrainedModel):
-    config: ParakeetCTCConfig
+    config: PreTrainedConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = "audio"
@@ -450,7 +469,11 @@ class ParakeetPreTrainedModel(PreTrainedModel):
             module.bias_v.data.normal_(mean=0.0, std=std)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
-        encoder_config = self.config.encoder_config if isinstance(self.config, ParakeetCTCConfig) else self.config
+        encoder_config = (
+            self.config.encoder_config
+            if isinstance(self.config, (ParakeetCTCConfig, ParakeetTDTConfig))
+            else self.config
+        )
 
         kernel_size = encoder_config.subsampling_conv_kernel_size
         stride = encoder_config.subsampling_conv_stride
@@ -597,6 +620,270 @@ class ParakeetGenerateOutput(ModelOutput):
     hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
 
 
+class ParakeetLSTM(torch.nn.Module):
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int,
+        dropout: Optional[float],
+        forget_gate_bias: Optional[float],
+        t_max: Optional[int] = None,
+        weights_init_scale: float = 1.0,
+        hidden_hidden_bias_scale: float = 0.0,
+        proj_size: int = 0,
+    ):
+        """Returns an LSTM with forget gate bias init to `forget_gate_bias`.
+        Args:
+            input_size: See `torch.nn.LSTM`.
+            hidden_size: See `torch.nn.LSTM`.
+            num_layers: See `torch.nn.LSTM`.
+            dropout: See `torch.nn.LSTM`.
+
+            forget_gate_bias: float, set by default to 1.0, which constructs a forget gate
+                initialized to 1.0.
+                Reference:
+                [An Empirical Exploration of Recurrent Network Architectures](http://proceedings.mlr.press/v37/jozefowicz15.pdf)
+
+            t_max: int value, set to None by default. If an int is specified, performs Chrono Initialization
+                of the LSTM network, based on the maximum number of timesteps `t_max` expected during the course
+                of training.
+                Reference:
+                [Can recurrent neural networks warp time?](https://openreview.net/forum?id=SJcKhk-Ab)
+
+            weights_init_scale: Float scale of the weights after initialization. Setting to lower than one
+                sometimes helps reduce variance between runs.
+
+            hidden_hidden_bias_scale: Float scale for the hidden-to-hidden bias scale. Set to 0.0 for
+                the default behaviour.
+
+        Returns:
+            A `torch.nn.LSTM`.
+        """
+        super(ParakeetLSTM, self).__init__()
+
+        self.lstm = torch.nn.LSTM(
+            input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=dropout, proj_size=proj_size
+        )
+
+        if t_max is not None:
+            # apply chrono init
+            for name, v in self.lstm.named_parameters():
+                if "bias" in name:
+                    p = getattr(self.lstm, name)
+                    n = p.nelement()
+                    hidden_size = n // 4
+                    p.data.fill_(0)
+                    p.data[hidden_size : 2 * hidden_size] = torch.log(
+                        torch.nn.init.uniform_(p.data[0:hidden_size], 1, t_max - 1)
+                    )
+                    # forget gate biases = log(uniform(1, Tmax-1))
+                    p.data[0:hidden_size] = -p.data[hidden_size : 2 * hidden_size]
+                    # input gate biases = -(forget gate biases)
+
+        elif forget_gate_bias is not None:
+            for name, v in self.lstm.named_parameters():
+                if "bias_ih" in name:
+                    bias = getattr(self.lstm, name)
+                    bias.data[hidden_size : 2 * hidden_size].fill_(forget_gate_bias)
+                if "bias_hh" in name:
+                    bias = getattr(self.lstm, name)
+                    bias.data[hidden_size : 2 * hidden_size] *= float(hidden_hidden_bias_scale)
+
+        self.dropout = torch.nn.Dropout(dropout) if dropout else None
+
+        for name, v in self.named_parameters():
+            if "weight" in name or "bias" in name:
+                v.data *= float(weights_init_scale)
+
+    def forward(
+        self, x: torch.Tensor, h: Optional[tuple[torch.Tensor, torch.Tensor]] = None
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        x, h = self.lstm(x, h)
+
+        if self.dropout:
+            x = self.dropout(x)
+
+        return x, h
+
+
+class ParakeetTDTJoint(ParakeetPreTrainedModel):
+    config: ParakeetTDTJointConfig
+    base_model_prefix = ""  # joint"
+    main_input_name = "enc"
+    _supports_flat_attention_mask = False
+    _supports_sdpa = True
+    _supports_flex_attn = False
+    _supports_attention_backend = False
+    _can_record_outputs = {}
+    _no_split_modules = None
+
+    def __init__(self, config: ParakeetTDTJointConfig):
+        super().__init__(config)
+        self.config = config
+        self.gradient_checkpointing = False
+
+        self.enc = torch.nn.Linear(config.enc_hidden_size, config.hidden_size)
+        self.pred = torch.nn.Linear(config.pred_hidden_size, config.hidden_size)
+
+        num_classes = config.vocab_size + 1 + len(config.durations)
+
+        layers = (
+            [torch.nn.ReLU(inplace=True)]
+            + ([torch.nn.Dropout(p=self.config.dropout)])
+            + [torch.nn.Linear(config.hidden_size, num_classes)]
+        )
+        self.joint_net = torch.nn.Sequential(*layers)
+        self.post_init()
+
+    @auto_docstring
+    @check_model_inputs()
+    def forward(
+        self,
+        enc: torch.Tensor,
+        pred: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithNoAttention:
+        # Right now we only support joint for inference.
+
+        pred = pred.view([-1, self.config.pred_hidden_size])  # making it B, D
+        enc = enc.view([-1, self.config.enc_hidden_size])  # making it B, D
+        enc = self.enc(enc)
+        pred = self.pred(pred)
+
+        assert enc.shape[0] == pred.shape[0]
+        output = self.joint_net(enc + pred)
+        return BaseModelOutput(last_hidden_state=output)
+
+
+class ParakeetTDTPredictor(ParakeetPreTrainedModel):
+    def __init__(self, config: ParakeetTDTDecoderConfig):
+        super().__init__(config)
+        self.gradient_checkpointing = False
+        self.config = config
+
+        self.embed = torch.nn.Embedding(config.vocab_size + 1, config.hidden_size)  # +1 for blank
+        self.dec_rnn = self.rnn(
+            config.hidden_size,
+            config.hidden_size,
+            config.num_hidden_layers + 1,
+            config.forget_gate_bias,
+            config.dropout,
+            config.t_max,
+            config.weights_init_scale,
+            config.hidden_hidden_bias_scale,
+        )
+        self.post_init()
+
+    def rnn(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int,
+        forget_gate_bias: Optional[float] = 1.0,
+        dropout: Optional[float] = 0.0,
+        t_max: Optional[int] = None,
+        weights_init_scale: float = 1.0,
+        hidden_hidden_bias_scale: float = 0.0,
+        proj_size: int = 0,
+    ) -> torch.nn.Module:
+        return ParakeetLSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            dropout=dropout,
+            forget_gate_bias=forget_gate_bias,
+            t_max=t_max,
+            weights_init_scale=weights_init_scale,
+            hidden_hidden_bias_scale=hidden_hidden_bias_scale,
+            proj_size=proj_size,
+        )
+
+    @auto_docstring
+    @check_model_inputs()
+    @can_return_tuple
+    def forward(
+        self,
+        input_token,
+        states,
+        hidden_state=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        assert input_token is not None
+
+        device = self.embed.weight.device
+        if input_token.device != device:
+            input_token = input_token.to(device)
+        return self.predict(input_token, state=states)
+
+    def predict(self, y, state):
+        # Get device and dtype of current module
+
+        # (B, U) -> (B, U, H)
+        y = self.embed(y).transpose(0, 1)  # (U + 1, B, H)
+
+        g, hid = self.dec_rnn(y, state)
+        g = g.transpose(0, 1).transpose(1, 2)  # (B, H, U + 1)
+
+        return g, hid
+
+
+@auto_docstring(
+    custom_intro="""
+    The Parakeet TDT Decoder. This class encapsulates both the predictor and joint network for TDT models.
+    """
+)
+class ParakeetTDTDecoder(ParakeetPreTrainedModel):
+    config: ParakeetTDTDecoderConfig
+    base_model_prefix = "decoder"
+    main_input_name = "input_token"
+    _supports_flat_attention_mask = False
+    _supports_sdpa = True
+    _supports_flex_attn = False
+    _supports_attention_backend = False
+    _can_record_outputs = {}
+    _no_split_modules = None
+
+    def __init__(self, config: ParakeetTDTDecoderConfig):
+        super().__init__(config)
+        self.config = config
+        self.gradient_checkpointing = False
+        self.prediction = ParakeetTDTPredictor(config)
+        self.post_init()
+
+    def _init_weights(self, module):
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value accross the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        module.prediction.embed.weight.data.normal_(mean=0.0, std=std)
+        for param in module.prediction.dec_rnn.lstm.parameters():
+            param.data.normal_(mean=0.0, std=std)
+
+    def get_input_embeddings(self):
+        return self.prediction.embed
+
+    def set_input_embeddings(self, embed):
+        self.prediction.embed = embed
+
+    @auto_docstring
+    @check_model_inputs()
+    @can_return_tuple
+    def forward(
+        self,
+        input_token,
+        hidden_state=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithNoAttention:
+        if hidden_state is not None:
+            hidden_state = tuple(hidden_state.unbind(dim=0))
+
+        h_out, h_state = self.prediction(input_token, hidden_state, **kwargs)
+        return BaseModelOutputWithNoAttention(h_out, torch.stack(h_state, dim=0))
+
+
 @auto_docstring(
     custom_intro="""
     Parakeet Encoder with a Connectionist Temporal Classification (CTC) head.
@@ -741,4 +1028,110 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         return sequences
 
 
-__all__ = ["ParakeetForCTC", "ParakeetEncoder", "ParakeetPreTrainedModel"]
+@auto_docstring(
+    custom_intro="""
+    Parakeet TDT model.
+    """
+)
+class ParakeetForTDT(ParakeetPreTrainedModel):
+    config: ParakeetTDTConfig
+
+    def __init__(self, config: ParakeetTDTConfig):
+        super().__init__(config)
+        self.encoder = ParakeetEncoder(config.encoder_config)
+        self.decoder = ParakeetTDTDecoder(config.decoder_config)
+        self.joint = ParakeetTDTJoint(config.joint_config)
+        self.blank_token_id = config.blank_token_id
+        self.max_token_per_frame = 2
+        self.post_init()
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        encoder_outputs = self.encoder(
+            input_features=input_features,
+            **kwargs,
+        )
+
+        logits = self.joint.joint_net(
+            self.joint.enc(encoder_outputs.last_hidden_state)
+        )  # [:,:,:self.joint.vocab_size]
+
+        return CausalLMOutput(
+            loss=torch.sum(encoder_outputs.last_hidden_state),  # a fake loss here.
+            logits=logits,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_features: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        encoder_outputs = self.encoder(
+            input_features=input_features,
+            **kwargs,
+        )
+        output = self.greedy_decode(encoder_outputs.last_hidden_state)
+
+        return output
+
+    def greedy_decode(self, encoder_output):
+        T = encoder_output.shape[1]
+        t = 0
+        hyp = []
+        last_label = torch.LongTensor([[self.blank_token_id]])
+        dec_out = self.decoder(input_token=last_label)
+        g, hidden_prime = dec_out.last_hidden_state, dec_out.hidden_states
+
+        symbols_added = 0
+        while t < T:
+            enc = encoder_output[0, t, :]
+            while symbols_added < self.max_token_per_frame:
+                logits = self.joint(enc, g).last_hidden_state
+
+                logits = logits.view([-1])
+
+                token_logits = logits[: self.blank_token_id + 1].softmax(-1)
+                duration_logits = logits[self.blank_token_id + 1 :].softmax(-1)
+
+                v, token = token_logits.max(-1)
+                v_duration, duration = duration_logits.max(-1)
+                token = token.item()
+                duration = duration.item()
+
+                if token != self.blank_token_id:
+                    hyp.append(token)
+                    last_label = token
+                    last_label = torch.LongTensor([[last_label]])
+                    dec_out = self.decoder(last_label, hidden_prime)
+                    g, hidden_prime = dec_out.last_hidden_state, dec_out.hidden_states
+
+                if duration == 0:
+                    symbols_added += 1
+                else:
+                    t += duration
+                    symbols_added = 0
+                    break
+
+            if symbols_added == self.max_token_per_frame:
+                t += 1
+                symbols_added = 0
+
+        return hyp
+
+
+__all__ = [
+    "ParakeetForCTC",
+    "ParakeetForTDT",
+    "ParakeetEncoder",
+    "ParakeetTDTDecoder",
+    "ParakeetTDTJoint",
+    "ParakeetPreTrainedModel",
+]
