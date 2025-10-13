@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 import torch
-from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
