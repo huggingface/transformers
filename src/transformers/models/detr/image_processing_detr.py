@@ -1724,7 +1724,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None
+        self, outputs, threshold: float = 0.5, target_sizes: Optional[Union[TensorType, list[tuple]]] = None
     ):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

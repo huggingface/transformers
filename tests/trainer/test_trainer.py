@@ -1435,9 +1435,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         args = TrainingArguments(tmp_dir, report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
         for key in dict1:
-            # Logging dir can be slightly different as they default to something with the time.
-            if key != "logging_dir":
-                self.assertEqual(dict1[key], dict2[key])
+            self.assertEqual(dict1[key], dict2[key])
 
     def test_number_of_steps_in_training(self):
         # Regular training has n_epochs * len(train_dl) steps
@@ -5342,7 +5340,6 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 num_train_epochs=4,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
-                logging_dir="runs",
                 run_name="test",
                 model_init=model_init,
             )
@@ -5391,7 +5388,6 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 num_train_epochs=10,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
-                logging_dir="runs",
                 run_name="test",
                 model_init=model_init,
                 compute_metrics=AlmostAccuracy(),
@@ -5481,7 +5477,6 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 num_train_epochs=4,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
-                logging_dir="runs",
                 run_name="test",
                 model_init=model_init,
             )
@@ -6079,7 +6074,6 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
                 num_train_epochs=4,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
-                logging_dir="runs",
                 run_name="test",
                 model_init=model_init,
             )
