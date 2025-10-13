@@ -437,6 +437,9 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             # --- Scatter into <sound> slots ---
             # Build a boolean mask over token positions where we should inject audio frames
             special_ids_mask = input_ids == self.config.audio_token_id  # (B, L)
+            # Never treat padding as content.
+            if attention_mask is not None:
+                special_ids_mask = special_ids_mask & attention_mask.to(torch.bool)
             n_audio_tokens = int(special_ids_mask.sum().item())
             n_audio_frames = int(flat_audio.shape[0])
             if n_audio_tokens != n_audio_frames:
