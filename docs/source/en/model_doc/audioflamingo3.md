@@ -1,13 +1,21 @@
-# AudioFlamingo3
+*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-10-15.*
+
+# Audio Flamingo 3
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
-AudioFlamingo3 (AF3) is a fully open large audio–language model designed for robust understanding and reasoning over speech, environmental sounds, and music. AF3 pairs a Whisper-style audio encoder with a causal language model and performs replace-in-place audio–text fusion: the processor aligns post-pool audio frames to a dedicated placeholder token (written as `<sound>` in code) and the model replaces those token slots with projected audio embeddings during the forward pass.
+Audio Flamingo 3 (AF3) is a fully open large audio–language model designed for robust understanding and reasoning over speech, environmental sounds, and music. AF3 pairs a Whisper-style audio encoder with a causal language model and performs replace-in-place audio–text fusion: the processor aligns post-pool audio frames to a dedicated placeholder token (written as `<sound>` in code) and the model replaces those token slots with projected audio embeddings during the forward pass.
 
 Highlights:
 
 - Unified audio encoder across speech, sound, and music.
-- Long-audio support via windowing and post-pool alignment (up to about 10 minutes by default).
+- Long-audio support via windowing and post-pool alignment (up to 10 minutes).
 - Deterministic fusion that preserves sequence length by replacing `<sound>` tokens with audio embeddings.
 - Production-oriented processing flow with batch safety and strict shape checking.
 
@@ -21,29 +29,46 @@ Project: https://research.nvidia.com/labs/adlr/AF3/
 ## Quickstart
 
 ```python
-from transformers import AudioFlamingo3Processor, AudioFlamingo3ForConditionalGeneration
-import librosa, torch
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
+MODEL_ID = "nvidia/audio-flamingo-3"
+processor = AutoProcessor.from_pretrained(MODEL_ID)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto").eval()
 
-def load_audio(p, sr=16000):
-    y, _ = librosa.load(p, sr=sr, mono=True)
-    if y.size:
-        dmin, dmax = y.min(), y.max()
-        y = (2 * y / (abs(dmax) or 1.0) - 1.0) if dmin >= 0 else y / (max(abs(dmax), abs(dmin)) or 1.0)
-    return y.astype("float64")
+conversations = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe the input speech."},
+                {"type": "audio", "path": "audio_1.wav"},
+            ],
+        }
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe the song."},
+                {"type": "audio", "path": "audio_2.wav"},
+            ],
+        }
+    ]
+]
 
+batch = processor.apply_chat_template(
+    conversations,
+    tokenize=True,
+    add_generation_prompt=True,
+    sampling_rate=getattr(processor.feature_extractor, "sampling_rate", 16000),
+    return_dict=True,
+).to(model.device)
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-processor = AudioFlamingo3Processor.from_pretrained("nvidia/audio-flamingo-3")
-model = AudioFlamingo3ForConditionalGeneration.from_pretrained("nvidia/audio-flamingo-3").to(device).eval()
+gen_ids = model.generate(**batch, max_new_tokens=512)
 
-texts = ["Transcribe the input speech.", "Describe the music in details."]
-audios = [load_audio("audio_1.wav"), load_audio("audio_2.wav")]
-inputs = processor(texts, audios, padding_side="left", tensor_type="pt").to(device)
-
-output_ids = model.generate(**inputs, max_new_tokens=2048, do_sample=False)
-texts = processor.batch_decode(output_ids, skip_special_tokens=True)
-texts = [text.split("\nassistant\n")[-1] for text in texts]
+inp_len = batch["input_ids"].shape[1]
+new_tokens = gen_ids[:, inp_len:]
+texts = processor.batch_decode(new_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 print(texts)
 ```
 
@@ -157,3 +182,26 @@ answers = [a.split("\nassistant\n")[-1] for a in answers]
 ## Notes on attention implementations
 
 AF3 supports PyTorch SDPA and FlashAttention when available. If you rely on fine-grained `head_mask` behavior for the audio encoder, use eager attention. In general usage, SDPA or FlashAttention are recommended for speed and memory efficiency.
+
+
+## AudioFlamingo3Config
+
+[[autodoc]] AudioFlamingo3Config
+
+## AudioFlamingo3EncoderConfig
+
+[[autodoc]] AudioFlamingo3EncoderConfig
+
+## AudioFlamingo3Processor
+
+[[autodoc]] AudioFlamingo3Processor
+
+## AudioFlamingo3Encoder
+
+[[autodoc]] AudioFlamingo3Encoder
+    - forward
+
+## AudioFlamingo3ForConditionalGeneration
+
+[[autodoc]] AudioFlamingo3ForConditionalGeneration
+    - forward

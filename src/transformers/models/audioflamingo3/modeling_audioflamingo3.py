@@ -22,8 +22,9 @@
 
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -37,8 +38,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import logging
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import auto_docstring, logging
 from ..auto import AutoModelForCausalLM
 from .configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3EncoderConfig
 
@@ -47,6 +47,11 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for AudioFlamingo3 causal language model (or autoregressive) outputs.
+    """
+)
 class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
     """
     Output type of :class:`~transformers.AudioFlamingo3ForConditionalGeneration`.
@@ -83,7 +88,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     if scaling is None:
@@ -94,9 +98,6 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -148,14 +149,12 @@ class AudioFlamingo3Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
@@ -222,7 +221,6 @@ class AudioFlamingo3Attention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=1.0,
             output_attentions=output_attentions,
-            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -257,7 +255,6 @@ class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
         output_attentions: bool = False,
     ) -> torch.Tensor:
         """
@@ -265,8 +262,6 @@ class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -276,7 +271,6 @@ class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -297,6 +291,7 @@ class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
         return hidden_states, attn_weights
 
 
+@auto_docstring
 class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     """
     Base class with common functionality for AudioFlamingo3 models.
@@ -329,6 +324,11 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+@auto_docstring(
+    custom_intro="""
+    The audio model from AudioFlamingo3 without any head or projection on top.
+    """
+)
 class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     """
     Audio encoder: Whisper conv front-end, Transformer encoder, average pool (time/2), then LayerNorm.
@@ -380,28 +380,19 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         self,
         input_features: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, tuple]:
         r"""
         Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
-                the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~AudioFlamingo3FeatureExtractor.__call__`]
-            attention_mask (`torch.Tensor`)`, *optional*):
-                AudioFlamingo3 does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
+            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                Log-Mel features extracted from raw audio. Use the processor/feature extractor to compute and pad
+                these features from waveform input.
+            attention_mask (`torch.FloatTensor` of shape `(batch_size, 1, S, S)`, *optional*):
+                Pre-pool encoder attention mask on the time axis. Provide `0` on valid positions and `-inf` on
+                padded positions (added to attention logits). If `None`, full attention is used. Here `S` is the
+                sequence length after the conv front-end (typically `ceil(T_mel/2)`).
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -411,6 +402,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+
         output_attentions = self.config.output_attentions if output_attentions is None else output_attentions
         output_hidden_states = (
             self.config.output_hidden_states if output_hidden_states is None else output_hidden_states
@@ -443,7 +435,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
                 out = layer(
                     h,
                     attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     output_attentions=output_attentions,
                 )
                 h = out[0]
@@ -524,6 +515,11 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
         return x
 
 
+@auto_docstring(
+    custom_intro="""
+    The AudioFlamingo3 model which consists of a audio backbone and a language model.
+    """
+)
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
     """
     AudioFlamingo3 model composed of an audio encoder, a projection to the LM hidden size, and a causal LM.
@@ -565,6 +561,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -581,6 +578,64 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple, AudioFlamingo3CausalLMOutputWithPast]:
+        r"""
+        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+        >>> MODEL_ID = "nvidia/audio-flamingo-3"
+        >>> processor = AutoProcessor.from_pretrained(MODEL_ID)
+        >>> model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto").eval()
+
+        >>> conversations = [
+        >>>     [
+        >>>         {
+        >>>             "role": "user",
+        >>>             "content": [
+        >>>                 {"type": "text", "text": "Transcribe the input speech."},
+        >>>                 {"type": "audio", "path": "audio_1.wav"},
+        >>>             ],
+        >>>         }
+        >>>     ],
+        >>>     [
+        >>>         {
+        >>>             "role": "user",
+        >>>             "content": [
+        >>>                 {"type": "text", "text": "Describe the song."},
+        >>>                 {"type": "audio", "path": "audio_2.wav"},
+        >>>             ],
+        >>>         }
+        >>>     ]
+        >>> ]
+
+        >>> batch = processor.apply_chat_template(
+        >>>     conversations,
+        >>>     tokenize=True,
+        >>>     add_generation_prompt=True,
+        >>>     sampling_rate=getattr(processor.feature_extractor, "sampling_rate", 16000),
+        >>>     return_dict=True,
+        >>> ).to(model.device)
+
+        >>> gen_ids = model.generate(**batch, max_new_tokens=512)
+
+        >>> inp_len = batch["input_ids"].shape[1]
+        >>> new_tokens = gen_ids[:, inp_len:]
+        >>> texts = processor.batch_decode(new_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        >>> print(texts)
+        ["Transcription of the input speech: Good morning everyone...", "The song is an orchestral piece..."]
+        ```"""
+
         output_attentions = self.config.output_attentions if output_attentions is None else output_attentions
         output_hidden_states = (
             self.config.output_hidden_states if output_hidden_states is None else output_hidden_states
@@ -646,7 +701,6 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         )
         logits = outputs[0]
 
-        # Optional loss
         loss = None
         if labels is not None:
             if attention_mask is not None:
@@ -674,7 +728,6 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             attention_mask=attention_mask,
         )
 
-    # --- Generation helpers ---
     def prepare_inputs_for_generation(self, *args, **kwargs):
         """
         Pass `input_features`/`feature_attention_mask` only on the first step of generation.

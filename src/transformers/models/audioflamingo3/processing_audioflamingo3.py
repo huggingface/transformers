@@ -64,6 +64,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
             The feature extractor is a required input.
         tokenizer ([`Qwen2TokenizerFast`]):
             The tokenizer is a required input.
+        chat_template (`Optional[str]`, *optional*):
+            The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
+            template will be used.
     """
 
     attributes = ["feature_extractor", "tokenizer"]
