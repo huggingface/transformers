@@ -280,12 +280,12 @@ class TextGenerationPipelineTests(unittest.TestCase):
             # output anything like that, so let's keep it simple.
             "type": "object",
             "properties": {
-                "first_word": {"type": "string", "x-regex": "^\s*([a-zA-Z]+)"},
-                "last_word": {"type": "string", "x-regex": "([a-zA-Z]+)\s*$"},
-        }
+                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
+                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
+            },
         }
         outputs = text_generator(chat, do_sample=False, max_new_tokens=10)
-        parsed_message = outputs[0]['generated_text'][-1]
+        parsed_message = outputs[0]["generated_text"][-1]
         self.assertEqual(parsed_message, {"first_word": "factors", "last_word": "factors"})
 
     def get_test_pipeline(
