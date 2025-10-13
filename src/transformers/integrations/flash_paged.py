@@ -64,7 +64,13 @@ def paged_attention_forward(
 
     # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
     if cache is not None:
-        k, v = cache.update(k, v, module.layer_idx, **kwargs)
+        k, v = cache.update(
+            key_states=k,
+            value_states=v,
+            layer_idx=module.layer_idx,
+            read_index=kwargs["read_index"],
+            write_index=kwargs["write_index"],
+        )
 
     # Retrieve the cumulative sequence lengths for the current layer
     if isinstance(cu_seq_lens_k, dict):
