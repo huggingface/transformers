@@ -36,8 +36,7 @@ class VideoMAEVideoProcessor(BaseVideoProcessor):
 
     def preprocess(self, videos, **kwargs):
         batch = super().preprocess(videos, **kwargs)
-        if "pixel_values_videos" in batch:
-            batch["pixel_values"] = batch.pop("pixel_values_videos")
+        batch["pixel_values"] = batch.pop("pixel_values_videos")
         return batch
 
 
