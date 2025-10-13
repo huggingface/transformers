@@ -7,7 +7,7 @@ from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepa
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
@@ -374,6 +374,9 @@ class MetaClip2TextModel(CLIPTextModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs()
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -686,6 +689,8 @@ class MetaClip2VisionModel(CLIPVisionModel):
     >>> pooled_output = outputs.pooler_output  # pooled CLS states
     ```"""
 
+    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,

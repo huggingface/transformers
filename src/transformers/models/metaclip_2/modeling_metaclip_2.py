@@ -1071,7 +1071,6 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 
     @check_model_inputs(tie_last_hidden_states=False)
     @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
