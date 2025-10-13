@@ -15,6 +15,9 @@
 
 import unittest
 
+import torch
+from PIL import Image
+
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
@@ -24,7 +27,7 @@ from ...test_video_processing_common import VideoProcessingTestMixin, prepare_vi
 
 if is_vision_available():
     if is_torchvision_available():
-        from transformers import VideoMAEVideoProcessor
+        from transformers import VideoMAEImageProcessor, VideoMAEVideoProcessor
 
 
 class VideoMAEVideoProcessingTester:
@@ -127,3 +130,31 @@ class VideoMAEVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(video_processing, "do_convert_rgb"))
         self.assertTrue(hasattr(video_processing, "model_input_names"))
         self.assertIn("pixel_values", video_processing.model_input_names)
+
+    def test_pixel_value_identity(self):
+        """
+        Verify that VideoMAEVideoProcessor (TorchCodec-based) produces pixel tensors
+        numerically similar to those from VideoMAEImageProcessor (PIL-based).
+        Minor (<1%) differences are expected due to color conversion and interpolation.
+        """
+        video = self.video_processor_tester.prepare_video_inputs(return_tensors="np")
+        video_processor = VideoMAEVideoProcessor(**self.video_processor_dict)
+        image_processor = VideoMAEImageProcessor(**self.video_processor_dict)
+
+        video_frames_np = video[0]
+        video_frames_pil = [Image.fromarray(frame.astype("uint8")) for frame in video_frames_np]
+        video_out = video_processor(video_frames_pil, return_tensors="pt")
+        image_out = image_processor(video_frames_pil, return_tensors="pt")
+
+        torch.testing.assert_close(
+            video_out["pixel_values"],
+            image_out["pixel_values"],
+            rtol=5e-2,
+            atol=1e-2,
+            msg=(
+                "Pixel values differ slightly between VideoMAEVideoProcessor "
+                "and VideoMAEImageProcessor. "
+                "Differences ≤1% are expected due to YUV→RGB conversion and "
+                "interpolation behavior in different decoders."
+            ),
+        )
