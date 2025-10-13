@@ -15,7 +15,8 @@
 """PyTorch DINOv3 model."""
 
 import math
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import numpy as np
 import torch

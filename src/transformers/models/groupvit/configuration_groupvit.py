@@ -274,8 +274,6 @@ class GroupViTConfig(PreTrainedConfig):
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
@@ -339,15 +337,19 @@ class GroupViTConfig(PreTrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `GroupViTTextConfig` with default values.")
+            text_config = GroupViTTextConfig()
+            logger.info("`text_config` is `None`. initializing the `GroupViTTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = GroupViTTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = GroupViTVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `GroupViTVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = GroupViTVisionConfig(**vision_config)
 
-        self.text_config = GroupViTTextConfig(**text_config)
-        self.vision_config = GroupViTVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.projection_intermediate_dim = projection_intermediate_dim
@@ -355,6 +357,7 @@ class GroupViTConfig(PreTrainedConfig):
         self.initializer_range = 0.02
         self.initializer_factor = 1.0
         self.output_segmentation = False
+        super().__init__(**kwargs)
 
 
 class GroupViTOnnxConfig(OnnxConfig):

@@ -11,12 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 from collections import defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Union
-
-from packaging import version
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -27,6 +24,7 @@ if TYPE_CHECKING:
 
 from ..utils import (
     ACCELERATE_MIN_VERSION,
+    BITSANDBYTES_MIN_VERSION,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
@@ -47,7 +45,7 @@ logger = logging.get_logger(__name__)
 
 class Bnb4BitHfQuantizer(HfQuantizer):
     """
-    4-bit quantization from bitsandbytes.py quantization method:
+    4-bit quantization from bitsandbytes quantization method:
         before loading: converts transformer layers into Linear4bit during loading: load 16bit weight and pass to the
         layer object after: quantizes individual weights in Linear4bit into 4bit at the first .cuda() call
         saving:
@@ -80,30 +78,15 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
             raise ImportError(
-                f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                f"Using `bitsandbytes` 4-bit quantization requires accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
-        if not is_bitsandbytes_available(check_library_only=True):
+        if not is_bitsandbytes_available():
             raise ImportError(
-                "Using `bitsandbytes` 4-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
+                f"Using `bitsandbytes` 4-bit quantization requires bitsandbytes: `pip install -U bitsandbytes>={BITSANDBYTES_MIN_VERSION}`"
             )
-        if not is_torch_available():
-            raise ImportError(
-                "The bitsandbytes library requires PyTorch but it was not found in your environment. "
-                "You can install it with `pip install torch`."
-            )
-        # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
-        # so those versions of the library are practically only available when CUDA is too.
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
-            if not torch.cuda.is_available():
-                raise ImportError(
-                    "The installed version of bitsandbytes (<0.43.1) requires CUDA, but CUDA is not available. "
-                    "You may need to install PyTorch with CUDA support or upgrade bitsandbytes to >=0.43.1."
-                )
 
         from ..integrations import validate_bnb_backend_availability
-        from ..utils import is_bitsandbytes_multi_backend_available
 
-        bnb_multibackend_is_enabled = is_bitsandbytes_multi_backend_available()
         validate_bnb_backend_availability(raise_exception=True)
 
         device_map = kwargs.get("device_map")
@@ -115,7 +98,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             device_map_without_lm_head = {
                 key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
             }
-            if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
+            if set(device_map.values()) == {"cpu"}:
                 pass
             elif "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(
@@ -128,19 +111,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 )
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
-            from accelerate.utils import CustomDtype
+        from accelerate.utils import CustomDtype
 
-            if target_dtype != torch.int8:
-                logger.info("target_dtype {target_dtype} is replaced by `CustomDtype.INT4` for 4-bit BnB quantization")
-            return CustomDtype.INT4
-        else:
-            raise ValueError(
-                "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
-                " the appropriate device map, you should upgrade your `accelerate` library,"
-                "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
-                "calculation. You may encounter unexpected behavior, or pass your own device map"
-            )
+        if target_dtype != torch.int8:
+            logger.info("target_dtype {target_dtype} is replaced by `CustomDtype.INT4` for 4-bit BnB quantization")
+        return CustomDtype.INT4
 
     def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
         return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.bnb_keys)]
@@ -154,6 +129,19 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         module, name = get_module_from_name(model, param_name)
         return isinstance(module, bnb.nn.Linear4bit) and name != "bias"
 
+    def get_param_name(self, param_name: str) -> str:
+        """
+        Get the right param_name in order to get the module associated with the param.
+        This is useful for quantized stats lile absmax or quant_map as we need to update the param_name to get the module as they are stored in ...weight.absmax.
+        """
+        if self.pre_quantized:
+            # We need to get the param name of quantized weights and not its components. Otherwise, we won't be able to get the nn.Module associated.
+            if any(param_name.endswith(x) for x in self.bnb_keys):
+                param_name = (
+                    param_name.rsplit(".", 1)[0] if "quant_state." not in param_name else param_name.rsplit(".", 2)[0]
+                )
+        return param_name
+
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -164,12 +152,10 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     ):
         import bitsandbytes as bnb
 
-        is_quant_stat = any(param_name.endswith(x) for x in self.bnb_keys)
         full_name = param_name
-        if is_quant_stat:
-            param_name = (
-                param_name.rsplit(".", 1)[0] if "quant_state." not in param_name else param_name.rsplit(".", 2)[0]
-            )
+
+        # update param name to get the weights instead of the quantized stats
+        param_name = self.get_param_name(param_name)
         module, tensor_name = get_module_from_name(model, param_name)
 
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
@@ -297,15 +283,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         return model
 
     def is_serializable(self, safe_serialization=None):
-        _is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
-
-        if not _is_4bit_serializable:
-            logger.warning(
-                "You are calling `save_pretrained` to a 4-bit converted model, but your `bitsandbytes` version doesn't support it. "
-                "If you want to save 4-bit models, make sure to have `bitsandbytes>=0.41.3` installed."
-            )
-            return False
-
         return True
 
     @cached_property
@@ -315,7 +292,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         the `module` parameter in `Params4bit.from_prequantized`
         :return:
         """
-        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.43.3")
+        return True
 
     @property
     def is_trainable(self) -> bool:

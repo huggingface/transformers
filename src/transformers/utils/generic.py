@@ -21,12 +21,12 @@ import os
 import tempfile
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
-from collections.abc import Iterable, MutableMapping
+from collections.abc import Callable, Iterable, MutableMapping
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, Optional, TypedDict
+from typing import Any, Optional, TypedDict
 
 import numpy as np
 

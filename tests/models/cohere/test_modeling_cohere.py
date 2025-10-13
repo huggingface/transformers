@@ -170,7 +170,7 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`

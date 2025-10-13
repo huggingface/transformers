@@ -14,8 +14,9 @@
 # limitations under the License.
 """PyTorch Idefics2 model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -30,7 +31,6 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
@@ -572,7 +572,6 @@ class Idefics2PerceiverAttention(nn.Module):
 
         self.is_causal = False
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         latents: torch.Tensor,
@@ -653,7 +652,6 @@ class Idefics2PerceiverLayer(nn.Module):
             hidden_act=config.hidden_act,
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         latents: torch.Tensor,
