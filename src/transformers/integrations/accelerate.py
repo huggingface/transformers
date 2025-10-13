@@ -16,9 +16,9 @@ Some of the functions here are derived from the `accelerate` library, with some 
 and simplicity/ease of use.
 """
 
-import collections
 import inspect
 import os
+from collections import defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional, Union
 
@@ -273,20 +273,13 @@ def compute_module_sizes(
     if special_dtypes is not None:
         special_dtypes = {key: _get_proper_dtype(dtyp) for key, dtyp in special_dtypes.items()}
         special_dtypes_size = {key: dtype_byte_size(dtyp) for key, dtyp in special_dtypes.items()}
+
     module_sizes = defaultdict(int)
-
-    module_list = []
-
-    if not buffers_only:
-        module_list = named_module_tensors(model, recurse=True)
-    else:
-        module_list = model.named_buffers(recurse=True)
-
-    for name, tensor in module_list:
+    for name, tensor in model.state_dict():
         if special_dtypes is not None and name in special_dtypes:
             size = tensor.numel() * special_dtypes_size[name]
         elif dtype is None:
-            size = tensor.numel() * dtype_byte_size(tensor.dtype)
+            size = tensor.numel() * tensor.element_size()
         elif str(tensor.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
             # According to the code in set_module_tensor_to_device, these types won't be converted
             # so use their original size here
@@ -554,7 +547,7 @@ def get_disk_only_shard_files(device_map, weight_map):
     """
     Returns the list of shard files containing only weights offloaded to disk.
     """
-    files_content = collections.defaultdict(list)
+    files_content = defaultdict(list)
     for weight_name, filename in weight_map.items():
         while len(weight_name) > 0 and weight_name not in device_map:
             weight_name = ".".join(weight_name.split(".")[:-1])
