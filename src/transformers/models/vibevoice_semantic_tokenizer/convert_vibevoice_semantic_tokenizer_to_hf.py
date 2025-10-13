@@ -15,7 +15,7 @@
 import argparse
 import torch
 import json
-from transformers import VibeVoiceAcousticTokenizerConfig, VibeVoiceAcousticTokenizerModel, AutoModel
+from transformers import VibeVoiceSemanticTokenizerConfig, VibeVoiceSemanticTokenizerModel, AutoModel
 
 
 def convert_checkpoint(vibevoice_model_id, config_path, push_to_hub, bfloat16):
@@ -23,31 +23,31 @@ def convert_checkpoint(vibevoice_model_id, config_path, push_to_hub, bfloat16):
     # 1) load original model
     full_model = AutoModel.from_pretrained(vibevoice_model_id)
 
-    # 2) extract acoustic tokenizer configuration
+    # 2) extract semantic tokenizer configuration
     if config_path is None:
-        acoustic_tokenizer_config = full_model.config.acoustic_tokenizer_config
-        acoustic_tokenizer_config = acoustic_tokenizer_config.to_dict()
+        semantic_tokenizer_config = full_model.config.semantic_tokenizer_config
+        semantic_tokenizer_config = semantic_tokenizer_config.to_dict()
     else:
         # load config
         with open(config_path, "r") as f:
             config = json.load(f)
-        # extract acoustic tokenizer configuration
-        acoustic_tokenizer_config = config["acoustic_tokenizer_config"]
+        # extract semantic tokenizer configuration
+        semantic_tokenizer_config = config["semantic_tokenizer_config"]
 
     # -- cleanup
-    acoustic_tokenizer_config["encoder_depths"] = list(map(int, acoustic_tokenizer_config["encoder_depths"].split("-")))
+    semantic_tokenizer_config["encoder_depths"] = list(map(int, semantic_tokenizer_config["encoder_depths"].split("-")))
 
     # 3) create config
-    model_config = VibeVoiceAcousticTokenizerConfig(**acoustic_tokenizer_config)
+    model_config = VibeVoiceSemanticTokenizerConfig(**semantic_tokenizer_config)
 
     # 4) create model
-    model = VibeVoiceAcousticTokenizerModel(model_config)
+    model = VibeVoiceSemanticTokenizerModel(model_config)
     # -- to bfloat16
     if bfloat16:
         model = model.to(torch.bfloat16)
 
-    # 5) load state dict of acoustic tokenizer from original VibeVoice model
-    original_state_dict = full_model.acoustic_tokenizer.state_dict()
+    # 5) load state dict of semantic tokenizer from original VibeVoice model
+    original_state_dict = full_model.semantic_tokenizer.state_dict()
     missing, unexpected = model.load_state_dict(original_state_dict, strict=False)
     if len(unexpected) != 0:
         raise ValueError(f"Unexpected keys: {unexpected}")
@@ -63,19 +63,19 @@ def convert_checkpoint(vibevoice_model_id, config_path, push_to_hub, bfloat16):
 """
 Can directly use VibeVoice model checkpoint
 ```bash
-python src/transformers/models/vibevoice_acoustic_tokenizer/convert_vibevoice_acoustic_tokenizer_to_hf.py \
+python src/transformers/models/vibevoice_semantic_tokenizer/convert_vibevoice_semantic_tokenizer_to_hf.py \
     --vibevoice_model_id microsoft/VibeVoice-1.5B \
-    --push_to_hub bezzam/VibeVoiceAcousticTokenizer
+    --push_to_hub bezzam/VibeVoiceSemanticTokenizer
 ```
 
 Using config:
 ```bash
 wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P /raid/eric/vibevoice_original
 
-python src/transformers/models/vibevoice_acoustic_tokenizer/convert_vibevoice_acoustic_tokenizer_to_hf.py \
+python src/transformers/models/vibevoice_semantic_tokenizer/convert_vibevoice_semantic_tokenizer_to_hf.py \
     --vibevoice_model_id microsoft/VibeVoice-1.5B \
     --config_path /raid/eric/vibevoice_original/config.json \
-    --push_to_hub bezzam/VibeVoiceAcousticTokenizer
+    --push_to_hub bezzam/VibeVoiceSemanticTokenizer
 ```
 """
 if __name__ == "__main__":
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
     parser.add_argument(
-        "--float32", action="store_true", help="Whether to use float32 or bfloat16 precision. Default is bfloat16."
+        "--float32", action="store_true", help="Whether to use float32 precision. Default is bfloat16."
     )
 
     args = parser.parse_args()

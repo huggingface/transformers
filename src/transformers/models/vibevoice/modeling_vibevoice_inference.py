@@ -10,7 +10,9 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...utils import logging
 from .audio_streamer import AsyncAudioStreamer, AudioStreamer
 from .modeling_vibevoice import VibeVoiceModel, VibeVoicePreTrainedModel
-from .modular_vibevoice_tokenizer import VibeVoiceTokenizerStreamingCache
+
+# TODO import from this folder?
+from ..vibevoice_acoustic_tokenizer import VibeVoiceTokenizerStreamingCache
 
 
 logger = logging.get_logger(__name__)

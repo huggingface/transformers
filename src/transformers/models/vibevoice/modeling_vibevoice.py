@@ -13,10 +13,8 @@ from ...utils import logging
 from ..llama.modeling_llama import LlamaRMSNorm
 from .configuration_vibevoice import VibeVoiceConfig
 from .modular_vibevoice_diffusion_head import VibeVoiceDiffusionHead
-from .modular_vibevoice_tokenizer import (
-    VibeVoiceSemanticTokenizerModel,
-)
 from ..vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerModel
+from ..vibevoice_semantic_tokenizer import VibeVoiceSemanticTokenizerModel
 from .schedule.dpm_solver import DPMSolverMultistepScheduler
 
 
@@ -116,7 +114,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         # Initialize speech components if needed
         # TODO model ID in config
         self.acoustic_tokenizer = VibeVoiceAcousticTokenizerModel.from_pretrained("bezzam/VibeVoiceAcousticTokenizer").to(dtype)
-        self.semantic_tokenizer = VibeVoiceSemanticTokenizerModel(config.semantic_tokenizer_config).to(dtype)
+        self.semantic_tokenizer = VibeVoiceSemanticTokenizerModel.from_pretrained("bezzam/VibeVoiceSemanticTokenizer").to(dtype)
 
         self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_vae_dim, lm_config.hidden_size).to(dtype)
         self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_vae_dim, lm_config.hidden_size).to(dtype)

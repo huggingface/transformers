@@ -14,69 +14,14 @@
 # limitations under the License.
 """ VibeVoice model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerConfig
+from ..vibevoice_semantic_tokenizer import VibeVoiceSemanticTokenizerConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
-    model_type = "vibevoice_semantic_tokenizer"
-
-    def __init__(
-        self,
-        channels: int = 1,
-        corpus_normalize: float = 0.0,
-        causal: bool = True,
-        vae_dim: int = 64,
-        fix_std: float = 0,
-        std_dist_type: str = 'none',
-        # common
-        mixer_layer: str = 'depthwise_conv',
-        conv_norm: str = 'none',
-        pad_mode: str = 'constant',
-        disable_last_norm: bool = True,
-        layernorm: str = 'RMSNorm',
-        layernorm_eps: float = 1e-5,
-        layernorm_elementwise_affine: bool = True,
-        conv_bias: bool = True,
-        layer_scale_init_value: float = 1e-6,
-        weight_init_value: float = 1e-2,
-        # encoder specific
-        encoder_n_filters: int = 32,
-        encoder_ratios: Optional[list[int]] = [8,5,5,4,2,2],
-        encoder_depths: str = "3-3-3-3-3-3-8",
-        **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.channels = channels
-        self.corpus_normalize = corpus_normalize
-        self.causal = causal
-        self.vae_dim = vae_dim
-        self.fix_std = fix_std
-        self.std_dist_type = std_dist_type
-
-        # common parameters
-        self.conv_norm = conv_norm
-        self.pad_mode = pad_mode
-        self.layernorm_eps = layernorm_eps
-        self.disable_last_norm = disable_last_norm
-        self.layernorm = layernorm
-        self.layernorm_elementwise_affine = layernorm_elementwise_affine
-        self.conv_bias = conv_bias
-        self.layer_scale_init_value = layer_scale_init_value
-        self.weight_init_value = weight_init_value
-        self.mixer_layer = mixer_layer
-
-        # encoder specific parameters
-        self.encoder_n_filters = encoder_n_filters
-        self.encoder_ratios = encoder_ratios
-        self.encoder_depths = encoder_depths
 
 
 class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
@@ -194,7 +139,6 @@ class VibeVoiceConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 __all__ = [
-    "VibeVoiceSemanticTokenizerConfig",
     "VibeVoiceDiffusionHeadConfig",
     "VibeVoiceConfig"
 ]
