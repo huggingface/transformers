@@ -16,8 +16,9 @@
 """PyTorch Qwen2.5Omni model (Audio, Image, Video)."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -1061,7 +1062,7 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
 
 
     >>> # Initializing a module style configuration
-    >>> configuration = Qwen2_5OmniConfig.from_sub_model_configs(
+    >>> configuration = Qwen2_5OmniConfig(
     ...     thinker_config, talker_config, token2wav_config
     ... )
 

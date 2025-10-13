@@ -21,8 +21,9 @@
 
 import collections.abc
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 import numpy as np
 import torch

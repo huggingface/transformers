@@ -360,7 +360,6 @@ class NotebookProgressCallback(TrainerCallback):
             _ = metrics.pop(f"{metric_key_prefix}_runtime", None)
             _ = metrics.pop(f"{metric_key_prefix}_samples_per_second", None)
             _ = metrics.pop(f"{metric_key_prefix}_steps_per_second", None)
-            _ = metrics.pop(f"{metric_key_prefix}_jit_compilation_time", None)
             for k, v in metrics.items():
                 splits = k.split("_")
                 name = " ".join([part.capitalize() for part in splits[1:]])

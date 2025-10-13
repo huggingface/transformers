@@ -38,7 +38,6 @@ from ....modeling_outputs import (
     TokenClassifierOutput,
 )
 from ....modeling_utils import PreTrainedModel
-from ....pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ....utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -48,7 +47,6 @@ from ....utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_qdqbert import QDQBertConfig
 
 
@@ -167,7 +165,6 @@ class QDQBertSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -291,27 +288,7 @@ class QDQBertAttention(nn.Module):
         super().__init__()
         self.self = QDQBertSelfAttention(config)
         self.output = QDQBertSelfOutput(config)
-        self.pruned_heads = set()
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -387,7 +364,6 @@ class QDQBertLayer(GradientCheckpointingLayer):
         self.intermediate = QDQBertIntermediate(config)
         self.output = QDQBertOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -398,12 +374,12 @@ class QDQBertLayer(GradientCheckpointingLayer):
         output_attentions=False,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
+        self_attn_past_key_values = past_key_values[:2] if past_key_values is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
             output_attentions=output_attentions,
-            past_key_values=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_values,
         )
         attention_output = self_attention_outputs[0]
 
@@ -423,13 +399,13 @@ class QDQBertLayer(GradientCheckpointingLayer):
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_values tuple
-            cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
+            cross_attn_past_key_values = past_key_values[-2:] if past_key_values is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                cross_attn_past_key_value,
+                cross_attn_past_key_values,
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
@@ -1027,14 +1003,6 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
             input_ids = input_ids[:, remove_prefix_length:]
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @add_start_docstrings("""QDQBERT Model with a `language modeling` head on top.""", QDQBERT_START_DOCSTRING)

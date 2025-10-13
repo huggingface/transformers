@@ -50,14 +50,14 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class ConvNextImageProcessorKwargs(ImagesKwargs):
+class ConvNextImageProcessorKwargs(ImagesKwargs, total=False):
     """
     crop_pct (`float`, *optional*):
         Percentage of the image to crop. Only has an effect if size < 384. Can be
         overridden by `crop_pct` in the`preprocess` method.
     """
 
-    crop_pct: Optional[float]
+    crop_pct: float
 
 
 @requires(backends=("vision",))

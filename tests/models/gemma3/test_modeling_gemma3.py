@@ -72,15 +72,6 @@ class Gemma3TextModelTester(CausalLMModelTester):
 @require_torch
 class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3TextModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Gemma3TextModel,
-            "text-classification": Gemma3TextForSequenceClassification,
-            "text-generation": Gemma3ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
@@ -267,7 +258,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         else ()
     )
     all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
+
     test_missing_keys = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]

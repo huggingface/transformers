@@ -96,9 +96,6 @@ class GPTJModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def get_large_model_config(self):
-        return GPTJConfig.from_pretrained("EleutherAI/gpt-j-6B")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -344,7 +341,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     fx_compatible = True
-    test_pruning = False
+
     test_missing_keys = False
 
     def test_torch_fx(self):
