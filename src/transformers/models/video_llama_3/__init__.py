@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_videomae import *
-    from .feature_extraction_videomae import *
-    from .image_processing_videomae import *
-    from .modeling_videomae import *
-    from .video_processing_videomae import *
+    from .configuration_video_llama_3 import *
+    from .image_processing_video_llama_3 import *
+    from .image_processing_video_llama_3_fast import *
+    from .modeling_video_llama_3 import *
+    from .processing_video_llama_3 import *
+    from .video_processing_video_llama_3 import *
 else:
     import sys
 
