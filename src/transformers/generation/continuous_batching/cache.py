@@ -323,11 +323,11 @@ class PagedAttentionCache:
         # the only case where you may write over cache you need to use
         else:
             # Add the cache to the key and value states
-            mask = layer_read_index == -1  # TODO: can this can be efficiently precomputed?
+            mask = (layer_read_index == -1).unsqueeze(-1).unsqueeze(-1)  # TODO: should this be precomputed?
             key_states_with_cache = k_cache[layer_read_index, :, :]
-            key_states_with_cache[mask] = key_states
+            key_states_with_cache.masked_scatter_(mask, key_states)
             value_states_with_cache = v_cache[layer_read_index, :, :]
-            value_states_with_cache[mask] = value_states
+            value_states_with_cache.masked_scatter_(mask, value_states)
             # Write new KV values to the cache
             k_cache[layer_write_index, :, :] = key_states
             v_cache[layer_write_index, :, :] = value_states
