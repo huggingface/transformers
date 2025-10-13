@@ -384,10 +384,10 @@ class DinoDetrImageLoss(nn.Module):
 
     def prep_for_dn(self, dn_meta):
         output_known_lbs_bboxes = dn_meta["output_known_lbs_bboxes"]
-        num_dn_groups, pad_size = dn_meta["num_dn_group"], dn_meta["pad_size"]
-        single_pad = pad_size // num_dn_groups
+        dn_num_groups, num_denoising_queries = dn_meta["dn_num_group"], dn_meta["dn_num_split"][0]
+        single_query = num_denoising_queries // dn_num_groups
 
-        return output_known_lbs_bboxes, single_pad, num_dn_groups
+        return output_known_lbs_bboxes, single_query, dn_num_groups
 
 
 def DinoDetrForObjectDetectionLoss(
