@@ -21,7 +21,7 @@ Highlights:
 
 ### Paper
 
-[Audio Flamingo 3](https://arxiv.org/abs/2507.08128): Advancing Audio Intelligence with Fully Open Large Audio Language Models  
+[Audio Flamingo 3](https://huggingface.co/papers/2507.08128): Advancing Audio Intelligence with Fully Open Large Audio Language Models  
 A. Goel, S. Ghosh, J. Kim, S. Kumar, Z. Kong, S. Lee, C.-H. H. Yang, R. Duraiswami, D. Manocha, R. Valle, B. Catanzaro  
 NVIDIA and University of Maryland  
 Project: https://research.nvidia.com/labs/adlr/AF3/
@@ -72,17 +72,12 @@ texts = processor.batch_decode(new_tokens, skip_special_tokens=True, clean_up_to
 print(texts)
 ```
 
-Tips:
-
-* Left padding is recommended for batched generation with mixed prompt lengths.
-* The processor returns conversation-formatted text; the snippet above keeps only the assistant’s reply.
-
 ## How the model works
 
 ### Architecture
 
 * **AudioFlamingo3Encoder**
-  Whisper-style conv front-end → Transformer encoder → average-pool over time (stride 2) → LayerNorm.
+  Whisper-style feature extractor + encoder → average-pool over time (stride 2) → LayerNorm.
   Produces per-frame hidden states at the post-pool rate.
 
 * **AudioFlamingo3MultiModalProjector**
@@ -177,11 +172,6 @@ answers = [a.split("\nassistant\n")[-1] for a in answers]
 
 * Empty or truncated outputs when batching
   Use left padding for batched generation and remove the prompt prefix by splitting on `"\nassistant\n"` as shown in the quickstart.
-
-
-## Notes on attention implementations
-
-AF3 supports PyTorch SDPA and FlashAttention when available. If you rely on fine-grained `head_mask` behavior for the audio encoder, use eager attention. In general usage, SDPA or FlashAttention are recommended for speed and memory efficiency.
 
 
 ## AudioFlamingo3Config
