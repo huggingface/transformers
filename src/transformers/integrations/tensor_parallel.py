@@ -85,17 +85,20 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, devic
 
         if device_type != "cpu":
             current_device.set_device(int(os.environ["LOCAL_RANK"]))
-        index = current_device.current_device() if device_type != "cpu" else None
-        tp_device = torch.device(device_type, index)
+            index = current_device.current_device()
+            tp_device = torch.device(device_type, index)
+            device_map = tp_device
+            # Silence output for non-primary ranks
+            if index > 0:
+                import sys
 
-        # Silence output for non-primary ranks
-        if index is not None and index > 0:
-            import sys
+                sys.stdout = open(os.devnull, "w")
+                sys.stderr = open(os.devnull, "w")
 
-            sys.stdout = open(os.devnull, "w")
-            sys.stderr = open(os.devnull, "w")
+        else:
+            tp_device = torch.device(device_type)
+            device_map = device_type or {}
 
-        device_map = tp_device
         tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
         device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
     else:

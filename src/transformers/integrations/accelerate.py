@@ -246,6 +246,7 @@ def check_and_set_device_map(device_map):
                 "Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` "
                 "requires `accelerate`. You can install it with `pip install accelerate`"
             )
+    return device_map
 
 
 def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers):
