@@ -62,8 +62,6 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
     model_tester_class = Lfm2MoeModelTester
     # used in `test_torch_compile_for_training`
