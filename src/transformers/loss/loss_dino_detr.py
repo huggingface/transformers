@@ -411,11 +411,8 @@ def DinoDetrForObjectDetectionLoss(
     dice_loss_coefficient,
     num_decoder_layers,
     two_stage_type,
-    no_interm_box_loss,
-    interm_loss_coef,
     outputs_class=None,
     outputs_coord=None,
-    **kwargs,
 ):
     # First: create the matcher
     matcher = HungarianMatcher(
@@ -455,8 +452,6 @@ def DinoDetrForObjectDetectionLoss(
         auxiliary_loss,
         num_decoder_layers,
         two_stage_type,
-        no_interm_box_loss,
-        interm_loss_coef,
     )
     loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs
@@ -473,8 +468,6 @@ def compute_weight_dict(
     auxiliary_loss,
     num_decoder_layers,
     two_stage_type,
-    no_interm_box_loss,
-    interm_loss_coef,
 ):
     # prepare weight dict
     weight_dict = {
@@ -504,21 +497,13 @@ def compute_weight_dict(
 
     if two_stage_type != "no":
         interm_weight_dict = {}
-        try:
-            no_interm_box_loss = no_interm_box_loss
-        except AttributeError:
-            no_interm_box_loss = False
         _coeff_weight_dict = {
             "loss_ce": 1.0,
-            "loss_bbox": 1.0 if not no_interm_box_loss else 0.0,
-            "loss_giou": 1.0 if not no_interm_box_loss else 0.0,
+            "loss_bbox": 1.0,
+            "loss_giou": 1.0,
         }
-        try:
-            interm_loss_coef = interm_loss_coef
-        except AttributeError:
-            interm_loss_coef = 1.0
         interm_weight_dict.update(
-            {k + "_interm": v * interm_loss_coef * _coeff_weight_dict[k] for k, v in clean_weight_dict_wo_dn.items()}
+            {k + "_interm": v * _coeff_weight_dict[k] for k, v in clean_weight_dict_wo_dn.items()}
         )
         weight_dict.update(interm_weight_dict)
-        return weight_dict
+    return weight_dict
