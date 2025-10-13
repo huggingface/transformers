@@ -241,7 +241,7 @@ class RagPreTrainedModel(PreTrainedModel):
         cls,
         question_encoder_pretrained_model_name_or_path: Optional[str] = None,
         generator_pretrained_model_name_or_path: Optional[str] = None,
-        retriever: RagRetriever = None,
+        retriever: Optional[RagRetriever] = None,
         **kwargs,
     ) -> PreTrainedModel:
         r"""
