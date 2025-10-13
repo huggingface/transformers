@@ -815,7 +815,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
 
         expected_input_ids = [151644, 872, 198] + [151655] * 10549 + [198, 74785, 279, 2168, 13, 151645, 198, 151644, 77091, 198]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()
+        self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist())
 
         expected_pixel_slice = torch.tensor(
             [
@@ -829,7 +829,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
             dtype=torch.float32,
             device="cpu",
         )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
+        torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
 
         # verify generation
         inputs = inputs.to(torch_device)
