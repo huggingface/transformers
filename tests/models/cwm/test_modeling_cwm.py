@@ -46,13 +46,15 @@ class CwmModelTester(CausalLMModelTester):
         config = super().get_config()
 
         config.sliding_window = 8192
-        config.rope_scaling = {
+        rope_params = {
             "factor": 16.0,
             "high_freq_factor": 4.0,
             "low_freq_factor": 1.0,
             "original_max_position_embeddings": 8192,
             "rope_type": "llama3",
+            "rope_theta": 1000000.0,
         }
+        config.rope_parameters = {"full_attention": rope_params, "sliding_attention": rope_params}
 
         return config
 

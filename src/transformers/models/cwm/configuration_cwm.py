@@ -154,6 +154,9 @@ class CwmConfig(PreTrainedConfig):
             ]
         else:
             layer_type_validation(layer_types, num_hidden_layers)
+
+        self.sliding_window = int(sliding_window) if sliding_window else None
+        self.layer_types = list(layer_types)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -190,9 +193,6 @@ class CwmConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        self.sliding_window = int(sliding_window) if sliding_window else None
-        self.layer_types = list(layer_types)
 
 
 __all__ = ["CwmConfig"]

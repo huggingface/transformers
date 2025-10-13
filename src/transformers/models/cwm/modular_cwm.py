@@ -31,7 +31,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
 )
-from ..qwen2.modeling_qwen2 import Qwen2Attention
+from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -151,6 +151,9 @@ class CwmConfig(LlamaConfig):
         else:
             layer_type_validation(layer_types, num_hidden_layers)
 
+        self.sliding_window = int(sliding_window) if sliding_window else None
+        self.layer_types = list(layer_types)
+
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -176,15 +179,16 @@ class CwmConfig(LlamaConfig):
             **kwargs,
         )
 
+        # CWM models don't use attention bias, remove it from config
+        del self.attention_bias
+
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", {"full_attention": 1_000_000.0, "sliding_attention": 1_000_000.0})
         standardize_rope_params(self, rope_theta=rope_theta)
 
-        # CWM models don't use attention bias, remove it from config
-        del self.attention_bias
 
-        self.sliding_window = int(sliding_window) if sliding_window else None
-        self.layer_types = list(layer_types)
+class CwmRotaryEmbedding(Qwen2RotaryEmbedding):
+    pass
 
 
 class CwmAttention(Qwen2Attention):
@@ -265,7 +269,9 @@ class CwmModel(LlamaModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
@@ -274,7 +280,7 @@ class CwmModel(LlamaModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
                 **kwargs,
             )
 
