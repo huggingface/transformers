@@ -1190,6 +1190,8 @@
         title: TVP
       - local: model_doc/udop
         title: UDOP
+      - local: model_doc/video_llama_3
+        title: VideoLlama3
       - local: model_doc/video_llava
         title: VideoLlava
       - local: model_doc/vilt
