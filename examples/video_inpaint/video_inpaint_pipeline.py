@@ -135,7 +135,9 @@ class VideoInpaintPipeline:
         remapped = cv2.remap(prev_latent.astype(np.float32), flow_map[..., 0], flow_map[..., 1], cv2.INTER_LINEAR)
         return remapped.astype(prev_latent.dtype)
 
-    def __call__(self, frames: list[np.ndarray], masks: list[np.ndarray] | None = None, prompt: str | None = None, **kwargs) -> VideoResult:
+    def __call__(
+        self, frames: list[np.ndarray], masks: list[np.ndarray] | None = None, prompt: str | None = None, **kwargs
+    ) -> VideoResult:
         n = len(frames)
         masks = masks or [None] * n
         out_frames = []
@@ -167,9 +169,9 @@ def load_synthetic_video(n_frames=6, size=(128, 128)):
         frame = np.zeros((size[1], size[0], 3), dtype=np.uint8)
         # moving square
         x = int((i / n_frames) * (size[0] - 32))
-        frame[32:64, x:x + 32] = [int(255 * (i / n_frames)), 50, 200]
+        frame[32:64, x : x + 32] = [int(255 * (i / n_frames)), 50, 200]
         mask = np.zeros((size[1], size[0]), dtype=np.uint8)
-        mask[32:64, x:x + 32] = 255
+        mask[32:64, x : x + 32] = 255
         frames.append(frame)
         masks.append(mask)
     return frames, masks
