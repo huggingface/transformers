@@ -3,6 +3,8 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ..generation.continuous_batching.cache import PagedAttentionCache
+
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -26,10 +28,16 @@ def eager_paged_attention_forward(
     **kwargs,
 ):
     # Add KV cache to the key and value tensors
-    cache = kwargs.pop("cache", None)
+    cache: Optional[PagedAttentionCache] = kwargs.pop("cache", None)
     if cache is not None:
         # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
-        key, value = cache.update(key, value, module.layer_idx, **kwargs)
+        key, value = cache.update(
+            key_states=key,
+            value_states=value,
+            layer_idx=module.layer_idx,
+            read_index=kwargs["read_index"],
+            write_index=kwargs["write_index"],
+        )
         key = key.transpose(0, 1).unsqueeze(0)
         value = value.transpose(0, 1).unsqueeze(0)
 

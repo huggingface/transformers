@@ -16,10 +16,11 @@
 
 import argparse
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 import timm
 import torch
@@ -224,11 +225,9 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
     expected_shape = (1, num_labels)
 
     repo_id = "huggingface/label-files"
-    num_labels = num_labels
     id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
-    id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
     ImageNetPreTrainedConfig = partial(RegNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)

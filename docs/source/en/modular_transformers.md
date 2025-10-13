@@ -82,7 +82,7 @@ class RobertaForMaskedLM(BertForMaskedLM):
 
 If you don't use the defined dependency, you'll receive the following error.
 
-```
+```text
 ValueError: You defined `RobertaEmbeddings` in the modular_roberta.py, it should be used when you define `BertModel`, as it is one of it's direct dependencies. Make sure you use it in the `__init__` function.
 ```
 
@@ -488,7 +488,7 @@ class LlamaForCausalLM(nn.Module):
       input_ids: torch.LongTensor = None,
       attention_mask: Optional[torch.Tensor] = None,
       position_ids: Optional[torch.LongTensor] = None,
-      past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+      past_key_values: Optional[Cache] = None,
       inputs_embeds: Optional[torch.FloatTensor] = None,
       labels: Optional[torch.LongTensor] = None,
       use_cache: Optional[bool] = None,
@@ -514,7 +514,7 @@ class NewModelForCausalLM(LlamaForCausalLM):    |    class LlamaForCausalLM(nn.M
                                                 |         input_ids: torch.LongTensor = None,
                                                 |         attention_mask: Optional[torch.Tensor] = None,
                                                 |         position_ids: Optional[torch.LongTensor] = None,
-                                                |         past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = |None,
+                                                |         past_key_values: Optional[Cache] = |None,
                                                 |         inputs_embeds: Optional[torch.FloatTensor] = None,
                                                 |         labels: Optional[torch.LongTensor] = None,
                                                 |         use_cache: Optional[bool] = None,

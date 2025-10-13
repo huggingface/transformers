@@ -41,14 +41,11 @@ if is_torch_available():
     import torch
 
     from transformers import BltConfig, BltForCausalLM, BltModel
-from transformers.models.blt.modeling_blt import BltRotaryEmbedding
 
 
 class BltModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = BltConfig
         base_model_class = BltModel
-        causal_lm_class = BltForCausalLM
 
     def __init__(
         self,
@@ -172,27 +169,8 @@ class BltModelTester(CausalLMModelTester):
 
 @require_torch
 class BltModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            BltModel,
-            BltForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": BltModel,
-            "text-generation": BltForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
     model_tester_class = BltModelTester
-    rotary_embedding_layer = BltRotaryEmbedding  # Enables RoPE tests if set
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -248,8 +226,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         """Override rope scaling from config test to handle Blt's sub-config structure."""
-        if self.rotary_embedding_layer is None:
-            self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
@@ -283,10 +259,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    @unittest.skip(reason="Decoder cannot keep gradients")
-    def test_flex_attention_with_grads():
-        pass
 
 
 @require_torch_accelerator

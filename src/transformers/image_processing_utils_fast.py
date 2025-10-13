@@ -15,9 +15,10 @@
 from collections.abc import Iterable
 from copy import deepcopy
 from functools import lru_cache, partial
-from typing import Any, Optional, TypedDict, Union
+from typing import Any, Optional, Union
 
 import numpy as np
+from huggingface_hub.dataclasses import validate_typed_dict
 
 from .image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from .image_transforms import (
@@ -40,13 +41,12 @@ from .image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from .processing_utils import Unpack
+from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
     is_torchvision_available,
-    is_torchvision_v2_available,
     is_vision_available,
     logging,
 )
@@ -60,14 +60,13 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as F
+
     from .image_utils import pil_torch_interpolation_mapping
+
 else:
     pil_torch_interpolation_mapping = None
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -165,28 +164,6 @@ def divide_to_patches(
     return patches
 
 
-class DefaultFastImageProcessorKwargs(TypedDict, total=False):
-    do_resize: Optional[bool]
-    size: Optional[dict[str, int]]
-    default_to_square: Optional[bool]
-    resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]]
-    do_center_crop: Optional[bool]
-    crop_size: Optional[dict[str, int]]
-    do_rescale: Optional[bool]
-    rescale_factor: Optional[Union[int, float]]
-    do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
-    do_convert_rgb: Optional[bool]
-    return_tensors: Optional[Union[str, TensorType]]
-    data_format: Optional[ChannelDimension]
-    input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional["torch.device"]
-    disable_grouping: Optional[bool]
-
-
 @auto_docstring
 class BaseImageProcessorFast(BaseImageProcessor):
     resample = None
@@ -208,10 +185,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
     input_data_format = None
     device = None
     model_input_names = ["pixel_values"]
-    valid_kwargs = DefaultFastImageProcessorKwargs
+    valid_kwargs = ImagesKwargs
     unused_kwargs = None
 
-    def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
         kwargs = self.filter_out_unused_kwargs(kwargs)
         size = kwargs.pop("size", self.size)
@@ -244,19 +221,19 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def pad(
         self,
-        images: "torch.Tensor",
+        images: list["torch.Tensor"],
         pad_size: SizeDict = None,
         fill_value: Optional[int] = 0,
         padding_mode: Optional[str] = "constant",
-        return_mask: Optional[bool] = False,
+        return_mask: bool = False,
         disable_grouping: Optional[bool] = False,
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> Union[tuple["torch.Tensor", "torch.Tensor"], "torch.Tensor"]:
         """
         Pads images to `(pad_size["height"], pad_size["width"])` or to the largest size in the batch.
 
         Args:
-            images (`torch.Tensor`):
+            images (`list[torch.Tensor]`):
                 Images to pad.
             pad_size (`SizeDict`, *optional*):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
@@ -271,7 +248,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Whether to disable grouping of images by size.
 
         Returns:
-            `torch.Tensor`: The resized image.
+            `Union[tuple[torch.Tensor, torch.Tensor], torch.Tensor]`: The padded images and pixel masks if `return_mask` is `True`.
         """
         if pad_size is not None:
             if not (pad_size.height and pad_size.width):
@@ -730,13 +707,14 @@ class BaseImageProcessorFast(BaseImageProcessor):
             data_format=data_format,
         )
 
-    def __call__(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
-        return self.preprocess(images, *args, **kwargs)
-
     @auto_docstring
-    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
+
+        # Perform type validation on received kwargs
+        validate_typed_dict(self.valid_kwargs, kwargs)
+
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self._valid_kwargs_names:
@@ -767,7 +745,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+        **kwargs: Unpack[ImagesKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
