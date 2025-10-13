@@ -907,7 +907,6 @@ class DinoDetrDecoderLayer(nn.Module):
             - `d_model` (int): The hidden size of the model.
             - `d_ffn` (int): The hidden size of the feed-forward network.
             - `activation` (str): The activation function to use in the feed-forward network.
-            - `key_aware_type` (str, *optional*): The type of key-aware projection to use (e.g., `"mean"`, `"proj_mean"`).
             - `decoder_sa_type` (str): The type of self-attention to use (e.g., `"sa"`, `"ca_content"`, `"ca_label"`).
 
     Inputs:
@@ -960,17 +959,11 @@ class DinoDetrDecoderLayer(nn.Module):
         self.dropout4 = nn.Dropout(config.dropout)
         self.norm3 = nn.LayerNorm(config.d_model)
 
-        self.key_aware_type = config.key_aware_type
         self.key_aware_proj = None
         self.decoder_sa_type = config.decoder_sa_type
 
         if config.decoder_sa_type == "ca_content":
             self.self_attn = DinoDetrMultiscaleDeformableAttention(config, config.num_heads, config.decoder_n_points)
-
-    def rm_self_attn_modules(self):
-        self.self_attn = None
-        self.dropout2 = None
-        self.norm2 = None
 
     @staticmethod
     def with_pos_embed(tensor: torch.FloatTensor, pos: torch.FloatTensor):
@@ -1036,13 +1029,6 @@ class DinoDetrDecoderLayer(nn.Module):
         memory_spatial_shapes: torch.FloatTensor,
         memory_spatial_shapes_list: list[torch.FloatTensor],
     ):
-        if self.key_aware_type is not None:
-            if self.key_aware_type == "mean":
-                queries = queries + memory.mean(0, keepdim=True)
-            elif self.key_aware_type == "proj_mean":
-                queries = queries + self.key_aware_proj(memory).mean(0, keepdim=True)
-            else:
-                raise NotImplementedError(f"Unknown key_aware_type: {self.key_aware_type}")
         transformed_queries, attn_weights = self.cross_attn(
             hidden_states=self.with_pos_embed(queries, query_position_embeddings).transpose(0, 1),
             reference_points=query_reference_points.transpose(0, 1).contiguous(),
@@ -1505,19 +1491,15 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             A single decoder layer to be cloned and stacked.
         norm (`torch.nn.Module`):
             A normalization layer applied to the decoder's output.
-        decoder_query_perturber (`Callable[[torch.Tensor], torch.Tensor]`):
             A function to apply perturbations to the decoder queries during training.
         config (`DinoDetrConfig`):
             The configuration object containing model parameters. Must include the following attributes:
             - `num_decoder_layers` (int): The number of decoder layers.
             - `dec_layer_share` (bool): Whether to share weights across decoder layers.
             - `num_feature_levels` (int): The number of feature levels.
-            - `use_detached_boxes_dec_out` (bool): Whether to use detached boxes for decoder output.
             - `query_dim` (int): The dimensionality of the query embeddings.
             - `d_model` (int): The hidden size of the model.
-            - `dec_layer_number` (Optional[List[int]]): The number of queries to select at each decoder layer.
             - `dec_layer_dropout_prob` (Optional[List[float]]): Dropout probabilities for each decoder layer.
-            - `dec_detach` (bool): Whether to detach reference points during iterative refinement.
 
     Inputs:
         queries (`torch.FloatTensor`):
@@ -1557,7 +1539,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self,
         decoder_layer: DinoDetrDecoderLayer,
         norm: torch.nn.Module,
-        decoder_query_perturber: Callable[[torch.Tensor], torch.Tensor],
         config: DinoDetrConfig,
     ):
         super().__init__(config)
@@ -1572,7 +1553,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.num_decoder_layers = config.num_decoder_layers
         self.norm = norm
         self.num_feature_levels = config.num_feature_levels
-        self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
         self.ref_point_head = DinoDetrMLPPredictionHead(
             config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
         )
@@ -1581,10 +1561,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.class_embed = None
         self.d_model = config.d_model
         self.ref_anchor_head = None
-        self.decoder_query_perturber = decoder_query_perturber
-        self.dec_layer_number = config.dec_layer_number
         self.dec_layer_dropout_prob = config.dec_layer_dropout_prob
-        self.dec_detach = config.dec_detach
 
         self.post_init()
 
@@ -1634,10 +1611,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         ref_points = [reference_points]
 
         for layer_id, layer in enumerate(self.layers):
-            # preprocess ref points
-            if self.training and self.decoder_query_perturber is not None and layer_id != 0:
-                reference_points = self.decoder_query_perturber(reference_points)
-
             if reference_points.shape[-1] == 4:
                 reference_points_input = (
                     reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[None, :]
@@ -1680,37 +1653,10 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
             if self.bbox_embed is not None:
                 new_reference_points_unsigmoid = self.bbox_embed[layer_id](output) + inverse_sigmoid(reference_points)
                 new_reference_points = new_reference_points_unsigmoid.sigmoid()
-
-                # select # ref points
-                if self.dec_layer_number is not None and layer_id != self.num_decoder_layers - 1:
-                    new_reference_points_number = new_reference_points.shape[0]
-                    select_number = self.dec_layer_number[layer_id + 1]
-                    if new_reference_points_number != select_number:
-                        class_unselected = self.class_embed[layer_id](output)  # nq, bs, 91
-                        topk_proposals = torch.topk(class_unselected.max(-1)[0], select_number, dim=0)[1]  # new_nq, bs
-                        new_reference_points = torch.gather(
-                            new_reference_points,
-                            0,
-                            topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
-                        )  # unsigmoid
-
-                if self.dec_detach:
-                    reference_points = new_reference_points.detach()
-                else:
-                    reference_points = new_reference_points
-                if self.use_detached_boxes_dec_out:
-                    ref_points.append(reference_points)
-                else:
-                    ref_points.append(new_reference_points)
+                reference_points = new_reference_points
+                ref_points.append(new_reference_points)
 
             intermediate.append(self.norm(output))
-            if self.dec_layer_number is not None and layer_id != self.num_decoder_layers - 1:
-                if new_reference_points_number != select_number:
-                    output = torch.gather(
-                        output,
-                        0,
-                        topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model),
-                    )  # unsigmoid
 
         if not return_dict:
             return (
@@ -1738,13 +1684,8 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             - `num_feature_levels` (int): The number of feature levels.
             - `num_queries` (int): The number of queries.
             - `d_model` (int): The hidden size of the model.
-            - `decoder_layer_noise` (bool): Whether to apply noise to decoder queries.
-            - `dln_xy_noise` (float): Noise scale for x and y coordinates in decoder queries.
-            - `dln_hw_noise` (float): Noise scale for width and height in decoder queries.
             - `two_stage_type` (str): The type of two-stage decoding to use (e.g., `"standard"`, `"no"`).
-            - `two_stage_keep_all_tokens` (bool): Whether to keep all tokens in two-stage decoding.
             - `embed_init_tgt` (bool): Whether to initialize target embeddings.
-            - `random_refpoints_xy` (bool): Whether to initialize reference points randomly.
             - `normalize_before` (bool): Whether to apply normalization before the encoder layers.
             - `num_encoder_layers` (int): The number of encoder layers.
             - `num_decoder_layers` (int): The number of decoder layers.
@@ -1784,33 +1725,19 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        if config.decoder_layer_noise:
-            self.decoder_query_perturber = DinoDetrRandomBoxPerturber(
-                x_noise_scale=config.dln_xy_noise,
-                y_noise_scale=config.dln_xy_noise,
-                w_noise_scale=config.dln_hw_noise,
-                h_noise_scale=config.dln_hw_noise,
-            )
-        else:
-            self.decoder_query_perturber = None
-
         self.num_feature_levels = config.num_feature_levels
-        self.two_stage_keep_all_tokens = config.two_stage_keep_all_tokens
         self.num_queries = config.num_queries
-        self.random_refpoints_xy = config.random_refpoints_xy
         encoder_layer = DinoDetrEncoderLayer(config)
-        encoder_norm = nn.LayerNorm(config.d_model) if config.normalize_before else None
+        encoder_norm = None
         self.encoder = DinoDetrEncoder(encoder_layer, encoder_norm, config)
         decoder_layer = DinoDetrDecoderLayer(config)
         decoder_norm = nn.LayerNorm(config.d_model)
         self.decoder = DinoDetrDecoder(
             decoder_layer=decoder_layer,
             norm=decoder_norm,
-            decoder_query_perturber=self.decoder_query_perturber,
             config=config,
         )
         self.d_model = config.d_model
-        self.num_patterns = config.num_patterns
         if config.num_feature_levels > 1:
             if config.num_encoder_layers > 0:
                 self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
@@ -1824,35 +1751,16 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             self.content_query_embeddings = None
         # for two stage
         self.two_stage_type = config.two_stage_type
-        self.two_stage_pat_embed = config.two_stage_pat_embed
-        self.two_stage_add_query_num = config.two_stage_add_query_num
-        self.two_stage_learn_wh = config.two_stage_learn_wh
         if config.two_stage_type == "standard":
             # anchor selection at the output of encoder
             self.enc_output = nn.Linear(config.d_model, config.d_model)
             self.enc_output_norm = nn.LayerNorm(config.d_model)
-
-            if config.two_stage_pat_embed > 0:
-                self.pat_embed_for_2stage = nn.Parameter(torch.Tensor(config.two_stage_pat_embed, config.d_model))
-                nn.init.normal_(self.pat_embed_for_2stage)
-
-            if config.two_stage_add_query_num > 0:
-                self.content_query_embeddings = nn.Embedding(self.two_stage_add_query_num, config.d_model)
-
-            if config.two_stage_learn_wh:
-                self.two_stage_wh_embedding = nn.Embedding(1, 2)
-            else:
-                self.two_stage_wh_embedding = None
+            self.two_stage_wh_embedding = None
 
         if config.two_stage_type == "no":
             self.init_ref_points(config.num_queries)  # init self.refpoint_embed
         self.enc_out_class_embed = None
         self.enc_out_bbox_embed = None
-        if config.rm_self_attn_layers is not None:
-            print(f"Removing the self-attn in {config.rm_self_attn_layers} decoder layers")
-            for lid, dec_layer in enumerate(self.decoder.layers):
-                if lid in config.rm_self_attn_layers:
-                    dec_layer.rm_self_attn_modules()
 
         self.post_init()
 
@@ -1866,9 +1774,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
         if self.num_feature_levels > 1 and self.level_embed is not None:
             nn.init.normal_(self.level_embed)
 
-        if self.two_stage_learn_wh:
-            nn.init.constant_(self.two_stage_wh_embedding.weight, math.log(0.05 / (1 - 0.05)))
-
     def get_valid_ratio(self, mask: torch.FloatTensor):
         _, height, width = mask.shape
         valid_H = torch.sum(mask[:, :, 0], 1)
@@ -1880,13 +1785,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
 
     def init_ref_points(self, use_num_queries: int):
         self.content_query_reference_points = nn.Embedding(use_num_queries, 4)
-
-        if self.random_refpoints_xy:
-            self.content_query_reference_points.weight.data[:, :2].uniform_(0, 1)
-            self.content_query_reference_points.weight.data[:, :2] = inverse_sigmoid(
-                self.content_query_reference_points.weight.data[:, :2]
-            )
-            self.content_query_reference_points.weight.data[:, :2].requires_grad = False
 
     def forward(
         self,
@@ -2016,25 +1914,11 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
         # Prepare queries
         mask_flatten = ~mask_flatten
         if self.two_stage_type == "standard":
-            if self.two_stage_learn_wh:
-                input_hw = self.two_stage_wh_embedding.weight[0]
-            else:
-                input_hw = None
+            input_hw = None
             output_memory, output_proposals = gen_encoder_output_proposals(
                 memory, mask_flatten, spatial_shapes, input_hw
             )
             output_memory = self.enc_output_norm(self.enc_output(output_memory))
-
-            if self.two_stage_pat_embed > 0:
-                batch_size, nhw, _ = output_memory.shape
-                output_memory = output_memory.repeat(1, self.two_stage_pat_embed, 1)
-                _pats = self.pat_embed_for_2stage.repeat_interleave(nhw, 0)
-                output_memory = output_memory + _pats
-                output_proposals = output_proposals.repeat(1, self.two_stage_pat_embed, 1)
-
-            if self.two_stage_add_query_num > 0:
-                output_memory = torch.cat((output_memory, queries), dim=1)
-                output_proposals = torch.cat((output_proposals, query_reference_points), dim=1)
 
             enc_outputs_class_unselected = self.enc_out_class_embed(output_memory)
             enc_outputs_coord_unselected = self.enc_out_bbox_embed(output_memory) + output_proposals
@@ -2087,12 +1971,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
                     content_queries,
                 )
 
-            if self.num_patterns > 0:
-                queries_embed = queries.repeat(1, self.num_patterns, 1)
-                query_reference_points = query_reference_points.repeat(1, self.num_patterns, 1)
-                queries_patterns = self.patterns.weight[None, :, :].repeat_interleave(self.num_queries, 1)
-                queries = queries_embed + queries_patterns
-
             init_box_proposal = content_query_reference_points.sigmoid()
 
         else:
@@ -2129,14 +2007,8 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
 
         # Postprocess
         if self.two_stage_type == "standard":
-            if self.two_stage_keep_all_tokens:
-                hidden_states_encoder = output_memory.unsqueeze(0)
-                reference_points_encoder = enc_outputs_coord_unselected.unsqueeze(0)
-                init_box_proposal = output_proposals
-
-            else:
-                hidden_states_encoder = queries_undetach.unsqueeze(0)
-                reference_points_encoder = query_reference_points_undetach.sigmoid().unsqueeze(0)
+            hidden_states_encoder = queries_undetach.unsqueeze(0)
+            reference_points_encoder = query_reference_points_undetach.sigmoid().unsqueeze(0)
         else:
             hidden_states_encoder = reference_points_encoder = None
 
@@ -2303,8 +2175,8 @@ def build_position_encoding(config):
             - `d_model` (int): The hidden size of the model.
             - `position_embedding_type` (str): The type of positional embedding to use. Supported values are `"SineHW"`
               for sine-based embeddings and `"Learned"` for learned embeddings.
-            - `pe_temperatureH` (int, *optional*): The temperature parameter for the height dimension in sine-based embeddings.
-            - `pe_temperatureW` (int, *optional*): The temperature parameter for the width dimension in sine-based embeddings.
+            - `pe_temperature_H` (int, *optional*): The temperature parameter for the height dimension in sine-based embeddings.
+            - `pe_temperature_W` (int, *optional*): The temperature parameter for the width dimension in sine-based embeddings.
 
     Returns:
         `nn.Module`: A positional encoding module.
@@ -2316,8 +2188,8 @@ def build_position_encoding(config):
     if config.position_embedding_type in ("SineHW"):
         position_embeddings = DinoDetrPositionEmbeddingSineHW(
             N_steps,
-            temperatureH=config.pe_temperatureH,
-            temperatureW=config.pe_temperatureW,
+            temperatureH=config.pe_temperature_H,
+            temperatureW=config.pe_temperature_W,
             normalize=True,
         )
     elif config.position_embedding_type in ("Learned"):
@@ -2407,7 +2279,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         super().__init__(config)
         # create deformable transformer
         self.transformer = DinoDetrEncoderDecoder(config=config)
-        self.label_enc = nn.Embedding(config.dn_labelbook_size + 1, config.d_model)
+        self.label_enc = nn.Embedding(config.dn_num_classes + 1, config.d_model)
 
         # Create backbone + positional encoding
         backbone = DinoDetrConvEncoder(config)
@@ -2476,15 +2348,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
 
         # Adjust embeddings based on two stage approach
         if config.two_stage_type != "no":
-            if config.two_stage_bbox_embed_share:
-                self.transformer.enc_out_bbox_embed = self.bbox_embed[0]
-            else:
-                self.transformer.enc_out_bbox_embed = copy.deepcopy(self.bbox_embed[0])
-
-            if config.two_stage_class_embed_share:
-                self.transformer.enc_out_class_embed = self.class_embed[0]
-            else:
-                self.transformer.enc_out_class_embed = copy.deepcopy(self.class_embed[0])
+            self.transformer.enc_out_bbox_embed = copy.deepcopy(self.bbox_embed[0])
+            self.transformer.enc_out_class_embed = copy.deepcopy(self.class_embed[0])
 
         if config.decoder_sa_type == "ca_label":
             self.label_embedding = nn.Embedding(config.num_classes, d_model)
@@ -2928,8 +2793,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 dice_loss_coefficient=self.config.dice_loss_coefficient,
                 num_decoder_layers=self.config.num_decoder_layers,
                 two_stage_type=self.config.two_stage_type,
-                no_interm_box_loss=self.config.no_interm_box_loss,
-                interm_loss_coef=self.config.interm_loss_coef,
             )
 
         # Remove?

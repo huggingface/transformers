@@ -48,12 +48,8 @@ class DinoDetrConfig(PretrainedConfig):
             Whether to use pretrained weights for the backbone.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        key_aware_type (`str`, *optional*): Can take values `"mean"` or `"proj_mean"` selects the way memory is added to queries
-            in forward_ca of the DinoDetrDecoderLayer.
         enc_layer_dropout_prob (`float`, *optional*): The dropout probability for all fully connected layers in the encoder.
         dec_layer_dropout_prob (`float`, *optional*): The dropout probability for all fully connected layers in the decoder.
-        rm_self_attn_layers (`int`, *optional*): The number of decoder layers from which to remove self attention.
-        dec_detach (`bool`, *optional*): Whether to detach the new reference points in the decoder.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
@@ -89,23 +85,11 @@ class DinoDetrConfig(PretrainedConfig):
             `two_stage_num_proposals` instead.
         two_stage_type (`str`, *optional*, defaults to `"standard"`): The type of two-stage mechanism to use.
         query_dim (`int`, *optional*, defaults to 4): The dimension of the object query embeddings.
-        use_detached_boxes_dec_out (`bool`, *optional*, defaults to `False`): Whether to use detached boxes in the decoder output.
-        dec_layer_number (`int`, *optional*): The number of layers in the decoder.
-        decoder_layer_noise (`bool`, *optional*, defaults to `False`): Whether to add noise to the decoder layers.
-        dln_xy_noise (`float`, *optional*, defaults to 0.2): The noise level of the DinoDetrRandomBoxPerturber along the x and y axes.
-        dln_hw_noise (`float`, *optional*, defaults to 0.2): The noise level of the DinoDetrRandomBoxPerturber along the w and h axes.
         num_encoder_layers (`int`, *optional*, defaults to 6): Number of encoder layers.
         num_decoder_layers (`int`, *optional*, defaults to 6): Number of decoder layers.
-        two_stage_keep_all_tokens (`bool`, *optional*, defaults to `False`): Whether to keep all tokens in the two-stage process.
-        random_refpoints_xy (`bool`, *optional*, defaults to `False`): Whether to initialize reference points randomly along the x and y axes.
-        normalize_before (`bool`, *optional*, defaults to `False`): Whether to apply layer normalization before other operations.
-        num_patterns (`int`, *optional*, defaults to 0): The number of patterns to use in the decoder.
         embed_init_tgt (`bool`, *optional*, defaults to `True`): Whether to initialize the target embeddings.
-        two_stage_pat_embed (`int`, *optional*, defaults to 0): The number of pattern embeddings in the two-stage process.
-        two_stage_add_query_num (`int`, *optional*, defaults to 0): The number of additional queries in the two-stage process.
-        two_stage_learn_wh (`bool`, *optional*, defaults to `False`): Whether to learn the width and height in the two-stage process.
         num_classes (`int`, *optional*, defaults to 91): The number of object classes the model can predict.
-        dn_labelbook_size (`int`, *optional*, defaults to 91): The size of the label book for denoising training.
+        dn_num_classes (`int`, *optional*, defaults to 91): The size of the label book for denoising training.
         dn_number (`int`, *optional*, defaults to 100): The number of denoising queries.
         dn_box_noise_scale (`float`, *optional*, defaults to 0.4): The scale of noise added to bounding boxes during denoising training.
         dn_label_noise_ratio (`float`, *optional*, defaults to 0.5): The ratio of noise added to labels during denoising training.
@@ -113,8 +97,6 @@ class DinoDetrConfig(PretrainedConfig):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         dec_pred_class_embed_share (`bool`, *optional*, defaults to `True`): Whether to share class embeddings across decoder layers.
         dec_pred_bbox_embed_share (`bool`, *optional*, defaults to `True`): Whether to share bounding box embeddings across decoder layers.
-        two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`): Whether to share bounding box embeddings in the two-stage process.
-        two_stage_class_embed_share (`bool`, *optional*, defaults to `False`): Whether to share class embeddings in the two-stage process.
         class_cost (`float`, *optional*, defaults to 2.0):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5.0):
@@ -130,8 +112,6 @@ class DinoDetrConfig(PretrainedConfig):
             Relative weight of the L1 bounding box loss in the object detection loss.
         giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
             Relative weight of the generalized IoU loss in the object detection loss.
-        interm_loss_coef (`float`, *optional*, defaults to 1.0): The weight of the intermediate loss.
-        no_interm_box_loss (`bool`, *optional*, defaults to `False`): Whether to disable intermediate bounding box loss.
         use_dn (`bool`, *optional*, defaults to `True`): Whether to use denoising training.
         use_masks (`bool`, *optional*, defaults to `True`): Whether to use masks in the model.
         focal_alpha (`float`, *optional*, defaults to 0.25):
@@ -171,17 +151,15 @@ class DinoDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
+        is_encoder_decoder=True,
         d_model=256,
         disable_custom_kernels=False,
         use_timm_backbone=True,
         num_channels=3,
         use_pretrained_backbone=True,
         activation_dropout=0.0,
-        key_aware_type=None,
         enc_layer_dropout_prob=None,
         dec_layer_dropout_prob=None,
-        rm_self_attn_layers=None,
-        dec_detach=None,
         init_std=0.02,
         backbone="resnet50",
         num_feature_levels=4,
@@ -200,31 +178,17 @@ class DinoDetrConfig(PretrainedConfig):
         num_queries=900,
         two_stage_type="standard",
         query_dim=4,
-        use_detached_boxes_dec_out=False,
-        dec_layer_number=None,
-        decoder_layer_noise=False,
-        dln_xy_noise=0.2,
-        dln_hw_noise=0.2,
         num_encoder_layers=6,
         num_decoder_layers=6,
-        two_stage_keep_all_tokens=False,
-        random_refpoints_xy=False,
-        normalize_before=False,
-        num_patterns=0,
         embed_init_tgt=True,
-        two_stage_pat_embed=0,
-        two_stage_add_query_num=0,
-        two_stage_learn_wh=False,
         num_classes=91,
-        dn_labelbook_size=91,
+        use_dn=True,
+        dn_num_classes=91,
         dn_number=100,
         dn_box_noise_scale=0.4,
         dn_label_noise_ratio=0.5,
         auxiliary_loss=True,
-        dec_pred_class_embed_share=True,
-        dec_pred_bbox_embed_share=True,
-        two_stage_bbox_embed_share=False,
-        two_stage_class_embed_share=False,
+        use_masks=True,
         class_cost=2.0,
         bbox_cost=5.0,
         giou_cost=2.0,
@@ -233,18 +197,15 @@ class DinoDetrConfig(PretrainedConfig):
         cls_loss_coefficient=1.0,
         bbox_loss_coefficient=5.0,
         giou_loss_coefficient=2.0,
-        interm_loss_coef=1.0,
-        no_interm_box_loss=False,
-        use_dn=True,
-        use_masks=True,
         focal_alpha=0.25,
+        dec_pred_class_embed_share=True,
+        dec_pred_bbox_embed_share=True,
         enc_layer_share=False,
         dec_layer_share=False,
+        pe_temperature_H=20,
+        pe_temperature_W=20,
         backbone_config=None,
         backbone_kwargs={"out_indices": [2, 3, 4]},
-        is_encoder_decoder=True,
-        pe_temperatureH=20,
-        pe_temperatureW=20,
         **kwargs,
     ):
         if backbone_config is None:
@@ -283,41 +244,24 @@ class DinoDetrConfig(PretrainedConfig):
         self.module_seq = module_seq
         self.d_ffn = d_ffn
         self.activation = activation
-        self.key_aware_type = key_aware_type
         self.decoder_sa_type = decoder_sa_type
         self.num_queries = num_queries
         self.enc_layer_dropout_prob = enc_layer_dropout_prob
         self.two_stage_type = two_stage_type
         self.query_dim = query_dim
-        self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
-        self.dec_layer_number = dec_layer_number
         self.dec_layer_dropout_prob = dec_layer_dropout_prob
-        self.decoder_layer_noise = decoder_layer_noise
-        self.dln_xy_noise = dln_xy_noise
-        self.dln_hw_noise = dln_hw_noise
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
-        self.two_stage_keep_all_tokens = two_stage_keep_all_tokens
-        self.random_refpoints_xy = random_refpoints_xy
-        self.normalize_before = normalize_before
-        self.num_patterns = num_patterns
         self.embed_init_tgt = embed_init_tgt
-        self.two_stage_pat_embed = two_stage_pat_embed
-        self.two_stage_add_query_num = two_stage_add_query_num
-        self.two_stage_learn_wh = two_stage_learn_wh
-        self.rm_self_attn_layers = rm_self_attn_layers
-        self.dec_detach = dec_detach
         self.init_std = init_std
         self.num_classes = num_classes
-        self.dn_labelbook_size = dn_labelbook_size
+        self.dn_num_classes = dn_num_classes
         self.dn_number = dn_number
         self.dn_box_noise_scale = dn_box_noise_scale
         self.dn_label_noise_ratio = dn_label_noise_ratio
         self.auxiliary_loss = auxiliary_loss
         self.dec_pred_class_embed_share = dec_pred_class_embed_share
         self.dec_pred_bbox_embed_share = dec_pred_bbox_embed_share
-        self.two_stage_bbox_embed_share = two_stage_bbox_embed_share
-        self.two_stage_class_embed_share = two_stage_class_embed_share
         self.use_dn = use_dn
         self.use_masks = use_masks
         self.class_cost = class_cost
@@ -328,13 +272,11 @@ class DinoDetrConfig(PretrainedConfig):
         self.cls_loss_coefficient = cls_loss_coefficient
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
-        self.interm_loss_coef = interm_loss_coef
-        self.no_interm_box_loss = no_interm_box_loss
         self.focal_alpha = focal_alpha
         self.enc_layer_share = enc_layer_share
         self.dec_layer_share = dec_layer_share
-        self.pe_temperatureH = pe_temperatureH
-        self.pe_temperatureW = pe_temperatureW
+        self.pe_temperature_H = pe_temperature_H
+        self.pe_temperature_W = pe_temperature_W
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
