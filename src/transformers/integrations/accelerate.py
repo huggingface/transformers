@@ -12,12 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Since, https://github.com/huggingface/transformers/pull/36963, loading is always performed with models on meta
-device. But since the `init_empty_weights` and `find_tied_parameters` functions are from accelerate, and accelerate is
-somewhat still a soft dependency, we copy the functions here to be used natively in Transformers.
-
-The `init_empty_weights` and `init_on_device` functions were copied from `accelerate.big_modeling.py`, and the
-`find_tied_parameters` was copied from `accelerate.utils.modeling.py`
+Some of the functions here are derived from the `accelerate` library, with some tweaks for better performances
+and simplicity/ease of use.
 """
 
 import collections
@@ -26,14 +22,15 @@ import os
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional, Union
 
-from ..utils import is_accelerate_available, is_torch_available, logging
-from ..utils.quantization_config import QuantizationMethod
-from .deepspeed import is_deepspeed_zero3_enabled
-from .fsdp import is_fsdp_enabled
-from .utils import (
+from ..utils import (
+    is_accelerate_available,
+    is_torch_available,
     is_torch_xpu_available,
     logging,
 )
+from ..utils.quantization_config import QuantizationMethod
+from .deepspeed import is_deepspeed_zero3_enabled
+from .fsdp import is_fsdp_enabled
 
 
 if is_torch_available():
@@ -217,7 +214,7 @@ def find_tied_parameters(model: "nn.Module", **kwargs):
     return [sorted([weight] + list(set(tied))) for weight, tied in tied_param_groups.items()]
 
 
-def check_and_set_device_map(device_map):
+def check_and_set_device_map(device_map: "torch.device" | int | str | dict | None):
     from ..modeling_utils import get_torch_context_manager_or_global_device
 
     # Potentially detect context manager or global device, and use it (only if no device_map was provided)
@@ -423,7 +420,11 @@ def get_balanced_memory(
 
     # Compute mean of final modules. In the first dict of module sizes, leaves are the parameters
     leaves = get_module_leaves(module_sizes)
-    module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
+
+    # THIS IS THE IMPORTANT PART
+    for key in leaves:
+        module_sizes.pop(key)
+
     # Once removed, leaves are the final modules.
     leaves = get_module_leaves(module_sizes)
     mean_leaves = int(sum([module_sizes[n] for n in leaves]) / max(len(leaves), 1))
