@@ -20,32 +20,44 @@ from transformers import VibeVoiceAcousticTokenizerConfig, VibeVoiceAcousticToke
 
 def convert_checkpoint(vibevoice_model_id, config_path, push_to_hub):
 
-    # load config
-    with open(config_path, "r") as f:
-        config = json.load(f)
+    # 1) load original model
+    full_model = AutoModel.from_pretrained(vibevoice_model_id)
 
-    # extract acoustic tokenizer configuration
-    acoustic_tokenizer_config = config["acoustic_tokenizer_config"]
+    # 2) extract acoustic tokenizer configuration
+    if config_path is None:
+        acoustic_tokenizer_config = full_model.config.acoustic_tokenizer_config
+        acoustic_tokenizer_config = acoustic_tokenizer_config.to_dict()
+    else:
+        # load config
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        # extract acoustic tokenizer configuration
+        acoustic_tokenizer_config = config["acoustic_tokenizer_config"]
+
     # -- cleanup
     acoustic_tokenizer_config["encoder_depths"] = list(map(int, acoustic_tokenizer_config["encoder_depths"].split("-")))
 
-    # create config
-    config = VibeVoiceAcousticTokenizerConfig(**acoustic_tokenizer_config)
+    # 3) create config
+    model_config = VibeVoiceAcousticTokenizerConfig(**acoustic_tokenizer_config)
 
-    # create model
-    model = VibeVoiceAcousticTokenizerModel(config)
+    # 4) create model
+    model = VibeVoiceAcousticTokenizerModel(model_config)
 
-    # TODO load state dict from original VibeVoice model
-    # -- load original model
-    original_model = AutoModel.from_pretrained(vibevoice_model_id)    
+    # 5) load state dict of acoustic tokenizer from original VibeVoice model
+    original_state_dict = full_model.acoustic_tokenizer.state_dict()
+    missing, unexpected = model.load_state_dict(original_state_dict, strict=False)
+    if len(unexpected) != 0:
+        raise ValueError(f"Unexpected keys: {unexpected}")
+    if len(missing) != 0:
+        raise ValueError(f"missing keys found: {missing}")
 
     # TODO create audio feature extractor here??
 
     # push to hub
-    model.push_to_hub(push_to_hub)
+    if push_to_hub is not None:
+        model.push_to_hub(push_to_hub)
 
 """
-wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P /raid/eric/vibevoice_original
 wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P /raid/eric/vibevoice_original
 
 python src/transformers/models/vibevoice_acoustic_tokenizer/convert_vibevoice_acoustic_tokenizer_to_hf.py \
@@ -57,7 +69,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--vibevoice_model_id", required=True, default=None, type=str, help="ID of the VibeVoice model to extract the acoustic tokenizer from.")
     parser.add_argument(
-        "--config_path", required=True, default=None, type=str, help="Path to hf config.yaml of model to convert"
+        "--config_path", default=None, type=str, help="Path to hf config.yaml of model to convert"
     )
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
