@@ -460,13 +460,13 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             elif model_class.__name__ == "DetrForSegmentation":
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.detr.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(len(model.detr.model.backbone.intermediate_channel_sizes), 3)
             else:
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
 
@@ -495,13 +495,13 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             elif model_class.__name__ == "DetrForSegmentation":
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.detr.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(len(model.detr.model.backbone.intermediate_channel_sizes), 3)
             else:
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
 
