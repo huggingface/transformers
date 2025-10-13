@@ -56,6 +56,8 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, devic
 
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
+        if device_type == "mps":
+            device_type = "cpu"  # fallback
         current_device = getattr(torch, device_type)
         if not torch.distributed.is_initialized():
             try:
@@ -106,9 +108,6 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, devic
             device_mesh = device_mesh["tp"]
         tp_size = device_mesh.size()
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
-
-    if tp_size is None:
-        tp_size = torch.distributed.get_world_size()
 
     return tp_device, device_map, device_mesh, tp_size
 
