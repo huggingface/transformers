@@ -24,11 +24,16 @@ import collections
 import inspect
 import os
 from contextlib import contextmanager
+from typing import TYPE_CHECKING, Optional, Union
 
 from ..utils import is_accelerate_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationMethod
 from .deepspeed import is_deepspeed_zero3_enabled
 from .fsdp import is_fsdp_enabled
+from .utils import (
+    is_torch_xpu_available,
+    logging,
+)
 
 
 if is_torch_available():
@@ -36,7 +41,14 @@ if is_torch_available():
     import torch.nn as nn
 
 if is_accelerate_available():
-    from accelerate import dispatch_model
+    from accelerate import dispatch_model, infer_auto_device_map
+    from accelerate.utils import check_tied_parameters_on_same_device, get_max_memory
+
+if TYPE_CHECKING:
+    import re
+
+    from ..modeling_utils import PreTrainedModel
+    from ..quantizers import HfQuantizer
 
 
 logger = logging.get_logger(__name__)
@@ -246,6 +258,266 @@ def check_and_set_device_map(device_map):
                 "Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` "
                 "requires `accelerate`. You can install it with `pip install accelerate`"
             )
+    return device_map
+
+
+def compute_module_sizes(
+    model: nn.Module,
+    dtype: Optional[Union[str, torch.device]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
+    buffers_only: bool = False,
+):
+    """
+    Compute the size of each submodule of a given model.
+    """
+    if dtype is not None:
+        dtype = _get_proper_dtype(dtype)
+        dtype_size = dtype_byte_size(dtype)
+    if special_dtypes is not None:
+        special_dtypes = {key: _get_proper_dtype(dtyp) for key, dtyp in special_dtypes.items()}
+        special_dtypes_size = {key: dtype_byte_size(dtyp) for key, dtyp in special_dtypes.items()}
+    module_sizes = defaultdict(int)
+
+    module_list = []
+
+    if not buffers_only:
+        module_list = named_module_tensors(model, recurse=True)
+    else:
+        module_list = model.named_buffers(recurse=True)
+
+    for name, tensor in module_list:
+        if special_dtypes is not None and name in special_dtypes:
+            size = tensor.numel() * special_dtypes_size[name]
+        elif dtype is None:
+            size = tensor.numel() * dtype_byte_size(tensor.dtype)
+        elif str(tensor.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
+            # According to the code in set_module_tensor_to_device, these types won't be converted
+            # so use their original size here
+            size = tensor.numel() * dtype_byte_size(tensor.dtype)
+        else:
+            size = tensor.numel() * min(dtype_size, dtype_byte_size(tensor.dtype))
+        name_parts = name.split(".")
+        for idx in range(len(name_parts) + 1):
+            module_sizes[".".join(name_parts[:idx])] += size
+
+    return module_sizes
+
+
+def get_module_leaves(module_sizes):
+    module_children = {}
+    for module in module_sizes:
+        if module == "" or "." not in module:
+            continue
+        parent = module.rsplit(".", 1)[0]
+        module_children[parent] = module_children.get(parent, 0) + 1
+    leaves = [module for module in module_sizes if module_children.get(module, 0) == 0 and module != ""]
+    return leaves
+
+
+def get_balanced_memory(
+    model: nn.Module,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
+    dtype: Optional[Union[str, torch.dtype]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
+    low_zero: bool = False,
+):
+    """
+    Compute a `max_memory` dictionary for [`infer_auto_device_map`] that will balance the use of each available GPU.
+
+    <Tip>
+
+    All computation is done analyzing sizes and dtypes of the model parameters. As a result, the model can be on the
+    meta device (as it would if initialized within the `init_empty_weights` context manager).
+
+    </Tip>
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to analyze.
+        max_memory (`Dict`, *optional*):
+            A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
+            Example: `max_memory={0: "1GB"}`.
+        no_split_module_classes (`List[str]`, *optional*):
+            A list of layer class names that should never be split across device (for instance any layer that has a
+            residual connection).
+        dtype (`str` or `torch.dtype`, *optional*):
+            If provided, the weights will be converted to that type when loaded.
+        special_dtypes (`Dict[str, Union[str, torch.device]]`, *optional*):
+            If provided, special dtypes to consider for some specific weights (will override dtype used as default for
+            all weights).
+        low_zero (`bool`, *optional*):
+            Minimizes the number of weights on GPU 0, which is convenient when it's used for other operations (like the
+            Transformers generate function).
+    """
+    # Get default / clean up max_memory
+    user_not_set_max_memory = max_memory is None
+    max_memory = get_max_memory(max_memory)
+
+    if is_npu_available():
+        expected_device_type = "npu"
+    elif is_mlu_available():
+        expected_device_type = "mlu"
+    elif is_sdaa_available():
+        expected_device_type = "sdaa"
+    elif is_musa_available():
+        expected_device_type = "musa"
+    elif is_xpu_available():
+        expected_device_type = "xpu"
+    elif is_hpu_available():
+        expected_device_type = "hpu"
+    elif is_mps_available():
+        expected_device_type = "mps"
+    else:
+        expected_device_type = "cuda"
+    num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
+
+    if num_devices == 0:
+        return max_memory
+
+    if num_devices == 1:
+        # We cannot do low_zero on just one GPU, but we will still reserve some memory for the buffer
+        low_zero = False
+        # If user just asked us to handle memory usage, we should avoid OOM
+        if user_not_set_max_memory:
+            for key in max_memory.keys():
+                if isinstance(key, int):
+                    max_memory[key] *= 0.9  # 90% is a good compromise
+                    logger.info(
+                        f"We will use 90% of the memory on device {key} for storing the model, and 10% for the buffer to avoid OOM. "
+                        "You can set `max_memory` in to a higher value to use more memory (at your own risk)."
+                    )
+                    break  # only one device
+
+    module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
+    per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
+
+    # We can't just set the memory to model_size // num_devices as it will end being too small: each GPU will get
+    # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
+    # add which is the biggest of:
+    # - the size of no split block (if applicable)
+    # - the mean of the layer sizes
+    if no_split_module_classes is None:
+        no_split_module_classes = []
+    elif not isinstance(no_split_module_classes, (list, tuple)):
+        no_split_module_classes = [no_split_module_classes]
+
+    # Identify the size of the no_split_block modules
+    if len(no_split_module_classes) > 0:
+        no_split_children = {}
+        for name, size in module_sizes.items():
+            if name == "":
+                continue
+            submodule = model
+            for submodule_name in name.split("."):
+                submodule = getattr(submodule, submodule_name)
+            class_name = submodule.__class__.__name__
+            if class_name in no_split_module_classes and class_name not in no_split_children:
+                no_split_children[class_name] = size
+
+            if set(no_split_children.keys()) == set(no_split_module_classes):
+                break
+        buffer = max(no_split_children.values()) if len(no_split_children) > 0 else 0
+    else:
+        buffer = 0
+
+    # Compute mean of final modules. In the first dict of module sizes, leaves are the parameters
+    leaves = get_module_leaves(module_sizes)
+    module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
+    # Once removed, leaves are the final modules.
+    leaves = get_module_leaves(module_sizes)
+    mean_leaves = int(sum([module_sizes[n] for n in leaves]) / max(len(leaves), 1))
+    buffer = int(1.25 * max(buffer, mean_leaves))
+    per_gpu += buffer
+
+    # Sorted list of GPUs id (we may have some gpu ids not included in the our max_memory list - let's ignore them)
+    gpus_idx_list = sorted(
+        device_id for device_id, device_mem in max_memory.items() if isinstance(device_id, int) and device_mem > 0
+    )
+    # The last device is left with max_memory just in case the buffer is not enough.
+    for idx in gpus_idx_list[:-1]:
+        max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
+
+    if low_zero:
+        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
+        max_memory[0] = min(min_zero, max_memory[0])
+
+    return max_memory
+
+
+def _get_device_map(
+    model: "PreTrainedModel",
+    device_map: dict | str | None,
+    max_memory: dict | None,
+    hf_quantizer: HfQuantizer | None,
+    dtype: torch.dtype | None,
+    keep_in_fp32_regex: re.Pattern | None,
+) -> dict:
+    """Compute the final `device_map` to use if we passed a value in ['auto', 'balanced', 'balanced_low_0', 'sequential'].
+    Otherwise, we check for any device inconsistencies in the device_map.
+    """
+    if isinstance(device_map, str):
+        special_dtypes = {}
+        if hf_quantizer is not None:
+            special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, dtype))
+        if keep_in_fp32_regex is not None:
+            special_dtypes.update(
+                {name: torch.float32 for name, _ in model.named_parameters() if keep_in_fp32_regex.search(name)}
+            )
+
+        target_dtype = dtype
+
+        if hf_quantizer is not None:
+            target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
+
+        no_split_modules = model._get_no_split_modules(device_map)
+        device_map_kwargs = {"no_split_module_classes": no_split_modules}
+
+        if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
+            device_map_kwargs["special_dtypes"] = special_dtypes
+        elif len(special_dtypes) > 0:
+            logger.warning(
+                "This model has some weights that should be kept in higher precision, you need to upgrade "
+                "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
+            )
+
+        if device_map != "sequential":
+            inferred_max_memory = get_balanced_memory(
+                model,
+                dtype=target_dtype,
+                low_zero=(device_map == "balanced_low_0"),
+                max_memory=max_memory,
+                **device_map_kwargs,
+            )
+        else:
+            inferred_max_memory = get_max_memory(max_memory)
+        if hf_quantizer is not None:
+            inferred_max_memory = hf_quantizer.adjust_max_memory(inferred_max_memory)
+
+        # `inferred_max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU,
+        # which we can use to allocate parameters.
+        for device_name in inferred_max_memory:
+            if isinstance(device_name, int):  # it's a GPU device
+                if is_torch_xpu_available():
+                    unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
+                else:
+                    unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
+                inferred_max_memory[device_name] += unused_memory
+            # respect the `max_memory` passed by the user
+            if max_memory is not None and device_name in max_memory:
+                inferred_max_memory[device_name] = min(inferred_max_memory[device_name], max_memory[device_name])
+        device_map_kwargs["max_memory"] = inferred_max_memory
+
+        device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
+
+        if hf_quantizer is not None:
+            hf_quantizer.validate_environment(device_map=device_map)
+
+    elif device_map is not None:
+        tied_params = find_tied_parameters(model)
+        # check if we don't have tied param in different devices
+        check_tied_parameters_on_same_device(tied_params, device_map)
+
     return device_map
 
 

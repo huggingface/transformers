@@ -50,6 +50,7 @@ from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
+    _get_device_map,
     accelerate_disk_offload,
     accelerate_dispatch,
     check_and_set_device_map,
@@ -109,7 +110,6 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_xla_available,
-    is_torch_xpu_available,
     logging,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
@@ -125,13 +125,9 @@ from .utils.quantization_config import QuantizationMethod
 
 
 if is_accelerate_available():
-    from accelerate import infer_auto_device_map
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
-        check_tied_parameters_on_same_device,
         extract_model_from_parallel,
-        get_balanced_memory,
-        get_max_memory,
         offload_weight,
         save_offload_index,
     )
@@ -1209,82 +1205,6 @@ def _get_dtype(
                 sub_config.dtype = default_dtype
 
     return config, dtype, dtype_orig
-
-
-def _get_device_map(
-    model: "PreTrainedModel",
-    device_map: Optional[Union[dict, str]],
-    max_memory: Optional[dict],
-    hf_quantizer: Optional[HfQuantizer],
-    dtype: Optional[torch.dtype],
-    keep_in_fp32_regex: Optional[re.Pattern],
-) -> dict:
-    """Compute the final `device_map` to use if we passed a value in ['auto', 'balanced', 'balanced_low_0', 'sequential'].
-    Otherwise, we check for any device inconsistencies in the device_map.
-    """
-    if isinstance(device_map, str):
-        special_dtypes = {}
-        if hf_quantizer is not None:
-            special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, dtype))
-        if keep_in_fp32_regex is not None:
-            special_dtypes.update(
-                {name: torch.float32 for name, _ in model.named_parameters() if keep_in_fp32_regex.search(name)}
-            )
-
-        target_dtype = dtype
-
-        if hf_quantizer is not None:
-            target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
-
-        no_split_modules = model._get_no_split_modules(device_map)
-        device_map_kwargs = {"no_split_module_classes": no_split_modules}
-
-        if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
-            device_map_kwargs["special_dtypes"] = special_dtypes
-        elif len(special_dtypes) > 0:
-            logger.warning(
-                "This model has some weights that should be kept in higher precision, you need to upgrade "
-                "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
-            )
-
-        if device_map != "sequential":
-            inferred_max_memory = get_balanced_memory(
-                model,
-                dtype=target_dtype,
-                low_zero=(device_map == "balanced_low_0"),
-                max_memory=max_memory,
-                **device_map_kwargs,
-            )
-        else:
-            inferred_max_memory = get_max_memory(max_memory)
-        if hf_quantizer is not None:
-            inferred_max_memory = hf_quantizer.adjust_max_memory(inferred_max_memory)
-
-        # `inferred_max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU,
-        # which we can use to allocate parameters.
-        for device_name in inferred_max_memory:
-            if isinstance(device_name, int):  # it's a GPU device
-                if is_torch_xpu_available():
-                    unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
-                else:
-                    unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
-                inferred_max_memory[device_name] += unused_memory
-            # respect the `max_memory` passed by the user
-            if max_memory is not None and device_name in max_memory:
-                inferred_max_memory[device_name] = min(inferred_max_memory[device_name], max_memory[device_name])
-        device_map_kwargs["max_memory"] = inferred_max_memory
-
-        device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
-
-        if hf_quantizer is not None:
-            hf_quantizer.validate_environment(device_map=device_map)
-
-    elif device_map is not None:
-        tied_params = find_tied_parameters(model)
-        # check if we don't have tied param in different devices
-        check_tied_parameters_on_same_device(tied_params, device_map)
-
-    return device_map
 
 
 def _find_missing_and_unexpected_keys(
