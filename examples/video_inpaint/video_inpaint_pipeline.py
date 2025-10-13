@@ -33,6 +33,7 @@ from typing import Any
 
 import numpy as np
 
+
 try:
     import cv2
 except Exception:
