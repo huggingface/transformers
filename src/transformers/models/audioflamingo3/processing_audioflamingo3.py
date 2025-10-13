@@ -38,6 +38,7 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
+            "padding_side": "left",
         },
         "audio_kwargs": {
             "sound_token": "<sound>",  # Placeholder token used in text for audio expansion.
@@ -46,7 +47,6 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {
             "return_tensors": "pt",
-            "padding_side": "left",
         },
     }
 
@@ -115,8 +115,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         text_kwargs = call_kwargs["text_kwargs"]
         audio_kwargs = call_kwargs["audio_kwargs"]
-        common_kwargs = call_kwargs["common_kwargs"]
-        return_tensors = common_kwargs.pop("return_tensors", None)
+        return_tensors = text_kwargs.pop("return_tensors", None)
 
         # Handle text
         if isinstance(text, str):
