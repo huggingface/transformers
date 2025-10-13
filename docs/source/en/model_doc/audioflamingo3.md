@@ -17,7 +17,6 @@ Highlights:
 - Unified audio encoder across speech, sound, and music.
 - Long-audio support via windowing and post-pool alignment (up to 10 minutes).
 - Deterministic fusion that preserves sequence length by replacing `<sound>` tokens with audio embeddings.
-- Production-oriented processing flow with batch safety and strict shape checking.
 
 ### Paper
 
@@ -36,24 +35,8 @@ processor = AutoProcessor.from_pretrained(MODEL_ID)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto").eval()
 
 conversations = [
-    [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe the input speech."},
-                {"type": "audio", "path": "audio_1.wav"},
-            ],
-        }
-    ],
-    [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Describe the song."},
-                {"type": "audio", "path": "audio_2.wav"},
-            ],
-        }
-    ]
+    [{"role": "user", "content": [{"type": "text", "text": "Transcribe the input speech."}, {"type": "audio", "path": "audio_1.wav"}]}],
+    [{"role": "user", "content": [{"type": "text", "text": "Describe the song."}, {"type": "audio", "path": "audio_2.wav"}]}],
 ]
 
 batch = processor.apply_chat_template(
@@ -90,10 +73,10 @@ print(texts)
 
 1. Each raw waveform is split into fixed-length windows based on the feature extractor’s `chunk_length` (seconds) and `sampling_rate` (Hz).
 2. For each window, the processor computes the number of post-pool frames `K` that the encoder will output (matching the conv/pool schedule).
-3. The processor expands the audio placeholder token `<sound>` exactly `K` times per window.
+3. The processor expands the audio placeholder token by the total number of post-pool frames across all windows.
 
-   * If the prompt contains no `<sound>`, all expanded tokens are **prepended** to the text.
-   * If the prompt contains `<sound>`, the number of placeholders must equal the number of windows.
+   * If the prompt contains no `<sound>`, all expanded tokens are inserted at the start of the user message in the chat template (or prepended to plain text if no template is used).
+   * If the prompt contains `<sound>`, exactly one placeholder is supported and it is expanded in place. Multiple placeholders are not supported.
 4. The model later replaces those token positions with the corresponding projected audio embeddings.
 
 This design guarantees a 1:1 match between placeholder positions in the text and encoder frame outputs, enabling safe batching without ragged audio–text concatenation.
@@ -102,41 +85,27 @@ This design guarantees a 1:1 match between placeholder positions in the text and
 
 ### Single-turn prompts (recommended)
 
-You can omit `<sound>` entirely and let the processor prepend the expanded tokens:
+You can omit `<sound>` entirely and let the processor insert the expanded tokens:
 
 ```python
 prompt = "Transcribe the input speech."
-inputs = processor(prompt, audio_array, padding_side="left", tensor_type="pt")
+inputs = processor(text=prompt, audio=audio_array)
 ```
 
 ### Explicit placeholder control (advanced)
 
-If you include `<sound>` in your prompt, the number of placeholders must equal the number of windows derived from `chunk_length` and `sampling_rate`:
+If you include `<sound>` in your prompt, provide exactly one placeholder; it will be expanded to match the total number of post‑pool frames across all windows:
 
 ```python
-# For a short clip that fits in a single window:
+# For a clip that may span multiple windows:
 prompt = "<sound>\nDescribe the audio in detail."
-inputs = processor(prompt, audio_array, padding_side="left", tensor_type="pt")
+inputs = processor(text=prompt, audio=audio_array)
 ```
 
 Notes:
 
-* The processor computes window counts automatically. If your audio spans multiple windows, include the same number of `<sound>` placeholders, in order.
-* When placeholders are present, each is expanded to the correct number of post-pool frame tokens internally.
-
-### Batch inference
-
-```python
-texts = [
-    "Transcribe the input speech.",
-    "Describe the ambience and any notable sound events."
-]
-audios = [audio1, audio2]
-inputs = processor(texts, audios, padding_side="left", tensor_type="pt")
-generate_ids = model.generate(**inputs, max_new_tokens=512)
-answers = processor.batch_decode(generate_ids, skip_special_tokens=True)
-answers = [a.split("\nassistant\n")[-1] for a in answers]
-```
+* The processor computes window counts automatically and expands a single `<sound>` to the correct total number of frame tokens.
+* Multiple `<sound>` placeholders are not supported and will raise an error.
 
 ## Long audio and windowing
 
@@ -147,8 +116,8 @@ answers = [a.split("\nassistant\n")[-1] for a in answers]
 
   * `L_mel` is the padded mel length.
   * A conv stack reduces time as `L1 = (L_mel - 1) // 2 + 1`.
-  * Post-pool frames are `K = (L1 - 2) // 2 + 1`.
-  * The processor expands `<sound>` exactly `K` times for that window.
+  * Post-pool frames per window: `K = (L1 - 2) // 2 + 1`.
+  * A single `<sound>` placeholder is expanded to the sum of `K` across all windows.
 
 ## Padding, attention, and caching
 
@@ -164,15 +133,14 @@ answers = [a.split("\nassistant\n")[-1] for a in answers]
 
 * Error: “Audio tokens and features mismatch”
   Cause: The number of `<sound>` tokens in `input_ids` does not match the total number of post-pool frames.
-  Fix: Let the processor handle expansion. If you include `<sound>` explicitly, ensure the number of placeholders equals the number of windows for that sample.
+  Fix: Let the processor handle expansion. If you include `<sound>` explicitly, use exactly one placeholder.
 
-* Error: “Sample X: found N placeholders but audio was split into M window(s).”
-  Cause: Mismatch between manual placeholders and automatic windowing.
-  Fix: Adjust the number of placeholders or omit them entirely.
+* Error: “Sample X: found N '<sound>' placeholders. Expected exactly 1 or 0 placeholders.”
+  Cause: Multiple placeholders are not supported.
+  Fix: Remove extra placeholders or omit them entirely and let the processor insert them.
 
 * Empty or truncated outputs when batching
-  Use left padding for batched generation and remove the prompt prefix by splitting on `"\nassistant\n"` as shown in the quickstart.
-
+  Use left padding for batched generation and decode only the new tokens after the prompt length, as shown in the quickstart.
 
 ## AudioFlamingo3Config
 
