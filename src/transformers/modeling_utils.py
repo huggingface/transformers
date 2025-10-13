@@ -5543,28 +5543,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         be initialized correctly (i.e. weight initialization distribution).
         Also take care of setting the `_is_hf_initialized` flag for keys that are not missing.
         """
-        for key in self.state_dict():
-            # If it's part of the keys that will be loaded, mark it as already initialized
-            if key not in missing_keys:
-                param_or_buffer = self.get_parameter_or_buffer(key)
-                param_or_buffer._is_hf_initialized = True
 
         def set_is_initialized_for_modules(module):
             # A module is already initialized if and only if all its children are also already initialized, and all
-            # its immediate `nn.Parameter` and persistent buffers are also already initialized
+            # its immediate `nn.Parameter` and persistent buffers are also already initialized (i.e. not missing)
             if (
+                # All immediate children are initialized
                 all(getattr(child, "_is_hf_initialized", False) for child in module.children())
-                and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+                # All immediate parameters are initialized
+                and all(param not in missing_keys for param, _ in module.named_parameters(recurse=False))
+                # All immediate persistent buffers are initialized
                 and all(
-                    getattr(buffer, "_is_hf_initialized", False)
-                    for buffer in module.buffers(recurse=False)
+                    buffer not in missing_keys
+                    for buffer, _ in module.named_buffers(recurse=False)
                     if buffer not in module._non_persistent_buffers_set
                 )
             ):
                 module._is_hf_initialized = True
 
-        # Set the flag on the modules as well. We do it recursively (depth-first), as it's more efficient (we do not
-        # need to check the entire state dict of each module, only the immediate children, so we only iterate once over
+        # Set the flag on the modules. We do it recursively (depth-first), as it's more efficient (we do not need to
+        # check the entire state dict of each module, only the immediate children, so we only iterate once over
         # each param)
         self.apply(set_is_initialized_for_modules)
 
