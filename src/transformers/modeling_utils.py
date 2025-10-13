@@ -5576,12 +5576,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             import deepspeed
 
             not_initialized_parameters = list(
-                {
-                    p
-                    for module in self.modules()
-                    if not getattr(module, "_is_hf_initialized", False)
-                    for p in module.parameters(recurse=False)
-                }
+                {v for v in self.state_dict().values() if not getattr(v, "_is_hf_initialized", False)}
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
