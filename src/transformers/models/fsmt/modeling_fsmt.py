@@ -616,10 +616,6 @@ class FSMTDecoder(nn.Module):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        # initialize `past_key_values`
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-
         x += positions
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
@@ -911,6 +907,9 @@ class FSMTModel(PretrainedFSMTModel):
 
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             raise ValueError("Make sure that `decoder_input_ids` or `decoder_inputs_embeds` are passed.")
+
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
