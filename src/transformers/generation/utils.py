@@ -546,9 +546,13 @@ class GenerationMixin(ContinuousMixin):
         model_inputs["cache_position"] = cache_position
 
         # 2. Generic cache-dependent input preparation
-        use_cache = kwargs.get("use_cache", False) or getattr(self.config, "use_cache", False)
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
+        # We check `use_cache` below because some stateful models (like `recurrent_gemma`) expect input slicing if
+        # their caching mechanism is used. To define `use_cache`, the user-defined argument takes precedence.
+        use_cache = kwargs.get("use_cache")
+        if use_cache is None:
+            use_cache = getattr(self.config, "use_cache", False)
         if past_key_values is None or use_cache:
             # TODO (joao): handle the case where cache length == input_ids length. The function below results in an
             # exception because we get empty input_ids after slicing. In essence, we need to roll back the cache 1
@@ -1807,7 +1811,7 @@ class GenerationMixin(ContinuousMixin):
             cache_position = torch.ones(seq_length, dtype=torch.int64, device=device).cumsum(0) - 1
 
         past_length = 0
-        if model_kwargs.get("past_key_values", None) is not None:
+        if model_kwargs.get("past_key_values") is not None:
             cache = model_kwargs["past_key_values"]
             past_length = 0
             # Support for BC tuple cache format
@@ -3335,7 +3339,7 @@ class GenerationMixin(ContinuousMixin):
 
             # pluck the cache from the beam indices that will be used in the next iteration
             # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
-            if model_kwargs.get("past_key_values", None) is not None:
+            if model_kwargs.get("past_key_values") is not None:
                 beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
                 if hasattr(self, "_reorder_cache"):
                     model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
