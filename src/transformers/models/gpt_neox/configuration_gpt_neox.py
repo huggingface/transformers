@@ -167,9 +167,13 @@ class GPTNeoXConfig(PreTrainedConfig):
         use_parallel_residual=True,
         rope_scaling=None,
         attention_bias=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size

@@ -108,8 +108,12 @@ class LongT5Config(PreTrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv

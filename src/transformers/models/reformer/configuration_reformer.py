@@ -191,8 +191,10 @@ class ReformerConfig(PreTrainedConfig):
         tie_word_embeddings=False,
         use_cache=True,
         classifier_dropout=None,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.add_cross_attention = add_cross_attention
         self.hash_seed = hash_seed
         self.vocab_size = vocab_size
         self.attention_head_size = attention_head_size

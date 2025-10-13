@@ -145,6 +145,8 @@ class T5GemmaModuleConfig(PreTrainedConfig):
         layer_types=None,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
         super().__init__(
@@ -154,6 +156,8 @@ class T5GemmaModuleConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

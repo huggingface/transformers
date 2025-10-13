@@ -176,10 +176,14 @@ class TapasConfig(PreTrainedConfig):
         disable_per_token_loss=False,
         aggregation_labels=None,
         no_aggregation_label_index=None,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.pad_token_id = pad_token_id
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
 
         # BERT hyperparameters (with updated max_position_embeddings and type_vocab_sizes)
         self.vocab_size = vocab_size

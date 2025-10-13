@@ -102,6 +102,8 @@ class UMT5Config(PreTrainedConfig):
         eos_token_id=1,
         decoder_start_token_id=0,
         classifier_dropout=0.0,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size

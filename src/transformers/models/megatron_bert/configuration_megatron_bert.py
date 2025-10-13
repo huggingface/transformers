@@ -99,11 +99,15 @@ class MegatronBertConfig(PreTrainedConfig):
         layer_norm_eps=1e-12,
         pad_token_id=0,
         use_cache=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.pad_token_id = pad_token_id
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

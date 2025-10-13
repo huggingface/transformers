@@ -101,6 +101,8 @@ class MusicgenDecoderConfig(PreTrainedConfig):
         bos_token_id=2048,
         eos_token_id=None,
         tie_word_embeddings=False,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size

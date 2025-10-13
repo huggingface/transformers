@@ -225,8 +225,12 @@ class EvollaConfig(PreTrainedConfig):
         eos_token_id=128009,
         use_cache=False,
         tie_word_embeddings=False,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size

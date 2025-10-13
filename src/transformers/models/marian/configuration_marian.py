@@ -131,8 +131,12 @@ class MarianConfig(PreTrainedConfig):
         eos_token_id=0,
         forced_eos_token_id=0,
         share_encoder_decoder_embeddings=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.decoder_vocab_size = decoder_vocab_size or vocab_size
         self.max_position_embeddings = max_position_embeddings

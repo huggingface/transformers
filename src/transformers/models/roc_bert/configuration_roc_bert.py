@@ -126,8 +126,12 @@ class RoCBertConfig(PreTrainedConfig):
         shape_embed_dim=512,
         shape_vocab_size=24858,
         concat_input=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

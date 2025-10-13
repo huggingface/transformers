@@ -147,8 +147,12 @@ class BigBirdPegasusConfig(PreTrainedConfig):
         block_size=64,
         num_random_blocks=3,
         use_bias=False,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model

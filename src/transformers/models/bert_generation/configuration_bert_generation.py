@@ -98,6 +98,8 @@ class BertGenerationConfig(PreTrainedConfig):
         bos_token_id=2,
         eos_token_id=1,
         use_cache=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -105,6 +107,8 @@ class BertGenerationConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

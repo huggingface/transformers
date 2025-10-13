@@ -114,6 +114,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
         eos_token_id=1,
         tie_word_embeddings=False,
         is_decoder=True,
+        add_cross_attention=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -140,6 +141,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
         self.decoder_start_token_id = decoder_start_token_id
         self.tie_word_embeddings = tie_word_embeddings
         self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         super().__init__(**kwargs)
 
 

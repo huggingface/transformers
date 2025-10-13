@@ -107,10 +107,14 @@ class BrosConfig(PreTrainedConfig):
         bbox_scale=100.0,
         n_relations=1,
         classifier_dropout_prob=0.1,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

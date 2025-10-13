@@ -117,6 +117,7 @@ class BlipTextConfig(PreTrainedConfig):
         is_decoder=True,
         use_cache=True,
         label_smoothing=0.0,
+        add_cross_attention=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -125,6 +126,7 @@ class BlipTextConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.sep_token_id = sep_token_id
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.encoder_hidden_size = encoder_hidden_size
