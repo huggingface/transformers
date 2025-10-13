@@ -186,7 +186,6 @@ class SmolVLMConfig(PreTrainedConfig):
                 pad_token_id=pad_token_id,
                 tie_word_embeddings=tie_word_embeddings,
             )
-
         self.text_config = text_config
         self.scale_factor = scale_factor
 

@@ -147,11 +147,13 @@ class T5GemmaModuleConfig(PreTrainedConfig):
         attn_logit_softcapping=50.0,
         **kwargs,
     ):
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -294,8 +296,9 @@ class T5GemmaConfig(PreTrainedConfig):
             if special_token_key not in kwargs:
                 kwargs[special_token_key] = getattr(decoder, special_token_key)
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__init__(**kwargs)
 
+        self.is_encoder_decoder = is_encoder_decoder
         self.use_cache = kwargs.get("use_cache", decoder.use_cache)
         self.initializer_range = kwargs.get("initializer_range", decoder.initializer_range)
         self.dropout_rate = dropout_rate

@@ -236,8 +236,10 @@ class Glm4MoeConfig(PreTrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.use_qk_norm = use_qk_norm
 
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
 __all__ = ["Glm4MoeConfig"]

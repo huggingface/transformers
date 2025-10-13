@@ -209,8 +209,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
         rope_config_validation(self, ignore_keys={"mrope_section", "mrope_interleaved"})
 
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class Qwen3VLConfig(PreTrainedConfig):
