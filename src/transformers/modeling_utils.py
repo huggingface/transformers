@@ -4888,7 +4888,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         disk_only_shard_files = []
         # Prepare parameters offloading if needed
         if device_map is not None and "disk" in device_map.values():
-            disk_offload_index, disk_only_shard_files = accelerate_disk_offload(
+            disk_offload_index, disk_only_shard_files, is_offloaded_safetensors = accelerate_disk_offload(
                 disk_offload_folder,
                 checkpoint_files,
                 device_map,

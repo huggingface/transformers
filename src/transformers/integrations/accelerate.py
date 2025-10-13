@@ -349,4 +349,4 @@ def accelerate_disk_offload(
         }
     else:
         disk_offload_index = {}
-    return disk_offload_index, disk_only_shard_files
+    return disk_offload_index, disk_only_shard_files, is_offloaded_safetensors
