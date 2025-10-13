@@ -5568,6 +5568,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Set the flag on the modules as well. We do it recursively (depth-first), as it's more efficient (we do not
         # need to check the entire state dict of each module, only the immediate children, so we only iterate once over
+        # each param)
         self.apply(set_is_initialized_for_modules)
 
         # This will only initialize submodules that are not marked as initialized by the line above.
