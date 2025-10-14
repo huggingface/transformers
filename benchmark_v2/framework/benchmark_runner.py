@@ -214,7 +214,7 @@ class BenchmarkRunner:
 
             # Quick validation: try one measurement first to see if this scenario works
             flush_memory()
-            e2e_latency, dt_tokens, decoded_output, gpu_metrics = self.time_generate(
+            e2e_latency, token_generation_times, decoded_output, gpu_metrics = self.time_generate(
                 max_new_tokens=1, gpu_monitor=None
             )
             if e2e_latency < 0:
@@ -231,11 +231,11 @@ class BenchmarkRunner:
             result = BenchmarkResult()
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
             for _ in trange(config.measurement_iterations):
-                e2e_latency, dt_tokens, decoded_output, gpu_metrics = self.time_generate(
+                e2e_latency, token_generation_times, decoded_output, gpu_metrics = self.time_generate(
                     max_new_tokens=config.num_tokens_to_generate,
                     gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
                 )
-                result.accumulate(e2e_latency, dt_tokens, decoded_output, gpu_metrics)
+                result.accumulate(e2e_latency, token_generation_times, decoded_output, gpu_metrics)
             self.logger.info("Benchmarking done. Cleaning up.")
 
             # Profile if needed
@@ -279,8 +279,8 @@ class BenchmarkRunner:
         decoded_output = self.tokenizer.decode(outputs[0, input_tokens:], skip_special_tokens=True)
         # Compute intermediate quantities
         e2e_latency = wall_time_1 - wall_time_0
-        dt_tokens = [t - wall_time_0 for t in streamer.timestamps[1:]]
-        return e2e_latency, dt_tokens, decoded_output, gpu_metrics
+        token_generation_times = [t - wall_time_0 for t in streamer.timestamps[1:]]
+        return e2e_latency, token_generation_times, decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
         """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
@@ -303,7 +303,7 @@ class BenchmarkRunner:
         model_id: str,
         benchmark_configs: list[BenchmarkConfig],
         num_tokens_to_profile: int = 0,
-        pretty_print_summary: bool = False,
+        pretty_print_summary: bool = True,
     ) -> dict[str, Any]:
         all_results = {}
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -343,7 +343,7 @@ class BenchmarkRunner:
 
         if pretty_print_summary:
             print()
-            print("-" * 120)
+            print("=" * 100)
             print(f"Finished benchmarks in {time.perf_counter() - start_time:.2f} seconds")
             print(f"Total number of benchmarks: {len(all_results)}")
             if len(all_results) > 0:
@@ -353,10 +353,10 @@ class BenchmarkRunner:
                 hardware_info = first_metadata.pop("hardware_info")
                 pretty_print_dict(first_metadata | hardware_info, tabs=1)
             for value in all_results.values():
-                print("-" * 120)
-                print(f"Config: {value['config'].infer_pretty_name()}\n")
+                print("=" * 100)
+                print(f"Config: {value['config'].infer_name(compact=False)}\n")
                 value["measurements"].pprint(tabs=1)
-            print("-" * 120)
+            print("=" * 100)
 
         return all_results
 

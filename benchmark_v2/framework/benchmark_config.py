@@ -70,30 +70,27 @@ class BenchmarkConfig:
     def hash(self) -> str:
         return hashlib.sha256(json.dumps(self.to_dict()).encode()).hexdigest()
 
-    def infer_name(self) -> str:
-        """Infer a human-readable name for the benchmark config."""
-        attn_code = self.attn_implementation + (f"_{self.sdpa_backend}" if self.attn_implementation == "sdpa" else "")
-        return "-".join([
-            f"w{self.warmup_iterations}_i{self.measurement_iterations}",
-            "monitored" if self.gpu_monitoring else "unmonitored",
-            f"b{self.batch_size}_s{self.sequence_length}_n{self.num_tokens_to_generate}",
-            attn_code,
-            f"compiled_{self.compile_mode}" if self.compile_mode is not None else "uncompiled",
-            "kernelized" if self.kernelize else "unkernelized",
-        ])
-
-    def infer_pretty_name(self) -> str:
-        """Infer a long name for the config, not meant to be dumped or saved."""
-        iter_str = f"{self.warmup_iterations} warmup, {self.measurement_iterations} iterations"
-        gpu_monitor_str = ("with" if self.gpu_monitoring else "no") + " GPU monitoring"
-        dimensions_str = f"batch size {self.batch_size}, sequence length {self.sequence_length}, {self.num_tokens_to_generate} generated tokens"
-        if self.attn_implementation == "sdpa":
-            attn_code = f"{self.attn_implementation} attention with {self.sdpa_backend} backend"
+    def infer_name(self, compact: bool = True) -> str:
+        """Infer a human-readable name for the benchmark config, either compact or verbose."""
+        if compact:
+            iter_str = f"w{self.warmup_iterations}_i{self.measurement_iterations}"
+            gpu_monitor_str = "monitored" if self.gpu_monitoring else "unmonitored"
+            dimensions_str = f"b{self.batch_size}_s{self.sequence_length}_n{self.num_tokens_to_generate}"
+            attn_code = self.attn_implementation
+            attn_code += (f"_{self.sdpa_backend}" if self.attn_implementation == "sdpa" else "")
+            compile_str = f"compiled_{self.compile_mode}" if self.compile_mode is not None else "uncompiled"
+            kernelize_str = "kernelized" if self.kernelize else "unkernelized"
+            sep = "-"
         else:
+            iter_str = f"{self.warmup_iterations} warmup, {self.measurement_iterations} iterations"
+            gpu_monitor_str = ("with" if self.gpu_monitoring else "no") + " GPU monitoring"
+            dimensions_str = f"batch size {self.batch_size}, sequence length {self.sequence_length}, {self.num_tokens_to_generate} generated tokens"
             attn_code = f"{self.attn_implementation} attention"
-        compile_str = "compiled" if self.compile_mode is not None else "not compiled"
-        kernelize_str = "kernelized" if self.kernelize else "not kernelized"
-        return ", ".join([iter_str, gpu_monitor_str, dimensions_str, attn_code, compile_str, kernelize_str])
+            attn_code += (f" with {self.sdpa_backend} backend" if self.attn_implementation == "sdpa" else "")
+            compile_str = "compiled" if self.compile_mode is not None else "not compiled"
+            kernelize_str = "kernelized" if self.kernelize else "not kernelized"
+            sep = ", "
+        return sep.join([iter_str, gpu_monitor_str, dimensions_str, attn_code, compile_str, kernelize_str])
 
     def to_dict(self) -> dict[str, Any]:
         return {

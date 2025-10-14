@@ -104,7 +104,7 @@ if __name__ == "__main__":
     runner = BenchmarkRunner(logger, args.output_dir, args.commit_id)
     results = runner.run_benchmarks(
         args.model_id,
-        benchmark_configs,
+        benchmark_configs[:3],
         args.num_tokens_to_profile,
         pretty_print_summary=True,
     )

@@ -81,19 +81,19 @@ class BenchmarkResult:
 
     def __init__(self) -> None:
         self.e2e_latency = []
-        self.dt_tokens = []
+        self.token_generation_times = []
         self.decoded_outputs = []
         self.gpu_metrics = []
 
     def accumulate(
         self,
         e2e_latency: float,
-        dt_tokens: list[float],
+        token_generation_times: list[float],
         decoded_output: str,
         gpu_metrics: Optional[GPURawMetrics],
     ) -> None:
         self.e2e_latency.append(e2e_latency)
-        self.dt_tokens.append(dt_tokens)
+        self.token_generation_times.append(token_generation_times)
         self.decoded_outputs.append(decoded_output)
         self.gpu_metrics.append(gpu_metrics)
 
@@ -105,7 +105,7 @@ class BenchmarkResult:
             gpu_metrics = [gm.to_dict() for gm in self.gpu_metrics]
         return {
             "e2e_latency": self.e2e_latency,
-            "dt_tokens": self.dt_tokens,
+            "token_generation_times": self.token_generation_times,
             "decoded_outputs": self.decoded_outputs,
             "gpu_metrics": gpu_metrics,
         }
@@ -122,17 +122,17 @@ class BenchmarkResult:
         for i in range(len(data["e2e_latency"])):
             new_instance.accumulate(
                 e2e_latency=data["e2e_latency"][i],
-                dt_tokens=data["dt_tokens"][i],
+                token_generation_times=data["token_generation_times"][i],
                 decoded_output=data["decoded_output"][i],
                 gpu_metrics=gpu_metrics[i],
             )
         return new_instance
 
     def get_measured_ttft(self) -> list[float]:
-        return [dt[0] for dt in self.dt_tokens if len(dt) > 0]
+        return [dt[0] for dt in self.token_generation_times if len(dt) > 0]
 
     def get_measured_itl(self) -> list[float]:
-        return [(dt[-1] - dt[0]) / (len(dt) - 1) for dt in self.dt_tokens if len(dt) > 1]
+        return [(dt[-1] - dt[0]) / (len(dt) - 1) for dt in self.token_generation_times if len(dt) > 1]
 
     def pprint(self, tabs: int = 0) -> None:
         collated_stats = equalize_lengths_and_collate(
