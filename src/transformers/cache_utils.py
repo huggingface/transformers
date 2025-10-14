@@ -176,6 +176,11 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         super().__init__()
         self.sliding_window = sliding_window
         self.cumulative_length = 0
+        self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
+
+    def lazy_initialization(self, key_states: torch.Tensor) -> None:
+        super().lazy_initialization(key_states)
+        self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
 
     def update(
         self,
@@ -932,7 +937,7 @@ class DynamicCache(Cache):
 
     def __init__(
         self,
-        ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None,
+        ddp_cache_data: Optional[Iterable[tuple[Optional[torch.Tensor], torch.Tensor, torch.Tensor]]] = None,
         config: Optional[PreTrainedConfig] = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = False,
@@ -965,10 +970,15 @@ class DynamicCache(Cache):
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
             # Init all the layers with the data
-            for layer_idx, (key_states, value_states) in enumerate(ddp_cache_data):
-                # If the config was not passed above, initialize a DynamicLayer for each entry of the ddp_data
+            for layer_idx, (sliding_window_tensor, key_states, value_states) in enumerate(ddp_cache_data):
+                # If the config was not passed above, initialize a new cache layer for each entry of the ddp_data
                 if config is None:
-                    layers.append(DynamicLayer())
+                    if sliding_window_tensor is not None:
+                        # Since the same layer is dispatched across replicas, sliding_window is the same for all
+                        sliding_window = sliding_window_tensor[0].item()
+                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
+                    else:
+                        layers.append(DynamicLayer())
                 # Update the layer with the data
                 _, _ = layers[layer_idx].update(key_states, value_states)
 
@@ -981,6 +991,10 @@ class DynamicCache(Cache):
             )
         else:
             super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
+
+    def __iter__(self):
+        for layer in self.layers:
+            yield getattr(layer, "_sliding_window_tensor", None), layer.keys, layer.values
 
 
 class StaticCache(Cache):

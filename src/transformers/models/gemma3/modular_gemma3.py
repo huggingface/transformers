@@ -764,7 +764,7 @@ def create_causal_mask_mapping(
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
         image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-        image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
+        image_group_ids = torch.where(is_image, image_group_ids, -1)
         mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
             token_type_ids.to(cache_position.device), image_group_ids
         )
