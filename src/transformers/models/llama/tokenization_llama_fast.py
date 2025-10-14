@@ -161,7 +161,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             add_prefix_space=add_prefix_space,
-            legacy=legacy,
             **kwargs,
         )
 
@@ -204,20 +203,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
     def _normalizer(self):
         """Normalizer configuration for this tokenizer."""
-        if self.legacy:
-            sequence = []
-            if self.add_prefix_space:
-                sequence += [normalizers.Prepend(prepend="▁")]
-            sequence += [normalizers.Replace(pattern=" ", content="▁")]
-            return normalizers.Sequence(sequence)
         return None
 
     def _pre_tokenizer(self, replacement, add_prefix_space):
         """Pre-tokenizer configuration for this tokenizer."""
-        if not self.legacy:
-            prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
-            return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
-        return None
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
 
 
 __all__ = ["LlamaTokenizerFast"]
