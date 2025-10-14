@@ -287,6 +287,7 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.tie_word_embeddings = tie_word_embeddings
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -309,7 +310,7 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 class Glm4vConfig(PreTrainedConfig):

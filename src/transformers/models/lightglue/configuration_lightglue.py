@@ -100,6 +100,7 @@ class LightGlueConfig(PreTrainedConfig):
         hidden_act: str = "gelu",
         attention_dropout=0.0,
         attention_bias=True,
+        is_decoder=False,
         trust_remote_code: bool = False,
         **kwargs,
     ):
@@ -149,6 +150,7 @@ class LightGlueConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
+        self.is_decoder = is_decoder
         super().__init__(**kwargs)
 
 

@@ -158,11 +158,14 @@ class GPT2Config(PreTrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        pad_token_id=None,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        is_decoder=False,
         add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.n_positions = n_positions
@@ -188,6 +191,7 @@ class GPT2Config(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
         super().__init__(**kwargs)
 

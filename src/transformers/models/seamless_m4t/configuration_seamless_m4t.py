@@ -317,6 +317,7 @@ class SeamlessM4TConfig(PreTrainedConfig):
         variance_predictor_kernel_size=3,
         var_pred_dropout=0.5,
         vocoder_offset=4,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         # overall_config
@@ -335,6 +336,7 @@ class SeamlessM4TConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.scale_embedding = scale_embedding
+        self.tie_word_embeddings = tie_word_embeddings
         # for proper config init
         self.num_attention_heads = decoder_attention_heads
         self.num_hidden_layers = decoder_layers

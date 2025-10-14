@@ -74,7 +74,13 @@ class EncoderDecoderConfig(PreTrainedConfig):
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     has_no_defaults_at_init = True
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        pad_token_id=None,
+        decoder_start_token_id=None,
+        tie_encoder_decoder=False,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
@@ -89,6 +95,9 @@ class EncoderDecoderConfig(PreTrainedConfig):
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
         self.is_encoder_decoder = True
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_encoder_decoder = tie_encoder_decoder
 
     @classmethod
     def from_encoder_decoder_configs(

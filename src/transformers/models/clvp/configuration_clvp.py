@@ -283,6 +283,7 @@ class ClvpDecoderConfig(PreTrainedConfig):
         use_attention_bias=True,
         initializer_factor=1.0,
         decoder_fixing_codes=[83, 45, 45, 248],
+        add_cross_attention=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -313,6 +314,7 @@ class ClvpDecoderConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
+        self.add_cross_attention = add_cross_attention
 
         super().__init__(**kwargs)
 

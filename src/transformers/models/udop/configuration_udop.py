@@ -112,10 +112,12 @@ class UdopConfig(PreTrainedConfig):
         num_channels=3,
         is_decoder=False,
         add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv

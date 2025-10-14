@@ -316,6 +316,7 @@ class FlavaMultimodalConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
         self.use_cls_token = use_cls_token
+        self.is_decoder = False  # need until mask API is updated
 
 
 class FlavaImageCodebookConfig(PreTrainedConfig):

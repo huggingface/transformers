@@ -2099,11 +2099,11 @@ class ModelTesterMixin:
             self.skipTest(reason="test_resize_embeddings is set to `False`")
 
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        original_config.tie_word_embeddings = False
+        original_config.get_text_config(decoder=True).tie_word_embeddings = False
         inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
-        if original_config.tie_word_embeddings:
+        if getattr(original_config.get_text_config(decoder=True), "tie_word_embeddings", False):
             self.skipTest(reason="Model cannot untied embeddings")
 
         for model_class in self.all_model_classes:
@@ -2319,7 +2319,7 @@ class ModelTesterMixin:
     def test_load_save_without_tied_weights(self):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            config.tie_word_embeddings = False
+            config.get_text_config(decoder=True).tie_word_embeddings = False
             model = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
@@ -2339,13 +2339,15 @@ class ModelTesterMixin:
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             copied_config = copy.deepcopy(original_config)
-            copied_config.get_text_config().tie_word_embeddings = True
+            copied_config.get_text_config(decoder=True).tie_word_embeddings = True
             model_tied = model_class(copied_config)
 
             tied_weight_keys = _get_tied_weight_keys(model_tied)
             # If we don't find any tied weights keys, and by default we don't tie the embeddings, it's because the model
             # does not tie them
-            if len(tied_weight_keys) == 0 and not original_config.tie_word_embeddings:
+            if len(tied_weight_keys) == 0 and not getattr(
+                original_config.get_text_config(decoder=True), "tie_word_embeddings", False
+            ):
                 continue
 
             ptrs = collections.defaultdict(list)
