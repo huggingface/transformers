@@ -3666,7 +3666,9 @@ class ModelTesterMixin:
                 config, attn_implementation=attn_implementation, dtype=torch.bfloat16
             ).to(torch_device)
 
-            # Used to test dropout, etc... in train mode. Also some models (eg. gemma3) need different inputs in train mode.
+            # By default, we perform the forward pass in train mode, because it's more sctrict than eval mode. If the
+            # forward pass is successful in train mode, it will also be successful in eval mode. But since some models
+            # (eg. gemma3) need different inputs in train mode we have the option to test the forward pass in eval mode.
             if test_fwd_in_train:
                 fa_model = fa_model.train()
             else:
