@@ -113,7 +113,7 @@ class VipLlavaMultiModalProjector(nn.Module):
 @auto_docstring
 class VipLlavaPreTrainedModel(PreTrainedModel):
     config: VipLlavaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 

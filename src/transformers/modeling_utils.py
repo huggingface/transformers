@@ -5092,11 +5092,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
+        # NOTE: if there is a `key_mapping` provided, we assume that the mapping already contains correct prefix
         prefix = model.base_model_prefix
         has_prefix_module = any(s.startswith(prefix) for s in original_checkpoint_keys) if len(prefix) > 0 else False
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
-        loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
-        loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
+        loading_task_model_from_base_state_dict = (
+            not has_prefix_module and expects_prefix_module and key_mapping is None
+        )
+        loading_base_model_from_task_state_dict = (
+            has_prefix_module and not expects_prefix_module and key_mapping is None
+        )
 
         # Find the key names that the model expects from the serialized keys
         key_renaming_mapping = model._get_key_renaming_mapping(

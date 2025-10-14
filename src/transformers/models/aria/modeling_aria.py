@@ -593,7 +593,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class AriaPreTrainedModel(PreTrainedModel):
     config: AriaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["AriaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]

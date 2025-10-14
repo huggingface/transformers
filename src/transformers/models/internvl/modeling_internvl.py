@@ -470,7 +470,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 @auto_docstring
 class InternVLPreTrainedModel(PreTrainedModel):
     config: InternVLConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 

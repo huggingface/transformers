@@ -1303,7 +1303,7 @@ class FlavaImageCodebookLayerGroup(nn.Module):
     """
 )
 class FlavaImageCodebook(FlavaPreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     config: FlavaImageCodebookConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
