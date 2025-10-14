@@ -3661,10 +3661,9 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             # TODO: to change it in the future with other relevant auto classes
-            fa_model = (
-                model_class._from_config(config, attn_implementation=attn_implementation, dtype=torch.bfloat16)
-                .to(torch_device)
-            )
+            fa_model = model_class._from_config(
+                config, attn_implementation=attn_implementation, dtype=torch.bfloat16
+            ).to(torch_device)
             if test_fwd_in_train:
                 fa_model = fa_model.train()
             else:
