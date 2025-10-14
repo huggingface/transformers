@@ -1153,19 +1153,33 @@ class AutoTokenizer:
             config = config.encoder
 
         model_type = config_class_to_model_type(type(config).__name__)
+        
         if model_type is not None:
             tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
 
-            if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
-                return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            else:
-                if tokenizer_class_py is not None:
-                    return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            try:
+                if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
+                    return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 else:
-                    raise ValueError(
-                        "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
-                        "in order to use this tokenizer."
-                    )
+                    if tokenizer_class_py is not None:
+                        return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                    else:
+                        raise ValueError(
+                            "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
+                            "in order to use this tokenizer."
+                        )
+
+            except TypeError as e:
+                # Detect missing dependency for Voxtral/Mistral models
+                model_id = str(pretrained_model_name_or_path).lower()
+                if "voxtral" in model_id or "mistralai" in model_id:
+                    raise ImportError(
+                        "The tokenizer for Voxtral or Mistral models requires the `mistral-common` package.\n"
+                        "Please install it with:\n\n    pip install mistral-common\n"
+                    ) from e
+                # Otherwise, re-raise the original error
+                raise
+
 
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
