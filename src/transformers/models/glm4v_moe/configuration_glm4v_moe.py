@@ -206,7 +206,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
                                                                     \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.0001):
             The aux loss factor for the loss.
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
