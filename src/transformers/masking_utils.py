@@ -409,7 +409,6 @@ def sdpa_mask_recent_torch(
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
-
     # Potentially add the padding 2D mask
     if padding_mask is not None:
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
