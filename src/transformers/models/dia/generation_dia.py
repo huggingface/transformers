@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -45,7 +46,7 @@ class DiaGenerationMixin(GenerationMixin):
         self,
         generation_config: GenerationConfig,
         input_ids_seq_length: Optional[int] = None,
-        encoder_input_ids: torch.LongTensor = None,
+        encoder_input_ids: Optional[torch.LongTensor] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         device: Optional[str] = None,
@@ -109,7 +110,7 @@ class DiaGenerationMixin(GenerationMixin):
         return merged_processors
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: dict
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
         generation_config, model_kwargs = super()._prepare_generation_config(
             generation_config, use_model_defaults, **kwargs
@@ -278,7 +279,7 @@ class DiaGenerationMixin(GenerationMixin):
         generation_mode = generation_config.get_generation_mode(assistant_model)
 
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_generation_mode(generation_mode, generation_mode_kwargs)
+        self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:

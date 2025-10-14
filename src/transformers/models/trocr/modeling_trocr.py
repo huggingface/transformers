@@ -32,7 +32,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_trocr import TrOCRConfig
 
 
@@ -51,7 +50,9 @@ class TrOCRLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: torch.Tensor = None):
+    def forward(
+        self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+    ):
         """`input_ids' shape is expected to be [bsz x seqlen]."""
 
         if position_ids is None:
@@ -179,14 +180,12 @@ class TrOCRAttention(nn.Module):
 
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -206,17 +205,17 @@ class TrOCRAttention(nn.Module):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_values.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -226,7 +225,7 @@ class TrOCRAttention(nn.Module):
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
+                key_states, value_states = curr_past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -257,15 +256,6 @@ class TrOCRAttention(nn.Module):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
             # this operation is a bit awkward, but it's required to
@@ -333,15 +323,12 @@ class TrOCRDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
@@ -356,11 +343,7 @@ class TrOCRDecoderLayer(GradientCheckpointingLayer):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size *(decoder_attention_heads,)*.
-            past_key_values (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_values (`Cache`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -372,7 +355,6 @@ class TrOCRDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
@@ -390,7 +372,6 @@ class TrOCRDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
@@ -482,8 +463,6 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         use_cache=None,
@@ -520,23 +499,8 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
-                on hidden heads. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+            past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
                 cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
@@ -586,16 +550,9 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = (
                 EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-                if encoder_hidden_states is not None
+                if encoder_hidden_states is not None or self.config.is_encoder_decoder
                 else DynamicCache(config=self.config)
             )
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
@@ -632,14 +589,6 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
-        # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
-            if attn_mask is not None:
-                if attn_mask.size()[0] != (len(self.layers)):
-                    raise ValueError(
-                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
-                        f" {head_mask.size()[0]}."
-                    )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
@@ -654,8 +603,6 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
@@ -748,9 +695,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -760,11 +705,6 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -830,8 +770,6 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,

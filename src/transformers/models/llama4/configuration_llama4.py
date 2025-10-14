@@ -14,15 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Llama4VisionConfig(PretrainedConfig):
+class Llama4VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Llama4VisionModel`]. It is used to instantiate a
     Llama4 vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +31,8 @@ class Llama4VisionConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -56,7 +57,6 @@ class Llama4VisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        vision_feature_layer (``, *optional*, defaults to -1): TODO
         vision_feature_select_strategy (`int`, *optional*, defaults to `"default"`): TODO
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -93,7 +93,6 @@ class Llama4VisionConfig(PretrainedConfig):
         image_size: int = 448,
         patch_size: int = 14,
         norm_eps: float = 1e-5,
-        vision_feature_layer=-1,
         vision_feature_select_strategy="default",
         initializer_range: float = 0.02,
         pixel_shuffle_ratio=0.5,
@@ -122,13 +121,27 @@ class Llama4VisionConfig(PretrainedConfig):
         self.multi_modal_projector_bias = multi_modal_projector_bias
         self.projector_dropout = projector_dropout
         self.attention_dropout = attention_dropout
-        self.vision_feature_layer = vision_feature_layer
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.rope_theta = rope_theta
+
+        self._vision_feature_layer = kwargs.get("vision_feature_layer", -1)
+
+        @property
+        def vision_feature_layer(self):
+            warnings.warn(
+                "The `vision_feature_layer` attribute is deprecated and will be removed in v4.58.0.",
+                FutureWarning,
+            )
+            return self._vision_feature_layer
+
+        @vision_feature_layer.setter
+        def vision_feature_layer(self, value):
+            self._vision_feature_layer = value
+
         super().__init__(**kwargs)
 
 
-class Llama4TextConfig(PretrainedConfig):
+class Llama4TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Llama4TextModel`]. It is used to instantiate a
     Llama4 text model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -136,8 +149,8 @@ class Llama4TextConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 202048):
@@ -378,10 +391,10 @@ class Llama4TextConfig(PretrainedConfig):
             self.layer_types = [
                 "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
-class Llama4Config(PretrainedConfig):
+class Llama4Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Llama4Model`]. It is used to instantiate an
     Llama4 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -389,8 +402,8 @@ class Llama4Config(PretrainedConfig):
 
     e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

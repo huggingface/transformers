@@ -21,10 +21,15 @@
 import math
 from typing import Any, Optional, Union
 
+import torch
+from torch import nn
+from torchvision.transforms.v2 import functional as F
+
+from transformers.image_transforms import get_size_with_aspect_ratio
+
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -39,68 +44,16 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    logging,
-)
+from ...utils import TensorType, auto_docstring, logging
 from .image_processing_mask2former import (
+    Mask2FormerImageProcessorKwargs,
     compute_segments,
     convert_segmentation_to_rle,
-    get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
 
 
-if is_torch_available():
-    import torch
-    from torch import nn
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
-
-
 logger = logging.get_logger(__name__)
-
-
-class Mask2FormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    size_divisor (`int`, *optional*, defaults to 32):
-        Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-        Swin Transformer.
-    ignore_index (`int`, *optional*):
-        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-        denoted with 0 (background) will be replaced with `ignore_index`.
-    do_reduce_labels (`bool`, *optional*, defaults to `False`):
-        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
-        The background label will be replaced by `ignore_index`.
-    num_labels (`int`, *optional*):
-        The number of labels in the segmentation map.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-        If `pad_size` is provided, the image will be padded to the specified dimensions.
-        Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`Dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-        height and width in the batch.
-    """
-
-    size_divisor: Optional[int]
-    ignore_index: Optional[int]
-    do_reduce_labels: Optional[bool]
-    num_labels: Optional[int]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
 
 
 def convert_segmentation_map_to_binary_masks_fast(
@@ -153,9 +106,9 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values", "pixel_mask"]
     size_divisor = 32
     do_reduce_labels = False
-    valid_kwargs = Mask2FormerFastImageProcessorKwargs
+    valid_kwargs = Mask2FormerImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[Mask2FormerFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[Mask2FormerImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -194,7 +147,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         size: SizeDict,
         size_divisor: int = 0,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -285,7 +238,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
         instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
-        **kwargs: Unpack[Mask2FormerFastImageProcessorKwargs],
+        **kwargs: Unpack[Mask2FormerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -308,7 +261,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[Mask2FormerFastImageProcessorKwargs],
+        **kwargs: Unpack[Mask2FormerImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -334,8 +287,8 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps: Optional["torch.Tensor"],
         instance_id_to_semantic_id: Optional[dict[int, int]],
         do_resize: Optional[bool],
-        size: Optional[dict[str, int]],
-        pad_size: Optional[dict[str, int]],
+        size: Optional[SizeDict],
+        pad_size: Optional[SizeDict],
         size_divisor: Optional[int],
         interpolation: Optional[Union["PILImageResampling", "F.InterpolationMode"]],
         do_rescale: Optional[bool],
@@ -370,9 +323,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                         image=grouped_segmentation_maps[shape],
                         size=size,
                         size_divisor=size_divisor,
-                        interpolation=F.InterpolationMode.NEAREST_EXACT
-                        if is_torchvision_v2_available()
-                        else F.InterpolationMode.NEAREST,
+                        interpolation=F.InterpolationMode.NEAREST_EXACT,
                     )
             resized_images_grouped[shape] = stacked_images
             if segmentation_maps is not None:
@@ -383,7 +334,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                 resized_segmentation_maps_grouped, grouped_segmentation_maps_index
             )
         if pad_size is not None:
-            padded_size = (pad_size["height"], pad_size["width"])
+            padded_size = (pad_size.height, pad_size.width)
         else:
             padded_size = get_max_height_width(resized_images)
 

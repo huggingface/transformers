@@ -18,7 +18,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -38,7 +39,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_gpt_oss import GptOssConfig
 
@@ -98,7 +98,9 @@ class GptOssExperts(nn.Module):
         if hidden_states.device.type == "cpu" or self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
+                expert_mask = torch.nn.functional.one_hot(
+                    router_indices, num_classes=num_experts + 1
+                )  # masking is also a class
                 expert_mask = expert_mask.permute(2, 1, 0)
                 # we sum on the top_k and on the sequence length to get which experts
                 # are hit this time around
@@ -106,6 +108,9 @@ class GptOssExperts(nn.Module):
             for expert_idx in expert_hit[:]:
                 # expert_idx only have 1 element, so we can use scale for fast indexing
                 expert_idx = expert_idx[0]
+                # skip masking index
+                if expert_idx == num_experts:
+                    continue
                 with torch.no_grad():
                     _, token_idx = torch.where(expert_mask[expert_idx])
                 current_state = hidden_states[token_idx]
@@ -161,8 +166,8 @@ class GptOssMLP(nn.Module):
         self.experts = GptOssExperts(config)
 
     def forward(self, hidden_states):
-        router_scores, router_indices = self.router(hidden_states)  # (num_experts, seq_len)
-        routed_out = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores)
+        router_scores, router_indices = self.router(hidden_states)
+        routed_out = self.experts(hidden_states, router_indices, router_scores)
         return routed_out, router_scores
 
 
@@ -292,7 +297,6 @@ class GptOssAttention(nn.Module):
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -348,7 +352,6 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -451,14 +454,14 @@ class GptOssModel(GptOssPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,

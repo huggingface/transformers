@@ -4,12 +4,12 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_metaclip_2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
@@ -23,14 +23,10 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     filter_out_non_signature_kwargs,
-    logging,
     torch_int,
 )
 from ...utils.generic import check_model_inputs
 from .configuration_metaclip_2 import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class MetaClip2TextEmbeddings(nn.Module):
@@ -233,13 +229,7 @@ class MetaClip2Attention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -491,7 +481,7 @@ class MetaClip2TextTransformer(nn.Module):
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -971,9 +961,8 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> MetaClip2Output:
         r"""
-        Args:
-            return_loss (`bool`, *optional*):
-                Whether or not to return the contrastive loss.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
 
         Examples:
 
@@ -1366,28 +1355,7 @@ class MetaClip2ForImageClassification(MetaClip2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         return ImageClassifierOutput(
             loss=loss,

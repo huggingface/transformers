@@ -44,11 +44,33 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging
 from ...video_utils import VideoInput, make_batched_videos
 
 
 logger = logging.get_logger(__name__)
+
+
+class Qwen2VLImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+        The max pixels of the image to resize the image.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
 def smart_resize(
@@ -116,6 +138,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+    valid_kwargs = Qwen2VLImageProcessorKwargs
 
     def __init__(
         self,
@@ -167,7 +190,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         images: Union[ImageInput, VideoInput],
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -299,12 +322,12 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         min_pixels: Optional[int] = None,
         max_pixels: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -360,10 +383,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -408,10 +429,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             images = make_flat_list_of_images(images)
 
         if images is not None and not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             rescale_factor=rescale_factor,

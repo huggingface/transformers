@@ -23,7 +23,6 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -43,7 +42,6 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_stablelm import StableLmConfig
 
 
@@ -221,7 +219,6 @@ class StableLmAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.rotary_emb = StableLmRotaryEmbedding(config=self.config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -309,7 +306,6 @@ class StableLmAttention(nn.Module):
 
 
 class StableLmSdpaAttention(StableLmAttention):
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -432,7 +428,6 @@ class StableLmFlashAttention2(StableLmAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -546,7 +541,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -562,7 +557,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
                 `[0, config.n_positions - 1]`.
 
                 [What are position IDs?](../glossary#position-ids)
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -699,10 +694,6 @@ class StableLmModel(StableLmPreTrainedModel):
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
-
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)

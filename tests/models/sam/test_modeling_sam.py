@@ -159,9 +159,8 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (SamVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     test_torchscript = False
     test_torch_exportable = True
 
@@ -515,9 +514,8 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     test_torchscript = False
     _is_composite = True
 
@@ -666,7 +664,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
         This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 

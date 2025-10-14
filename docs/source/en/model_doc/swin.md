@@ -47,6 +47,7 @@ pipeline = pipeline(
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -66,7 +67,7 @@ model = AutoModelForImageClassification.from_pretrained(
     device_map="auto"
 )
 
-device = infer_device()
+device = Accelerator().device
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 inputs = image_processor(image, return_tensors="pt").to(model.device)
@@ -79,6 +80,7 @@ class_labels = model.config.id2label
 predicted_class_label = class_labels[predicted_class_id]
 print(f"The predicted class label is: {predicted_class_label}")
 ```
+
 </hfoption>
 </hfoptions>
 

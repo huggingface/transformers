@@ -14,11 +14,11 @@
 import json
 import os
 import unittest
+from functools import cached_property
 
 from transformers import BatchEncoding, LEDTokenizer, LEDTokenizerFast
 from transformers.models.led.tokenization_led import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
-from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -164,7 +164,7 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
     def test_pretokenized_inputs(self):
         pass
 
-    def test_embeded_special_tokens(self):
+    def test_embedded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)

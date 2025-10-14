@@ -19,10 +19,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
@@ -31,14 +30,15 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class Gemma3TextConfig(PretrainedConfig):
+class Gemma3TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3TextModel`]. It is used to instantiate an Gemma3Text
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Gemma3Text-7B.
     e.g. [google/gemma3_text-7b](https://huggingface.co/google/gemma3_text-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 262208):
             Vocabulary size of the Gemma3Text model. Defines the number of different tokens that can be represented by the
@@ -136,6 +136,9 @@ class Gemma3TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
+        use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
+            If True, the model will attend to all text tokens instead of using a causal mask. This does not change
+            behavior for vision tokens.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -193,6 +196,7 @@ class Gemma3TextConfig(PretrainedConfig):
         attn_logit_softcapping=None,
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
+        use_bidirectional_attention=False,
         **kwargs,
     ):
         super().__init__(
@@ -222,6 +226,9 @@ class Gemma3TextConfig(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        self.use_bidirectional_attention = use_bidirectional_attention
+        if use_bidirectional_attention:
+            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
@@ -235,22 +242,10 @@ class Gemma3TextConfig(PretrainedConfig):
                 "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
-
-    @property
-    def sliding_window_pattern(self):
-        warnings.warn(
-            "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
-            FutureWarning,
-        )
-        return self._sliding_window_pattern
-
-    @sliding_window_pattern.setter
-    def sliding_window_pattern(self, value):
-        self._sliding_window_pattern = value
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
-class Gemma3Config(PretrainedConfig):
+class Gemma3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3ForConditionalGeneration`]. It is used to instantiate an
     Gemma3ForConditionalGeneration according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -258,8 +253,8 @@ class Gemma3Config(PretrainedConfig):
 
     e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[Gemma3TextConfig, dict]`, *optional*):

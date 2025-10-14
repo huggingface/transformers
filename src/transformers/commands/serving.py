@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import asyncio
 import base64
 import copy
 import datetime
@@ -23,13 +24,14 @@ import re
 import tempfile
 import threading
 import time
+import uuid
 from argparse import ArgumentParser, Namespace
-from collections.abc import Generator, Iterable
+from collections.abc import AsyncGenerator, Generator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
-from typing import Optional, Union
+from typing import Optional, TypedDict, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
@@ -127,7 +129,7 @@ if serve_dependencies_available:
 
     class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
         """
-        OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string).
+        OpenAI's CompletionCreateParamsStreaming with additional fields for the generation config (as a json string) and passing the request_id
         """
 
         generation_config: str
@@ -139,7 +141,7 @@ if serve_dependencies_available:
 
         file: bytes  # Overwritten -- pydantic isn't happy with `typing.IO[bytes]`, present in the original type
         generation_config: str
-        stream: Optional[bool] = False
+        stream: bool = False
 
     # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have built-in validation.
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
@@ -208,6 +210,8 @@ _TOOL_CALL_TOKENS = {
     },
 }
 _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
+
+X_REQUEST_ID = "x-request-id"
 
 
 class Modality(enum.Enum):
@@ -453,8 +457,14 @@ class ServeArguments:
     def __post_init__(self):
         """Only used for BC `torch_dtype` argument."""
         # In this case only the BC torch_dtype was given
-        if self.torch_dtype is not None and self.dtype == "auto":
-            self.dtype = self.torch_dtype
+        if self.torch_dtype is not None:
+            if self.dtype is None:
+                self.dtype = self.torch_dtype
+            elif self.torch_dtype != self.dtype:
+                raise ValueError(
+                    f"`torch_dtype` {self.torch_dtype} and `dtype` {self.dtype} have different values. `torch_dtype` is deprecated and "
+                    "will be removed in 4.59.0, please set `dtype` instead."
+                )
 
 
 class ServeCommand(BaseTransformersCLICommand):
@@ -505,7 +515,7 @@ class ServeCommand(BaseTransformersCLICommand):
     def _validate_request(
         self,
         request: dict,
-        schema: "_TypedDictMeta",  # noqa: F821
+        schema: TypedDict,
         validator: "TypeAdapter",
         unused_fields: set,
     ):
@@ -515,7 +525,7 @@ class ServeCommand(BaseTransformersCLICommand):
         Args:
             request (`dict`):
                 The request to validate.
-            schema (`_TypedDictMeta`):
+            schema (`TypedDict`):
                 The schema of the request to validate. It is a `TypedDict` definition.
             validator (`TypeAdapter`):
                 The validator to use to validate the request. Built from `schema`.
@@ -577,7 +587,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def build_chat_completion_chunk(
         self,
-        request_id: Optional[str] = "",
+        request_id: str = "",
         content: Optional[int] = None,
         model: Optional[str] = None,
         role: Optional[str] = None,
@@ -685,29 +695,30 @@ class ServeCommand(BaseTransformersCLICommand):
             logger.warning_once(
                 "CORS allow origin is set to `*`. This is not recommended for production environments."
             )
-        else:
-            logger.warning_once(
-                "Some apps may require CORS. Consider launching the server with `--enable-cors` if you see errors."
-            )
+
+        from fastapi import Request
 
         @app.post("/v1/chat/completions")
-        def chat_completion(request: dict):
-            self.validate_chat_completion_request(request=request)
+        def chat_completion(request: Request, body: dict):
+            self.validate_chat_completion_request(request=body)
 
             if self.use_continuous_batching:
-                output = self.continuous_batching_chat_completion(request)
+                output = self.continuous_batching_chat_completion(body, request.state.request_id)
             else:
-                output = self.generate_chat_completion(request)
+                output = self.generate_chat_completion(body)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.post("/v1/responses")
         def responses(request: dict):
             self.validate_response_request(request=request)
+            # Support non-streaming mode when `stream=false` is provided
+            stream = request.get("stream", True)
+            if not stream:
+                response_obj = self.generate_response_non_streaming(request)
+                return JSONResponse(response_obj)
 
             output = self.generate_response(request)
             return StreamingResponse(output, media_type="text/event-stream")
-
-        from fastapi import Request
 
         @app.post("/v1/audio/transcriptions")
         async def audio_transcriptions(request: Request):
@@ -735,6 +746,14 @@ class ServeCommand(BaseTransformersCLICommand):
         @app.get("/health")
         def healthcheck():
             return JSONResponse({"status": "ok"})
+
+        @app.middleware("http")
+        async def get_or_set_request_id(request: Request, call_next):
+            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
+            request.state.request_id = request_id
+            response = await call_next(request)
+            response.headers[X_REQUEST_ID] = request_id
+            return response
 
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
@@ -784,7 +803,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for model in model_infos
             ]
 
-    def continuous_batching_chat_completion(self, req: dict) -> Generator[str, None, None]:
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> AsyncGenerator[str, None]:
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -832,13 +851,8 @@ class ServeCommand(BaseTransformersCLICommand):
             model.device
         )
 
-        def stream_chat_completion(_inputs):
+        def stream_chat_completion(request_id, decode_stream):
             try:
-                decode_stream = DecodeStream(_inputs.tolist(), False)
-                request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
-                )
-
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
@@ -862,9 +876,24 @@ class ServeCommand(BaseTransformersCLICommand):
 
             except Exception as e:
                 logger.error(str(e))
+                self.running_continuous_batching_manager.cancel_request(request_id)
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        return stream_chat_completion(inputs[0])
+        async def cancellation_wrapper(_inputs, request_id):
+            try:
+                decode_stream = DecodeStream(_inputs.tolist(), False)
+                # XXX: using returned request_id as safety in case it is None
+                request_id = self.running_continuous_batching_manager.add_request(
+                    _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
+                )
+                for chunk in stream_chat_completion(request_id, decode_stream):
+                    yield chunk
+                    await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
+            except asyncio.CancelledError:
+                self.running_continuous_batching_manager.cancel_request(request_id)
+                logger.warning(f"Request {request_id} was cancelled.")
+
+        return cancellation_wrapper(inputs[0], request_id)
 
     @staticmethod
     def get_model_modality(model: "PreTrainedModel") -> Modality:
@@ -989,7 +1018,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
-            last_kv_cache = self.last_kv_cache
+            seq_len = self.last_kv_cache.get_seq_length()
+            if inputs["input_ids"].shape[-1] > seq_len:
+                last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             **inputs,
@@ -1027,8 +1058,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for result in streamer:
                     # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
                     if "gptoss" in model.config.architectures[0].lower():
-                        if result.endswith("<|return|>"):
-                            result = result[: -len("<|return|>")]
+                        result = result.removesuffix("<|return|>")
                     results += result
 
                     # (related to temporary hack 2)
@@ -1156,7 +1186,7 @@ class ServeCommand(BaseTransformersCLICommand):
             inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
             inputs.append(req["input"])
         else:
-            raise ValueError("inputs should be a list, dict, or str")
+            raise TypeError("inputs should be a list, dict, or str")
 
         inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
         inputs = inputs.to(model.device)
@@ -1176,7 +1206,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
-            last_kv_cache = self.last_kv_cache
+            seq_len = self.last_kv_cache.get_seq_length()
+            if inputs["input_ids"].shape[-1] > seq_len:
+                last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             "inputs": inputs,
@@ -1284,8 +1316,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for result in streamer:
                     # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
                     if "gptoss" in model.config.architectures[0].lower():
-                        if result.endswith("<|return|>"):
-                            result = result[: -len("<|return|>")]
+                        result = result.removesuffix("<|return|>")
                     results += result
 
                     # (related to temporary hack 2)
@@ -1295,19 +1326,31 @@ class ServeCommand(BaseTransformersCLICommand):
                             results = ""  # reset the results -> results will now track the final response
                             continue
                         else:
-                            continue
-
-                    response_output_text_delta = ResponseTextDeltaEvent(
-                        type="response.output_text.delta",
-                        item_id=f"msg_{request_id}",
-                        sequence_number=sequence_number,
-                        output_index=output_index,
-                        content_index=content_index,
-                        delta=result,
-                        logprobs=[{"token": "", "logprob": 99.9}],  # TODO: add actual logprobs
-                    )
-                    sequence_number += 1
-                    yield self.build_response_event(response_output_text_delta)
+                            response_output_text_delta = ResponseTextDeltaEvent(
+                                type="response.output_text.delta",
+                                item_id=f"msg_{request_id}",
+                                sequence_number=sequence_number,
+                                output_index=output_index,
+                                content_index=content_index,
+                                delta=result,
+                                logprobs=[],
+                            )
+                            sequence_number += 1
+                            yield self.build_response_event(response_output_text_delta)
+                    else:
+                        # Normal path: emit token deltas when not filtering CoT
+                        if result:
+                            response_output_text_delta = ResponseTextDeltaEvent(
+                                type="response.output_text.delta",
+                                item_id=f"msg_{request_id}",
+                                sequence_number=sequence_number,
+                                output_index=output_index,
+                                content_index=content_index,
+                                delta=result,
+                                logprobs=[],
+                            )
+                            sequence_number += 1
+                            yield self.build_response_event(response_output_text_delta)
 
                 # Signal the end of the text generation
                 response_output_text_done = ResponseTextDoneEvent(
@@ -1317,7 +1360,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     output_index=output_index,
                     content_index=0,
                     text=results,
-                    logprobs=[{"token": "", "logprob": 99.9}],  # TODO: add actual logprobs
+                    logprobs=[],
                 )
                 sequence_number += 1
                 yield self.build_response_event(response_output_text_done)
@@ -1415,6 +1458,94 @@ class ServeCommand(BaseTransformersCLICommand):
                 thread.join()
 
         return stream_response(generation_streamer, request_id)
+
+    def generate_response_non_streaming(self, req: dict) -> dict:
+        """
+        Generates an OpenAI Response in non-streaming mode (single JSON payload).
+
+        Args:
+            req (`dict`): The request to generate an OpenAI Response for.
+
+        Returns:
+            `dict`: The OpenAI `Response` serialized as a dict.
+        """
+        model_id_and_revision = self.process_model_name(req["model"])
+        must_discard_cache = model_id_and_revision != self.last_model
+        self.last_model = model_id_and_revision
+        model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        if isinstance(req["input"], str):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append({"role": "user", "content": req["input"]})
+        elif isinstance(req["input"], list):
+            if "instructions" in req:
+                if req["input"][0]["role"] != "system":
+                    inputs = [{"role": "system", "content": req["instructions"]}, *req["input"]]
+                else:
+                    inputs = req["input"]
+                    inputs[0]["content"] = req["instructions"]
+            else:
+                inputs = req["input"]
+        elif isinstance(req["input"], dict):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append(req["input"])
+        else:
+            raise ValueError("inputs should be a list, dict, or str")
+
+        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
+        inputs = inputs.to(model.device)
+        request_id = req.get("previous_response_id", "req_0")
+
+        # Temporary hack for GPTOSS 1: don't filter special tokens
+        skip_special_tokens = True
+        if "gptoss" in model.config.architectures[0].lower():
+            skip_special_tokens = False
+
+        generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
+
+        last_kv_cache = None
+        if self.is_continuation(req) and not must_discard_cache:
+            seq_len = self.last_kv_cache.get_seq_length()
+            if inputs.shape[-1] > seq_len:
+                last_kv_cache = self.last_kv_cache
+
+        generate_output = model.generate(
+            inputs=inputs,
+            attention_mask=torch.ones_like(inputs),
+            generation_config=generation_config,
+            return_dict_in_generate=True,
+            past_key_values=last_kv_cache,
+        )
+        # save KV cache
+        self.last_kv_cache = generate_output.past_key_values
+
+        # Decode full text
+        full_text = processor.batch_decode(generate_output.sequences, skip_special_tokens=skip_special_tokens)[0]
+
+        created_at = time.time()
+        response_output_item = ResponseOutputMessage(
+            id=f"msg_{request_id}",
+            type="message",
+            status="completed",
+            role="assistant",
+            content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
+            annotations=[],
+        )
+        response_completed = Response(
+            id=f"resp_{request_id}",
+            created_at=created_at,
+            status="completed",
+            model=model_id_and_revision,
+            instructions=req.get("instructions"),
+            text={"format": {"type": "text"}},
+            output=[response_output_item],
+            object="response",
+            tools=[],
+            parallel_tool_calls=req.get("parallel_tool_calls", False),
+            tool_choice="auto",
+            metadata=req.get("metadata"),
+        )
+        return response_completed.model_dump(exclude_none=True)
 
     def generate_transcription(self, req: dict) -> Generator[str, None, None]:
         """

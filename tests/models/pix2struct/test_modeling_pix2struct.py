@@ -145,9 +145,8 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Pix2StructVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Pix2StructVisionModelTester(self)
@@ -314,8 +313,6 @@ class Pix2StructTextModelTester:
 class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructTextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
@@ -414,8 +411,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         else {}
     )
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
@@ -478,9 +474,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 "attention_mask",
                 "decoder_input_ids",
                 "decoder_attention_mask",
-                "head_mask",
-                "decoder_head_mask",
-                "cross_attn_head_mask",
                 "encoder_outputs",
                 "past_key_values",
                 "labels",
@@ -529,41 +522,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             loss = model(**inputs).loss
             loss.backward()
-
-    # override as the `logit_scale` parameter initialization is different for Pix2Struct
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        # See PR #38607 (to avoid flakiness)
-                        data = torch.flatten(param.data)
-                        n_elements = torch.numel(data)
-                        # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
-                        # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
-                        n_elements_to_skip_on_each_side = int(n_elements * 0.025)
-                        data_to_check = torch.sort(data).values
-                        if n_elements_to_skip_on_each_side > 0:
-                            data_to_check = data_to_check[
-                                n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side
-                            ]
-                        self.assertIn(
-                            ((data_to_check.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     # overwrite because `vocab_size` is not an attribute of `Pix2StructConfig` but rather `Pix2StructTextConfig`
     def test_resize_tokens_embeddings(self):
@@ -627,6 +585,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:

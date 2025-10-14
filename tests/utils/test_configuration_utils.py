@@ -21,11 +21,10 @@ import unittest.mock as mock
 import warnings
 from pathlib import Path
 
-from huggingface_hub import HfFolder
-from requests.exceptions import HTTPError
+import httpx
 
 from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
 
@@ -40,9 +39,6 @@ config_common_kwargs = {
     "output_attentions": True,
     "torchscript": True,
     "dtype": "float16",
-    "use_bfloat16": True,
-    "tf_legacy_loss": True,
-    "pruned_heads": {"a": 1},
     "tie_word_embeddings": False,
     "is_decoder": True,
     "cross_attention_hidden_size": 128,
@@ -95,7 +91,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
@@ -183,7 +178,7 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertEqual(summary_type, c.summary_type, "mismatch for key: summary_type")
 
     def test_config_common_kwargs_is_complete(self):
-        base_config = PretrainedConfig()
+        base_config = PreTrainedConfig()
         missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
         # If this part of the test fails, you have arguments to add in config_common_kwargs above.
         self.assertListEqual(
@@ -224,14 +219,16 @@ class ConfigTestUtils(unittest.TestCase):
         response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "failed", request=mock.Mock(), response=mock.Mock()
+        )
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -299,7 +296,7 @@ class ConfigTestUtils(unittest.TestCase):
         # Loading config should not raise a FutureWarning. It was the case before.
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            PretrainedConfig.from_pretrained("bert-base-uncased")
+            PreTrainedConfig.from_pretrained("bert-base-uncased")
 
     def test_get_text_config(self):
         """Tests the `get_text_config` method."""
@@ -337,24 +334,24 @@ class ConfigTestUtils(unittest.TestCase):
     def test_bc_torch_dtype(self):
         import torch
 
-        config = PretrainedConfig(dtype="bfloat16")
+        config = PreTrainedConfig(dtype="bfloat16")
         self.assertEqual(config.dtype, torch.bfloat16)
 
-        config = PretrainedConfig(torch_dtype="bfloat16")
+        config = PreTrainedConfig(torch_dtype="bfloat16")
         self.assertEqual(config.dtype, torch.bfloat16)
 
         # Check that if we pass both, `dtype` is used
-        config = PretrainedConfig(dtype="bfloat16", torch_dtype="float32")
+        config = PreTrainedConfig(dtype="bfloat16", torch_dtype="float32")
         self.assertEqual(config.dtype, torch.bfloat16)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             config.save_pretrained(tmpdirname)
 
-            config = PretrainedConfig.from_pretrained(tmpdirname)
+            config = PreTrainedConfig.from_pretrained(tmpdirname)
             self.assertEqual(config.dtype, torch.bfloat16)
 
-            config = PretrainedConfig.from_pretrained(tmpdirname, dtype="float32")
+            config = PreTrainedConfig.from_pretrained(tmpdirname, dtype="float32")
             self.assertEqual(config.dtype, "float32")
 
-            config = PretrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
+            config = PreTrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
             self.assertEqual(config.dtype, "float32")

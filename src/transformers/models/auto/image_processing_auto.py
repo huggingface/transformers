@@ -22,7 +22,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Optional, Union
 
 # Build the list of all image processors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...image_processing_utils import ImageProcessingMixin
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -91,8 +91,9 @@ else:
             ("dinov3_vit", (None, "DINOv3ViTImageProcessorFast")),
             ("donut-swin", ("DonutImageProcessor", "DonutImageProcessorFast")),
             ("dpt", ("DPTImageProcessor", "DPTImageProcessorFast")),
+            ("edgetam", (None, "Sam2ImageProcessorFast")),
             ("efficientformer", ("EfficientFormerImageProcessor", None)),
-            ("efficientloftr", ("EfficientLoFTRImageProcessor", None)),
+            ("efficientloftr", ("EfficientLoFTRImageProcessor", "EfficientLoFTRImageProcessorFast")),
             ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
@@ -111,7 +112,7 @@ else:
             ("idefics2", ("Idefics2ImageProcessor", "Idefics2ImageProcessorFast")),
             ("idefics3", ("Idefics3ImageProcessor", "Idefics3ImageProcessorFast")),
             ("ijepa", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("imagegpt", ("ImageGPTImageProcessor", None)),
+            ("imagegpt", ("ImageGPTImageProcessor", "ImageGPTImageProcessorFast")),
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor", None)),
             ("janus", ("JanusImageProcessor", "JanusImageProcessorFast")),
@@ -120,6 +121,7 @@ else:
             ("layoutlmv2", ("LayoutLMv2ImageProcessor", "LayoutLMv2ImageProcessorFast")),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
+            ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
             ("lightglue", ("LightGlueImageProcessor", None)),
             ("llama4", ("Llama4ImageProcessor", "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
@@ -132,7 +134,7 @@ else:
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("mllama", ("MllamaImageProcessor", None)),
+            ("mllama", ("MllamaImageProcessor", "MllamaImageProcessorFast")),
             ("mm-grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor", "MobileNetV1ImageProcessorFast")),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
@@ -151,11 +153,12 @@ else:
             ("pix2struct", ("Pix2StructImageProcessor", None)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
-            ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", None)),
+            ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
             ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
+            ("qwen3_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("resnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
@@ -183,6 +186,7 @@ else:
             ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
             ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
+            ("video_llama_3", ("VideoLlama3ImageProcessor", "VideoLlama3ImageProcessorFast")),
             ("videomae", ("VideoMAEImageProcessor", None)),
             ("vilt", ("ViltImageProcessor", "ViltImageProcessorFast")),
             ("vipllava", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -241,7 +245,6 @@ def get_image_processor_config(
     pretrained_model_name_or_path: Union[str, os.PathLike],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -266,9 +269,6 @@ def get_image_processor_config(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -321,7 +321,6 @@ def get_image_processor_config(
         IMAGE_PROCESSOR_NAME,
         cache_dir=cache_dir,
         force_download=force_download,
-        resume_download=resume_download,
         proxies=proxies,
         token=token,
         revision=revision,
@@ -391,9 +390,6 @@ class AutoImageProcessor:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the image processor files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -507,7 +503,7 @@ class AutoImageProcessor:
 
         # If we don't find the image processor class in the image processor config, let's try the model config.
         if image_processor_type is None and image_processor_auto_map is None:
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path,
                     trust_remote_code=trust_remote_code,
@@ -563,9 +559,7 @@ class AutoImageProcessor:
                     )
                 image_processor_class = get_image_processor_class_from_name(image_processor_type)
             else:
-                image_processor_type_slow = (
-                    image_processor_type[:-4] if image_processor_type.endswith("Fast") else image_processor_type
-                )
+                image_processor_type_slow = image_processor_type.removesuffix("Fast")
                 image_processor_class = get_image_processor_class_from_name(image_processor_type_slow)
                 if image_processor_class is None and image_processor_type.endswith("Fast"):
                     raise ValueError(
@@ -636,7 +630,7 @@ class AutoImageProcessor:
         Register a new image processor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             image_processor_class ([`ImageProcessingMixin`]): The image processor to register.
         """

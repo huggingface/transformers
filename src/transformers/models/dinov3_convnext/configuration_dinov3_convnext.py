@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -24,15 +24,15 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-class DINOv3ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
-    """
+class DINOv3ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
+    r"""
     This is the configuration class to store the configuration of a [`DINOv3ConvNextModel`]. It is used to instantiate an
     DINOv3ConvNext model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DINOv3ConvNext
     [facebook/dinov3-convnext-tiny-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-convnext-tiny-pretrain-lvd1689m) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):

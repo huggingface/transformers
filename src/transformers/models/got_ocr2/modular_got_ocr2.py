@@ -20,8 +20,7 @@ import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -46,15 +45,15 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
-class GotOcr2VisionConfig(PretrainedConfig):
+class GotOcr2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GotOcr2VisionModel`]. It is used to instantiate a GOT_OCR2
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of the SAM ViT-h
     [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -137,7 +136,7 @@ class GotOcr2VisionConfig(PretrainedConfig):
         self.mlp_dim = mlp_dim
 
 
-class GotOcr2Config(PretrainedConfig):
+class GotOcr2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GotOcr2ForConditionalGeneration`]. It is used to instantiate a
     GotOcr2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -145,8 +144,8 @@ class GotOcr2Config(PretrainedConfig):
 
     e.g [stepfun-ai/GOT-OCR-2.0-hf](https://huggingface.co/stepfun-ai/GOT-OCR-2.0-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -323,8 +322,8 @@ class GotOcr2Model(LlavaModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -334,7 +333,7 @@ class GotOcr2Model(LlavaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, GotOcr2ModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -383,8 +382,8 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

@@ -17,6 +17,7 @@ import copy
 import inspect
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import (
     BarkCausalModel,
@@ -39,7 +40,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -113,11 +113,8 @@ class BarkSemanticModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         inputs_dict = {
             "input_ids": input_ids,
-            "head_mask": head_mask,
             "attention_mask": input_mask,
         }
 
@@ -249,11 +246,8 @@ class BarkCoarseModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         inputs_dict = {
             "input_ids": input_ids,
-            "head_mask": head_mask,
             "attention_mask": input_mask,
         }
 
@@ -385,15 +379,12 @@ class BarkFineModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         # randint between self.n_codes_given - 1 and self.n_codes_total - 1
         codebook_idx = ids_tensor((1,), self.n_codes_total - self.n_codes_given).item() + self.n_codes_given
 
         inputs_dict = {
             "codebook_idx": codebook_idx,
             "input_ids": input_ids,
-            "head_mask": head_mask,
             "attention_mask": input_mask,
         }
 
@@ -499,7 +490,7 @@ class BarkModelTester:
         self.is_training = is_training
 
     def get_config(self):
-        return BarkConfig.from_sub_model_configs(
+        return BarkConfig(
             self.semantic_model_tester.get_config(),
             self.coarse_acoustics_model_tester.get_config(),
             self.fine_acoustics_model_tester.get_config(),
@@ -531,9 +522,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    test_model_parallel = False
-    # no model_parallel for now
 
     test_resize_embeddings = True
 
@@ -621,9 +609,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    test_model_parallel = False
-    # no model_parallel for now
 
     test_resize_embeddings = True
 
@@ -708,9 +693,6 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    # no model_parallel for now
-    test_model_parallel = False
 
     # torchscript disabled for now because forward with an int
     test_torchscript = False
@@ -884,6 +866,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:

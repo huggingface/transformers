@@ -19,7 +19,6 @@ from functools import lru_cache
 from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -461,7 +460,7 @@ class Owlv2Attention(nn.Module):
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if output_attentions:
-            # this operation is a bit akward, but it's required to
+            # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following

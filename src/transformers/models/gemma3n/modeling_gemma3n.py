@@ -40,7 +40,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
 
@@ -56,9 +55,8 @@ logger = logging.get_logger(__name__)
 )
 class Gemma3nModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -87,9 +85,8 @@ class Gemma3nCausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -103,7 +100,7 @@ class Gemma3nCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
@@ -1311,7 +1308,6 @@ class Gemma3nTextAttention(nn.Module):
                 config.layer_types[layer_idx]
             )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1408,7 +1404,6 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1808,11 +1803,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
         "What is your favorite condiment?"
         ```"""
 
-        if self.training and self.config._attn_implementation != "eager":
-            logger.warning_once(
-                "It is strongly recommended to train Gemma3n models with the `eager` attention implementation "
-                f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
-            )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2017,7 +2007,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         input_features_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -2222,7 +2212,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         input_features_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,

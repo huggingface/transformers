@@ -121,6 +121,7 @@ To get familiar with the data, explore what the examples look like.
 ```
 
 The examples in the dataset have the following fields:
+
 - `image_id`: the example image id
 - `image`: a `PIL.Image.Image` object containing the image
 - `width`: width of the image
@@ -171,10 +172,10 @@ To get an even better understanding of the data, visualize an example in the dat
 
 >>> image
 ```
+
 <div class="flex justify-center">
     <img src="https://i.imgur.com/oVQb9SF.png" alt="CPPE-5 Image Example"/>
 </div>
-
 
 To visualize the bounding boxes with associated labels, you can get the labels from the dataset's metadata, specifically
 the `category` field.
@@ -216,6 +217,7 @@ Instantiate the image processor from the same checkpoint as the model you want t
 ```
 
 Before passing the images to the `image_processor`, apply two preprocessing transformations to the dataset:
+
 - Augmenting images
 - Reformatting annotations to meet DETR expectations
 
@@ -505,6 +507,7 @@ The images in this dataset are still quite large, even after resizing. This mean
 require at least one GPU.
 
 Training involves the following steps:
+
 1. Load the model with [`AutoModelForObjectDetection`] using the same checkpoint as in the preprocessing.
 2. Define your training hyperparameters in [`TrainingArguments`].
 3. Pass the training arguments to [`Trainer`] along with the model, dataset, image processor, and data collator.
@@ -527,9 +530,10 @@ and `id2label` maps that you created earlier from the dataset's metadata. Additi
 In the [`TrainingArguments`] use `output_dir` to specify where to save your model, then configure hyperparameters as you see fit. For `num_train_epochs=30` training will take about 35 minutes in Google Colab T4 GPU, increase the number of epoch to get better results.
 
 Important notes:
- - Do not remove unused columns because this will drop the image column. Without the image column, you
+
+- Do not remove unused columns because this will drop the image column. Without the image column, you
 can't create `pixel_values`. For this reason, set `remove_unused_columns` to `False`.
- - Set `eval_do_concat_batches=False` to get proper evaluation results. Images have different number of target boxes, if batches are concatenated we will not be able to determine which boxes belongs to particular image.
+- Set `eval_do_concat_batches=False` to get proper evaluation results. Images have different number of target boxes, if batches are concatenated we will not be able to determine which boxes belongs to particular image.
 
 If you wish to share your model by pushing to the Hub, set `push_to_hub` to `True` (you must be signed in to Hugging
 Face to upload your model).
@@ -576,6 +580,7 @@ Finally, bring everything together, and call [`~transformers.Trainer.train`]:
 
 >>> trainer.train()
 ```
+
 <div>
 
   <progress value='3210' max='3210' style='width:300px; height:20px; vertical-align: middle;'></progress>
@@ -1487,10 +1492,11 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 ```
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
-```py
->>> from transformers import infer_device
 
->>> device = infer_device()
+```py
+>>> from accelerate import Accelerator
+
+>>> device = Accelerator().device
 >>> model_repo = "qubvel-hf/detr_finetuned_cppe5"
 
 >>> image_processor = AutoImageProcessor.from_pretrained(model_repo)

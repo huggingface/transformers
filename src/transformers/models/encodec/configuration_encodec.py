@@ -19,22 +19,22 @@ from typing import Optional
 
 import numpy as np
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class EncodecConfig(PretrainedConfig):
+class EncodecConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`EncodecModel`]. It is used to instantiate a
     Encodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [facebook/encodec_24khz](https://huggingface.co/facebook/encodec_24khz) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         target_bandwidths (`list[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0, 24.0]`):

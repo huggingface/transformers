@@ -20,12 +20,11 @@ from typing import Literal, Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -53,15 +52,15 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class ModernBertConfig(PretrainedConfig):
+class ModernBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertModel`]. It is used to instantiate an ModernBert
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ModernBERT-base.
     e.g. [answerdotai/ModernBERT-base](https://huggingface.co/answerdotai/ModernBERT-base)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50368):
@@ -679,7 +678,6 @@ class ModernBertAttention(nn.Module):
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
-        self.pruned_heads = set()
 
     def forward(
         self,
@@ -1019,6 +1017,15 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     _pad_modernbert_output(inputs=hs, indices=indices, batch=batch_size, seqlen=seq_len)
                     for hs in all_hidden_states
                 )
+        # If the attention implementation is FA2 and there is no need for repadding, there might still be the batch
+        # dimension missing
+        elif (
+            self.config._attn_implementation == "flash_attention_2"
+            and all_hidden_states is not None
+            and all_hidden_states[-1].dim() == 2
+        ):
+            hidden_states = hidden_states.unsqueeze(0)
+            all_hidden_states = tuple(hs.unsqueeze(0) for hs in all_hidden_states)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
@@ -1201,8 +1208,19 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if self.config._attn_implementation == "flash_attention_2":
+            # Logits padding
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
+            # Hidden states padding
+            if getattr(outputs, "hidden_states", None) is not None:
+                padded_hidden_states = []
+                for hs in outputs.hidden_states:
+                    if hs.dim() == 3 and hs.shape[0] == 1:
+                        hs = hs.squeeze(0)
+                    padded_hidden_states.append(
+                        _pad_modernbert_output(inputs=hs, indices=indices, batch=batch_size, seqlen=seq_len)
+                    )
+                outputs.hidden_states = tuple(padded_hidden_states)
 
         if not return_dict:
             output = (logits,)
@@ -1625,14 +1643,24 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        last_hidden_state = outputs[0]
+        last_hidden_state = outputs[0]  # shape (num_choices, seq_len, hidden_size)
 
+        # If classifier_pooling is "cls", isolate the <cls> token
         if self.config.classifier_pooling == "cls":
-            last_hidden_state = last_hidden_state[:, 0]
+            indices_0 = torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device)
+            # for left or right padding, <cls> is the first non-pad token
+            if attention_mask is not None:
+                cls_mask = attention_mask.argmax(dim=-1).to(last_hidden_state.device)
+            # if no pad, <cls> is the first token
+            else:
+                cls_mask = torch.tensor(0, dtype=torch.long, device=last_hidden_state.device)
+            # extract the <cls> token for the logits
+            last_hidden_state = last_hidden_state[indices_0, cls_mask]
+
+        # If classifier_pooling is "mean", pool the hidden states by averaging over the sequence length
         elif self.config.classifier_pooling == "mean":
-            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
-                dim=1, keepdim=True
-            )
+            num_non_pad_tokens = attention_mask.sum(dim=1, keepdim=True)
+            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / num_non_pad_tokens
 
         pooled_output = self.head(last_hidden_state)
         pooled_output = self.drop(pooled_output)
