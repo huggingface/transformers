@@ -43,8 +43,8 @@ from ..glm4_moe.modeling_glm4_moe import (
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
-    Glm4vTextRotaryEmbedding,
     Glm4vTextModel,
+    Glm4vTextRotaryEmbedding,
     rotate_half,
 )
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
