@@ -586,8 +586,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                     scaled_latent.to(self.model.acoustic_tokenizer.device),
                     cache=acoustic_cache,  # Use acoustic-specific cache
                     sample_indices=diffusion_indices.to(self.model.acoustic_tokenizer.device),
-                    use_cache=True,
-                    debug=False
+                    use_cache=True
                 )
 
                 # Store audio chunks for each sample
@@ -607,8 +606,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                     audio_chunk,
                     cache=semantic_cache,  # Use semantic-specific cache
                     sample_indices=diffusion_indices,
-                    use_cache=True,
-                    debug=False
+                    use_cache=True
                 ).mean # semantic tokenizer has no VAE.
 
                 # Combine acoustic and semantic features for next input
