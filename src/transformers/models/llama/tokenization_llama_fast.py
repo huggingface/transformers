@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib.util
 import os
 from shutil import copyfile
 from typing import Optional
@@ -137,12 +136,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_prefix_space=None,
         **kwargs,
     ):
-        if vocab_file is None:
-            if importlib.util.find_spec("mistral_common") is None:
-                raise ImportError(
-                    "Using this tokenizer requires the `mistral-common` library. "
-                    "Please install it with `pip install mistral-common`."
-                )
         if legacy is None:
             logger.warning_once(
                 f"You are using the default legacy behaviour of the {self.__class__}. This is"

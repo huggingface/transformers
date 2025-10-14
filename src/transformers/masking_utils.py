@@ -409,9 +409,13 @@ def sdpa_mask_recent_torch(
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
+    original_mask_function = mask_function
+    
     # Potentially add the padding 2D mask
     if padding_mask is not None:
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
+        if original_mask_function is bidirectional_mask_function:
+            return padding_mask[:,None,None,:].expand(batch_size, 1, q_length, kv_length)
 
     batch_arange = torch.arange(batch_size, device=cache_position.device)
     head_arange = torch.arange(1, device=cache_position.device)
