@@ -30,13 +30,15 @@ from ...utils import is_torch_available
 if is_torch_available():
     import torch
 
+NestedList = list[Union[Optional[float | int], "NestedList"]]
+
 
 class SamImagesKwargs(ImagesKwargs, total=False):
     segmentation_maps: Optional[ImageInput]
-    input_points: Optional[list[list[float]]]
-    input_labels: Optional[list[list[int]]]
-    input_boxes: Optional[list[list[list[float]]]]
-    point_pad_value: int
+    input_points: Optional[NestedList]
+    input_labels: Optional[NestedList]
+    input_boxes: Optional[NestedList]
+    point_pad_value: Optional[int]
     mask_size: dict[str, int]
     mask_pad_size: dict[str, int]
 
