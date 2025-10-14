@@ -22,24 +22,6 @@ from .configuration_vibevoice_semantic_tokenizer import VibeVoiceSemanticTokeniz
 
 
 # Normalization modules
-class ConvLayerNorm(nn.LayerNorm):
-    """
-    Convolution-friendly LayerNorm that moves channels to last dimensions
-    before running the normalization and moves them back to original position right after.
-    """
-
-    def __init__(self, normalized_shape: tp.Union[int, list[int], torch.Size], **kwargs):
-        super().__init__(normalized_shape, **kwargs)
-
-    def forward(self, x):
-        x = x.transpose(1, 2)  # b ... t -> b t ...
-        x = nn.functional.layer_norm(
-            x.float(), self.normalized_shape, self.weight.float(), self.bias.float(), self.eps
-        ).type_as(x)
-        x = x.transpose(1, 2)  # b t ... -> b ... t
-        return x
-
-
 class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-5, elementwise_affine=True, weight_shape=None):
         super().__init__()
@@ -77,18 +59,6 @@ class ConvRMSNorm(RMSNorm):
 
         output = output.transpose(1, 2)  # b t ... -> b ... t
         return output
-
-
-class NormConv1d(nn.Module):
-    """Wrapper around Conv1d and normalization applied to this conv"""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        self.conv = nn.Conv1d(*args, **kwargs)
-
-    def forward(self, x):
-        x = self.conv(x)
-        return x
 
 
 class VibeVoiceTokenizerStreamingCache:
@@ -202,9 +172,7 @@ class SConv1d(nn.Module):
         pad_mode: str = "reflect",
     ):
         super().__init__()
-        self.conv = NormConv1d(
-            in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias
-        )
+        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias)
         self.causal = causal
         self.pad_mode = pad_mode
 
@@ -392,38 +360,18 @@ class Block1D(nn.Module):
     def __init__(self, dim, kernel_size=7, drop_path=0.0, mixer_layer="conv", layer_scale_init_value=1e-6, **kwargs):
         super().__init__()
 
-        if kwargs.get("layernorm", "LN") == "LN":
-            self.norm = ConvLayerNorm(dim, eps=kwargs.get("eps", 1e-6))
-            self.ffn_norm = ConvLayerNorm(dim, eps=kwargs.get("eps", 1e-6))
-        elif kwargs.get("layernorm", "RMSNorm") == "RMSNorm":
-            self.norm = ConvRMSNorm(dim, eps=kwargs.get("eps", 1e-6))
-            self.ffn_norm = ConvRMSNorm(dim, eps=kwargs.get("eps", 1e-6))
-
-        if mixer_layer == "conv":
-            self.mixer = Convlayer(
-                dim,
-                dim,
-                groups=kwargs.get("groups", 1),
-                kernel_size=kernel_size,
-                pad_mode=kwargs.get("pad_mode", "reflect"),
-                norm=kwargs.get("norm", "none"),
-                causal=kwargs.get("causal", True),
-                bias=kwargs.get("bias", True),
-            )
-        elif mixer_layer == "depthwise_conv":
-            self.mixer = Convlayer(
-                dim,
-                dim,
-                groups=dim,
-                kernel_size=kernel_size,
-                pad_mode=kwargs.get("pad_mode", "reflect"),
-                norm=kwargs.get("norm", "none"),
-                causal=kwargs.get("causal", True),
-                bias=kwargs.get("bias", True),
-            )
-        else:
-            raise ValueError(f"Unsupported mixer layer: {mixer_layer}")
-
+        self.norm = ConvRMSNorm(dim, eps=kwargs.get("eps", 1e-6))
+        self.ffn_norm = ConvRMSNorm(dim, eps=kwargs.get("eps", 1e-6))
+        self.mixer = Convlayer(
+            dim,
+            dim,
+            groups=dim,
+            kernel_size=kernel_size,
+            pad_mode=kwargs.get("pad_mode", "reflect"),
+            norm=kwargs.get("norm", "none"),
+            causal=kwargs.get("causal", True),
+            bias=kwargs.get("bias", True),
+        )
         self.ffn = FFN(
             dim,
             kwargs.get("ffn_expansion", 4) * dim,

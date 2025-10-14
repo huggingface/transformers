@@ -112,9 +112,9 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self.language_model = AutoModel.from_config(lm_config)
 
         # Initialize speech components if needed
-        # TODO model ID in config
-        self.acoustic_tokenizer = VibeVoiceAcousticTokenizerModel.from_pretrained("bezzam/VibeVoiceAcousticTokenizer").to(dtype)
-        self.semantic_tokenizer = VibeVoiceSemanticTokenizerModel.from_pretrained("bezzam/VibeVoiceSemanticTokenizer").to(dtype)
+        # TODO model ID in config?
+        self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config).to(dtype)
+        self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config).to(dtype)
 
         self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_vae_dim, lm_config.hidden_size).to(dtype)
         self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_vae_dim, lm_config.hidden_size).to(dtype)

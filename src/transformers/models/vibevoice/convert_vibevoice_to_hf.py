@@ -16,7 +16,7 @@ import argparse
 import torch
 from safetensors.torch import load_file
 import json
-from transformers import VibeVoiceSemanticTokenizerConfig, VibeVoiceSemanticTokenizerModel
+from transformers import VibeVoiceConfig, VibeVoiceModel, VibeVoiceAcousticTokenizerModel, VibeVoiceSemanticTokenizerModel
 
 
 def update_state_dict_for_hf_model(state_dict):
@@ -32,9 +32,9 @@ def update_state_dict_for_hf_model(state_dict):
     for key, value in state_dict.items():
         new_key = key
         
-        # Handle conv.conv -> conv mapping for all SConv1d layers
+        # Handle conv.conv -> conv mapping for semantic tokenizer SConv1d layers only
         # This removes one level of .conv nesting
-        if ".conv.conv." in key:
+        if ".conv.conv." in key and "semantic_tokenizer" in key:
             new_key = key.replace(".conv.conv.", ".conv.")
         
         updated_state_dict[new_key] = value
@@ -44,50 +44,35 @@ def update_state_dict_for_hf_model(state_dict):
 
 def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
 
-    # 1) load state dict from safetensors checkpoint
-    full_model_state_dict = load_file(checkpoint)
-    # -- filter for semantic tokenizer only
-    prefix = "model.semantic_tokenizer"
-    original_state_dict = {
-        k[len(prefix)+1:]: v  # +1 to remove the dot after the prefix
-        for k, v in full_model_state_dict.items()
-        if k.startswith(prefix)
-    }
-    # # ## TODO load from original model files here (will also be using for integration tests)
-    # from transformers.models.vibevoice_original.modeling_vibevoice import VibeVoiceModel
-    # full_model = VibeVoiceModel.from_pretrained("microsoft/VibeVoice-1.5B")
-    # semantic_tokenizer_state_dict_2 = full_model.semantic_tokenizer.state_dict()
+    if bfloat16:
+        dtype = torch.bfloat16
+    else:
+        dtype = torch.float32
 
-    # 2) extract semantic tokenizer configuration
+    # 1) Load state dict from safetensors checkpoint
+    original_state_dict = load_file(checkpoint)
+    # -- remove "model." prefix
+    if list(original_state_dict.keys())[0].startswith("model."):
+        original_state_dict = {k[len("model."):]: v for k, v in original_state_dict.items()}
+
+    # 2) Prepare model configuration
+    # -- Load
     with open(config_path, "r") as f:
-        config = json.load(f)
-    # extract semantic tokenizer configuration
-    semantic_tokenizer_config = config["semantic_tokenizer_config"]
-    # if config_path is None:
-    #     semantic_tokenizer_config = full_model.config.semantic_tokenizer_config
-    #     semantic_tokenizer_config = semantic_tokenizer_config.to_dict()
-    # else:
-    #     # load config
-    #     with open(config_path, "r") as f:
-    #         config = json.load(f)
-    #     # extract semantic tokenizer configuration
-    #     semantic_tokenizer_config = config["semantic_tokenizer_config"]
-
-    # -- cleanup
-    semantic_tokenizer_config["encoder_depths"] = list(map(int, semantic_tokenizer_config["encoder_depths"].split("-")))
+        model_config = json.load(f)
+    # -- Use prepared acoustic and semantic tokenizers
+    acoustic_tokenizer = VibeVoiceAcousticTokenizerModel.from_pretrained("bezzam/VibeVoiceAcousticTokenizer").to(dtype)
+    semantic_tokenizer = VibeVoiceSemanticTokenizerModel.from_pretrained("bezzam/VibeVoiceSemanticTokenizer").to(dtype)
+    model_config["acoustic_tokenizer_config"] = acoustic_tokenizer.config.to_dict()
+    model_config["semantic_tokenizer_config"] = semantic_tokenizer.config.to_dict()
 
     # 3) create config
-    model_config = VibeVoiceSemanticTokenizerConfig(**semantic_tokenizer_config)
+    model_config = VibeVoiceConfig(**model_config)
 
     # 4) create model
-    model = VibeVoiceSemanticTokenizerModel(model_config)
-    # -- to bfloat16
-    if bfloat16:
-        model = model.to(torch.bfloat16)
+    model = VibeVoiceModel(model_config).to(dtype)
 
     # 5) Update state dict to match HuggingFace model structure
     updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
-    
     missing, unexpected = model.load_state_dict(updated_state_dict, strict=False)
     if len(unexpected) != 0:
         raise ValueError(f"Unexpected keys: {unexpected}")
@@ -100,28 +85,22 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     if push_to_hub is not None:
         model.push_to_hub(push_to_hub)
 
-"""```bash
-# -- download checkpoint and config: https://gist.github.com/ebezzam/524341a2133c17e107777f6823609d25#file-download_checkpoints-py
+"""
+```bash
+# -- download checkpoint and config
 python src/transformers/models/vibevoice/download_vibevoice_checkpoint.py
 wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P /raid/eric/vibevoice
 
 # -- run conversion
-python src/transformers/models/vibevoice_semantic_tokenizer/convert_vibevoice_semantic_tokenizer_to_hf.py \
+python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --checkpoint /raid/eric/vibevoice/VibeVoice-1.5B-combined.safetensors \
     --config_path /raid/eric/vibevoice/config.json \
-    --push_to_hub bezzam/VibeVoiceSemanticTokenizer
-```
-
-Can directly use VibeVoice model checkpoint
-```bash
-python src/transformers/models/vibevoice_semantic_tokenizer/convert_vibevoice_semantic_tokenizer_to_hf.py \
-    --checkpoint microsoft/VibeVoice-1.5B \
-    --push_to_hub bezzam/VibeVoiceSemanticTokenizer
+    --push_to_hub bezzam/VibeVoice-1.5B
 ```
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", required=True, default=None, type=str, help="VibeVoice model checkpoint to extract the semantic tokenizer from.")
+    parser.add_argument("--checkpoint", required=True, default=None, type=str, help="Original VibeVoice model checkpoint.")
     parser.add_argument(
         "--config_path", default=None, type=str, help="Path to hf config.json of model to convert"
     )

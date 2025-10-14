@@ -61,6 +61,9 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
 class VibeVoiceConfig(PretrainedConfig):
     model_type = "vibevoice"
     is_composition = True
+
+    # TODO: change to AutoConfig and "decoder_config" to "text_config"
+    # -- see Llava
     sub_configs = {
         "acoustic_tokenizer_config": VibeVoiceAcousticTokenizerConfig,
         "semantic_tokenizer_config": VibeVoiceSemanticTokenizerConfig,

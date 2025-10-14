@@ -383,6 +383,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("univnet", "UnivNetModel"),
         ("van", "VanModel"),
         ("vibevoice", "VibeVoiceModel"),
+        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
+        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerModel"),
         ("video_llava", "VideoLlavaModel"),
         ("videomae", "VideoMAEModel"),
         ("vilt", "ViltModel"),

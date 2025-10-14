@@ -82,7 +82,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--vibevoice_model_id", required=True, default=None, type=str, help="ID of the VibeVoice model to extract the acoustic tokenizer from.")
     parser.add_argument(
-        "--config_path", default=None, type=str, help="Path to hf config.yaml of model to convert"
+        "--config_path", default=None, type=str, help="Path to hf config.json of model to convert"
     )
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
