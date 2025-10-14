@@ -24,25 +24,15 @@ os.environ["TOKENIZERS_PARALLELISM"] = "1"
 torch.set_float32_matmul_precision("high")
 
 
-class LLaMABenchmark(ModelBenchmark):
-    """Simplified LLaMA model benchmark implementation using the ModelBenchmark base class."""
+class BERTBenchmark(ModelBenchmark):
+    """Simplified BERT model benchmark implementation using the ModelBenchmark base class."""
 
     def __init__(self, logger: logging.Logger):
         super().__init__(logger)
-        self._default_prompt = "Why dogs are so cute?"  # Custom prompt for LLaMA
-
-    def get_default_generation_config(self) -> dict[str, Any]:
-        """Get LLaMA-specific generation configuration."""
-        return {
-            "do_sample": False,
-            "top_p": 1.0,
-            "temperature": 1.0,
-            "repetition_penalty": 1.0,
-            "max_new_tokens": None,  # Will be set per scenario
-        }
+        self._default_prompt = "Why dogs are so cute?"
 
     def get_model_init_kwargs(self, config) -> dict[str, Any]:
-        """Get LLaMA-specific model initialization kwargs."""
+        """Get BERT-specific model initialization kwargs."""
         return {
             "torch_dtype": getattr(torch, config.torch_dtype),
             "attn_implementation": config.attn_implementation,
@@ -50,17 +40,17 @@ class LLaMABenchmark(ModelBenchmark):
         }
 
     def get_default_torch_dtype(self) -> str:
-        """Get default torch dtype for LLaMA."""
-        return "float16"  # LLaMA works well with float16
+        """Get default torch dtype for BERT."""
+        return "float16"
 
     def get_default_device(self) -> str:
-        """Get default device for LLaMA."""
-        return "cuda"  # LLaMA prefers CUDA
+        """Get default device for BERT."""
+        return "cuda"
 
 
-def run_llama(logger, output_dir, **kwargs):
+def run_bert(logger, output_dir, **kwargs):
     """
-    Run LLaMA benchmark with the given configuration.
+    Run BERT benchmark with the given configuration.
 
     Args:
         logger: Logger instance
@@ -73,16 +63,16 @@ def run_llama(logger, output_dir, **kwargs):
     # Extract parameters with common defaults
     from benchmark_framework import BenchmarkRunner, ModelBenchmark
 
-    params = ModelBenchmark.extract_benchmark_kwargs("meta-llama/Llama-2-7b-hf", **kwargs)
+    params = ModelBenchmark.extract_benchmark_kwargs("bert-base-uncased", **kwargs)
 
-    logger.info(f"Starting LLaMA benchmark for model: {params['model_id']}")
+    logger.info(f"Starting BERT benchmark for model: {params['model_id']}")
     logger.info(
         f"Configuration: warmup={params['warmup_iterations']}, measurement={params['measurement_iterations']}, tokens={params['num_tokens_to_generate']}"
     )
 
     try:
         # Create benchmark instance
-        benchmark = LLaMABenchmark(logger)
+        benchmark = BERTBenchmark(logger)
 
         # Create scenarios
         scenario_kwargs = {k: v for k, v in params.items() if k != "commit_id"}
@@ -102,11 +92,11 @@ def run_llama(logger, output_dir, **kwargs):
         model_name = params["model_id"].split("/")[-1]  # Extract model name from ID
         output_file = runner.save_results(model_name, results)
 
-        logger.info(f"LLaMA benchmark completed successfully. Results saved to: {output_file}")
+        logger.info(f"BERT benchmark completed successfully. Results saved to: {output_file}")
         return output_file
 
     except Exception as e:
-        logger.error(f"LLaMA benchmark failed: {e}")
+        logger.error(f"BERT benchmark failed: {e}")
         import traceback
 
         logger.debug(traceback.format_exc())
