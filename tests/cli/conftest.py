@@ -21,6 +21,6 @@ import transformers.cli.transformers
 def cli():
     def _cli_invoke(*args):
         runner = CliRunner()
-        return runner.invoke(transformers.cli.transformers.app, list(args))
+        return runner.invoke(transformers.cli.transformers.app, list(args), catch_exceptions=False)
 
     return _cli_invoke
