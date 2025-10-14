@@ -19,6 +19,7 @@ import unittest
 
 import pytest
 from parameterized import parameterized
+from pytest import mark
 
 from transformers import (
     AutoModelForCausalLM,
@@ -30,12 +31,14 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    is_flaky,
     is_flash_attn_2_available,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_large_accelerator,
     slow,
     torch_device,
@@ -341,6 +344,16 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
             model.save_pretrained(tmp_dir)
             for_causal_lm = AutoModelForCausalLM.from_pretrained(tmp_dir)
             self.assertIsInstance(for_causal_lm, Gemma3ForConditionalGeneration)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_2_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(
+            attn_implementation="flash_attention_2", padding_side="left", check_forward_in_train=False
+        )
 
 
 @slow

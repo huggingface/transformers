@@ -2974,8 +2974,13 @@ class ModelTesterMixin:
             )
 
     def flash_attn_inference_equivalence(
-        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
-    ):
+        self,
+        attn_implementation: str,
+        padding_side: str,
+        atol: float = 4e-2,
+        rtol: float = 4e-2,
+        check_forward_in_train: bool = True,
+    ) -> None:
         r"""
         Tests the equivalence between the eager and flash attention implementations.
         This test is only for inference and runs with `dtype=torch.bfloat16`.
@@ -3113,11 +3118,13 @@ class ModelTesterMixin:
                 torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
                 if padding_side == "left":
                     torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
-                    # Check it can run in training mode
-                    model.train()
-                    _ = model(**second_inputs)
                 else:
                     torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
+
+                # Check it can run in training mode
+                if check_forward_in_train:
+                    model.train()
+                    _ = model(**second_inputs)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
@@ -3664,9 +3671,11 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             # TODO: to change it in the future with other relevant auto classes
-            fa_model = model_class._from_config(
-                config, attn_implementation=attn_implementation, dtype=torch.bfloat16
-            ).to(torch_device)
+            fa_model = (
+                model_class._from_config(config, attn_implementation=attn_implementation, dtype=torch.bfloat16)
+                .to(torch_device)
+                .eval()
+            )
 
             dummy_input = inputs_dict[fa_model.main_input_name]
             if dummy_input.dtype in [torch.float32, torch.float16]:
