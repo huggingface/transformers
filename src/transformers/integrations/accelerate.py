@@ -257,7 +257,7 @@ def check_and_set_device_map(device_map: "torch.device" | int | str | dict | Non
     return device_map
 
 
-def compute_module_sizes(model: "PreTrainedModel", hf_quantizer: "HfQuantizer" | None) -> dict[str, int]:
+def compute_module_sizes(model: "PreTrainedModel", hf_quantizer: "HfQuantizer | None") -> dict[str, int]:
     """
     Compute the size of each submodule of a given model (in bytes).
     """
@@ -279,7 +279,7 @@ def get_balanced_memory(
     model: "PreTrainedModel",
     max_memory: dict[int | str, int | str] | None = None,
     no_split_module_classes: list[str] | None = None,
-    hf_quantizer: "HfQuantizer" | None = None,
+    hf_quantizer: "HfQuantizer | None" = None,
     low_zero: bool = False,
 ):
     """
@@ -385,7 +385,7 @@ def _get_device_map(
     model: "PreTrainedModel",
     device_map: dict | str | None,
     max_memory: dict | None,
-    hf_quantizer: "HfQuantizer" | None,
+    hf_quantizer: "HfQuantizer | None",
     dtype: torch.dtype | None,
 ) -> dict:
     """Compute the final `device_map` to use if we passed a value in ['auto', 'balanced', 'balanced_low_0', 'sequential'].
