@@ -121,16 +121,14 @@ class AutoQuantizationConfig:
     @classmethod
     def from_dict(cls, quantization_config_dict: dict):
         quant_method = quantization_config_dict.get("quant_method")
-        if quant_method is None:
+        # We need a special care for bnb models to make sure everything is BC ..
+        if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
+            suffix = "_4bit" if quantization_config_dict.get("load_in_4bit", False) else "_8bit"
+            quant_method = QuantizationMethod.BITS_AND_BYTES + suffix
+        elif quant_method is None:
             raise ValueError(
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
-
-        if quant_method == QuantizationMethod.BITS_AND_BYTES:
-            if quantization_config_dict.get("load_in_8bit"):
-                quant_method += "_8bit"
-            else:
-                quant_method += "_4bit"
 
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(

@@ -1598,6 +1598,7 @@ class ModelTesterMixin:
                         cache_shape = (batch_size, num_heads, cache_length, head_dim)
                         non_empty_pkv = tuple(
                             (
+                                None,
                                 torch.rand(cache_shape, dtype=torch.float, device=torch_device),
                                 torch.rand(cache_shape, dtype=torch.float, device=torch_device),
                             )
