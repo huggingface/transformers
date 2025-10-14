@@ -273,7 +273,9 @@ def restore_default_dtype(func):
     return _wrapper
 
 
-def get_keep_in_fp32_regex(model, hf_quantizer, dtype):
+def get_keep_in_fp32_regex(
+    model: "PreTrainedModel", hf_quantizer: HfQuantizer | None, dtype: torch.dtype
+) -> re.Pattern | None:
     # Find fp32 modules if needed
     keep_in_fp32_modules = []
     # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
@@ -288,9 +290,10 @@ def get_keep_in_fp32_regex(model, hf_quantizer, dtype):
         keep_in_fp32_modules.extend(model._keep_in_fp32_modules_strict)
 
     keep_in_fp32_regex = None
-    if keep_in_fp32_modules:
+    if len(keep_in_fp32_modules) > 0:
         # We need to match exact layers, so we add either `.` on each side, or start/end of string
         keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
+
     return keep_in_fp32_regex
 
 
@@ -555,7 +558,6 @@ def _infer_parameter_dtype(
     model: "PreTrainedModel",
     param_name: str,
     empty_param: torch.Tensor,
-    keep_in_fp32_regex: Optional[re.Pattern] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
 ) -> Union[bool, Optional[torch.dtype]]:
     try:
@@ -576,11 +578,8 @@ def _infer_parameter_dtype(
     casting_dtype = None
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
     if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-        # First fp32 if part of the exception list
-        if keep_in_fp32_regex is not None and keep_in_fp32_regex.search(param_name):
-            casting_dtype = torch.float32
-        # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
-        elif hf_quantizer is not None:
+        # dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
+        if hf_quantizer is not None:
             casting_dtype = model.config._pre_quantization_dtype
         else:
             casting_dtype = old_param.dtype
@@ -604,7 +603,6 @@ def _load_state_dict_into_meta_model(
     disk_offload_folder: Optional[str] = None,
     disk_offload_index: Optional[dict] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
-    keep_in_fp32_regex: Optional[re.Pattern] = None,
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
 ) -> tuple[Optional[dict], Optional[dict]]:
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
@@ -634,13 +632,7 @@ def _load_state_dict_into_meta_model(
             param = file_pointer.get_slice(serialized_param_name)
         else:
             param = empty_param.to(tensor_device)  # It is actually not empty!
-        to_contiguous, casting_dtype = _infer_parameter_dtype(
-            model,
-            param_name,
-            empty_param,
-            keep_in_fp32_regex,
-            hf_quantizer,
-        )
+        to_contiguous, casting_dtype = _infer_parameter_dtype(model, param_name, empty_param, hf_quantizer)
 
         if device_mesh is not None:
             if not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
@@ -741,7 +733,6 @@ def load_shard_file(args):
         reverse_key_renaming_mapping,
         disk_offload_folder,
         disk_offload_index,
-        keep_in_fp32_regex,
         device_mesh,
     ) = args
 
@@ -776,7 +767,6 @@ def load_shard_file(args):
             disk_offload_folder=disk_offload_folder,
             disk_offload_index=disk_offload_index,
             hf_quantizer=hf_quantizer,
-            keep_in_fp32_regex=keep_in_fp32_regex,
             device_mesh=device_mesh,
         )
 
@@ -4510,8 +4500,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
-        # Regex to keep a fixed dtype
+        # Regex to keep a fixed fp32 dtype
         keep_in_fp32_regex = get_keep_in_fp32_regex(model, hf_quantizer, dtype)
+        # Set some modules to fp32 if needed
+        if keep_in_fp32_regex is not None and dtype != torch.float32:
+            for name, param in model.named_parameters():
+                if keep_in_fp32_regex.search(name):
+                    # param = param.to(torch.float32) does not work here as only in the local scope.
+                    param.data = param.data.to(torch.float32)
+
         if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
             hf_quantizer.preprocess_model(
                 model=model,
@@ -4527,7 +4524,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Prepare the full device map
         if device_map is not None:
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype, keep_in_fp32_regex)
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype)
 
         # restore default dtype
         if dtype_orig is not None:
@@ -4545,7 +4542,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             disk_offload_folder=offload_folder,
             dtype=dtype,
             hf_quantizer=hf_quantizer,
-            keep_in_fp32_regex=keep_in_fp32_regex,
             device_mesh=device_mesh,
             key_mapping=key_mapping,
             weights_only=weights_only,
@@ -4725,7 +4721,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         disk_offload_folder: Optional[str] = None,
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
-        keep_in_fp32_regex: Optional[re.Pattern] = None,
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
         key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
@@ -4792,13 +4787,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(missing_keys + mismatched_keys, is_quantized)
 
-        # Set some modules to fp32 if needed
-        if keep_in_fp32_regex is not None:
-            for name, param in model.named_parameters():
-                if keep_in_fp32_regex.search(name):
-                    # param = param.to(torch.float32) does not work here as only in the local scope.
-                    param.data = param.data.to(torch.float32)
-
         # Get reverse key mapping
         reverse_key_renaming_mapping = {v: k for k, v in key_renaming_mapping.items()}
 
@@ -4850,7 +4838,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 reverse_key_renaming_mapping,
                 disk_offload_folder,
                 disk_offload_index,
-                keep_in_fp32_regex,
                 device_mesh,
             )
             for shard_file in checkpoint_files
@@ -4898,7 +4885,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if param.device.type == "meta":
                         continue
                     # Shard the param
-                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_regex)
+                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param)
                     shard_and_distribute_module(
                         model,
                         param.to(tp_device),
