@@ -18,9 +18,9 @@ import inspect
 import os
 import tempfile
 import unittest
-import pytest
 
 import numpy as np
+import pytest
 import requests
 
 from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig

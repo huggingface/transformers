@@ -133,7 +133,11 @@ class FSMTConfig(PreTrainedConfig):
     ```"""
 
     model_type = "fsmt"
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model", "vocab_size": "tgt_vocab_size"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "vocab_size": "tgt_vocab_size",
+    }
 
     # update the defaults from config file
     def __init__(
@@ -188,7 +192,7 @@ class FSMTConfig(PreTrainedConfig):
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
 
-        common_kwargs.pop("decoder", None) # delete unused kwargs
+        common_kwargs.pop("decoder", None)  # delete unused kwargs
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         # 3 Types of Dropout

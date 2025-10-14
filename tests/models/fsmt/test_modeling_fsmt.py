@@ -173,8 +173,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "src_vocab_size": 10,
             "tgt_vocab_size": 20,
         }
-        # XXX: hack to appease to all other models requiring `vocab_size`
-        config["vocab_size"] = 99  # no such thing in FSMT
         self.config_tester = ConfigTester(self, config_class=FSMTConfig, **config)
 
     def test_config(self):
