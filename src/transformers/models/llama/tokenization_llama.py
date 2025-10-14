@@ -88,29 +88,16 @@ class LlamaTokenizer(TokenizersBackend):
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used
             A simple example:
-
-            - `legacy=True`:
             ```python
     >>> from transformers import LlamaTokenizer
 
-            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=True, from_scratch=True)
+            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
             >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
             [1, 15043, 29871, 1, 869]
-            ```
-            - `legacy=False`:
-            ```python
-            >>> from transformers import LlamaTokenizer
-
-            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False, from_scratch=True)
-            >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
-            [1, 15043, 29871, 1, 29889]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
         add_prefix_space (`bool`, *optional*):
             Whether or not the tokenizer should automatically add a prefix space
-        from_scratch (`bool`, *optional*, defaults to `False`):
-            Whether to create an empty trainable tokenizer from scratch. When `True`, creates a minimal tokenizer
-            with only basic special tokens that can be trained on new data.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
