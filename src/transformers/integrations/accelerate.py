@@ -257,22 +257,30 @@ def check_and_set_device_map(device_map: "torch.device | int | str | dict | None
     return device_map
 
 
-def compute_module_sizes(model: "PreTrainedModel", hf_quantizer: "HfQuantizer | None") -> dict[str, int]:
+def compute_module_sizes(
+    model: "PreTrainedModel", hf_quantizer: "HfQuantizer | None"
+) -> tuple[dict[str, int], dict[str, int]]:
     """
     Compute the size of each submodule of a given model (in bytes).
+    Returns a tuple of 2 dicts, the fist one containing a mapping of all the modules and the corresponding size
+    in bytes, and the 2nd one containing a mapping from all leaf modules (modules containing parameters, the end of
+    the model graph) and the corresponding sizes.
     """
-    module_sizes = defaultdict(int)
-    for name, param in model.state_dict():
+    all_module_sizes = defaultdict(int)
+    leaves_module_sizes = defaultdict(int)
+    for name, param in model.state_dict().items():
         if hf_quantizer is not None:
             dtype_size = hf_quantizer.param_element_size(model, name)
         else:
             dtype_size = param.element_size()
         size = param.numel() * dtype_size
         name_parts = name.split(".")
-        for idx in range(len(name_parts) + 1):
-            module_sizes[".".join(name_parts[:idx])] += size
+        for idx in range(len(name_parts)):
+            all_module_sizes[".".join(name_parts[:idx])] += size
+        if "." in name:
+            leaves_module_sizes[name.rsplit(".", 1)[0]] += size
 
-    return module_sizes
+    return all_module_sizes, leaves_module_sizes
 
 
 def get_balanced_memory(
@@ -332,7 +340,7 @@ def get_balanced_memory(
                     )
                     break  # only one device
 
-    module_sizes = compute_module_sizes(model, hf_quantizer)
+    module_sizes, leave_modules_sizes = compute_module_sizes(model, hf_quantizer)
     per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
 
     # We can't just set the memory to model_size // num_devices as it will end being too small: each GPU will get
@@ -361,8 +369,7 @@ def get_balanced_memory(
                 break
         buffer = max(no_split_children.values()) if len(no_split_children) > 0 else 0
 
-    leave_modules = {k.rsplit(".", 1)[0] for k in model.state_dict() if "." in k}
-    mean_leaves = int(sum([module_sizes[n] for n in leave_modules]) / max(len(leave_modules), 1))
+    mean_leaves = int(sum(leave_modules_sizes.values()) / max(len(leave_modules_sizes), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
