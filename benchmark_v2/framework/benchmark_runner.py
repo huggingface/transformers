@@ -244,7 +244,7 @@ class BenchmarkRunner:
 
             return {
                 "metadata": BenchmarkMetadata(model_id=model_id, commit_id=self.commit_id),
-                "measures": result,
+                "measurements": result,
                 "config": config,
             }
 
