@@ -1180,7 +1180,6 @@ class AutoTokenizer:
                 # Otherwise, re-raise the original error
                 raise
 
-
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING)}."
