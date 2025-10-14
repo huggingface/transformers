@@ -16,4 +16,4 @@ rendered properly in your Markdown viewer.
 
 # ExecuTorch
 
-[ExecuTorch](https://pytorch.org/executorch/stable/index.html) is a platform that enables PyTorch training and inference programs to be run on mobile and edge devices. It is powered by [torch.compile](https://pytorch.org/docs/stable/torch.compiler.html) and [torch.export](https://pytorch.org/docs/main/export.html) for performance and deployment. You can use ExecuTorch to directly run models from Transformers with [Optimum ExecuTorch](https://github.com/huggingface/optimum-executorch).
+[ExecuTorch](https://pytorch.org/executorch/stable/index.html) is a platform that enables PyTorch training and inference programs to be run on mobile and edge devices. You can use ExecuTorch to directly run models from Transformers with [Optimum ExecuTorch](https://github.com/huggingface/optimum-executorch).
