@@ -113,7 +113,7 @@ class HfQuantizer(ABC):
         """
         return device_map
 
-    def get_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+    def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         """
         Override this method if you want to adjust the `target_dtype` variable used in `from_pretrained`
         to compute the device_map in case the device_map is a `str`. E.g. for bitsandbytes we force-set `target_dtype`
