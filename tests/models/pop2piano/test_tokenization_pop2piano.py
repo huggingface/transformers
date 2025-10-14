@@ -15,8 +15,6 @@
 Please note that Pop2PianoTokenizer is too far from our usual tokenizers and thus cannot use the TokenizerTesterMixin class.
 """
 
-import os
-import pickle
 import shutil
 import tempfile
 import unittest

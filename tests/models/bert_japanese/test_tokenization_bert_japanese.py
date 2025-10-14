@@ -14,7 +14,6 @@
 
 
 import os
-import pickle
 import unittest
 
 from transformers import AutoTokenizer
