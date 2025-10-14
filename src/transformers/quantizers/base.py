@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import Any, Optional, Union
 
+from ..modeling_utils import PreTrainedModel
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
 from .quantizers_utils import get_module_from_name
-from ..modeling_utils import PreTrainedModel
+
 
 if is_torch_available():
     import torch
