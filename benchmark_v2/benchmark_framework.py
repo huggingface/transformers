@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import gc
 import json
 import logging
@@ -24,12 +23,17 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Optional, TypedDict, Union
+from collections.abc import Callable
 
 import gpustat
 import numpy as np
 import psutil
 import torch
 
+
+# =========================
+# GPU Monitoring Structures
+# =========================
 
 class GPUMetrics(TypedDict):
     """GPU monitoring result with GPU metrics."""
@@ -51,8 +55,42 @@ class NoGPU(TypedDict):
     gpu_monitoring_reason: str
 
 
+def collect_gpu_metrics(gpu_index: int = 0) -> Union[GPUMetrics, NoGPU]:
+    """
+    Collect GPU utilization and memory usage metrics.
+
+    Args:
+        gpu_index: Index of the GPU to monitor.
+
+    Returns:
+        GPU metrics dict or NoGPU reason dict.
+    """
+    try:
+        stats = gpustat.new_query()
+        if not stats.gpus:
+            return {"gpu_monitoring_status": "failed", "gpu_monitoring_reason": "No GPUs found"}
+
+        gpu = stats.gpus[gpu_index]
+        return {
+            "gpu_utilization_mean": gpu.utilization,
+            "gpu_utilization_max": gpu.utilization,
+            "gpu_utilization_min": gpu.utilization,
+            "gpu_memory_used_mean": gpu.memory_used,
+            "gpu_memory_used_max": gpu.memory_used,
+            "gpu_memory_used_min": gpu.memory_used,
+            "sample_count": 1,
+            "gpu_monitoring_status": "success",
+        }
+    except Exception as e:
+        return {"gpu_monitoring_status": "failed", "gpu_monitoring_reason": str(e)}
+
+
+# =========================
+# Timing Utilities
+# =========================
+
 class ArchAwareTimer:
-    """Architecture-aware timer for supposedly better prescision"""
+    """Architecture-aware timer for better precision (CUDA Events or CPU perf_counter)."""
 
     def __init__(self, device: Optional[str] = None):
         """
@@ -63,12 +101,14 @@ class ArchAwareTimer:
         """
         self.device = device
         self.use_cuda = torch.cuda.is_available()
+        self.device_obj = None
 
         if self.use_cuda:
             if device and device != "cpu":
                 self.device_obj = torch.device(device)
             else:
-                # Fall back to CPU timing if device is CPU or CUDA not available
+                # Warn if CUDA is available but CPU is explicitly chosen
+                logging.warning("CUDA is available but CPU timing will be used.")
                 self.use_cuda = False
 
         if self.use_cuda:
@@ -77,7 +117,7 @@ class ArchAwareTimer:
                 self.start_event = torch.cuda.Event(enable_timing=True)
                 self.end_event = torch.cuda.Event(enable_timing=True)
             except RuntimeError:
-                # Fall back to CPU timing if CUDA events fail
+                logging.warning("Falling back to CPU timing due to CUDA event failure.")
                 self.use_cuda = False
 
         if not self.use_cuda:
@@ -108,12 +148,10 @@ class ArchAwareTimer:
             Elapsed time in seconds
         """
         if self.use_cuda:
-            # CUDA events return time in milliseconds, convert to seconds
             return self.start_event.elapsed_time(self.end_event) / 1000.0
-        else:
-            if self.start_time is None or self.end_time is None:
-                raise RuntimeError("Timer not properly started/stopped")
-            return self.end_time - self.start_time
+        if self.start_time is None or self.end_time is None:
+            raise RuntimeError("Timer not properly started/stopped")
+        return self.end_time - self.start_time
 
     @property
     def timing_method(self) -> str:
@@ -129,6 +167,10 @@ class ArchAwareTimer:
         """Context manager exit."""
         self.stop()
 
+
+# =========================
+# Benchmark Configuration
+# =========================
 
 @dataclass
 class BenchmarkConfig:
@@ -151,6 +193,20 @@ class BenchmarkConfig:
     sdpa_backend: Optional[str] = None  # None, "math", "flash_attention", "efficient_attention", "cudnn_attention"
     custom_params: dict[str, Any] = field(default_factory=dict)
 
+    def validate(self):
+        """Validate configuration values to catch errors early."""
+        valid_variants = {"eager", "compiled", "kernelized"}
+        if self.variant not in valid_variants:
+            raise ValueError(f"Invalid variant: {self.variant}")
+
+        valid_attn = {"eager", "sdpa", "flash_attention_2"}
+        if self.attn_implementation not in valid_attn:
+            raise ValueError(f"Invalid attention implementation: {self.attn_implementation}")
+
+
+# =========================
+# Benchmark Scenario Logic
+# =========================
 
 class BenchmarkScenario:
     """
@@ -162,38 +218,42 @@ class BenchmarkScenario:
         self.name = name
         self.config = config
         self.description = description
-        self._setup_callbacks = []
-        self._teardown_callbacks = []
+        self._setup_callbacks: list[Callable] = []
+        self._teardown_callbacks: list[Callable] = []
 
-    def add_setup_callback(self, callback: callable):
+    def add_setup_callback(self, callback: Callable):
         """Add a callback to be executed during scenario setup."""
         self._setup_callbacks.append(callback)
 
-    def add_teardown_callback(self, callback: callable):
+    def add_teardown_callback(self, callback: Callable):
         """Add a callback to be executed during scenario teardown."""
         self._teardown_callbacks.append(callback)
 
-    def setup(self, model, tokenizer, logger=None):
+    def setup(self, model, tokenizer, logger: Optional[logging.Logger] = None):
         """Execute setup callbacks for this scenario."""
         for callback in self._setup_callbacks:
             try:
                 callback(model, tokenizer, self.config, logger)
             except Exception as e:
                 if logger:
-                    logger.warning(f"Setup callback failed for scenario {self.name}: {e}")
+                    logger.warning(f"Setup callback failed for scenario {self.name}", exc_info=True)
 
-    def teardown(self, model, tokenizer, logger=None):
+    def teardown(self, model, tokenizer, logger: Optional[logging.Logger] = None):
         """Execute teardown callbacks for this scenario."""
         for callback in self._teardown_callbacks:
             try:
                 callback(model, tokenizer, self.config, logger)
             except Exception as e:
                 if logger:
-                    logger.warning(f"Teardown callback failed for scenario {self.name}: {e}")
+                    logger.warning(f"Teardown callback failed for scenario {self.name}", exc_info=True)
 
     def __repr__(self):
         return f"BenchmarkScenario(name='{self.name}', variant='{self.config.variant}')"
 
+
+# =========================
+# Timing Result Data Class
+# =========================
 
 @dataclass
 class TimingResult:
@@ -205,6 +265,7 @@ class TimingResult:
     time_per_output_token_seconds: Optional[float] = None
     total_tokens_generated: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
+
 
 
 @dataclass
