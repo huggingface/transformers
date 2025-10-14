@@ -269,9 +269,16 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         topk_group=1,
         first_k_dense_replace=1,
         norm_topk_prob=True,
+        pad_token_id=None,
+        eos_token_id=None,
+        bos_token_id=None,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

@@ -397,12 +397,13 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         max_window_layers=28,
         layer_types=None,
         attention_dropout=0.0,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        self.tie_word_embeddings = (tie_word_embeddings,)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -425,6 +426,10 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:

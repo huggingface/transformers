@@ -132,6 +132,10 @@ class OpenAIGPTConfig(PreTrainedConfig):
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -150,6 +154,10 @@ class OpenAIGPTConfig(PreTrainedConfig):
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

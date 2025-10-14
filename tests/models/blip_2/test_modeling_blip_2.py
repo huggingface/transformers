@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -504,6 +505,11 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_model_get_set_embeddings(self):
         pass
 
+    @pytest.mark.generate
+    @unittest.skip(reason="Blip2Model does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -854,6 +860,11 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_cpu_offload(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="Blip2Model does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):

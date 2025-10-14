@@ -192,6 +192,9 @@ class DogeConfig(PreTrainedConfig):
         norm_topk_prob=False,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -221,6 +224,10 @@ class DogeConfig(PreTrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
@@ -232,10 +239,7 @@ class DogeConfig(PreTrainedConfig):
         if num_key_value_heads is None:
             self.num_key_value_heads = num_attention_heads
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["DogeConfig"]

@@ -96,6 +96,10 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         hidden_act="silu",
         intermediate_size=2816,
         initializer_range=0.02,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -115,10 +119,12 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = False  # Force-set to False for BC
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        super().__init__(**kwargs)
 
 
 class BltGlobalTransformerConfig(PreTrainedConfig):
@@ -142,6 +148,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         hidden_act="silu",
         intermediate_size=5632,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -157,10 +164,9 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = False
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        super().__init__(**kwargs)
 
 
 class BltPatcherConfig(PreTrainedConfig):
@@ -217,6 +223,7 @@ class BltPatcherConfig(PreTrainedConfig):
         intermediate_size=2048,
         rope_scaling=None,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -234,9 +241,8 @@ class BltPatcherConfig(PreTrainedConfig):
         self.rope_scaling = rope_scaling
         self.initializer_range = initializer_range
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        self.tie_word_embeddings = False
+        super().__init__(**kwargs)
 
 
 class BltConfig(PreTrainedConfig):
@@ -334,6 +340,9 @@ class BltConfig(PreTrainedConfig):
         decoder_config=None,
         global_config=None,
         tie_word_embeddings=False,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         initializer_range=0.02,
         rope_theta=500000.0,
         rope_scaling=None,
@@ -409,8 +418,9 @@ class BltConfig(PreTrainedConfig):
             encoder_cross_output_size if encoder_cross_output_size != self.global_config.hidden_size else None
         )
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 

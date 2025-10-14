@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 
 from transformers import (
@@ -522,6 +523,11 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     @unittest.skip(reason="InstructBlipModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="InstructBlip does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
         pass
 
     def test_forward_signature(self):

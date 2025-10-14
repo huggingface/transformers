@@ -139,6 +139,8 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         hidden_dropout=0.0,
         is_decoder=False,
         add_cross_attention=False,
+        pad_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -146,6 +148,8 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         self.add_cross_attention = add_cross_attention
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

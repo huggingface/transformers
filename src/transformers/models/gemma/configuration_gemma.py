@@ -151,19 +151,17 @@ class GemmaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.use_bidirectional_attention = use_bidirectional_attention
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["GemmaConfig"]

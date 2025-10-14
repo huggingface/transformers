@@ -188,6 +188,10 @@ class DbrxConfig(PreTrainedConfig):
         use_cache: bool = True,
         initializer_range: float = 0.02,
         output_router_logits: bool = False,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
+        tie_word_embeddings=False,
         **kwargs: Any,
     ):
         if attn_config is None:
@@ -216,10 +220,12 @@ class DbrxConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
         self.rope_theta: float = 10000.0
-        tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 

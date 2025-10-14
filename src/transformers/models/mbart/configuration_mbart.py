@@ -134,6 +134,7 @@ class MBartConfig(PreTrainedConfig):
         forced_eos_token_id=2,
         is_decoder=False,
         add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.is_decoder = is_decoder
@@ -161,6 +162,7 @@ class MBartConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             forced_eos_token_id=forced_eos_token_id,

@@ -175,6 +175,9 @@ class Qwen3Config(PreTrainedConfig):
         max_window_layers=28,
         layer_types=None,
         attention_dropout=0.0,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -217,6 +220,9 @@ class Qwen3Config(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 

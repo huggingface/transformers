@@ -121,6 +121,9 @@ class MoshiDepthConfig(PreTrainedConfig):
         rms_norm_eps=1e-8,
         num_codebooks=8,
         tie_word_embeddings=False,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -144,6 +147,9 @@ class MoshiDepthConfig(PreTrainedConfig):
         self.audio_vocab_size = audio_vocab_size
 
         self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         super().__init__(**kwargs)
 
 
@@ -259,6 +265,9 @@ class MoshiConfig(PreTrainedConfig):
         rms_norm_eps=1e-8,
         num_codebooks=8,
         tie_word_embeddings=False,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -307,6 +316,9 @@ class MoshiConfig(PreTrainedConfig):
         self.depth_decoder_config = MoshiDepthConfig(**depth_decoder_config)
 
         self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         super().__init__(**kwargs)
 
     @property

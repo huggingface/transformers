@@ -199,6 +199,9 @@ class Glm4MoeConfig(PreTrainedConfig):
         first_k_dense_replace=1,
         norm_topk_prob=True,
         use_qk_norm=False,
+        bos_token_id=None,
+        eos_token_id=None,
+        pad_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -235,11 +238,12 @@ class Glm4MoeConfig(PreTrainedConfig):
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.use_qk_norm = use_qk_norm
+        self.tie_word_embeddings = tie_word_embeddings
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["Glm4MoeConfig"]

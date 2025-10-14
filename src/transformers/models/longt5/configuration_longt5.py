@@ -110,6 +110,8 @@ class LongT5Config(PreTrainedConfig):
         eos_token_id=1,
         is_decoder=False,
         add_cross_attention=False,
+        bos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.is_decoder = is_decoder
@@ -133,7 +135,9 @@ class LongT5Config(PreTrainedConfig):
         self.encoder_attention_type = encoder_attention_type
         self.use_cache = use_cache
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]

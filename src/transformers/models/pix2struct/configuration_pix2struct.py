@@ -112,6 +112,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
         use_cache=False,
         pad_token_id=0,
         eos_token_id=1,
+        bos_token_id=None,
         tie_word_embeddings=False,
         is_decoder=True,
         add_cross_attention=False,
@@ -131,6 +132,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
 
         self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
 
         # for backwards compatibility

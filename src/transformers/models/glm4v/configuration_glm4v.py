@@ -260,6 +260,7 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.rope_scaling = rope_scaling
+        self.tie_word_embeddings = (tie_word_embeddings,)
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
@@ -269,7 +270,7 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 class Glm4vConfig(PreTrainedConfig):

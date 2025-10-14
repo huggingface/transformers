@@ -341,6 +341,9 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         mlp_only_layers=None,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -377,6 +380,9 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         super().__init__(**kwargs)
 
 

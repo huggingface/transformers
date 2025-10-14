@@ -362,12 +362,13 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         max_window_layers=28,
         layer_types=None,
         attention_dropout=0.0,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -377,6 +378,9 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -778,6 +782,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -789,7 +794,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):

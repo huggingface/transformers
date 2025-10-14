@@ -107,6 +107,7 @@ class ClvpEncoderConfig(PreTrainedConfig):
         initializer_factor=1.0,
         bos_token_id=255,
         eos_token_id=0,
+        pad_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -125,6 +126,7 @@ class ClvpEncoderConfig(PreTrainedConfig):
         self.summary_type = summary_type
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
         super().__init__(**kwargs)
 
@@ -276,6 +278,7 @@ class ClvpDecoderConfig(PreTrainedConfig):
         use_cache=True,
         bos_token_id=8192,
         eos_token_id=8193,
+        pad_token_id=None,
         feature_size=80,
         use_attention_bias=True,
         initializer_factor=1.0,
@@ -309,6 +312,7 @@ class ClvpDecoderConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
         super().__init__(**kwargs)
 

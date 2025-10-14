@@ -126,6 +126,7 @@ class M2M100Config(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -152,6 +153,7 @@ class M2M100Config(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 

@@ -124,6 +124,8 @@ class SwitchTransformersConfig(PreTrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
+        bos_token_id=None,
+        tie_word_embeddings=True,
         is_decoder=False,
         add_cross_attention=False,
         **kwargs,
@@ -178,7 +180,9 @@ class SwitchTransformersConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.dense_act_fn = dense_act_fn
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

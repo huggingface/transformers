@@ -164,6 +164,9 @@ class Dots1Config(PreTrainedConfig):
         sliding_window=4096,
         max_window_layers=62,
         layer_types=None,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -206,6 +209,9 @@ class Dots1Config(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         super().__init__(**kwargs)
 
 

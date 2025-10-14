@@ -95,6 +95,10 @@ class CTRLConfig(PreTrainedConfig):
         layer_norm_epsilon=1e-6,
         initializer_range=0.02,
         use_cache=True,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -107,6 +111,10 @@ class CTRLConfig(PreTrainedConfig):
         self.embd_pdrop = embd_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.use_cache = use_cache
 

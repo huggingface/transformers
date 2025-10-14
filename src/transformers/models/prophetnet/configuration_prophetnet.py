@@ -129,6 +129,7 @@ class ProphetNetConfig(PreTrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -162,6 +163,7 @@ class ProphetNetConfig(PreTrainedConfig):
         self.add_cross_attention = add_cross_attention
         self.decoder_start_token_id = decoder_start_token_id
         self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

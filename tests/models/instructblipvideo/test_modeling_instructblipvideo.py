@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -535,6 +536,11 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     @unittest.skip(reason="InstructBlipVideoModel does not have input/output embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="InstructBlipVideo does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
         pass
 
     def test_forward_signature(self):
