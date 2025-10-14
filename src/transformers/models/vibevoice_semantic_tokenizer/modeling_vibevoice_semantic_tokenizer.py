@@ -4,6 +4,21 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_vibevoice_semantic_tokenizer.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import copy
 import math
 import typing as tp
@@ -172,7 +187,9 @@ class SConv1d(nn.Module):
         pad_mode: str = "reflect",
     ):
         super().__init__()
-        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias)
+        self.conv = nn.Conv1d(
+            in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias
+        )
         self.causal = causal
         self.pad_mode = pad_mode
 
@@ -372,6 +389,7 @@ class Block1D(nn.Module):
             causal=kwargs.get("causal", True),
             bias=kwargs.get("bias", True),
         )
+
         self.ffn = FFN(
             dim,
             kwargs.get("ffn_expansion", 4) * dim,
@@ -445,9 +463,7 @@ class TokenizerEncoder(nn.Module):
         disable_last_norm = getattr(config, "disable_last_norm", False)
 
         # determine the norm type based on layernorm
-        if layernorm == "LN":
-            norm_type = ConvLayerNorm
-        elif layernorm == "RMSNorm":
+        if layernorm == "RMSNorm":
             norm_type = partial(ConvRMSNorm, elementwise_affine=layernorm_elementwise_affine)
         else:
             raise ValueError(f"Unsupported norm type: {layernorm}")
