@@ -191,11 +191,22 @@ class MergeModuleList(ConversionOps):
 
         return out
 
+class Fp8Quantize(ConversionOps):
+    def convert(self, collected_tensors):
+        from .quantizers.quantizers_finegrained_fp8 import FineGrainedFP8HfQuantizer
+        return FineGrainedFP8HfQuantizer.create_quantized_param(collected_tensors)
+
+
+class Slice(ConversionOps):
+    # TODO: implement slicing for tp
+    def convert(self, inputs):
+        return inputs
 
 class ConversionType(Enum):
     FUSE = Fuse()
     MERGE_MODULE_LIST = MergeModuleList()
-
+    FP8_QUANTIZE = Fp8Quantize()
+    SLICE = Slice()
     def __call__(self, *args, **kwargs):
         # Call enum member as a constructor: ConversionType.FUSE() -> Fuse()
         return self.value(*args, **kwargs) @ dataclass(frozen=True)
@@ -205,7 +216,12 @@ globals().update({member.name: member for member in ConversionType})
 
 
 class WeightConversion:
-    """Specification for applying renaming and other operations."""
+    """
+
+    Specification for applying renaming and other operations.
+
+    Most probably take the tp_plan here, the quantization_config, and call all the different ops 
+    """
 
     new_key_name: str
     operations: Optional[list[ConversionType]]  # if TP or quantization, some ops like "slicing" will be added?S
