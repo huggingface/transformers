@@ -125,7 +125,7 @@ class FastSpeech2ConformerModelTester:
 @require_torch
 class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
@@ -545,7 +545,7 @@ class FastSpeech2ConformerWithHifiGanTester:
 @require_torch
 class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
-    test_pruning = False
+
     test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True

@@ -23,21 +23,24 @@ import numpy as np
 
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_torch_available
-from ...video_utils import VideoInput
 
 
 if is_torch_available():
     import torch
 
+NestedList = list[Union[Optional[float | int], "NestedList"]]
 
-class SamImagesKwargs(ImagesKwargs):
+
+class SamImagesKwargs(ImagesKwargs, total=False):
     segmentation_maps: Optional[ImageInput]
-    input_points: Optional[list[list[float]]]
-    input_labels: Optional[list[list[int]]]
-    input_boxes: Optional[list[list[list[float]]]]
+    input_points: Optional[NestedList]
+    input_labels: Optional[NestedList]
+    input_boxes: Optional[NestedList]
     point_pad_value: Optional[int]
+    mask_size: dict[str, int]
+    mask_pad_size: dict[str, int]
 
 
 class SamProcessorKwargs(ProcessingKwargs, total=False):
@@ -73,8 +76,6 @@ class SamProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio: Optional[AudioInput] = None,
-        video: Optional[VideoInput] = None,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -114,7 +115,7 @@ class SamProcessor(ProcessorMixin):
             input_points=input_points,
             input_labels=input_labels,
             input_boxes=input_boxes,
-            return_tensors=output_kwargs["common_kwargs"].get("return_tensors"),
+            return_tensors=output_kwargs["images_kwargs"].get("return_tensors"),
             point_pad_value=point_pad_value,
         )
 

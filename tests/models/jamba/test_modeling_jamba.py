@@ -19,7 +19,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, JambaConfig, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, JambaConfig, is_torch_available
 from transformers.testing_utils import (
     DeviceProperties,
     Expectations,
@@ -33,6 +33,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -319,7 +320,7 @@ class JambaModelTester:
 
 
 @require_torch
-class JambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             JambaModel,
@@ -339,27 +340,44 @@ class JambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, HybridMambaAttentionDynamicCache)
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, HybridMambaAttentionDynamicCache)
 
-        # (batch, head, seq_length, head_features)
-        expected_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-            config.hidden_size // config.num_attention_heads,
-        )
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        attention_shape = (batch_size, num_heads, seq_length, head_dim)
+        conv_shape = (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_conv)
+        ssm_shape = (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_state)
 
-        self.assertListEqual(
-            [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-            [expected_shape] * len(decoder_past_key_values.key_cache),
-        )
-        self.assertListEqual(
-            [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
-            [expected_shape] * len(decoder_past_key_values.value_cache),
-        )
+        self.assertTrue(config.num_hidden_layers, len(past_key_values))
+
+        for idx in range(len(past_key_values)):
+            if config.layers_block_type[idx] == "mamba":
+                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
+                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
+            else:
+                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
+                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
+
+    def _check_caches_are_equal(
+        self, cache1: HybridMambaAttentionDynamicCache, cache2: HybridMambaAttentionDynamicCache
+    ):
+        if not isinstance(cache1, HybridMambaAttentionDynamicCache) or not isinstance(
+            cache2, HybridMambaAttentionDynamicCache
+        ):
+            raise ValueError("The wrong cache is being used!")
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
+            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
+            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
 
     def setUp(self):
         self.model_tester = JambaModelTester(self)
@@ -520,7 +538,7 @@ class JambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     tmpdirname,
                     dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    load_in_4bit=True,
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
                 )
 
                 for _, param in model.named_parameters():
@@ -532,12 +550,8 @@ class JambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
-    @unittest.skip("TODO, jamba is annoying, needs another refactor, too tired for that now")
-    def test_generation_tester_mixin_inheritance(self):
-        pass
-
-    @unittest.skip("TODO, jamba is annoying, needs another refactor, too tired for that now")
-    def test_batching_equivalence(self):
+    @unittest.skip("Jamba has a non standard cache which is not compatible with dp/ddp")
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
 
@@ -555,6 +569,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         cls.model = JambaForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
+            use_mamba_kernels=False,
         )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
         cls.device_properties = get_device_properties()
@@ -584,23 +599,6 @@ class JambaModelIntegrationTest(unittest.TestCase):
         output_sentence = self.tokenizer.decode(out[0, :])
         self.assertEqual(output_sentence, expected_sentence)
 
-        # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
-            with torch.no_grad():
-                logits = self.model(input_ids=input_ids).logits
-
-            EXPECTED_LOGITS_NO_GRAD = torch.tensor(
-                [
-                    -7.6875, -7.6562,  8.9375, -7.7812, -7.4062, -7.9688, -8.3125, -7.4062,
-                    -7.8125, -8.1250, -7.8125, -7.3750, -7.8438, -7.5000, -8.0625, -8.0625,
-                    -7.5938, -7.9688, -8.2500, -7.5625, -7.7500, -7.7500, -7.6562, -7.6250,
-                    -8.1250, -8.0625, -8.1250, -7.8750, -8.1875, -8.2500, -7.5938, -8.0000,
-                    -7.5000, -7.7500, -7.9375, -7.4688, -8.0625, -7.3438, -8.0000, -7.5000
-                ]
-                , dtype=torch.float32)  # fmt: skip
-
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
-
     @slow
     def test_simple_batched_generate_with_padding(self):
         # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
@@ -626,32 +624,3 @@ class JambaModelIntegrationTest(unittest.TestCase):
         output_sentences = self.tokenizer.batch_decode(out)
         self.assertEqual(output_sentences[0], expected_sentences[0])
         self.assertEqual(output_sentences[1], expected_sentences[1])
-
-        # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
-            with torch.no_grad():
-                logits = self.model(input_ids=inputs["input_ids"]).logits
-
-            # TODO fix logits
-            EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
-                [
-                    -7.7188, -7.6875,  8.8750, -7.8125, -7.4062, -8.0000, -8.3125, -7.4375,
-                    -7.8125, -8.1250, -7.8125, -7.4062, -7.8438, -7.5312, -8.0625, -8.0625,
-                    -7.6250, -8.0000, -8.3125, -7.5938, -7.7500, -7.7500, -7.6562, -7.6562,
-                    -8.1250, -8.0625, -8.1250, -7.8750, -8.1875, -8.2500, -7.5938, -8.0625,
-                     -7.5000, -7.7812, -7.9375, -7.4688, -8.0625, -7.3750, -8.0000, -7.50003
-                ]
-                , dtype=torch.float32)  # fmt: skip
-
-            EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
-                [
-                    -3.5469, -4.0625,  8.5000, -3.8125, -3.6406, -3.7969, -3.8125, -3.3594,
-                     -3.7188, -3.7500, -3.7656, -3.5469, -3.7969, -4.0000, -3.5625, -3.6406,
-                    -3.7188, -3.6094, -4.0938, -3.6719, -3.8906, -3.9844, -3.8594, -3.4219,
-                    -3.2031, -3.4375, -3.7500, -3.6562, -3.9688, -4.1250, -3.6406, -3.57811,
-                    -3.0312, -3.4844, -3.6094, -3.5938, -3.7656, -3.8125, -3.7500, -3.8594
-                ]
-                , dtype=torch.float32)  # fmt: skip
-
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
-            torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)

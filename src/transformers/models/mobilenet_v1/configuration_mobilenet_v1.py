@@ -19,7 +19,7 @@ from collections.abc import Mapping
 
 from packaging import version
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -27,15 +27,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class MobileNetV1Config(PretrainedConfig):
+class MobileNetV1Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MobileNetV1Model`]. It is used to instantiate a
     MobileNetV1 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MobileNetV1
     [google/mobilenet_v1_1.0_224](https://huggingface.co/google/mobilenet_v1_1.0_224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):

@@ -19,7 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -36,7 +37,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_jetmoe import JetMoeConfig
 
@@ -427,7 +427,8 @@ class JetMoeAttention(nn.Module):
                 "when creating this class."
             )
 
-        self.num_key_value_groups = config.num_experts_per_tok
+        self.num_key_value_groups = 1  # We ignore this by setting it to 1 as we have different repeat patterns
+        self.top_k = config.num_experts_per_tok
         self.attention_dropout = config.attention_dropout
         self.kv_projection_size = config.kv_channels * config.num_key_value_heads
         self.num_key_value_heads = config.num_key_value_heads
@@ -469,6 +470,11 @@ class JetMoeAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
+        # This is different from other models where we repeat k/v heads
+        # instead of repeat interleaving them
+        key_states = key_states.repeat(1, self.top_k, 1, 1)
+        value_states = value_states.repeat(1, self.top_k, 1, 1)
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -480,7 +486,7 @@ class JetMoeAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.view(*input_shape, self.num_key_value_groups, -1)
+        attn_output = attn_output.view(*input_shape, self.top_k, -1)
         attn_output = self.experts.reduce(attn_output, topo_info)
         attn_output = attn_output.view(*input_shape, -1)
         return attn_output, attn_weights, router_logits
@@ -490,12 +496,11 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: JetMoeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = JetMoeAttention(config, layer_idx)
         self.mlp = JetMoeMoE(config)
         self.input_layernorm = JetMoeRMSNorm(config.hidden_size)
         self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
+        self.self_attention = JetMoeAttention(config, layer_idx)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -510,7 +515,7 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _, _ = self.self_attn(
+        hidden_states, _, _ = self.self_attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -585,7 +590,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -637,6 +642,7 @@ class JetMoeModel(JetMoePreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_ids=position_ids,
                 **kwargs,
             )
 

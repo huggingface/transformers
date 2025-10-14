@@ -38,15 +38,24 @@ from ...image_utils import (
     to_numpy_array,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging
 
 
 if is_vision_available():
-    import PIL
     from PIL import Image
 
 
 logger = logging.get_logger(__name__)
+
+
+class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    max_image_tiles (`int`, *optional*):
+        The maximum number of tiles allowed.
+    """
+
+    max_image_tiles: int
 
 
 @lru_cache(maxsize=10)
@@ -397,30 +406,6 @@ def pack_images(
     return stacked_images, all_num_tiles
 
 
-def pack_aspect_ratios(aspect_ratios: list[list[tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
-    """
-    Stack a list of aspect ratios into a numpy array.
-
-    Args:
-        aspect_ratios (`list[list[tuple[int, int]]]`):
-            A list of aspect ratios.
-        pad_value (`int`, *optional*, defaults to 1):
-            The value to pad the aspect ratios with.
-
-    Returns:
-        `np.ndarray`:
-            The aspect ratios stacked into a numpy array with shape (batch_size, max_num_images, 2).
-    """
-    batch_size = len(aspect_ratios)
-    max_num_images = max(len(row) for row in aspect_ratios)
-
-    aspect_ratios_stacked = np.full((batch_size, max_num_images, 2), pad_value, dtype=np.int64)
-    for i, row in enumerate(aspect_ratios):
-        if len(row) > 0:
-            aspect_ratios_stacked[i, : len(row)] = np.array(row)
-    return aspect_ratios_stacked
-
-
 def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
     """
     Convert aspect ratio tuples to unique ids.
@@ -501,7 +486,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
         image (Image):
             The image to convert.
     """
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
@@ -567,6 +552,7 @@ class MllamaImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
+    valid_kwargs = MllamaImageProcessorKwargs
 
     def __init__(
         self,
@@ -707,7 +693,7 @@ class MllamaImageProcessor(BaseImageProcessor):
             # iterate over images in a batch sample
             for image in images:
                 # default PIL images to channels_last
-                if input_data_format is None and isinstance(image, PIL.Image.Image):
+                if input_data_format is None and isinstance(image, Image.Image):
                     input_data_format = ChannelDimension.LAST
 
                 # convert to numpy array for processing

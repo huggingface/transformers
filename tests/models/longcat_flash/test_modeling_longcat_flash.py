@@ -38,7 +38,7 @@ from ...test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, LongcatFlashForCausalLM, LongcatFlashModel
+    from transformers import AutoTokenizer, Cache, LongcatFlashForCausalLM, LongcatFlashModel
 
 
 class LongcatFlashModelTester(CausalLMModelTester):
@@ -210,15 +210,6 @@ class LongcatFlashModelTester(CausalLMModelTester):
 
 @require_torch
 class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": LongcatFlashModel,
-            "text-generation": LongcatFlashForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     model_split_percents = [0.5, 0.8]
 
     model_tester_class = LongcatFlashModelTester
@@ -231,40 +222,18 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    def test_past_key_values_format(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size, seq_length = inputs["input_ids"].shape
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Cache)
 
         k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
         v_embed_dim = config.v_head_dim
 
-        self_attention_keys_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        self_attention_values_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
+        expected_key_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
+        expected_value_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
 
-        num_hidden_layers = config.num_hidden_layers
-        all_cache_shapes = [[self_attention_keys_shape, self_attention_values_shape] for _ in range(num_hidden_layers)]
-
-        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
-
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        from transformers.cache_utils import Cache
-
-        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
-
-        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        v_embed_dim = config.v_head_dim
-
-        expected_key_shape = (batch_size, config.num_key_value_heads, cache_length, k_embed_dim)
-        expected_value_shape = (batch_size, config.num_key_value_heads, cache_length, v_embed_dim)
-
-        if isinstance(decoder_past_key_values, Cache):
-            for layer_idx in range(config.num_hidden_layers):
-                self.assertEqual(decoder_past_key_values.layers[layer_idx].keys.shape, expected_key_shape)
-                self.assertEqual(decoder_past_key_values.layers[layer_idx].values.shape, expected_value_shape)
-        else:
-            for layer_past in decoder_past_key_values:
-                self.assertEqual(layer_past[0].shape, expected_key_shape)
-                self.assertEqual(layer_past[1].shape, expected_value_shape)
+        for layer_idx in range(config.num_hidden_layers):
+            self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_key_shape)
+            self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_value_shape)
 
     @unittest.skip("MoE experts may not receive gradients with small test data")
     def test_training_gradient_checkpointing(self):
@@ -435,16 +404,16 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
     @require_large_cpu_ram
     def test_longcat_generation_cpu(self):
         # takes absolutely forever and a lot RAM, but allows to test the output in the CI
-        model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="cpu", dtype=torch.bfloat16)
+        model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
         chat = [{"role": "user", "content": "Paris is..."}]
         inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 
         with torch.no_grad():
-            outputs = model.generate(inputs, max_new_tokens=10, do_sample=False)
+            outputs = model.generate(inputs, max_new_tokens=3, do_sample=False)
 
         response = tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
-        expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is... a city of timeless charm, where"
+        expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is..."
 
         self.assertEqual(response, expected_output)

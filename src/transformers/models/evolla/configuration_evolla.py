@@ -14,7 +14,7 @@
 # limitations under the License.
 """Evolla model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -22,12 +22,12 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class SaProtConfig(PretrainedConfig):
+class SaProtConfig(PreTrainedConfig):
     r"""This is the configuration class to store the configuration of a [`EvollaSaProtProteinEncoder`]. It is used to instantiate a
     SaProt model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 446):
@@ -97,7 +97,7 @@ class SaProtConfig(PretrainedConfig):
         self.token_dropout = token_dropout
 
 
-class EvollaConfig(PretrainedConfig):
+class EvollaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EvollaModel`]. It is used to instantiate an
     Evolla model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -105,8 +105,8 @@ class EvollaConfig(PretrainedConfig):
 
     e.g. [westlake-repl/Evolla-10B-hf](https://huggingface.co/westlake-repl/Evolla-10B-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         protein_encoder_config (`dict`, *optional*):

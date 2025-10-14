@@ -22,7 +22,7 @@
 from collections.abc import Sequence
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import is_timm_available, logging, requires_backends
 
@@ -34,7 +34,7 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
-class Gemma3nTextConfig(PretrainedConfig):
+class Gemma3nTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nTextModel`]. It is used to instantiate an
     Gemma3nTextModel model according to the specified arguments, defining the model architecture. Instantiating a
@@ -301,7 +301,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         self.activation_sparsity_pattern = activation_sparsity_pattern
 
 
-class Gemma3nAudioConfig(PretrainedConfig):
+class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nAudioEncoder`]. It is used to instantiate
     an `Gemma3nAudioEncoder` model according to the specified arguments, defining the model architecture. Instantiating
@@ -440,7 +440,7 @@ class Gemma3nAudioConfig(PretrainedConfig):
         self.sscp_conv_stride_size = sscp_conv_stride_size
 
 
-class Gemma3nVisionConfig(PretrainedConfig):
+class Gemma3nVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmWrapper`]. It is used to
     instantiate an timm model model according to the specified arguments, defining the model architecture.
@@ -499,15 +499,18 @@ class Gemma3nVisionConfig(PretrainedConfig):
         model_args: Optional[dict] = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.architecture = architecture
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
-        self.model_args = model_args  # named "model_args" for BC with timm
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
         self.vocab_offset = vocab_offset
         self.rms_norm_eps = rms_norm_eps
+        self.architecture = architecture
+        self.initializer_range = initializer_range
+        self.do_pooling = do_pooling
+        self.model_args = model_args  # named "model_args" for BC with timm
+        super().__init__(**kwargs)
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
@@ -558,7 +561,7 @@ class Gemma3nVisionConfig(PretrainedConfig):
         return output
 
 
-class Gemma3nConfig(PretrainedConfig):
+class Gemma3nConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nForConditionalGeneration`]. It is used to
     instantiate a Gemma3nForConditionalGeneration according to the specified arguments, defining the model
@@ -567,8 +570,8 @@ class Gemma3nConfig(PretrainedConfig):
 
     e.g. [google/gemma-3n-E4B](https://huggingface.co/google/gemma-3n-E4B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[Gemma3nTextConfig, dict]`, *optional*):

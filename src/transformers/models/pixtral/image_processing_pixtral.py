@@ -38,6 +38,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -47,6 +48,15 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    patch_size (`Union[dict[str, int], int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+        Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
+    """
+
+    patch_size: Union[dict[str, int], int]
 
 
 # Adapted from function in image_transforms.py to ensure any transparent pixels are converted to white.
@@ -171,6 +181,7 @@ class PixtralImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "image_sizes"]
+    valid_kwargs = PixtralImageProcessorKwargs
 
     def __init__(
         self,

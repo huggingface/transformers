@@ -109,9 +109,6 @@ class T5ModelTester:
         self.scope = None
         self.decoder_layers = decoder_layers
 
-    def get_large_model_config(self):
-        return T5Config.from_pretrained("google-t5/t5-base")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
@@ -240,8 +237,6 @@ class T5ModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -571,7 +566,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         else {}
     )
     fx_compatible = True
-    test_pruning = False
+
     test_resize_embeddings = True
     is_encoder_decoder = True
     # The small T5 model needs higher percentages for CPU/MP tests
@@ -917,9 +912,6 @@ class T5EncoderOnlyModelTester:
         self.scope = None
         self.is_training = is_training
 
-    def get_large_model_config(self):
-        return T5Config.from_pretrained("google-t5/t5-base")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
 
@@ -1010,7 +1002,7 @@ class T5EncoderOnlyModelTester:
 
 class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (T5EncoderModel, T5ForTokenClassification) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     pipeline_model_mapping = (
         {

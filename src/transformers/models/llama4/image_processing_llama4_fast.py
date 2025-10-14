@@ -25,12 +25,12 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
+from ...image_transforms import split_to_tiles
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -91,30 +91,6 @@ def get_max_res_without_distortion(
         new_width = min(math.floor(original_width * scale_h), target_width)
 
     return new_height, new_width
-
-
-def split_to_tiles(images: torch.Tensor, num_tiles_height: int, num_tiles_width: int) -> torch.Tensor:
-    # Split image into number of required tiles (width x height)
-    batch_size, num_channels, height, width = images.size()
-    images = images.view(
-        batch_size,
-        num_channels,
-        num_tiles_height,
-        height // num_tiles_height,
-        num_tiles_width,
-        width // num_tiles_width,
-    )
-    # Permute dimensions to reorder the axes
-    image = images.permute(0, 2, 4, 1, 3, 5).contiguous()
-    # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
-    image = image.view(
-        batch_size,
-        num_tiles_width * num_tiles_height,
-        num_channels,
-        height // num_tiles_height,
-        width // num_tiles_width,
-    )
-    return image
 
 
 @lru_cache(maxsize=1)
@@ -309,8 +285,8 @@ def get_best_fit(
     return optimal_canvas
 
 
-class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
+class Llama4ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
     max_patches (`int`, *optional*, defaults to 16):
         The maximum number of patches to be extracted from the image.
         Can be overridden by the `max_patches` parameter in the `preprocess` method.
@@ -321,8 +297,8 @@ class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         but never upsample, unless the image is smaller than the patch size.
     """
 
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
+    max_patches: int
+    resize_to_max_canvas: bool
 
 
 @auto_docstring
