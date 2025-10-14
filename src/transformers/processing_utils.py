@@ -800,9 +800,8 @@ class ProcessorMixin(PushToHubMixin):
             if attribute_name == "tokenizer":
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
-            else:
-                if (attribute := getattr(self, attribute_name)) and attribute._auto_class is not None:
-                    custom_object_save(attribute, save_directory, config=attribute)
+            elif attribute._auto_class is not None:
+                custom_object_save(attribute, save_directory, config=attribute)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
