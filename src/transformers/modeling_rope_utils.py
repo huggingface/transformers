@@ -165,11 +165,12 @@ def dynamic_rope_update(rope_forward):
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
         rope_type = self.rope_type if layer_type is None else self.rope_type[layer_type]
+        kwargs = {"layer_type": layer_type} if layer_type is not None else {}
         if "dynamic" in rope_type:
-            dynamic_frequency_update(self, position_ids, device=x.device, layer_type=layer_type)
+            dynamic_frequency_update(self, position_ids, device=x.device, **kwargs)
         elif rope_type == "longrope":
-            longrope_frequency_update(self, position_ids, device=x.device, layer_type=layer_type)
-        return rope_forward(self, x, position_ids, layer_type=layer_type)
+            longrope_frequency_update(self, position_ids, device=x.device, **kwargs)
+        return rope_forward(self, x, position_ids, **kwargs)
 
     return wrapper
 

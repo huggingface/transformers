@@ -521,7 +521,7 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
 
 class Glm4vTextRotaryEmbedding(Glm4RotaryEmbedding):
     # Ignore copy
-    def forward(self, x, position_ids, layer_type=None):
+    def forward(self, x, position_ids):
         # In contrast to other models, GLM4V different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)

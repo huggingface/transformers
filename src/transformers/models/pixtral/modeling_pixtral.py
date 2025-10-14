@@ -125,7 +125,7 @@ class PixtralRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type=None):
+    def forward(self, x, position_ids):
         if layer_type is not None:
             raise ValueError(
                 f"{self.__class__.__name__} does not support layer types, but got `layer_type={layer_type}`"

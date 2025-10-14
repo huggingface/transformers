@@ -168,7 +168,7 @@ class Qwen2VLRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     # Ignore copy
-    def forward(self, x, position_ids, layer_type=None):
+    def forward(self, x, position_ids):
         # In contrast to other models, Qwen2_VL has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
