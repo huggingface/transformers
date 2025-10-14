@@ -193,6 +193,12 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self, from_slow=False):
+        if not self.vocab_file or not os.path.isfile(self.vocab_file):
+            raise ValueError(
+                f"Missing SentencePiece model given file path: '{self.vocab_file}'. "
+                "This tokenizer requires a .model file provided by the 'mistral-common' package. "
+                "Install it with: pip install mistral-common"
+            )
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         if self.legacy or from_slow:  # no dependency on protobuf
             tokenizer.Load(self.vocab_file)
@@ -200,7 +206,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
-            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
+            model_pb2 = import_protobuf(f"The new behaviour of {self._class.name_} (with self.legacy = False)")
             model = model_pb2.ModelProto.FromString(sp_model)
             normalizer_spec = model_pb2.NormalizerSpec()
             normalizer_spec.add_dummy_prefix = False
