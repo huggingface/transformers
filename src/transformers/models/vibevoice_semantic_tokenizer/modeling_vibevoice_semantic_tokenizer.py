@@ -24,7 +24,6 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Union
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -369,17 +368,17 @@ class Convlayer(nn.Module):
 
 class Block1D(nn.Module):
     def __init__(
-            self, 
-            dim, 
-            kernel_size=7,
-            layer_scale_init_value=1e-6, 
-            eps=1e-6,
-            pad_mode="reflect",
-            causal=True,
-            ffn_expansion=4,
-            bias=True,
-            **kwargs
-        ):
+        self,
+        dim,
+        kernel_size=7,
+        layer_scale_init_value=1e-6,
+        eps=1e-6,
+        pad_mode="reflect",
+        causal=True,
+        ffn_expansion=4,
+        bias=True,
+        **kwargs,
+    ):
         super().__init__()
 
         self.norm = ConvRMSNorm(dim, eps=eps)
@@ -491,17 +490,20 @@ class TokenizerEncoder(nn.Module):
 
         for i in range(len(self.depths)):
             in_ch = self.n_filters * (2**i)
-            stage = nn.Sequential(*[
-                Block1D(
-                    dim=in_ch,
-                    drop_path=dp_rates[cur + j],
-                    eps=layernorm_eps,
-                    causal=self.causal,
-                    pad_mode=pad_mode,
-                    bias=bias,
-                    layer_scale_init_value=layer_scale_init_value,
-                ) for j in range(self.depths[i])
-            ])
+            stage = nn.Sequential(
+                *[
+                    Block1D(
+                        dim=in_ch,
+                        drop_path=dp_rates[cur + j],
+                        eps=layernorm_eps,
+                        causal=self.causal,
+                        pad_mode=pad_mode,
+                        bias=bias,
+                        layer_scale_init_value=layer_scale_init_value,
+                    )
+                    for j in range(self.depths[i])
+                ]
+            )
             self.stages.append(stage)
             cur += self.depths[i]
 
