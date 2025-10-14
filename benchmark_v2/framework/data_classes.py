@@ -81,7 +81,7 @@ class BenchmarkResult:
 
     def __init__(self) -> None:
         self.e2e_latency = []
-        self.token_generation_times = []
+        self.token_generation_times = []  # time at which each token was generated (relative to start of the generation)
         self.decoded_outputs = []
         self.gpu_metrics = []
 

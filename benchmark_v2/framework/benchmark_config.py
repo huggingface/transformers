@@ -1,7 +1,7 @@
 import hashlib
 import json
-from typing import Any, Optional, Union
 import logging
+from typing import Any, Optional
 
 
 KERNELIZATION_AVAILABLE = False
@@ -77,7 +77,7 @@ class BenchmarkConfig:
             gpu_monitor_str = "monitored" if self.gpu_monitoring else "unmonitored"
             dimensions_str = f"b{self.batch_size}_s{self.sequence_length}_n{self.num_tokens_to_generate}"
             attn_code = self.attn_implementation
-            attn_code += (f"_{self.sdpa_backend}" if self.attn_implementation == "sdpa" else "")
+            attn_code += f"_{self.sdpa_backend}" if self.attn_implementation == "sdpa" else ""
             compile_str = f"compiled_{self.compile_mode}" if self.compile_mode is not None else "uncompiled"
             kernelize_str = "kernelized" if self.kernelize else "unkernelized"
             sep = "-"
@@ -86,7 +86,7 @@ class BenchmarkConfig:
             gpu_monitor_str = ("with" if self.gpu_monitoring else "no") + " GPU monitoring"
             dimensions_str = f"batch size {self.batch_size}, sequence length {self.sequence_length}, {self.num_tokens_to_generate} generated tokens"
             attn_code = f"{self.attn_implementation} attention"
-            attn_code += (f" with {self.sdpa_backend} backend" if self.attn_implementation == "sdpa" else "")
+            attn_code += f" with {self.sdpa_backend} backend" if self.attn_implementation == "sdpa" else ""
             compile_str = "compiled" if self.compile_mode is not None else "not compiled"
             kernelize_str = "kernelized" if self.kernelize else "not kernelized"
             sep = ", "
@@ -161,6 +161,7 @@ def cross_generate_configs(
                 )
                 configs.append(config)
     return configs
+
 
 def generate_all_configs(
     warmup_iterations: int = 5,

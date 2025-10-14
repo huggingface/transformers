@@ -339,7 +339,6 @@ class BenchmarkRunner:
             # Cleanup model and save results
             self.cleanup()
             self.save_results(model_id, all_results, timestamp=timestamp)
-        self.logger.info("All benchmarks done.")
 
         if pretty_print_summary:
             print()
