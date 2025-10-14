@@ -1153,7 +1153,7 @@ class AutoTokenizer:
             config = config.encoder
 
         model_type = config_class_to_model_type(type(config).__name__)
-        
+
         if model_type is not None:
             tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
 
