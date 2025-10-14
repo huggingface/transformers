@@ -20,7 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 
@@ -34,17 +34,17 @@ from ...video_utils import VideoInput, make_batched_videos
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
 # and does not use them in video processor class
-class Qwen3OmniMoeVideosKwargs(VideosKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    min_frames: Optional[int]
-    max_frames: Optional[int]
-    use_audio_in_video: Optional[bool]
-    seconds_per_chunk: Optional[float]
-    position_id_per_seconds: Optional[int]
+class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
+    use_audio_in_video: bool
+    seconds_per_chunk: float
+    position_id_per_seconds: Union[int, float]
 
 
 class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
@@ -66,6 +66,7 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": True,
+            "truncation": False,
             "return_attention_mask": True,
         },
     }
@@ -122,9 +123,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput = None,
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        audio: AudioInput = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -166,7 +167,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
 
         if audio is not None:
-            output_kwargs["audio_kwargs"]["padding"] = True  # Setting to True to avoid default truncation
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"

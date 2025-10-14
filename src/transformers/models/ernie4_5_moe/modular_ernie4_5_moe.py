@@ -149,7 +149,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        routing_weights = routing_weights.to(router_logits.dtype)
         return selected_experts, routing_weights
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:

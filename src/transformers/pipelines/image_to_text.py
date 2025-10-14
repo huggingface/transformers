@@ -34,7 +34,7 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
+    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_image_processor=True))
 class ImageToTextPipeline(Pipeline):
     """
-    Image To Text pipeline using a `AutoModelForVision2Seq`. This pipeline predicts a caption for a given image.
+    Image To Text pipeline using a `AutoModelForImageTextToText`. This pipeline predicts a caption for a given image.
 
     Unless the model you're using explicitly sets these generation parameters in its configuration files
     (`generation_config.json`), the following default values will be used:
@@ -80,7 +80,7 @@ class ImageToTextPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
+        self.check_model_type(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
 
     def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None, timeout=None):
         forward_params = {}

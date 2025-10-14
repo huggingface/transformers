@@ -60,24 +60,6 @@ class Dots1ModelTester(CausalLMModelTester):
 
 @require_torch
 class Dots1ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Dots1Model,
-            Dots1ForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Dots1Model,
-            "text-generation": Dots1ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_pruning = False
     model_tester_class = Dots1ModelTester
 
 

@@ -407,8 +407,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
 
-    This replaces `load_in_8bit` or `load_in_4bit`therefore both options are mutually exclusive.
-
     Currently only supports `LLM.int8()`, `FP4`, and `NF4` quantization. If more methods are added to `bitsandbytes`,
     then more arguments will be added to this class.
 
@@ -564,13 +562,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise TypeError("bnb_4bit_use_double_quant must be a boolean")
-
-        if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-            "0.39.0"
-        ):
-            raise ValueError(
-                "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
-            )
 
     def is_quantizable(self):
         r"""
@@ -1137,11 +1128,11 @@ class VptqLayerConfig(QuantizationConfigMixin):
         in_features: int = -1,
         indices_as_float: bool = False,
         is_indice_packed: bool = True,
-        num_centroids: tuple = [-1, -1],
-        num_res_centroids: tuple = [-1, -1],
+        num_centroids: list = [-1, -1],
+        num_res_centroids: list = [-1, -1],
         out_features: int = -1,
         outlier_size: int = 0,
-        vector_lens: tuple = [-1, -1],
+        vector_lens: list = [-1, -1],
         **kwargs,
     ):
         self.enable_norm = enable_norm
