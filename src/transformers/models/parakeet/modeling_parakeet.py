@@ -29,7 +29,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
@@ -892,6 +892,17 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
 
         self.post_init()
 
+    def _init_weights(self, module):
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value accross the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        module.prediction.embed.weight.data.normal_(mean=0.0, std=std)
+        for param in module.prediction.dec_rnn.lstm.parameters():
+            param.data.normal_(mean=0.0, std=std)
+
     @auto_docstring
     @check_model_inputs()
     @can_return_tuple
@@ -900,8 +911,12 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
         input_token,
         hidden_state=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
-        return self.prediction(input_token, hidden_state, **kwargs)
+    ) -> BaseModelOutputWithNoAttention:
+        if hidden_state is not None:
+            hidden_state = tuple(hidden_state.unbind(dim=0))  # tuple(hidden_state[0], hidden_state[1])
+
+        h_out, h_state = self.prediction(input_token, hidden_state, **kwargs)
+        return BaseModelOutputWithNoAttention(h_out, torch.stack(h_state, dim=0))
 
 
 @auto_docstring(
@@ -1089,13 +1104,15 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         last_label = torch.LongTensor([[last_label]])
 
-        g, hidden_prime = self.decoder(input_token=last_label)
+        dec_out = self.decoder(input_token=last_label)
+        g, hidden_prime = dec_out.last_hidden_state, dec_out.hidden_states
 
         while t < T:
             symbols_added = 0
             enc = encoder_output[0, t, :]
             while symbols_added < 2:
                 logits = self.joint(enc, g)
+
                 token_logits = logits[: self.blank_token_id + 1].softmax(-1)
                 duration_logits = logits[self.blank_token_id + 1 :].softmax(-1)
 
@@ -1108,7 +1125,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                     hyp.append(token)
                     last_label = token
                     last_label = torch.LongTensor([[last_label]])
-                    g, hidden_prime = self.decoder(last_label, hidden_prime)
+                    dec_out = self.decoder(last_label, hidden_prime)
+                    g, hidden_prime = dec_out.last_hidden_state, dec_out.hidden_states
 
                 if duration == 0:
                     symbols_added += 1
