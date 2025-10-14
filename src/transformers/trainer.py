@@ -740,7 +740,7 @@ class Trainer:
         self._created_lr_scheduler = False
 
         # Set use_cache for the model
-        if hasattr(self.model,"config"):
+        if hasattr(self.model, "config"):
             if self.args.use_model_cache is None:
                 self.model.config.use_cache = _is_peft_model(self.model)
             else:
