@@ -143,7 +143,7 @@ class LlamaTokenizer(TokenizersBackend):
 
         tokenizer_object = None
 
-        if (vocab is not None or merges is not None) and tokenizer_file is None:
+        if tokenizer_file is None:
             # Build a complete Tokenizer with model, decoder, normalizer and pre-tokenizer
             self._tokenizer = Tokenizer(self._model())
             self._tokenizer.decoder = self._decoder(add_prefix_space=self.add_prefix_space)
