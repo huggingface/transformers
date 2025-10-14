@@ -128,18 +128,14 @@ class LlamaTokenizer(TokenizersBackend):
         self._vocab = vocab if vocab is not None else self._vocab()
         self._merges = merges if merges is not None else generate_merges(self._vocab)
 
-        tokenizer_object = None
-
-        if tokenizer_file is None:
-            # Build a complete Tokenizer with model, decoder, normalizer and pre-tokenizer
-            self._tokenizer = Tokenizer(self._model())
-            self._tokenizer.decoder = self._decoder(add_prefix_space=self.add_prefix_space)
-            self._tokenizer.normalizer = self._normalizer()
-            self._tokenizer.pre_tokenizer = self._pre_tokenizer(add_prefix_space=self.add_prefix_space)
-            tokenizer_object = self._tokenizer
-
+        self._tokenizer = Tokenizer(self._model())
+        self._tokenizer.decoder = self._decoder(add_prefix_space=self.add_prefix_space)
+        self._tokenizer.normalizer = self._normalizer()
+        self._tokenizer.pre_tokenizer = self._pre_tokenizer(add_prefix_space=self.add_prefix_space)
+        tokenizer_object = self._tokenizer
+        
         super().__init__(
-            tokenizer_file=tokenizer_file,
+            tokenizer_file=None,
             tokenizer_object=tokenizer_object,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
@@ -152,17 +148,20 @@ class LlamaTokenizer(TokenizersBackend):
             **kwargs,
         )
 
+        self._add_bos_token = add_bos_token
+        self._add_eos_token = add_eos_token
+        self.use_default_system_prompt = use_default_system_prompt
+        self.vocab_file = vocab_file
+        
+        self._post_init()
+
+    def _post_init(self):
+        """Post-initialization setup that needs to run after _tokenizer is set."""
         # TODO: how to do this cleanly? Need to trigger re-adding special tokens after setting the normalizer in Tokenizers
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False)
         self._tokenizer.normalizer = None #normalizers.Sequence([normalizers.Prepend("▁"), normalizers.Replace(pattern=" ", content="▁")])
         self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
-
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
         self.update_post_processor()
-        
-        self.use_default_system_prompt = use_default_system_prompt
-        self.vocab_file = vocab_file
         
 
     def _model(self):

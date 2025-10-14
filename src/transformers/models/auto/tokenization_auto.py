@@ -29,6 +29,7 @@ from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
+from ...utils.hub import has_file, cached_file
 from ...utils import (
     cached_file,
     extract_commit_hash,
@@ -1139,74 +1140,66 @@ class AutoTokenizer:
                 tokenizer_class = fast_tokenizer_class
 
             if use_fast and fast_tokenizer_class is not None:
-                try:
-                    from ...utils.hub import has_file, cached_file
-                except Exception:
-                    has_file = None
-                    cached_file = None
-
                 # If tokenizer.json exists, load the tokenizers-backend 
-                if has_file is not None:
-                    try:
-                        tokenizer_json_exists = has_file(
-                            pretrained_model_name_or_path,
-                            "tokenizer.json",
-                            revision=kwargs.get("revision", None),
-                            token=kwargs.get("token", None),
-                            cache_dir=kwargs.get("cache_dir", None),
-                            local_files_only=kwargs.get("local_files_only", False),
-                        )
-                    except Exception:
-                        tokenizer_json_exists = False
-                    if tokenizer_json_exists:
-                        return fast_tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                try:
+                    tokenizer_json_exists = has_file(
+                        pretrained_model_name_or_path,
+                        "tokenizer.json",
+                        revision=kwargs.get("revision", None),
+                        token=kwargs.get("token", None),
+                        cache_dir=kwargs.get("cache_dir", None),
+                        local_files_only=kwargs.get("local_files_only", False),
+                    )
+                except Exception:
+                    tokenizer_json_exists = False
+                if tokenizer_json_exists:
+                    return fast_tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
                 # If only SPM exists, try to get vocab and merges and init to load a tokenizers-backend
-                if has_file is not None and cached_file is not None:
+                try:
+                    spm_exists = has_file(
+                        pretrained_model_name_or_path,
+                        "tokenizer.model",
+                        revision=kwargs.get("revision", None),
+                        token=kwargs.get("token", None),
+                        cache_dir=kwargs.get("cache_dir", None),
+                        local_files_only=kwargs.get("local_files_only", False),
+                    )
+                except Exception:
+                    spm_exists = False
+                if spm_exists:
                     try:
-                        spm_exists = has_file(
+                        resolved_spm = cached_file(
                             pretrained_model_name_or_path,
                             "tokenizer.model",
-                            revision=kwargs.get("revision", None),
-                            token=kwargs.get("token", None),
                             cache_dir=kwargs.get("cache_dir", None),
+                            force_download=kwargs.get("force_download", False),
+                            proxies=kwargs.get("proxies", None),
+                            token=kwargs.get("token", None),
+                            revision=kwargs.get("revision", None),
                             local_files_only=kwargs.get("local_files_only", False),
+                            subfolder=kwargs.get("subfolder", ""),
                         )
                     except Exception:
-                        spm_exists = False
-                    if spm_exists:
+                        resolved_spm = None
+                    if resolved_spm is not None:
                         try:
-                            resolved_spm = cached_file(
-                                pretrained_model_name_or_path,
-                                "tokenizer.model",
-                                cache_dir=kwargs.get("cache_dir", None),
-                                force_download=kwargs.get("force_download", False),
-                                proxies=kwargs.get("proxies", None),
-                                token=kwargs.get("token", None),
-                                revision=kwargs.get("revision", None),
-                                local_files_only=kwargs.get("local_files_only", False),
-                                subfolder=kwargs.get("subfolder", ""),
-                            )
+                            from ...create_fast_tokenizer import SentencePieceExtractor
+                            fast_sig = inspect.signature(getattr(fast_tokenizer_class, "__init__", fast_tokenizer_class))
+                            if "vocab" in fast_sig.parameters and "merges" in fast_sig.parameters:
+                                try:
+                                    vocab, merges = SentencePieceExtractor(resolved_spm).extract()
+                                    return fast_tokenizer_class.from_pretrained(
+                                        pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
+                                    )
+                                except Exception:
+                                    pass
                         except Exception:
-                            resolved_spm = None
-                        if resolved_spm is not None:
-                            try:
-                                from ...create_fast_tokenizer import SentencePieceExtractor
-                                fast_sig = inspect.signature(getattr(fast_tokenizer_class, "__init__", fast_tokenizer_class))
-                                if "vocab" in fast_sig.parameters and "merges" in fast_sig.parameters:
-                                    try:
-                                        vocab, merges = SentencePieceExtractor(resolved_spm).extract()
-                                        return fast_tokenizer_class.from_pretrained(
-                                            pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
-                                        )
-                                    except Exception:
-                                        pass
-                            except Exception:
-                                pass
-             # If we failed with a tokenizers-backedn, we load from another backend (below only SPM but will add others)
+                            pass
+            # If we failed with a tokenizers-backend, we load from another backend (below only SPM but will add others)
             if tokenizer_class is None:
                 try:
-        	        vocab_file_exists = has_file(
+                    vocab_file_exists = has_file(
                         pretrained_model_name_or_path,
                         "tokenizer.model",
                         revision=kwargs.get("revision", None),
@@ -1229,9 +1222,6 @@ class AutoTokenizer:
                 raise ValueError(
                     f"Could not load tokenizer from {pretrained_model_name_or_path}. "
                     "No tokenizer configuration or model config could be found."
-                )
-                raise ValueError(
-                    f"Tokenizer class {tokenizer_class_candidate} does not exist or is not currently imported."
                 )
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 

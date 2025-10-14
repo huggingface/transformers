@@ -1864,6 +1864,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
 
+        # If tokenizer_file exists and tokenizer has a TokenizersBackend, replace the blank tokenizer with tokenizer.json
+        if tokenizer_file is not None and hasattr(tokenizer, '_tokenizer'):
+            from tokenizers import Tokenizer as TokenizerFast
+            
+            tokenizer._tokenizer = TokenizerFast.from_file(tokenizer_file)
+            # Re-run post-initialization if the tokenizer has it
+            if hasattr(tokenizer, '_post_init'):
+                tokenizer._post_init()
+
         if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.info(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
