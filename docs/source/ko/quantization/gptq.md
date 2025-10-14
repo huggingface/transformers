@@ -91,30 +91,3 @@ from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto")
 ```
-
-## ExLlama [[exllama]]
-
-[ExLlama](https://github.com/turboderp/exllama)은 [Llama](model_doc/llama) 모델의 Python/C++/CUDA 구현체로, 4비트 GPTQ 가중치를 사용하여 더 빠른 추론을 위해 설계되었습니다(이 [벤치마크](https://github.com/huggingface/optimum/tree/main/tests/benchmark#gptq-benchmark)를 참고하세요). ['GPTQConfig'] 객체를 생성할 때 ExLlama 커널이 기본적으로 활성화됩니다. 추론 속도를 더욱 높이기 위해, `exllama_config` 매개변수를 구성하여 [ExLlamaV2](https://github.com/turboderp/exllamav2) 커널을 사용할 수 있습니다:
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, GPTQConfig
-
-gptq_config = GPTQConfig(bits=4, exllama_config={"version":2})
-model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config=gptq_config)
-```
-
-<Tip warning={true}>
-
-4비트 모델만 지원되며, 양자화된 모델을 PEFT로 미세 조정하는 경우 ExLlama 커널을 비활성화할 것을 권장합니다.
-
-</Tip>
-
-ExLlama 커널은 전체 모델이 GPU에 있을 때만 지원됩니다. CPU에서 추론을 수행하는 경우 [`GPTQConfig`]에서 ExLlama 커널을 비활성화해야 합니다. 이를 위해 config.json 파일의 양자화 설정에서 ExLlama 커널과 관련된 속성을 덮어써야 합니다.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, GPTQConfig
-gptq_config = GPTQConfig(bits=4, use_exllama=False)
-model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="cpu", quantization_config=gptq_config)
-```

@@ -664,8 +664,6 @@ class GPTQConfig(QuantizationConfigMixin):
         backend (`str`, *optional*):
             Controls which kernel to use. Valid values for gptqmodel are `auto`, `auto_trainable` and more. Ref gptqmodel backends:
             https://github.com/ModelCloud/GPTQModel/blob/main/gptqmodel/utils/backend.py
-        use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
-            Whether or not to use optimized CUDA kernels for fp16 models. Need to have model in fp16.
         model_seqlen (`int`, *optional*):
             The maximum sequence length that the model can take.
         block_name_to_quantize (`str`, *optional*):
@@ -676,14 +674,9 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
-        use_exllama (`bool`, *optional*):
-            Whether to use exllama backend. Defaults to `True` if unset. Only works with `bits` = 4.
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
-        exllama_config (`dict[str, Any]`, *optional*):
-            The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
-            to `{"version": 1}` if unset.
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
             Whether to cache block outputs to reuse as inputs for the succeeding block.
         modules_in_block_to_quantize (`list[list[str]]`, *optional*):
@@ -708,15 +701,12 @@ class GPTQConfig(QuantizationConfigMixin):
         checkpoint_format: str = "gptq",
         meta: Optional[dict[str, Any]] = None,
         backend: Optional[str] = None,
-        use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
         block_name_to_quantize: Optional[str] = None,
         module_name_preceding_first_block: Optional[list[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
-        use_exllama: Optional[bool] = None,
         max_input_length: Optional[int] = None,
-        exllama_config: Optional[dict[str, Any]] = None,
         cache_block_outputs: bool = True,
         modules_in_block_to_quantize: Optional[list[list[str]]] = None,
         **kwargs,
@@ -733,28 +723,19 @@ class GPTQConfig(QuantizationConfigMixin):
         self.checkpoint_format = checkpoint_format.lower()
         self.meta = meta
         self.backend = backend.lower() if isinstance(backend, str) else backend
-        self.use_cuda_fp16 = use_cuda_fp16
         self.model_seqlen = model_seqlen
         self.block_name_to_quantize = block_name_to_quantize
         self.module_name_preceding_first_block = module_name_preceding_first_block
         self.batch_size = batch_size
         self.pad_token_id = pad_token_id
-        self.use_exllama = use_exllama
         self.max_input_length = max_input_length
-        self.exllama_config = exllama_config
         self.cache_block_outputs = cache_block_outputs
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
         self.post_init()
 
     def get_loading_attributes(self):
         attributes_dict = copy.deepcopy(self.__dict__)
-        loading_attributes = [
-            "use_exllama",
-            "exllama_config",
-            "use_cuda_fp16",
-            "max_input_length",
-            "backend",
-        ]
+        loading_attributes = ["max_input_length", "backend"]
         loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
         return loading_attributes_dict
 
@@ -788,29 +769,7 @@ class GPTQConfig(QuantizationConfigMixin):
 
         # make sure backend default stays consistent with gptqmodel expectations
         if is_gptqmodel_available() and self.backend is None:
-            self.backend = "auto_trainable" if self.use_exllama is not None and not self.use_exllama else "auto"
-
-        if self.use_exllama is None:
-            # New default behaviour
-            self.use_exllama = True
-
-        if self.exllama_config is None:
-            self.exllama_config = {"version": ExllamaVersion.ONE}
-        else:
-            if "version" not in self.exllama_config:
-                raise ValueError("`exllama_config` needs to have a `version` key.")
-            elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
-                exllama_version = self.exllama_config["version"]
-                raise ValueError(
-                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
-                )
-
-        if self.bits == 4 and self.use_exllama:
-            if self.exllama_config["version"] == ExllamaVersion.ONE:
-                logger.info(
-                    "You have activated exllama backend. Note that you can get better inference "
-                    "speed using exllamav2 kernel by setting `exllama_config`."
-                )
+            self.backend = "auto"
         if self.modules_in_block_to_quantize is not None:
             optimum_version = version.parse(importlib.metadata.version("optimum"))
             if optimum_version < version.parse("1.15.0"):
@@ -819,29 +778,19 @@ class GPTQConfig(QuantizationConfigMixin):
                 )
 
     def to_dict(self) -> dict[str, Any]:
-        config_dict = super().to_dict()
-        config_dict.pop("disable_exllama", None)
-        return config_dict
+        return super().to_dict()
 
     def to_dict_optimum(self):
         """
         Get compatible dict for optimum gptq config
         """
-        quant_dict = self.to_dict()
-        # make it compatible with optimum config
-        quant_dict["disable_exllama"] = not self.use_exllama
-        return quant_dict
+        return self.to_dict()
 
     @classmethod
     def from_dict_optimum(cls, config_dict):
         """
         Get compatible class with optimum gptq config dict
         """
-
-        if "disable_exllama" in config_dict:
-            config_dict["use_exllama"] = not config_dict["disable_exllama"]
-            # switch to None to not trigger the warning
-            config_dict.pop("disable_exllama")
 
         config = cls(**config_dict)
         return config

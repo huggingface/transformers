@@ -107,41 +107,6 @@ from transformers import AutoModelForCausalLM, GPTQConfig
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config=GPTQConfig(bits=4, backend="marlin"))
 ```
 
-## ExLlama
-
-> [!WARNING]
-> Only 4-bit models are supported, and we recommend deactivating the ExLlama kernels if you're finetuning a quantized model with PEFT.
-
-[ExLlama](https://github.com/turboderp/exllama) is a Python/C++/CUDA implementation of the [Llama](model_doc/llama) model that is designed for faster inference with 4-bit GPTQ weights (check out these [benchmarks](https://github.com/huggingface/optimum/tree/main/tests/benchmark#gptq-benchmark)). The ExLlama kernel is activated by default when you create a [`GPTQConfig`] object.
-
-To boost inference speed even further, use the [ExLlamaV2](https://github.com/turboderp/exllamav2) kernels by configuring the `exllama_config` parameter in [`GPTQConfig`].
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, GPTQConfig
-
-gptq_config = GPTQConfig(bits=4, exllama_config={"version":2})
-model = AutoModelForCausalLM.from_pretrained(
-    "{your_username}/opt-125m-gptq",
-    device_map="auto",
-    quantization_config=gptq_config
-)
-```
-
-The ExLlama kernels are only supported when the entire model is on the GPU. If you're doing inference on a CPU, disable the ExLlama kernel in [`GPTQConfig`]. This overwrites the attributes related to the ExLlama kernels in the quantization config of the `config.json` file.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, GPTQConfig
-
-gptq_config = GPTQConfig(bits=4, use_exllama=False)
-model = AutoModelForCausalLM.from_pretrained(
-    "{your_username}/opt-125m-gptq",
-    device_map="cpu",
-    quantization_config=gptq_config
-)
-```
-
 ## GPT-QModel]
 
 GPT-QModel] is the actively maintained backend for GPTQ in Transformers. It was originally forked from AutoGPTQ, but has since diverged with significant improvements such as faster quantization, lower memory usage, and more accurate defaults.

@@ -102,8 +102,6 @@ class GPTQTest(unittest.TestCase):
     sym = True
     group_size = 128
     desc_act = False
-    use_exllama = False
-
     dataset = [
         "gptqmodel is an easy-to-use model quantization library with user-friendly APIs, based on the GPTQ algorithm."
     ]
@@ -131,7 +129,6 @@ class GPTQTest(unittest.TestCase):
             group_size=cls.group_size,
             desc_act=cls.desc_act,
             sym=cls.sym,
-            use_exllama=cls.use_exllama,
         )
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -276,7 +273,7 @@ class GPTQTestCUDA(GPTQTest):
                 self.skipTest("gptqmodel not available")
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                 tmpdirname,
-                quantization_config=GPTQConfig(use_exllama=self.use_exllama, bits=self.bits),
+                quantization_config=GPTQConfig(bits=self.bits),
                 device_map=self.device_map,
             )
             self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
