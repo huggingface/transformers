@@ -739,6 +739,12 @@ class Trainer:
         self._train_batch_size = args.train_batch_size
         self._created_lr_scheduler = False
 
+        # Set use_cache for the model
+        if self.args.use_model_cache is None:
+            model.config.use_cache = _is_peft_model(self.model)
+        else:
+            model.config.use_cache = self.args.use_model_cache
+
         # very last
         self._memory_tracker.stop_and_update_metrics()
 

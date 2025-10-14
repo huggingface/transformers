@@ -752,6 +752,11 @@ class TrainingArguments:
             Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
             num_tokens_in_batch for precise loss calculation. Reference:
             https://github.com/huggingface/transformers/issues/34242
+        
+        use_model_cache (`Optional[bool]`, *optional*, defaults to `None`):
+            Whether or not to enable cache for the model (`use_cache`). For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`. 
+            Defaults to `False` unless we have a peft model
+
     """
 
     # Sometimes users will pass in a `str` repr of a dict in the CLI
@@ -1393,6 +1398,14 @@ class TrainingArguments:
             "help": "Whether or not to average tokens across devices. If enabled, will use all_reduce to "
             "synchronize num_tokens_in_batch for precise loss calculation. Reference: "
             "https://github.com/huggingface/transformers/issues/34242"
+        },
+    )
+    
+    use_model_cache: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether or not to use cache for the model (`use_cache`). For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`. "
+            "Defaults to `None`. If `None`, we will set the model config`use_cache` to False unless we have a peft model. "
         },
     )
 
