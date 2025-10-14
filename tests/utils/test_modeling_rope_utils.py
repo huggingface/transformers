@@ -74,17 +74,17 @@ class RopeTest(unittest.TestCase):
             self.assertIn(model_specific_kwarg, logs.output[0])
 
         # We can indicate Different RoPE params for each attention type
-        # If any of the layer types have no RoPE params defined, we raise an error
-        config.layer_types = ["global_attn", "local_attn", "mamba"]
+        # We can also have only one RoPE params defined for all layer, we don't raise an error
+        # because it is not required to have separate RoPE per layer type
+        config.layer_types = ["global_attn", "local_attn"]
         config.rope_parameters = {
             "global_attn": {"rope_type": "default", "rope_theta": 10000},
             "local_attn": {"rope_type": "linear", "rope_theta": 10000, "factor": 2.0},
-            "mamba": None,
         }
         rope_config_validation(config)
-        with self.assertRaises(KeyError):
-            del config.rope_parameters["local_attn"]
-            rope_config_validation(config)
+
+        config.rope_parameters = config.rope_parameters["local_attn"]
+        rope_config_validation(config)
 
     def test_yarn_original_original_max_position_embeddings_validation(self):
         """Tests that models with no/bad `original_max_position_embeddings` raise a warning"""
