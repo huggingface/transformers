@@ -104,10 +104,10 @@ class PEAudioEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.resnet_block = PEAudioResnetBlock1d(config)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.class_embedding = nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
     def forward(self, inputs_embeds, padding_mask=None):
-        hidden_states = torch.cat([self.cls_token.expand(inputs_embeds.size(0), -1, -1), inputs_embeds], dim=1)
+        hidden_states = torch.cat([self.class_embedding.expand(inputs_embeds.size(0), -1, -1), inputs_embeds], dim=1)
 
         if padding_mask is not None:
             # TODO: any reason why we take padding_mask[0] and not just 1?
@@ -384,11 +384,6 @@ class PEAudioRMSNorm(nn.Module):
 
 
 class PEAudioTransformer(nn.Module):
-    _can_record_outputs = {
-        "attentions": PEAudioAttention,
-        "hidden_states": PEAudioDecoderLayer,
-    }
-
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -400,7 +395,6 @@ class PEAudioTransformer(nn.Module):
         self.rope_embeddings = PEAudioRotaryEmbedding(config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
-    @check_model_inputs
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
@@ -566,6 +560,19 @@ class PEAudioPretrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, PEAudioEmbeddings):
+            embed_dim = module.class_embedding.shape[-1]
+            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+
 
 @dataclass
 @auto_docstring
@@ -607,6 +614,11 @@ class PEAudioOutput(ModelOutput):
 class PEAudioEncoder(PEAudioPretrainedModel):
     config_class = PEAudioEncoderConfig
     base_model_prefix = "audio_encoder"
+    main_input_name = "input_values"
+    _can_record_outputs = {
+        "hidden_states": PEAudioDecoderLayer,
+        "attentions": PEAudioAttention,
+    }
 
     def __init__(self, config: PEAudioEncoderConfig):
         super().__init__(config)
@@ -616,10 +628,14 @@ class PEAudioEncoder(PEAudioPretrainedModel):
         self.data_proj = nn.Linear(config.dac_config.codebook_dim, config.hidden_size)
         self.transformer = PEAudioTransformer(config)
 
+        self.post_init()
+
+    @check_model_inputs
     def forward(
         self,
         input_values: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
             hidden_states = self.encoder(input_values)  # (batch_size, hidden_size, seq_len)
@@ -628,15 +644,13 @@ class PEAudioEncoder(PEAudioPretrainedModel):
         codec_features = hidden_states.transpose(1, 2)
         feature_padding_mask = None
         if padding_mask is not None:
-            feature_padding_mask = padding_mask[:, :: self.dac_vae_encoder.config.hop_length]
-        outputs = self.transformer(self.data_proj(codec_features), attention_mask=feature_padding_mask)
+            feature_padding_mask = padding_mask[:, :: self.config.dac_config.hop_length]
+        outputs = self.transformer(self.data_proj(codec_features), attention_mask=feature_padding_mask, **kwargs)
 
         # TODO: shoud we return codec features?
         return BaseModelOutputWithPooling(
             last_hidden_state=outputs.last_hidden_state,
             pooler_output=outputs.pooler_output,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
 
