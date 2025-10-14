@@ -409,13 +409,13 @@ def sdpa_mask_recent_torch(
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
-    original_mask_function = mask_function
 
     # Potentially add the padding 2D mask
     if padding_mask is not None:
-        mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
-        if original_mask_function is bidirectional_mask_function:
+        # Fix for issue #41566. We want to avoid vmapping over the masks and allow opting out early given a bidirectional mask.
+        if mask_function is bidirectional_mask_function:
             return padding_mask[:, None, None, :].expand(batch_size, 1, q_length, kv_length)
+        mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
     batch_arange = torch.arange(batch_size, device=cache_position.device)
     head_arange = torch.arange(1, device=cache_position.device)
     # This creates the 4D mask easily. Note that we need this context manager as vmap cannot handle slicing a tensor from
@@ -491,15 +491,24 @@ def sdpa_mask_older_torch(
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
-
-    # This creates the 4D mask easily. Note that we do not include vmap over the batch_idx dimension as well,
-    # as vmap cannot handle slicing a tensor from scalar tensor (it internally calls `.item()` which vmap does not allow
-    # However, in more recent version of Pytorch, a trick was introduced to handle it - which is the reason we have
-    # `sdpa_mask_recent_torch`, as it allows more general `mask_function`
-    causal_mask = _vmap_for_bhqkv(mask_function, bh_indices=False)(None, None, cache_position, kv_arange)
-    causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
-    if padding_mask is not None:
-        causal_mask = causal_mask * padding_mask[:, None, None, :]
+    
+    # Fix for issue #41566. We want to avoid vmapping over the masks and allow opting out early given a bidirectional mask (which is all true).
+    if mask_function is bidirectional_mask_function:
+        if padding_mask is not None:
+            causal_mask = padding_mask[:, None, None, :].expand(batch_size, 1, q_length, kv_length)
+        else:
+            causal_mask = torch.ones((batch_size, 1, q_length, kv_length), dtype=torch.bool, device=cache_position.device)
+    else:
+        
+        
+        # This creates the 4D mask easily. Note that we do not include vmap over the batch_idx dimension as well,
+        # as vmap cannot handle slicing a tensor from scalar tensor (it internally calls `.item()` which vmap does not allow
+        # However, in more recent version of Pytorch, a trick was introduced to handle it - which is the reason we have
+        # `sdpa_mask_recent_torch`, as it allows more general `mask_function`
+        causal_mask = _vmap_for_bhqkv(mask_function, bh_indices=False)(None, None, cache_position, kv_arange)
+        causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
+        if padding_mask is not None:
+            causal_mask = causal_mask * padding_mask[:, None, None, :]
 
     # Due to a bug in versions of torch<2.5, we need to update the mask in case a query is not attending to any
     # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
