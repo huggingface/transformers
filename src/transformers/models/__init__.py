@@ -353,6 +353,7 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .vaultgemma import *
+    from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
     from .vilt import *
