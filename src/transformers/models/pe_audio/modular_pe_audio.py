@@ -47,7 +47,7 @@ class PEAudioMaskedGroupNorm(nn.GroupNorm):
 
 
 class PEAudioConvBlock1d(nn.Module):
-    def __init__(self, config: PEAudioEncoderConfig):
+    def __init__(self, config):
         super().__init__()
         self.groupnorm = PEAudioMaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
         self.activation = nn.SiLU()
@@ -65,7 +65,7 @@ class PEAudioConvBlock1d(nn.Module):
 
 
 class PEAudioResnetBlock1d(nn.Module):
-    def __init__(self, config: PEAudioEncoderConfig):
+    def __init__(self, config):
         super().__init__()
         self.block1 = PEAudioConvBlock1d(config)
         self.block2 = PEAudioConvBlock1d(config)
@@ -94,7 +94,7 @@ class PEAudioResnetBlock1d(nn.Module):
 
 
 class PEAudioEmbeddings(nn.Module):
-    def __init__(self, config: PEAudioEncoderConfig):
+    def __init__(self, config):
         super().__init__()
         self.resnet_block = PEAudioResnetBlock1d(config)
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
@@ -135,7 +135,7 @@ class PEAudioTransformer(nn.Module):
         "hidden_states": PEAudioDecoderLayer,
     }
 
-    def __init__(self, config: PEAudioEncoderConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embeddings = PEAudioEmbeddings(config)

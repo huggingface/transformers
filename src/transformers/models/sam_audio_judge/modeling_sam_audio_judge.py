@@ -4,13 +4,11 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam_audio_judge.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 import torch
 import torch.nn as nn
-from einops import rearrange
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -22,249 +20,99 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
-from .configuration_sam_audio_judge import DACVAEConfig, SamAudioJudgeConfig, SamAudioJudgeTransformerConfig
+from .configuration_sam_audio_judge import SamAudioJudgeConfig
 
 
-## Audio Codec
-class VAEBottleneck(torch.nn.Module):
-    def __init__(
-        self,
-        input_dim: int = 512,
-        bottleneck_dim: int = 512,
-    ):
-        super().__init__()
-        self.in_proj = torch.nn.Conv1d(input_dim, bottleneck_dim * 2, kernel_size=1)
-        self.out_proj = torch.nn.Conv1d(bottleneck_dim, input_dim, kernel_size=1)
-
-    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        mean, _ = self.in_proj(z).chunk(2, dim=1)
-        return mean
-
-
-class Snake1d(nn.Module):
-    """
-    A 1-dimensional Snake activation function module.
-    """
-
-    def __init__(self, hidden_dim):
-        super().__init__()
-        self.alpha = nn.Parameter(torch.ones(1, hidden_dim, 1))
-
-    def forward(self, hidden_states):
-        shape = hidden_states.shape
-        hidden_states = hidden_states.reshape(shape[0], shape[1], -1)
-        hidden_states = hidden_states + (self.alpha + 1e-9).reciprocal() * torch.sin(self.alpha * hidden_states).pow(2)
-        hidden_states = hidden_states.reshape(shape)
-        return hidden_states
-
-
-class DACVAEResidualUnit(nn.Module):
-    """
-    A residual unit composed of Snake1d and weight-normalized Conv1d layers with dilations.
-    """
-
-    def __init__(self, dimension: int = 16, dilation: int = 1):
-        super().__init__()
-        pad = ((7 - 1) * dilation) // 2
-
-        self.snake1 = Snake1d(dimension)
-        self.conv1 = nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad)
-        self.snake2 = Snake1d(dimension)
-        self.conv2 = nn.Conv1d(dimension, dimension, kernel_size=1)
-
-    def forward(self, hidden_state):
-        """
-        Forward pass through the residual unit.
-
-        Args:
-            hidden_state (`torch.Tensor` of shape `(batch_size, channels, time_steps)`):
-                Input tensor .
-
-        Returns:
-            output_tensor (`torch.Tensor` of shape `(batch_size, channels, time_steps)`):
-                Input tensor after passing through the residual unit.
-        """
-        output_tensor = hidden_state
-        output_tensor = self.conv1(self.snake1(output_tensor))
-        output_tensor = self.conv2(self.snake2(output_tensor))
-
-        padding = (hidden_state.shape[-1] - output_tensor.shape[-1]) // 2
-        if padding > 0:
-            hidden_state = hidden_state[..., padding:-padding]
-        output_tensor = hidden_state + output_tensor
-        return output_tensor
-
-
-class DACVAEEncoderBlock(nn.Module):
-    """Encoder block used in D_A_C_V_A_E encoder."""
-
-    def __init__(self, config: DACVAEConfig, stride: int = 1, stride_index: int = 1):
-        super().__init__()
-
-        dimension = config.encoder_hidden_size * 2**stride_index
-        self.res_unit1 = DACVAEResidualUnit(dimension // 2, dilation=1)
-        self.res_unit2 = DACVAEResidualUnit(dimension // 2, dilation=3)
-        self.res_unit3 = DACVAEResidualUnit(dimension // 2, dilation=9)
-        self.snake1 = Snake1d(dimension // 2)
-        self.conv1 = nn.Conv1d(
-            dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
-        )
-
-    def forward(self, hidden_state):
-        hidden_state = self.res_unit1(hidden_state)
-        hidden_state = self.res_unit2(hidden_state)
-        hidden_state = self.snake1(self.res_unit3(hidden_state))
-        hidden_state = self.conv1(hidden_state)
-
-        return hidden_state
-
-
-class DACVAEEncoder(nn.Module):
-    """D_A_C_V_A_E Encoder"""
-
-    def __init__(self, config: DACVAEConfig):
-        super().__init__()
-
-        strides = config.downsampling_ratios
-        # Create first convolution
-        self.conv1 = nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3)
-
-        self.block = []
-        # Create EncoderBlocks that double channels as they downsample by `stride`
-        for stride_index, stride in enumerate(strides):
-            stride_index = stride_index + 1
-            self.block += [DACVAEEncoderBlock(config, stride=stride, stride_index=stride_index)]
-
-        self.block = nn.ModuleList(self.block)
-        d_model = config.encoder_hidden_size * 2**stride_index
-        self.snake1 = Snake1d(d_model)
-        self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
-
-    def forward(self, hidden_state):
-        hidden_state = self.conv1(hidden_state)
-
-        for module in self.block:
-            hidden_state = module(hidden_state)
-
-        hidden_state = self.snake1(hidden_state)
-        hidden_state = self.conv2(hidden_state)
-
-        return hidden_state
-
-
-class SamAudioJudgeDacEncoderVAE(torch.nn.Module):
-    def __init__(self, config: DACVAEConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.encoder = DACVAEEncoder(config)
-        self.bottleneck = VAEBottleneck(config.codebook_size, config.codebook_dim)
-        self.hop_length = config.hop_length
-        self.sampling_rate = config.sampling_rate
-
-    def forward(self, waveform: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
-            z = self.encoder(self._pad(waveform))
-            encoded_frames = self.bottleneck(z)
-        return encoded_frames
-
-    def _pad(self, wavs):
-        length = wavs.size(-1)
-        if length % self.hop_length:
-            p1d = (0, self.hop_length - (length % self.hop_length))
-            return torch.nn.functional.pad(wavs, p1d, "reflect")
-        else:
-            return wavs
-
-
-## Patcher
-class MaskedGroupNorm(torch.nn.GroupNorm):
-    def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+class SamAudioJudgeMaskedGroupNorm(nn.GroupNorm):
+    def forward(self, x, padding_mask=None):
         if padding_mask is None:
             return super().forward(x)
-        B, C, L = x.shape
-        G = self.num_groups
-        x_grouped = x.view(B, G, C // G, L)
-        padding_mask_grouped = padding_mask.reshape(B, G, C // G, L).bool()
+
+        batch_size, hidden_size, seq_len = x.shape
+        group_size = hidden_size // self.num_groups
+        grouped_shape = (batch_size, -1, group_size, seq_len)
+
+        x_grouped = x.view(grouped_shape)
+        padding_mask_grouped = padding_mask.reshape(grouped_shape).bool()
+
         mean = torch.masked.mean(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True)
         var = torch.masked.var(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True, unbiased=False)
+
         x_norm = (x_grouped - mean) / torch.sqrt(var + self.eps)
-        x_norm = x_norm.view(B, C, L)
+        x_norm = x_norm.view(x.shape)
+
         if self.affine:
             x_norm = x_norm * self.weight.view(1, -1, 1) + self.bias.view(1, -1, 1)
+
         return x_norm * padding_mask
 
 
-class ConvBlock1d(torch.nn.Module):
-    def __init__(self, config: SamAudioJudgeTransformerConfig):
+class SamAudioJudgeConvBlock1d(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.groupnorm = MaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
-        self.activation = torch.nn.SiLU()
-        self.project = torch.nn.Conv1d(
+        self.groupnorm = SamAudioJudgeMaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
+        self.activation = nn.SiLU()
+        self.project = nn.Conv1d(
             in_channels=config.hidden_size,
             out_channels=config.hidden_size,
             kernel_size=3,
             padding="same",
         )
 
-    def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x, padding_mask=None):
         x = self.groupnorm(x, padding_mask=padding_mask)
         x = self.activation(x)
         return self.project(x)
 
 
-class ResnetBlock1d(torch.nn.Module):
-    def __init__(self, config: SamAudioJudgeTransformerConfig):
-        super().__init__()
-        self.block1 = ConvBlock1d(config)
-        self.block2 = ConvBlock1d(config)
-
-    def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        if padding_mask is not None:
-            padding_mask = padding_mask.unsqueeze(1).expand_as(x)
-        h = self.block1(x, padding_mask=padding_mask)
-        h = self.block2(h, padding_mask=padding_mask)
-        return h + x
-
-
-class SamAudioJudgeMLP(nn.Module):
+class SamAudioJudgeResnetBlock1d(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.block1 = SamAudioJudgeConvBlock1d(config)
+        self.block2 = SamAudioJudgeConvBlock1d(config)
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class SamAudioJudgeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+    def forward(self, hidden_states, padding_mask=None):
         """
-        SamAudioJudgeRMSNorm is equivalent to T5LayerNorm
+        Args:
+            hidden_states: (batch_size, seq_len, hidden_size)
+            padding_mask: (batch_size, seq_len)
+        Returns:
+            hidden_states: (batch_size, seq_len, hidden_size)
         """
+        # transpose for convolutions
+        # (batch_size, seq_len, hidden_size) -> (batch_size, hidden_size, seq_len)
+        hidden_states = hidden_states.transpose(1, 2)
+
+        if padding_mask is not None:
+            padding_mask = padding_mask.unsqueeze(1).expand_as(hidden_states)
+
+        residual = hidden_states
+        hidden_states = self.block1(hidden_states, padding_mask=padding_mask)
+        hidden_states = self.block2(hidden_states, padding_mask=padding_mask)
+        hidden_states = residual + hidden_states
+
+        return hidden_states.transpose(1, 2)
+
+
+class SamAudioJudgeEmbeddings(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
+        self.resnet_block = SamAudioJudgeResnetBlock1d(config)
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+    def forward(self, inputs_embeds, padding_mask=None):
+        hidden_states = torch.cat([self.cls_token.expand(inputs_embeds.size(0), -1, -1), inputs_embeds], dim=1)
 
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        if padding_mask is not None:
+            # TODO: any reason why we take padding_mask[0] and not just 1?
+            padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1)
+
+        hidden_states = self.resnet_block(hidden_states, padding_mask=padding_mask)
+        return hidden_states, padding_mask
 
 
 class SamAudioJudgeRotaryEmbedding(nn.Module):
@@ -301,6 +149,40 @@ class SamAudioJudgeRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -341,20 +223,25 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
-    dim = cos.size(-1)
-    cos = cos.narrow(-1, 0, dim // 2)
-    sin = sin.narrow(-1, 0, dim // 2)
-    freqs_cis = torch.stack((cos, -sin, sin, cos), dim=-1).view(*cos.size(), 2, 2)
-    return freqs_cis
+@use_kernel_forward_from_hub("RMSNorm")
+class SamAudioJudgeRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        SamAudioJudgeRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    freqs_cis = stack_freqs(cos, sin)
-    freqs_cis = freqs_cis.unsqueeze(unsqueeze_dim)
-    q_ = q.reshape(*q.shape[:-1], -1, 1, 2)
-    k_ = k.reshape(*k.shape[:-1], -1, 1, 2)
-    return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class SamAudioJudgeAttention(nn.Module):
@@ -388,7 +275,7 @@ class SamAudioJudgeAttention(nn.Module):
         self.k_norm = SamAudioJudgeRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -436,8 +323,24 @@ class SamAudioJudgeAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class SamAudioJudgeMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
 class SamAudioJudgeDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: SamAudioJudgeConfig, layer_idx: int):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -446,7 +349,6 @@ class SamAudioJudgeDecoderLayer(GradientCheckpointingLayer):
         self.mlp = SamAudioJudgeMLP(config)
         self.input_layernorm = SamAudioJudgeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = SamAudioJudgeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -483,41 +385,24 @@ class SamAudioJudgeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class SamAudioJudgeEmbeddings(torch.nn.Module):
-    def __init__(self, config: SamAudioJudgeTransformerConfig):
-        super().__init__()
-        self.config = config
-        self.resnet_block = ResnetBlock1d(config)
-        self.cls_token = torch.nn.Parameter(torch.randn(1, 1, config.hidden_size))
-
-    def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        x = torch.cat([self.cls_token.expand(x.size(0), -1, -1), x], dim=1)
-        x = rearrange(x, "b l c-> b c l")
-        if padding_mask is not None:
-            padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1)
-        h = self.resnet_block(x, padding_mask=padding_mask)
-        return rearrange(h, "b c l -> b l c"), padding_mask
-
-
-class SamAudioJudgeTransformer(torch.nn.Module):
+class SamAudioJudgeTransformer(nn.Module):
     _can_record_outputs = {
         "attentions": SamAudioJudgeAttention,
         "hidden_states": SamAudioJudgeDecoderLayer,
     }
 
-    def __init__(self, config: SamAudioJudgeTransformerConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embeddings = SamAudioJudgeEmbeddings(config)
-        self.layers = torch.nn.ModuleList(
+        self.layers = nn.ModuleList(
             [SamAudioJudgeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = SamAudioJudgeRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.rope_embeddings = SamAudioJudgeRotaryEmbedding(config)
-        self.output = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     @check_model_inputs
-    @auto_docstring
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
@@ -552,7 +437,6 @@ class SamAudioJudgeTransformer(torch.nn.Module):
 
 class SamAudioJudgePretrainedModel(PreTrainedModel):
     config: SamAudioJudgeConfig
-    base_model_prefix = "sam_audio_judge"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -561,7 +445,6 @@ class SamAudioJudgePretrainedModel(PreTrainedModel):
 
 
 @dataclass
-@auto_docstring
 class SamAudioJudgeOutput(ModelOutput):
     r"""
     overall (torch.Tensor, optional): Overall score tensor of shape (batch_size, 1).
@@ -586,89 +469,74 @@ class SamAudioJudgeOutput(ModelOutput):
 class SamAudioJudgeModel(SamAudioJudgePretrainedModel):
     def __init__(self, config: SamAudioJudgeConfig):
         super().__init__(config)
-        config.transformer._attn_implementation = config._attn_implementation
-        config.finetune_transformer._attn_implementation = config._attn_implementation
-        self.data_proj = torch.nn.Linear(config.dac_vae_encoder.codebook_dim, config.transformer.hidden_size)
-        self.dac_vae_encoder = SamAudioJudgeDacEncoderVAE(config.dac_vae_encoder)
-        self.transformer = SamAudioJudgeTransformer(config.transformer)
-        self.finetune_transformer = SamAudioJudgeTransformer(config.finetune_transformer)
-        self.text_model = AutoModel.from_config(config.text_model)
-        self.cat_audio_proj = torch.nn.Linear(2 * config.transformer.hidden_size, config.bottleneck_dim)
-        self.text_proj1 = torch.nn.Linear(
-            in_features=config.text_model.hidden_size, out_features=config.transformer.hidden_size, bias=False
-        )
-        self.text_proj2 = torch.nn.Linear(
-            in_features=config.transformer.hidden_size, out_features=config.bottleneck_dim
-        )
-        self.layer_norm = torch.nn.LayerNorm(config.bottleneck_dim)
-        self.proj_audio_and_text = torch.nn.Linear(2 * config.bottleneck_dim, config.bottleneck_dim)
-        self.finetune_data_proj = torch.nn.Linear(config.bottleneck_dim, config.finetune_transformer.hidden_size)
-        self.head = torch.nn.Linear(config.finetune_transformer.hidden_size, 4, bias=False)
-        self.mean = torch.nn.Parameter(torch.zeros(4, requires_grad=False))
-        self.std = torch.nn.Parameter(torch.ones(4, requires_grad=False))
+        self.text_model = AutoModel.from_config(config.text_config)
+        self.audio_encoder = AutoModel.from_config(config.audio_config)
+        self.transformer = SamAudioJudgeTransformer(config)
 
-    def _get_text_output(self, input_ids, attention_mask):
-        nth_layer = self.config.nth_text_layer
-        output = self.text_model(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=nth_layer is not None
+        self.text_proj1 = nn.Linear(
+            in_features=config.text_config.hidden_size, out_features=config.audio_config.hidden_size, bias=False
         )
-        if nth_layer is None:
-            text_model_output = output.last_hidden_state
-        else:
-            text_model_output = output.hidden_states[nth_layer]
+        self.text_proj2 = nn.Linear(in_features=config.audio_config.hidden_size, out_features=config.bottleneck_dim)
 
-        return BaseModelOutputWithPooling(last_hidden_state=text_model_output, pooler_output=text_model_output[:, 0])
+        self.cat_audio_proj = nn.Linear(2 * config.audio_config.hidden_size, config.bottleneck_dim)
+        self.proj_audio_and_text = nn.Linear(2 * config.bottleneck_dim, config.bottleneck_dim)
+        self.data_proj = nn.Linear(config.bottleneck_dim, config.hidden_size)
+        self.head = nn.Linear(config.hidden_size, 4, bias=False)
+        self.layer_norm = nn.LayerNorm(config.bottleneck_dim)
 
-    @auto_docstring
+        self.register_buffer("mean", torch.zeros(4))
+        self.register_buffer("std", torch.ones(4))
+
     def forward(
         self,
-        input_ids: torch.Tensor,  # tokenized text
-        input_values: torch.Tensor,  # input audio waveform
-        separated_values: torch.Tensor,  # separated audio waveform
-        attention_mask: Optional[torch.Tensor] = None,  # text attention mask
-        padding_mask: Optional[torch.Tensor] = None,  # audio padding mask
+        input_ids: torch.Tensor,
+        input_values: torch.Tensor,
+        separated_values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
     ) -> SamAudioJudgeOutput:
-        r"""
-        Args:
-            input_ids (torch.Tensor): Tokenized text input IDs.
-            input_values (torch.Tensor): Audio waveform tensor for the input audio used in source separation.
-            separated_values (torch.Tensor): Resulting waveform tensor from the separation model.
-            attention_mask (Optional[torch.Tensor], optional): Attention mask for the text input. Defaults to None.
-            padding_mask (Optional[torch.Tensor], optional): Padding mask for the audio input. Defaults to None.
+        stacked_audio = torch.cat([input_values, separated_values], dim=0)
 
-        Examples:
+        audio_output: BaseModelOutputWithPooling = self.audio_encoder(
+            input_values=stacked_audio,
+            padding_mask=padding_mask,
+            return_dict=True,
+        )
 
-        ```python
-        from transformers import AutoProcessor, AutoModel
-
-        model = AutoModel.from_pretrained("facebook/sam_audio_judge")
-        processor = AutoProcessor.from_pretrained("facebook/sam_audio_judge")
-        processed = processor(input_audio=[<"input mixture audio">], separated_audio=["<separated audio>"], text=["<prompt>"])
-        result = model(**processed)
-        ```
-
-        """
-        text_features = self.text_proj1(self._get_text_output(input_ids, attention_mask).pooler_output)
-        stacked_audios = torch.cat([input_values, separated_values], dim=0)
-        stacked_codec_features = self.dac_vae_encoder(stacked_audios)
         feature_padding_mask = None
         if padding_mask is not None:
-            feature_padding_mask = padding_mask[:, :: self.dac_vae_encoder.config.hop_length]
-        stacked_features = self.transformer(
-            self.data_proj(stacked_codec_features.transpose(1, 2)), padding_mask=feature_padding_mask
+            feature_padding_mask = padding_mask[:, :: self.config.audio_config.dac_config.hop_length]
+
+        text_output = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=self.config.nth_text_layer,
+            return_dict=True,
         )
-        input_features, hyp_features = stacked_features.last_hidden_state.chunk(2, 0)
-        audio_features = self.cat_audio_proj(torch.cat([hyp_features, input_features], dim=2))
-        expanded_text = self.layer_norm(self.text_proj2(text_features)).unsqueeze(1).expand_as(audio_features)
-        audio_and_text = self.proj_audio_and_text(torch.cat([audio_features, expanded_text], dim=2))
-        finetune_transformer_output = self.finetune_transformer(
-            self.finetune_data_proj(audio_and_text), padding_mask=feature_padding_mask
-        )
-        result = self.head(finetune_transformer_output.last_hidden_state)
-        if feature_padding_mask is not None:
-            feature_padding_mask = feature_padding_mask.unsqueeze(-1)
-        pooled = torch.masked.mean(result, mask=feature_padding_mask, dim=1)
+
+        if self.config.nth_text_layer is not None:
+            text_embeds = text_output.hidden_states[self.config.nth_text_layer]
+        else:
+            text_embeds = text_output.last_hidden_state
+
+        text_embeds = self.text_proj1(text_embeds)
+
+        audio_embeds, audio_hyp_embeds = audio_output.last_hidden_state.chunk(2, 0)
+        audio_embeds = torch.cat([audio_hyp_embeds, audio_embeds], dim=2)
+        audio_embeds = self.cat_audio_proj(audio_embeds)
+
+        text_embeds = self.text_proj2(text_embeds.unsqueeze(1).expand_as(audio_embeds))
+        text_embeds = self.layer_norm(text_embeds)
+
+        audio_text_embeds = torch.cat([audio_embeds, text_embeds], dim=2)
+        audio_text_embeds = self.proj_audio_and_text(audio_text_embeds)
+        audio_text_embeds = self.data_proj(audio_text_embeds)
+        audio_text_output = self.transformer(audio_text_embeds, padding_mask=feature_padding_mask)
+
+        logits = self.head(audio_text_output.last_hidden_state)
+        pooled = torch.masked.mean(logits, mask=feature_padding_mask, dim=1)
         de_normalized = pooled * self.std + self.mean
+
         return SamAudioJudgeOutput(*de_normalized.chunk(4, dim=1))
 
 
