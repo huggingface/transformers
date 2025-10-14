@@ -41,7 +41,12 @@ from ..glm4_moe.modeling_glm4_moe import (
     eager_attention_forward,
 )
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vVisionConfig
-from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vTextRotaryEmbedding, rotate_half
+from ..glm4v.modeling_glm4v import (
+    Glm4vForConditionalGeneration,
+    Glm4vTextRotaryEmbedding,
+    Glm4vTextModel,
+    rotate_half,
+)
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
     Qwen3VLMoeModelOutputWithPast,
@@ -468,27 +473,7 @@ class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
 
 
 @auto_docstring
-class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
-    config: Glm4vMoeTextConfig
-
-    def __init__(self, config: Glm4vMoeTextConfig):
-        super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [Glm4vMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm4vMoeTextRotaryEmbedding(config=config)
-
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @auto_docstring
-    @check_model_inputs()
+class Glm4vMoeTextModel(Glm4vTextModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
