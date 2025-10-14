@@ -122,7 +122,6 @@ from .import_utils import (
     is_apollo_torch_available,
     is_aqlm_available,
     is_auto_awq_available,
-    is_auto_gptq_available,
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,

@@ -16,10 +16,9 @@ rendered properly in your Markdown viewer.
 
 # GPTQ
 
-The [GPTQModel](https://github.com/ModelCloud/GPTQModel) and [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) implements the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes the error. These weights are quantized to int4, but they're restored to fp16 on the fly during inference. This can save memory usage by 4x because the int4 weights are dequantized in a fused kernel rather than a GPU's global memory. Inference is also faster because a lower bitwidth takes less time to communicate.
+The [GPT-QModel](https://github.com/ModelCloud/GPTQModel) project (Python package `gptqmodel`) implements the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes the error. These weights are quantized to int4, but they're restored to fp16 on the fly during inference. This can save memory usage by 4x because the int4 weights are dequantized in a fused kernel rather than a GPU's global memory. Inference is also faster because a lower bitwidth takes less time to communicate.
 
-> [!WARNING]
-> AutoGPTQ is likely to be deprecated in the future due to lack of continued support for new models and features. See the [GPTQModel](#gptqmodel) section for more details.
+AutoGPTQ is no longer supported in Transformers. Install GPT-QModel] instead.
 
 Install Accelerate, Transformers and Optimum first.
 
@@ -27,24 +26,11 @@ Install Accelerate, Transformers and Optimum first.
 pip install --upgrade accelerate optimum transformers
 ```
 
-Then run the command below to install a GPTQ library.
-
-<hfoptions id="install">
-<hfoption id="GPTQmodel">
+Then run the command below to install GPT-QModel].
 
 ```bash
 pip install gptqmodel --no-build-isolation
 ```
-
-</hfoption>
-<hfoption id="AutoGPTQ">
-
-```bash
-pip install auto-gptq --no-build-isolation
-```
-
-</hfoption>
-</hfoptions>
 
 Create a [`GPTQConfig`] class and set the number of bits to quantize to, a dataset to calbrate the weights for quantization, and a tokenizer to prepare the dataset.
 
@@ -58,7 +44,7 @@ gptq_config = GPTQConfig(bits=4, dataset="c4", tokenizer=tokenizer)
 You can pass your own dataset as a list of strings, but it is highly recommended to use the same dataset from the GPTQ paper.
 
 ```py
-dataset = ["auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."]
+dataset = ["gptqmodel is an easy-to-use model quantization library with user-friendly apis, based on the GPTQ algorithm."]
 gptq_config = GPTQConfig(bits=4, dataset=dataset, tokenizer=tokenizer)
 ```
 
@@ -142,7 +128,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-The ExLlama kernels are only supported when the entire model is on the GPU. If you're doing inference on a CPU with AutoGPTQ 0.4.2+, disable the ExLlama kernel in [`GPTQConfig`]. This overwrites the attributes related to the ExLlama kernels in the quantization config of the `config.json` file.
+The ExLlama kernels are only supported when the entire model is on the GPU. If you're doing inference on a CPU, disable the ExLlama kernel in [`GPTQConfig`]. This overwrites the attributes related to the ExLlama kernels in the quantization config of the `config.json` file.
 
 ```py
 import torch
@@ -156,16 +142,16 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-## GPTQModel
+## GPT-QModel]
 
-It is recommended to use GPTQModel, originally a maintained fork of AutoGPTQ, because it has since diverged from AutoGTPQ with some significant features. GPTQModel has faster quantization, lower memory usage, and more accurate default quantization.
+GPT-QModel] is the actively maintained backend for GPTQ in Transformers. It was originally forked from AutoGPTQ, but has since diverged with significant improvements such as faster quantization, lower memory usage, and more accurate defaults.
 
-GPTQModel provides asymmetric quantization which can potentially lower quantization errors compared to symmetric quantization. It is not backward compatible with AutoGPTQ, and not all kernels (Marlin) support asymmetric quantization.
+GPT-QModel] provides asymmetric quantization which can potentially lower quantization errors compared to symmetric quantization. It is not backward compatible with legacy AutoGPTQ checkpoints, and not all kernels (Marlin) support asymmetric quantization.
 
-GPTQModel also has broader support for the latest LLM models, multimodal models (Qwen2-VL and Ovis1.6-VL), platforms (Linux, macOS, Windows 11), and hardware (AMD ROCm, Apple Silicon, Intel/AMD CPUs, and Intel Datacenter Max/Arc GPUs, etc.).
+GPT-QModel] also has broader support for the latest LLM models, multimodal models (Qwen2-VL and Ovis1.6-VL), platforms (Linux, macOS, Windows 11), and hardware (AMD ROCm, Apple Silicon, Intel/AMD CPUs, and Intel Datacenter Max/Arc GPUs, etc.).
 
 The Marlin kernels are also updated for A100 GPUs and other kernels are updated to include auto-padding for legacy models and models with non-uniform in/out-features.
 
 ## Resources
 
-Run the GPTQ quantization with PEFT [notebook](https://colab.research.google.com/drive/1_TIrmuKOFhuRRiTWN94iLKUFu6ZX4ceb?usp=sharing) for a hands-on experience, and read [Making LLMs lighter with AutoGPTQ and transformers](https://huggingface.co/blog/gptq-integration) to learn more about the AutoGPTQ integration.
+Run the GPTQ quantization with PEFT [notebook](https://colab.research.google.com/drive/1_TIrmuKOFhuRRiTWN94iLKUFu6ZX4ceb?usp=sharing) for a hands-on experience.

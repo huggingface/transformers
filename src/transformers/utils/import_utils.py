@@ -984,11 +984,6 @@ def is_compressed_tensors_available() -> bool:
 
 
 @lru_cache
-def is_auto_gptq_available() -> bool:
-    return _is_package_available("auto_gptq")
-
-
-@lru_cache
 def is_gptqmodel_available() -> bool:
     return _is_package_available("gptqmodel")
 
