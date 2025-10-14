@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # CodeLlama[[codellama]]
 
-[Code Llama](https://huggingface.co/papers/2308.12950)는 코딩 작업에 특화된 대규모 언어 모델 계열로,  [Llama 2](./llama2)를 기반으로 개발되었습니다. 일반적인 코드, Python 특화, 명령어(지시) 기반 변형 등 다양한 버전으로 제공되며, 모두 7B, 13B, 34B, 70B 매개변수 크기로 사용할 수 있습니다. Code Llama 모델은 코드를 생성하고 설명하며, 코드의 누락된 부분을 채울 수도 있습니다("infilling"이라고 함). 16K 토큰 길이로 훈련되었지만, 최대 100K 토큰까지 안정적으로 생성하며 긴 컨텍스트도 처리할 수 있습니다.
+[Code Llama](https://huggingface.co/papers/2308.12950)는 코딩 작업에 특화된 대규모 언어 모델 계열로,  [Llama 2](./llama2)를 기반으로 개발되었습니다. 일반적인 코드, Python 특화, 명령어(지시) 기반 변형 등 다양한 버전으로 제공되며, 모두 7B, 13B, 34B, 70B 매개변수 크기로 사용할 수 있습니다. Code Llama 모델은 코드를 생성하고 설명하며, 코드의 누락된 부분을 채울 수도 있습니다. 이를 인필링(infilling)이라고 합니다. 16K 토큰 길이로 훈련되었지만, 최대 100K 토큰까지 안정적으로 생성하며 긴 컨텍스트도 처리할 수 있습니다.
 
 [Code Llama](https://huggingface.co/collections/meta-llama/code-llama-family-661da32d0a9d678b6f55b933) 컬렉션에서 모든 원본 Code Llama 체크포인트를 찾을 수 있습니다.
 
@@ -142,7 +142,7 @@ visualizer("""def func(a, b):
 ## 참고사항[[notes]]
 
 - 인필링 기능은 7B 및 13B 기반 모델에서만 사용할 수 있으며, Python, Instruct, 34B 또는 70B 모델에서는 사용할 수 없습니다.
-- 코드를 작성하고 싶은 부분에 `<FILL_ME>` 토큰을 사용하세요. 토크나이저는 이 토큰을 분할하여 [원본 훈련 패턴](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402) 을 따르는 입력 문자열로 변환합니다. 이는 직접 패턴을 준비하는 것보다 더 안정적입니다.
+- 코드를 채워 넣고 싶은 부분에 `<FILL_ME>` 토큰을 사용하세요. 토크나이저는 이 토큰을 분할하여 [원본 훈련 패턴](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402) 을 따르는 입력 문자열로 변환합니다. 이는 직접 패턴을 준비하는 것보다 더 안정적입니다.
     ```py
     from transformers import LlamaForCausalLM, CodeLlamaTokenizer
 
