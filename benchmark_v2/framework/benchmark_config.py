@@ -82,6 +82,19 @@ class BenchmarkConfig:
             "kernelized" if self.kernelize else "unkernelized",
         ])
 
+    def infer_pretty_name(self) -> str:
+        """Infer a long name for the config, not meant to be dumped or saved."""
+        iter_str = f"{self.warmup_iterations} warmup, {self.measurement_iterations} iterations"
+        gpu_monitor_str = ("with" if self.gpu_monitoring else "no") + " GPU monitoring"
+        dimensions_str = f"batch size {self.batch_size}, sequence length {self.sequence_length}, {self.num_tokens_to_generate} generated tokens"
+        if self.attn_implementation == "sdpa":
+            attn_code = f"{self.attn_implementation} attention with {self.sdpa_backend} backend"
+        else:
+            attn_code = f"{self.attn_implementation} attention"
+        compile_str = "compiled" if self.compile_mode is not None else "not compiled"
+        kernelize_str = "kernelized" if self.kernelize else "not kernelized"
+        return ", ".join([iter_str, gpu_monitor_str, dimensions_str, attn_code, compile_str, kernelize_str])
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,

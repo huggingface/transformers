@@ -354,7 +354,7 @@ class BenchmarkRunner:
                 pretty_print_dict(first_metadata | hardware_info, tabs=1)
             for value in all_results.values():
                 print("-" * 120)
-                print(f"Config: {value['config'].name}\n")
+                print(f"Config: {value['config'].infer_pretty_name()}\n")
                 value["measurements"].pprint(tabs=1)
             print("-" * 120)
 
