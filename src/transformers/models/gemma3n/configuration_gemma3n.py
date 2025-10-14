@@ -499,15 +499,18 @@ class Gemma3nVisionConfig(PreTrainedConfig):
         model_args: Optional[dict] = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.architecture = architecture
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
-        self.model_args = model_args  # named "model_args" for BC with timm
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
         self.vocab_offset = vocab_offset
         self.rms_norm_eps = rms_norm_eps
+        self.architecture = architecture
+        self.initializer_range = initializer_range
+        self.do_pooling = do_pooling
+        self.model_args = model_args  # named "model_args" for BC with timm
+        super().__init__(**kwargs)
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):

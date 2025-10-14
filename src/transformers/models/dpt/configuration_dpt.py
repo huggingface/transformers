@@ -14,12 +14,10 @@
 # limitations under the License.
 """DPT model configuration"""
 
-import copy
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from ..bit import BitConfig
 
 
@@ -140,6 +138,7 @@ class DPTConfig(PreTrainedConfig):
     ```"""
 
     model_type = "dpt"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -181,8 +180,6 @@ class DPTConfig(PreTrainedConfig):
         pooler_act="tanh",
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
@@ -274,27 +271,7 @@ class DPTConfig(PreTrainedConfig):
         self.semantic_classifier_dropout = semantic_classifier_dropout
         self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
         self.pooler_act = pooler_act
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`]. Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-
-        if output["backbone_config"] is not None:
-            output["backbone_config"] = self.backbone_config.to_dict()
-
-        output["model_type"] = self.__class__.model_type
-        return output
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["DPTConfig"]

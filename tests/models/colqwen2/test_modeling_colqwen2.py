@@ -23,7 +23,7 @@ from datasets import load_dataset
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from transformers import is_torch_available
+from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
 from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval, ColQwen2ForRetrievalOutput
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
@@ -202,7 +202,7 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
     fx_compatible = False
     test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = True
 
     def setUp(self):
@@ -301,7 +301,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         model = ColQwen2ForRetrieval.from_pretrained(
             self.model_name,
             dtype=torch.float16,
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         ).eval()
 
         # Load the test dataset

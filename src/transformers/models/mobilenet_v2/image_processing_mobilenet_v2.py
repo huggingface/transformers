@@ -51,7 +51,7 @@ from ...utils.import_utils import requires
 logger = logging.get_logger(__name__)
 
 
-class MobileNetV2ImageProcessorKwargs(ImagesKwargs):
+class MobileNetV2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
@@ -59,7 +59,7 @@ class MobileNetV2ImageProcessorKwargs(ImagesKwargs):
         ADE20k). The background label will be replaced by 255.
     """
 
-    do_reduce_labels: Optional[bool]
+    do_reduce_labels: bool
 
 
 @requires(backends=("vision",))

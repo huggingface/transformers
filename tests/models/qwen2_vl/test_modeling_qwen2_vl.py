@@ -178,7 +178,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
-    test_pruning = False
+
     _is_composite = True
 
     def setUp(self):

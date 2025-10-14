@@ -287,7 +287,7 @@ def register_quantizer(name: str):
             raise ValueError(f"Quantizer '{name}' already registered")
 
         if not issubclass(cls, HfQuantizer):
-            raise ValueError("Quantizer must extend HfQuantizer")
+            raise TypeError("Quantizer must extend HfQuantizer")
 
         AUTO_QUANTIZER_MAPPING[name] = cls
         return cls

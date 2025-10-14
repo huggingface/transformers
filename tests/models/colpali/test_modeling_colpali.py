@@ -187,7 +187,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ColPaliForRetrieval,) if is_torch_available() else ()
     fx_compatible = False
     test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = True
     additional_model_inputs = ["token_type_ids"]
 

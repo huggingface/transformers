@@ -25,7 +25,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_transforms import corners_to_center_format
 from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..rt_detr.modeling_rt_detr import (
     RTDetrConvNormLayer,
     RTDetrDecoder,
@@ -213,6 +213,7 @@ class DFineConfig(PreTrainedConfig):
     """
 
     model_type = "d_fine"
+    sub_configs = {"backbone_config": AutoConfig}
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -414,39 +415,6 @@ class DFineConfig(PreTrainedConfig):
                 f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
             )
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
-    @classmethod
-    def from_backbone_configs(cls, backbone_config: PreTrainedConfig, **kwargs):
-        """Instantiate a [`DFineConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
-        configuration.
-
-            Args:
-                backbone_config ([`PreTrainedConfig`]):
-                    The backbone configuration.
-
-            Returns:
-                [`DFineConfig`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config,
-            **kwargs,
-        )
 
 
 class DFineMultiscaleDeformableAttention(nn.Module):

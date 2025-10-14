@@ -262,7 +262,7 @@ class Sam2VideoProcessor(ProcessorMixin):
         elif isinstance(data, (int, float)):
             return data
         else:
-            raise ValueError(f"Unsupported data type: {type(data)}")
+            raise TypeError(f"Unsupported data type: {type(data)}")
 
     def _get_nested_dimensions(self, nested_list, max_dims=None):
         """
@@ -530,9 +530,9 @@ class Sam2VideoProcessor(ProcessorMixin):
         self,
         video: Optional[VideoInput] = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Union[str, "torch.device"] = None,
-        processing_device: Union[str, "torch.device"] = None,
-        video_storage_device: Union[str, "torch.device"] = None,
+        inference_state_device: Optional[Union[str, "torch.device"]] = None,
+        processing_device: Optional[Union[str, "torch.device"]] = None,
+        video_storage_device: Optional[Union[str, "torch.device"]] = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):

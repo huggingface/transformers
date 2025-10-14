@@ -159,7 +159,6 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     pipeline_model_mapping = {}
 
-    test_pruning = False
     test_resize_embeddings = False
 
     def setUp(self):

@@ -43,10 +43,11 @@ Bark can be optimized with just a few extra lines of code, which **significantly
 You can speed up inference and reduce memory footprint by 50% simply by loading the model in half-precision.
 
 ```python
-from transformers import BarkModel, infer_device
+from transformers import BarkModel
+from accelerate import Accelerator
 import torch
 
-device = infer_device()
+device = Accelerator().device
 model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16).to(device)
 ```
 
@@ -98,10 +99,11 @@ To put this into perspective, on an NVIDIA A100 and when generating 400 semantic
 You can combine optimization techniques, and use CPU offload, half-precision and Flash Attention 2 all at once.
 
 ```python
-from transformers import BarkModel, infer_device
+from transformers import BarkModel
+from accelerate import Accelerator
 import torch
 
-device = infer_device()
+device = Accelerator().device
 
 # load in fp16 and use Flash Attention 2
 model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)

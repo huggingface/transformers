@@ -80,10 +80,10 @@ LLM（Language Model）による自己回帰生成の重要な側面の1つは�
 
 
 ```py
->>> from transformers import AutoModelForCausalLM
+>>> from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "openlm-research/open_llama_7b", device_map="auto", load_in_4bit=True
+...     "openlm-research/open_llama_7b", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 
@@ -123,12 +123,12 @@ LLM（Language Model）による自己回帰生成の重要な側面の1つは�
 [生成戦略](generation_strategies)はたくさんあり、デフォルトの値があなたのユースケースに適していないことがあります。出力が期待通りでない場合、最も一般的な落とし穴とその回避方法のリストを作成しました。
 
 ```py
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 >>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
 >>> tokenizer.pad_token = tokenizer.eos_token  # Llama has no pad token by default
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "openlm-research/open_llama_7b", device_map="auto", load_in_4bit=True
+...     "openlm-research/open_llama_7b", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 

@@ -21,12 +21,12 @@ import os
 import tempfile
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
-from collections.abc import Iterable, MutableMapping
+from collections.abc import Callable, Iterable, MutableMapping
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, Optional, TypedDict
+from typing import Any, Optional, TypedDict
 
 import numpy as np
 
@@ -797,9 +797,21 @@ def check_model_inputs(tie_last_hidden_states=True):
     def wrapped_fn(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            use_cache = (
-                kwargs["use_cache"] if kwargs.get("use_cache") is not None else getattr(self.config, "use_cache", None)
-            )
+            use_cache_arg_index = None
+            if "use_cache" in func.__code__.co_varnames:
+                use_cache_arg_index = func.__code__.co_varnames.index("use_cache") - 1  # -1 for self
+
+            if (
+                use_cache_arg_index is not None
+                and len(args) > use_cache_arg_index
+                and args[use_cache_arg_index] is not None
+            ):
+                use_cache = args[use_cache_arg_index]
+            elif kwargs.get("use_cache") is not None:
+                use_cache = kwargs["use_cache"]
+            else:
+                use_cache = getattr(self.config, "use_cache", None)
+
             if use_cache is not None:
                 if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
                     logger.warning_once(
@@ -807,7 +819,12 @@ def check_model_inputs(tie_last_hidden_states=True):
                     )
                     use_cache = False
 
-                kwargs["use_cache"] = use_cache
+                if use_cache_arg_index is not None and len(args) > use_cache_arg_index:
+                    args = list(args)
+                    args[use_cache_arg_index] = use_cache
+                    args = tuple(args)
+                else:
+                    kwargs["use_cache"] = use_cache
 
             return_dict = kwargs.pop("return_dict", None)
             if return_dict is None:
@@ -818,7 +835,8 @@ def check_model_inputs(tie_last_hidden_states=True):
                 for k, v in all_args["kwargs"].items():
                     all_args[k] = v
 
-            capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__), {})  # there is a weak ref for executorch
+            # _can_record_outputs is None by default
+            capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__)) or {}  # there is a weak ref for executorch
             recordable_keys = {
                 f"output_{k}": all_args.get(
                     f"output_{k}",

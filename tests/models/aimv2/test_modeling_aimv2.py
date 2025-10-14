@@ -180,7 +180,7 @@ class Aimv2VisionModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Aimv2VisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
 
@@ -310,7 +310,7 @@ class Aimv2TextModelTester:
 class Aimv2TextModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Aimv2TextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
 
@@ -352,8 +352,10 @@ class Aimv2ModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return Aimv2Config.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return Aimv2Config(
+            text_config=self.text_model_tester.get_config(),
+            vision_config=self.vision_model_tester.get_config(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -389,7 +391,7 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_torchscript = False
     test_resize_embeddings = False
     test_attention_outputs = False

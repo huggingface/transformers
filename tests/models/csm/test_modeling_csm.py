@@ -142,7 +142,7 @@ class CsmModelTester:
 
 class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     test_resize_embeddings_untied = False
 

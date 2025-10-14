@@ -21,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     VipLlavaConfig,
     VipLlavaForConditionalGeneration,
     VipLlavaModel,
@@ -177,7 +178,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     )
     pipeline_model_mapping = {"image-text-to-text": VipLlavaForConditionalGeneration} if is_torch_available() else {}
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     _is_composite = True
 
@@ -293,7 +294,9 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         model_id = "llava-hf/vip-llava-7b-hf"
 
-        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = VipLlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"

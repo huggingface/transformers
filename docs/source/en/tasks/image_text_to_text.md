@@ -39,10 +39,11 @@ pip install -q transformers accelerate flash_attn
 Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
+from transformers import AutoProcessor, AutoModelForImageTextToText
+from accelerate import Accelerator
 import torch
 
-device = torch.device(infer_device())
+device = Accelerator().device
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
     dtype=torch.bfloat16,

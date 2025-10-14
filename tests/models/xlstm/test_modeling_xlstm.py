@@ -86,10 +86,6 @@ class xLSTMModelTester:
         self.step_kernel = step_kernel
         self.tie_word_embeddings = tie_word_embeddings
 
-    def get_large_model_config(self):
-        cfg = xLSTMConfig.from_pretrained("NX-AI/xLSTM-7b")
-        return cfg
-
     def prepare_config_and_inputs(self, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -156,7 +152,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     has_attentions = False  # xLSTM does not support attentions
     fx_compatible = False
     test_torchscript = False
-    test_pruning = False
 
     pipeline_model_mapping = (
         {"feature-extraction": xLSTMModel, "text-generation": xLSTMForCausalLM} if is_torch_available() else {}

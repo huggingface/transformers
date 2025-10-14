@@ -107,6 +107,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
 
         # fmt: off
         last_output = Expectations({
+            ("xpu", None): {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8872},
             ("cuda", None): {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8871},
             ("rocm", (9, 5)): {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8872}
         }).get_expectation()

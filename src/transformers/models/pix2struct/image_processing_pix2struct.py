@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 DEFAULT_FONT_PATH = "ybelkada/fonts"
 
 
-class Pix2StructImageProcessorKwargs(ImagesKwargs):
+class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_patches (`int`, *optional*):
         Maximum number of patches to extract.
@@ -57,7 +57,7 @@ class Pix2StructImageProcessorKwargs(ImagesKwargs):
         Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
     """
 
-    max_patches: Optional[int]
+    max_patches: int
     header_text: Optional[Union[list[str], str]]
 
 

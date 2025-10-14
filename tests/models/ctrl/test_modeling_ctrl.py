@@ -189,7 +189,6 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    test_pruning = True
     test_resize_embeddings = False
 
     # TODO: Fix the failed tests

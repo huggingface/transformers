@@ -204,7 +204,6 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     fx_compatible = False  # broken by output recording refactor
 
-    test_pruning = False
     test_resize_embeddings = False
     test_torch_exportable = True
 

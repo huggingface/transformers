@@ -19,7 +19,7 @@ from typing import Optional
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -74,6 +74,7 @@ class VitPoseConfig(PreTrainedConfig):
     ```"""
 
     model_type = "vitpose"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -87,8 +88,6 @@ class VitPoseConfig(PreTrainedConfig):
         use_simple_decoder: bool = True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if use_pretrained_backbone:
             logger.info(
                 "`use_pretrained_backbone` is `True`. For the pure inference purpose of VitPose weight do not set this value."
@@ -122,13 +121,7 @@ class VitPoseConfig(PreTrainedConfig):
         self.scale_factor = scale_factor
         self.use_simple_decoder = use_simple_decoder
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["VitPoseConfig"]

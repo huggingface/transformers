@@ -257,8 +257,8 @@ likely tokenization in practice, but also offers the possibility to sample a pos
 probabilities.
 
 Those probabilities are defined by the loss the tokenizer is trained on. Assuming that the training data consists of
-the words \\(x_{1}, \dots, x_{N}\\) and that the set of all possible tokenizations for a word \\(x_{i}\\) is
-defined as \\(S(x_{i})\\), then the overall loss is defined as
+the words $x_{1}, \dots, x_{N}$ and that the set of all possible tokenizations for a word $x_{i}$ is
+defined as $S(x_{i})$, then the overall loss is defined as
 
 $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )$$
 

@@ -258,7 +258,7 @@ class Sam2Processor(ProcessorMixin):
         elif isinstance(data, (int, float)):
             return data
         else:
-            raise ValueError(f"Unsupported data type: {type(data)}")
+            raise TypeError(f"Unsupported data type: {type(data)}")
 
     def _get_nested_dimensions(self, nested_list, max_dims=None):
         """

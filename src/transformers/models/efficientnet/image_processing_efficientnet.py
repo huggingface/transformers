@@ -44,7 +44,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class EfficientNetImageProcessorKwargs(ImagesKwargs):
+class EfficientNetImageProcessorKwargs(ImagesKwargs, total=False):
     """
     rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
         Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].

@@ -19,7 +19,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, is_torch_available, set_seed
+from transformers import AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
@@ -37,9 +37,6 @@ if is_torch_available():
 
     from transformers import (
         Qwen2ForCausalLM,
-        Qwen2ForQuestionAnswering,
-        Qwen2ForSequenceClassification,
-        Qwen2ForTokenClassification,
         Qwen2Model,
     )
 
@@ -55,17 +52,6 @@ class Qwen2ModelTester(CausalLMModelTester):
 @require_torch
 class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen2ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Qwen2Model,
-            "text-classification": Qwen2ForSequenceClassification,
-            "token-classification": Qwen2ForTokenClassification,
-            "text-generation": Qwen2ForCausalLM,
-            "question-answering": Qwen2ForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -132,7 +118,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model = Qwen2ForCausalLM.from_pretrained(
             "Qwen/Qwen2-0.5B",
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)

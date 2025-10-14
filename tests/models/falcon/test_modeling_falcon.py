@@ -18,6 +18,7 @@ import unittest
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
     FalconConfig,
     is_torch_available,
 )
@@ -36,8 +37,6 @@ if is_torch_available():
 
     from transformers import (
         FalconForCausalLM,
-        FalconForSequenceClassification,
-        FalconForTokenClassification,
         FalconModel,
     )
 
@@ -54,17 +53,6 @@ class FalconModelTester(CausalLMModelTester):
 @require_torch
 class FalconModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = FalconModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": FalconModel,
-            "text-classification": FalconForSequenceClassification,
-            "token-classification": FalconForTokenClassification,
-            "text-generation": FalconForCausalLM,
-            "zero-shot": FalconForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -104,7 +92,9 @@ class FalconLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_falcon_11b(self):
         tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-11B", padding_side="left")
         model = FalconForCausalLM.from_pretrained(
-            "tiiuae/falcon-11B", device_map={"": torch_device}, load_in_8bit=True
+            "tiiuae/falcon-11B",
+            device_map={"": torch_device},
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
         model.eval()
         inputs = tokenizer(
@@ -164,7 +154,7 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "tiiuae/falcon-7b",
             device_map={"": torch_device},
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         test_text = "A sequence: 1, 2"  # should generate the rest of the sequence

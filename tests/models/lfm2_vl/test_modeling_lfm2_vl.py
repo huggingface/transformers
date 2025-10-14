@@ -45,6 +45,7 @@ if is_torch_available():
     import torch
 
     from transformers import Lfm2VlConfig, Lfm2VlForConditionalGeneration, Lfm2VlModel
+    from transformers.models.lfm2.modeling_lfm2 import Lfm2HybridConvCache
 
 
 class Lfm2VlModelTester(CausalLMModelTester):
@@ -160,7 +161,7 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     fx_compatible = False
     model_tester_class = Lfm2VlModelTester
     _is_composite = True
@@ -172,6 +173,36 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             self, config_class=Lfm2VlConfig, has_text_modality=False, common_properties=common_properties
         )
 
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Lfm2HybridConvCache)
+
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        attention_shape = (batch_size, num_heads, seq_length, head_dim)
+        conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
+
+        for i in range(config.num_hidden_layers):
+            if config.layer_types[i] == "full_attention":
+                self.assertEqual(past_key_values.key_cache[i].shape, attention_shape)
+                self.assertEqual(past_key_values.value_cache[i].shape, attention_shape)
+            else:
+                self.assertEqual(past_key_values.conv_cache[i].shape, conv_shape)
+
+    def _check_caches_are_equal(self, cache1: Lfm2HybridConvCache, cache2: Lfm2HybridConvCache):
+        """Text model uses lfm2, which has non-standard cache"""
+        if not isinstance(cache1, Lfm2HybridConvCache) or not isinstance(cache2, Lfm2HybridConvCache):
+            raise ValueError("The wrong cache is being used!")
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
+            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+            torch.testing.assert_close(cache1.conv_cache[idx], cache2.conv_cache[idx])
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -179,10 +210,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         "Lfm2 backbone alternates between attention and conv layers, so attention are only returned for attention layers"
     )
     def test_attention_outputs(self):
-        pass
-
-    @unittest.skip("Lfm2 backbone has a special cache format as it alternates between attention and conv layers")
-    def test_past_key_values_format(self):
         pass
 
     @unittest.skip(

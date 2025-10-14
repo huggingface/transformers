@@ -352,7 +352,6 @@ class FunnelModelTester:
 
 @require_torch
 class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_pruning = False
     all_model_classes = (
         (
             FunnelModel,
@@ -430,7 +429,6 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 @require_torch
 class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
-    test_pruning = False
     all_model_classes = (
         (FunnelBaseModel, FunnelForMultipleChoice, FunnelForSequenceClassification) if is_torch_available() else ()
     )

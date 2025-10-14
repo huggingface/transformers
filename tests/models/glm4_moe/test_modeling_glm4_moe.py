@@ -58,14 +58,6 @@ class Glm4MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Glm4MoeModel,
-            "text-generation": Glm4MoeForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False
     model_tester_class = Glm4MoeModelTester
     # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"

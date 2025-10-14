@@ -47,9 +47,9 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class Emu3ImageProcessorKwargs(ImagesKwargs):
-    ratio: Optional[str]
-    image_area: Optional[int]
+class Emu3ImageProcessorKwargs(ImagesKwargs, total=False):
+    ratio: str
+    image_area: int
 
 
 def smart_resize(

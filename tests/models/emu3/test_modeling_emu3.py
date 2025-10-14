@@ -21,7 +21,14 @@ import requests
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers import Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available, set_seed
+from transformers import (
+    BitsAndBytesConfig,
+    Emu3Config,
+    Emu3TextConfig,
+    is_torch_available,
+    is_vision_available,
+    set_seed,
+)
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -132,7 +139,7 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):
@@ -320,7 +327,7 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else ()
     )
     pipeline_model_mapping = {}
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):
@@ -359,7 +366,9 @@ class Emu3IntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_generation(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
 
         image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
@@ -377,7 +386,9 @@ class Emu3IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_torch_large_accelerator
     def test_model_generation_batched(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
         processor.tokenizer.padding_side = "left"
 
@@ -420,7 +431,9 @@ class Emu3IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_torch_large_accelerator
     def test_model_generation_multi_image(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
 
         image = Image.open(requests.get("https://picsum.photos/id/237/50/50", stream=True).raw)
@@ -447,7 +460,9 @@ class Emu3IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_torch_large_accelerator
     def test_model_generate_images(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Gen-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
 
         inputs = processor(

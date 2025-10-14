@@ -123,8 +123,8 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-class BridgeTowerImageProcessorKwargs(ImagesKwargs):
-    size_divisor: Optional[int]
+class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
 
 
 class BridgeTowerImageProcessor(BaseImageProcessor):

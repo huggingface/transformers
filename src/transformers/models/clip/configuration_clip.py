@@ -266,7 +266,7 @@ class CLIPConfig(PreTrainedConfig):
     >>> config_text = CLIPTextConfig()
     >>> config_vision = CLIPVisionConfig()
 
-    >>> config = CLIPConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = CLIPConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "clip"
@@ -280,8 +280,6 @@ class CLIPConfig(PreTrainedConfig):
         # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
-
-        super().__init__(**kwargs)
 
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
@@ -346,19 +344,24 @@ class CLIPConfig(PreTrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `CLIPTextConfig` with default values.")
+            text_config = CLIPTextConfig()
+            logger.info("`text_config` is `None`. initializing the `CLIPTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = CLIPTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = CLIPVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `CLIPVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = CLIPVisionConfig(**vision_config)
 
-        self.text_config = CLIPTextConfig(**text_config)
-        self.vision_config = CLIPVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+        super().__init__(**kwargs)
 
 
 class CLIPOnnxConfig(OnnxConfig):

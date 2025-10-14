@@ -280,10 +280,10 @@ class Aimv2Config(SiglipConfig):
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
     ):
-        super().__init__(text_config, vision_config, **kwargs)
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.max_logit_scale = 100.0
+        super().__init__(text_config, vision_config, **kwargs)
 
         del self.initializer_factor
 

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 if TYPE_CHECKING:
@@ -68,6 +68,7 @@ class SuperGlueConfig(PreTrainedConfig):
     """
 
     model_type = "superglue"
+    sub_configs = {"keypoint_detector_config": AutoConfig}
 
     def __init__(
         self,
@@ -113,10 +114,6 @@ class SuperGlueConfig(PreTrainedConfig):
         self.is_decoder = False
 
         super().__init__(**kwargs)
-
-    @property
-    def sub_configs(self):
-        return {"keypoint_detector_config": type(self.keypoint_detector_config)}
 
 
 __all__ = ["SuperGlueConfig"]

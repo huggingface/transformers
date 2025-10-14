@@ -33,7 +33,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging
 from .configuration_mpnet import MPNetConfig
 
@@ -201,24 +200,6 @@ class MPNetAttention(nn.Module):
         self.attn = MPNetSelfAttention(config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attn.num_attention_heads, self.attn.attention_head_size, self.pruned_heads
-        )
-
-        self.attn.q = prune_linear_layer(self.attn.q, index)
-        self.attn.k = prune_linear_layer(self.attn.k, index)
-        self.attn.v = prune_linear_layer(self.attn.v, index)
-        self.attn.o = prune_linear_layer(self.attn.o, index, dim=1)
-
-        self.attn.num_attention_heads = self.attn.num_attention_heads - len(heads)
-        self.attn.all_head_size = self.attn.attention_head_size * self.attn.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -425,14 +406,6 @@ class MPNetModel(MPNetPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(

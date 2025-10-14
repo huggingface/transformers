@@ -171,7 +171,7 @@ class Glm4vVisionText2TextModelTester:
 @require_torch
 class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Glm4vModel, Glm4vForConditionalGeneration) if is_torch_available() else ()
-    test_pruning = False
+
     test_torchscript = False
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     _is_composite = True

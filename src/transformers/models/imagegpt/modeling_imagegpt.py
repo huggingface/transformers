@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...pytorch_utils import Conv1D
 from ...utils import (
     auto_docstring,
     logging,
@@ -97,23 +97,6 @@ class ImageGPTAttention(nn.Module):
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
-
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
-        index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
-
-        # Prune conv1d layers
-        self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
-        self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
-
-        # Update hyper params
-        self.split_size = (self.split_size // self.num_heads) * (self.num_heads - len(heads))
-        self.num_heads = self.num_heads - len(heads)
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
@@ -232,11 +215,11 @@ class ImageGPTAttention(nn.Module):
                 is_updated = layer_past.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = layer_past.cross_attention_cache
+                    curr_past_key_values = layer_past.cross_attention_cache
                 else:
-                    curr_past_key_value = layer_past.self_attention_cache
+                    curr_past_key_values = layer_past.self_attention_cache
             else:
-                curr_past_key_value = layer_past
+                curr_past_key_values = layer_past
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention:
@@ -249,8 +232,8 @@ class ImageGPTAttention(nn.Module):
             if layer_past is not None and is_updated:
                 # reuse k,v, cross_attentions, and compute only q
                 query = self.q_attn(hidden_states)
-                key = curr_past_key_value.layers[self.layer_idx].keys
-                value = curr_past_key_value.layers[self.layer_idx].values
+                key = curr_past_key_values.layers[self.layer_idx].keys
+                value = curr_past_key_values.layers[self.layer_idx].values
             else:
                 query = self.q_attn(hidden_states)
                 key, value = self.c_attn(current_states).split(self.split_size, dim=2)
@@ -264,7 +247,7 @@ class ImageGPTAttention(nn.Module):
         if layer_past is not None:
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
             cache_position = cache_position if not is_cross_attention else None
-            key, value = curr_past_key_value.update(key, value, self.layer_idx, {"cache_position": cache_position})
+            key, value = curr_past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
             # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
             if is_cross_attention:
                 layer_past.is_updated[self.layer_idx] = True
@@ -434,13 +417,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        """
-        for layer, heads in heads_to_prune.items():
-            self.h[layer].attn.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -517,24 +493,20 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 )
                 use_cache = False
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
-
-        past_length = past_key_values.get_seq_length() if past_key_values is not None else past_key_values
-
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position: torch.Tensor = torch.arange(
+                past_seen_tokens, past_seen_tokens + input_shape[-1], device=device
+            )
+
         if position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0)
+            position_ids = cache_position.unsqueeze(0)
 
         # ImageGPTAttention mask.
         if attention_mask is not None:

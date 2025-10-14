@@ -71,8 +71,6 @@ class DeepseekVLConfig(PreTrainedConfig):
         image_token_id: int = 100015,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
             text_config = {}
             logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
@@ -92,6 +90,7 @@ class DeepseekVLConfig(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["DeepseekVLConfig"]

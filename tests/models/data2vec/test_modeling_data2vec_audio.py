@@ -353,7 +353,6 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else {}
     )
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = Data2VecAudioModelTester(self)

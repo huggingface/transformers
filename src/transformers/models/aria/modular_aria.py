@@ -38,7 +38,7 @@ from ...image_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
@@ -214,11 +214,11 @@ class AriaTextConfig(LlamaConfig):
         pad_token_id=2,
         **super_kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **super_kwargs)
         self.intermediate_size = intermediate_size
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
         self.moe_num_shared_experts = moe_num_shared_experts
+        super().__init__(pad_token_id=pad_token_id, **super_kwargs)
 
 
 class AriaConfig(PreTrainedConfig):
@@ -904,7 +904,15 @@ class AriaImageProcessor(BaseImageProcessor):
         return num_patches
 
 
+class AriaImagesKwargs(ImagesKwargs, total=False):
+    split_image: bool
+    max_image_size: int
+    min_image_size: int
+
+
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: AriaImagesKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,

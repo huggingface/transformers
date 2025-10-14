@@ -15,11 +15,11 @@
 
 import os
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import redirect_stdout
 from dataclasses import dataclass, fields
 from io import BytesIO
-from typing import Callable, NewType, Optional, Union
+from typing import NewType, Optional, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -110,6 +110,11 @@ class VideoMetadata(Mapping):
         for key, value in dictionary.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+
+
+VideoMetadataType = Union[
+    VideoMetadata, dict, list[Union[dict, VideoMetadata]], list[list[Union[dict, VideoMetadata]]]
+]
 
 
 def is_valid_video_frame(frame):
@@ -217,7 +222,7 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
     return flat_videos_list
 
 
-def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadata, dict]):
+def make_batched_metadata(videos: VideoInput, video_metadata: VideoMetadataType) -> list[VideoMetadata]:
     if video_metadata is None:
         # Create default metadata and fill attributes we can infer from given video
         video_metadata = [

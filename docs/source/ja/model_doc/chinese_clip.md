@@ -71,7 +71,6 @@ Chinese-CLIP モデルは、[OFA-Sys](https://huggingface.co/OFA-Sys) によっ�
 ## ChineseCLIPConfig
 
 [[autodoc]] ChineseCLIPConfig
-    - from_text_vision_configs
 
 ## ChineseCLIPTextConfig
 

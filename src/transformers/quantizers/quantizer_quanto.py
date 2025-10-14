@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 from typing import TYPE_CHECKING, Optional, Union
-
-from packaging import version
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -135,23 +132,16 @@ class QuantoHfQuantizer(HfQuantizer):
         module.weight.requires_grad = False
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.27.0"):
-            from accelerate.utils import CustomDtype
+        from accelerate.utils import CustomDtype
 
-            mapping = {
-                "int8": torch.int8,
-                "float8": CustomDtype.FP8,
-                "int4": CustomDtype.INT4,
-                "int2": CustomDtype.INT2,
-            }
-            target_dtype = mapping[self.quantization_config.weights]
-            return target_dtype
-        else:
-            raise ValueError(
-                "You are using `device_map='auto'` on an optimum-quanto quantized model. To automatically compute"
-                " the appropriate device map, you should upgrade your `accelerate` library,"
-                "`pip install --upgrade accelerate` or install it from source."
-            )
+        mapping = {
+            "int8": torch.int8,
+            "float8": CustomDtype.FP8,
+            "int4": CustomDtype.INT4,
+            "int2": CustomDtype.INT2,
+        }
+        target_dtype = mapping[self.quantization_config.weights]
+        return target_dtype
 
     def _process_model_before_weight_loading(
         self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs
@@ -166,9 +156,6 @@ class QuantoHfQuantizer(HfQuantizer):
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         model.config.quantization_config = self.quantization_config
-
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        return model
 
     @property
     def is_trainable(self) -> bool:

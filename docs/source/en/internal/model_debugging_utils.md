@@ -345,7 +345,7 @@ Skipped : 124/323 (38.4%)
  - bit: Bit does not use inputs_embeds
  - blip: Blip does not use inputs_embeds
  - blip_2: Inputs_embeds is tested in individual model tests
- - bridgetower: 
+ - bridgetower:
  - canine: CANINE does not have a get_input_embeddings() method.
  - ...
 

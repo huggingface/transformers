@@ -519,8 +519,8 @@ class ImageProcessingTestMixin:
                 image_inputs[0],
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=[0.0, 0.0, 0.0, 0.0],
+                image_std=[1.0, 1.0, 1.0, 1.0],
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
@@ -530,8 +530,8 @@ class ImageProcessingTestMixin:
                 image_inputs,
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=[0.0, 0.0, 0.0, 0.0],
+                image_std=[1.0, 1.0, 1.0, 1.0],
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(

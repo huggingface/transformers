@@ -252,38 +252,26 @@ class OwlViTConfig(PreTrainedConfig):
         return_dict=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the OwlViTTextConfig with default values.")
+            text_config = OwlViTTextConfig()
+            logger.info("`text_config` is `None`. initializing the `OwlViTTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = OwlViTTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. initializing the OwlViTVisionConfig with default values.")
+            vision_config = OwlViTVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `OwlViTVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = OwlViTVisionConfig(**vision_config)
 
-        self.text_config = OwlViTTextConfig(**text_config)
-        self.vision_config = OwlViTVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.return_dict = return_dict
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: dict, vision_config: dict, **kwargs):
-        r"""
-        Instantiate a [`OwlViTConfig`] (or a derived class) from owlvit text model configuration and owlvit vision
-        model configuration.
-
-        Returns:
-            [`OwlViTConfig`]: An instance of a configuration object
-        """
-        config_dict = {}
-        config_dict["text_config"] = text_config
-        config_dict["vision_config"] = vision_config
-
-        return cls.from_dict(config_dict, **kwargs)
+        super().__init__(**kwargs)
 
 
 class OwlViTOnnxConfig(OnnxConfig):

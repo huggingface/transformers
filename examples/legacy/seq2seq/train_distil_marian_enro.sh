@@ -20,7 +20,7 @@ export MAX_LEN=128
 python finetune_trainer.py \
     --tokenizer_name $m --model_name_or_path $m \
     --data_dir $ENRO_DIR \
-    --output_dir marian_en_ro_6_3 --overwrite_output_dir \
+    --output_dir marian_en_ro_6_3 \
     --learning_rate=3e-4 \
     --warmup_steps 500 --sortish_sampler \
     --fp16 \

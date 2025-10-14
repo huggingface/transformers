@@ -210,7 +210,7 @@ class MetaClip2VisionModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (MetaClip2VisionModel, MetaClip2VisionModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -405,7 +405,7 @@ class MetaClip2TextModelTester:
 class MetaClip2TextModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (MetaClip2TextModel, MetaClip2TextModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
@@ -537,7 +537,7 @@ class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittes
     )
     additional_model_inputs = ["pixel_values"]
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     _is_composite = True
@@ -709,7 +709,7 @@ class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, Pipeli
     all_model_classes = (MetaClip2ForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": MetaClip2ForImageClassification} if is_torch_available() else {}
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     _is_composite = True

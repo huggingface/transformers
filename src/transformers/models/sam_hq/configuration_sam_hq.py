@@ -292,7 +292,6 @@ class SamHQConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
@@ -308,6 +307,7 @@ class SamHQConfig(PreTrainedConfig):
         self.prompt_encoder_config = SamHQPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamHQMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 __all__ = ["SamHQVisionConfig", "SamHQMaskDecoderConfig", "SamHQPromptEncoderConfig", "SamHQConfig"]

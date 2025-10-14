@@ -481,8 +481,8 @@ Reload the dataset and load an image for inference.
 We will now see how to infer without a pipeline. Process the image with an image processor and place the `pixel_values` on a GPU:
 
 ```py
->>> from transformers import infer_device
->>> device = infer_device()
+>>> from accelerate import Accelerator
+>>> device = Accelerator().device
 >>> encoding = image_processor(image, return_tensors="pt")
 >>> pixel_values = encoding.pixel_values.to(device)
 ```

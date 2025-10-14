@@ -313,7 +313,6 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     pipeline_model_mapping = {"feature-extraction": VisualBertModel} if is_torch_available() else {}
     test_torchscript = False
-    test_pruning = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

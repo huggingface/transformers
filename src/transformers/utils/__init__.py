@@ -105,6 +105,7 @@ from .hub import (
 )
 from .import_utils import (
     ACCELERATE_MIN_VERSION,
+    BITSANDBYTES_MIN_VERSION,
     ENV_VARS_TRUE_AND_AUTO_VALUES,
     ENV_VARS_TRUE_VALUES,
     GGUF_MIN_VERSION,
@@ -125,7 +126,6 @@ from .import_utils import (
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
-    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
     is_ccl_available,
     is_coloredlogs_available,
@@ -252,6 +252,7 @@ from .import_utils import (
     requires_backends,
     torch_only_method,
 )
+from .kernel_config import KernelConfig
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,

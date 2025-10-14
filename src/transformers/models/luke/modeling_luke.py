@@ -529,10 +529,6 @@ class LukeAttention(nn.Module):
         super().__init__()
         self.self = LukeSelfAttention(config)
         self.output = LukeSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
     def forward(
         self,
@@ -822,9 +818,6 @@ class LukeModel(LukePreTrainedModel):
 
     def set_entity_embeddings(self, value):
         self.entity_embeddings.entity_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
     @auto_docstring
     def forward(

@@ -47,8 +47,8 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class ViltImageProcessorKwargs(ImagesKwargs):
-    size_divisor: Optional[int]
+class ViltImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
 
 
 def max_across_indices(values: Iterable[Any]) -> list[Any]:

@@ -41,8 +41,8 @@ from ...utils.deprecation import deprecate_kwarg
 logger = logging.get_logger(__name__)
 
 
-class VitMatteImageProcessorKwargs(ImagesKwargs):
-    size_divisor: Optional[int]
+class VitMatteImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
 
 
 class VitMatteImageProcessor(BaseImageProcessor):

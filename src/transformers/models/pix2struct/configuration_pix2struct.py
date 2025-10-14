@@ -289,7 +289,7 @@ class Pix2StructConfig(PreTrainedConfig):
     >>> config_text = Pix2StructTextConfig()
     >>> config_vision = Pix2StructVisionConfig()
 
-    >>> config = Pix2StructConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = Pix2StructConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "pix2struct"
@@ -306,20 +306,24 @@ class Pix2StructConfig(PreTrainedConfig):
         is_encoder_decoder=True,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, is_encoder_decoder=is_encoder_decoder, **kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the Pix2StructTextConfig with default values.")
+            text_config = Pix2StructTextConfig(
+                {"is_encoder_decoder": is_encoder_decoder, "tie_word_embeddings": tie_word_embeddings}
+            )
+            logger.info("`text_config` is `None`. initializing the `Pix2StructTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config["is_encoder_decoder"] = is_encoder_decoder
+            text_config["tie_word_embeddings"] = tie_word_embeddings
+            text_config = Pix2StructTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. Initializing the Pix2StructVisionConfig with default values.")
+            vision_config = Pix2StructVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `Pix2StructVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Pix2StructVisionConfig(**vision_config)
 
-        text_config["is_encoder_decoder"] = is_encoder_decoder
-        text_config["tie_word_embeddings"] = tie_word_embeddings
-        self.text_config = Pix2StructTextConfig(**text_config)
-        self.vision_config = Pix2StructVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.decoder_start_token_id = self.text_config.decoder_start_token_id
         self.pad_token_id = self.text_config.pad_token_id
@@ -332,6 +336,7 @@ class Pix2StructConfig(PreTrainedConfig):
         self.vision_config.initializer_range = self.initializer_range
 
         self.is_vqa = is_vqa
+        super().__init__(tie_word_embeddings=tie_word_embeddings, is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["Pix2StructConfig", "Pix2StructTextConfig", "Pix2StructVisionConfig"]

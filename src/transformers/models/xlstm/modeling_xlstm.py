@@ -34,8 +34,9 @@ if is_xlstm_available():
 
     external_xlstm = True
 else:
+    from collections.abc import Callable
     from functools import partial
-    from typing import Callable, Literal
+    from typing import Literal
 
     from .configuration_xlstm import round_up_to_next_multiple_of
 

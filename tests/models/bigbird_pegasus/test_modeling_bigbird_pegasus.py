@@ -265,7 +265,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     )
     is_encoder_decoder = True
     test_missing_keys = False
-    test_pruning = False
 
     # torchscript tests are not passing for now.
     # Also torchscript is not an important feature to have in the beginning.
@@ -783,7 +782,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 @require_torch
 class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(

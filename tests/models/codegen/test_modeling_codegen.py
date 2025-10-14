@@ -86,9 +86,6 @@ class CodeGenModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def get_large_model_config(self):
-        return CodeGenConfig.from_pretrained("Salesforce/codegen-2B-mono")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -317,7 +314,7 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         {"feature-extraction": CodeGenModel, "text-generation": CodeGenForCausalLM} if is_torch_available() else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_missing_keys = False
 
     # special case for DoubleHeads model

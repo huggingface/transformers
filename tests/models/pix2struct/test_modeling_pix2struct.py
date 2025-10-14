@@ -145,7 +145,7 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Pix2StructVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -313,7 +313,6 @@ class Pix2StructTextModelTester:
 class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructTextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
@@ -412,7 +411,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False

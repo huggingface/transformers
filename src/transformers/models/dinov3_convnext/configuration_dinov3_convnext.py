@@ -18,12 +18,13 @@ from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
 
 
-class DINOv3ConvNextConfig(PreTrainedConfig):
+class DINOv3ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DINOv3ConvNextModel`]. It is used to instantiate an
     DINOv3ConvNext model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -53,6 +54,16 @@ class DINOv3ConvNextConfig(PreTrainedConfig):
             The drop rate for stochastic depth.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of input images.
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
 
     Example:
     ```python
@@ -81,6 +92,8 @@ class DINOv3ConvNextConfig(PreTrainedConfig):
         layer_scale_init_value: float = 1e-6,
         drop_path_rate: float = 0.0,
         image_size: int = 224,
+        out_features: Optional[list[str]] = None,
+        out_indices: Optional[list[int]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -94,6 +107,10 @@ class DINOv3ConvNextConfig(PreTrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
 
     @property
     def num_stages(self) -> int:

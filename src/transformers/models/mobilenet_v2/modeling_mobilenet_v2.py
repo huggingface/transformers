@@ -334,9 +334,6 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _prune_heads(self, heads_to_prune):
-        raise NotImplementedError
-
     @auto_docstring
     def forward(
         self,

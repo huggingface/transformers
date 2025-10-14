@@ -328,7 +328,7 @@ class ClapConfig(PreTrainedConfig):
     >>> config_text = ClapTextConfig()
     >>> config_audio = ClapAudioConfig()
 
-    >>> config = ClapConfig.from_text_audio_configs(config_text, config_audio)
+    >>> config = ClapConfig(text_config=config_text, audio_config=config_audio)
     ```"""
 
     model_type = "clap"
@@ -344,18 +344,21 @@ class ClapConfig(PreTrainedConfig):
         initializer_factor=1.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the ClapTextConfig with default values.")
+            text_config = ClapTextConfig()
+            logger.info("`text_config` is `None`. initializing the `ClapTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = ClapTextConfig(**text_config)
 
         if audio_config is None:
-            audio_config = {}
-            logger.info("audio_config is None. initializing the ClapAudioConfig with default values.")
+            audio_config = ClapAudioConfig()
+            logger.info("`audio_config` is `None`. initializing the `ClapAudioConfig` with default values.")
+        elif isinstance(audio_config, dict):
+            audio_config = ClapAudioConfig(**audio_config)
 
-        self.text_config = ClapTextConfig(**text_config)
-        self.audio_config = ClapAudioConfig(**audio_config)
+        self.text_config = text_config
+        self.audio_config = audio_config
+
         self.text_config.projection_dim = projection_dim
         self.audio_config.projection_dim = projection_dim
 
@@ -369,6 +372,7 @@ class ClapConfig(PreTrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = initializer_factor
         self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
+        super().__init__(**kwargs)
 
 
 __all__ = ["ClapAudioConfig", "ClapConfig", "ClapTextConfig"]

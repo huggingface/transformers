@@ -216,7 +216,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
     is_encoder_decoder = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
-    test_pruning = False
+
     test_missing_keys = False
 
     # TODO: Fix the failed tests

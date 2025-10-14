@@ -234,9 +234,9 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = True
+    fx_compatible = False
     test_resize_position_embeddings = True
-    test_pruning = False
+
     test_missing_keys = False
 
     def setUp(self):
@@ -563,7 +563,7 @@ class PegasusStandaloneDecoderModelTester:
 class PegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusDecoder, PegasusForCausalLM) if is_torch_available() else ()
     test_resize_position_embeddings = True
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(

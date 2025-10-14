@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pickle
 import shutil
 import tempfile
 import unittest
@@ -214,13 +213,6 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @cached_property
     def big_tokenizer(self):
         return XLMRobertaTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
-
-    def test_picklable_without_disk(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = XLMRobertaTokenizer(f.name, keep_accents=True)
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:

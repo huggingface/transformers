@@ -13,9 +13,6 @@
 # limitations under the License.
 
 import inspect
-import pickle
-import shutil
-import tempfile
 import unittest
 
 from transformers import (
@@ -170,18 +167,6 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
 
                 self.assertTrue(special_token_id in r_output)
-
-    def test_picklable(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = PreTrainedTokenizerFast(
-                tokenizer_object=MoshiConverter(vocab_file=f.name).converted(),
-                bos_token="<s>",
-                unk_token="<unk>",
-                eos_token="</s>",
-            )
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
 
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers

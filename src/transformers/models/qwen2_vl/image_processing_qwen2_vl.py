@@ -52,7 +52,7 @@ from ...video_utils import VideoInput, make_batched_videos
 logger = logging.get_logger(__name__)
 
 
-class Qwen2VLImageProcessorKwargs(ImagesKwargs):
+class Qwen2VLImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_pixels (`int`, *optional*, defaults to `56 * 56`):
         The min pixels of the image to resize the image.
@@ -66,11 +66,11 @@ class Qwen2VLImageProcessorKwargs(ImagesKwargs):
         The merge size of the vision encoder to llm encoder.
     """
 
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
 def smart_resize(

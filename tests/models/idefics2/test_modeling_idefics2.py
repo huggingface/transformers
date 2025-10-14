@@ -23,6 +23,7 @@ import requests
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     Idefics2Config,
     Idefics2ForConditionalGeneration,
     Idefics2Model,
@@ -178,7 +179,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Idefics2Model,) if is_torch_available() else ()
     fx_compatible = False
     test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = True
     _is_composite = True
 
@@ -369,7 +370,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics2ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_torchscript = False
 
@@ -591,8 +592,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics2ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/idefics2-8b-base",
-            load_in_4bit=True,
+            "HuggingFaceM4/idefics2-8b-base", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
         )
 
         # Create pixel inputs
@@ -619,8 +619,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
 
         model = Idefics2ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/idefics2-8b-base",
-            load_in_4bit=True,
+            "HuggingFaceM4/idefics2-8b-base", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
         )
 
         from datasets import load_dataset
@@ -662,7 +661,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_eager = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
             attn_implementation="eager",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
         generated_ids_eager = model_eager.generate(**inputs, max_new_tokens=10)
         generated_texts_eager = self.processor.batch_decode(generated_ids_eager, skip_special_tokens=True)
@@ -673,7 +672,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_flash_attention_2 = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
             attn_implementation="flash_attention_2",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
         generated_ids_flash_attention_2 = model_flash_attention_2.generate(**inputs, max_new_tokens=10)
         generated_texts_flash_attention_2 = self.processor.batch_decode(

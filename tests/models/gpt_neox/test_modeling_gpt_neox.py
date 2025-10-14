@@ -285,7 +285,7 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     test_missing_keys = False
 
     def setUp(self):

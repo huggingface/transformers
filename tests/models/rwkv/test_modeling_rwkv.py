@@ -84,9 +84,6 @@ class RwkvModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def get_large_model_config(self):
-        return RwkvConfig.from_pretrained("sgugger/rwkv-4-pile-7b")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -220,7 +217,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)

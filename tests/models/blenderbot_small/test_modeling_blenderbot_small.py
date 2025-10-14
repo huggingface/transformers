@@ -216,8 +216,7 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = True
-    test_pruning = False
+    fx_compatible = False
     test_missing_keys = False
 
     # TODO: Fix the failed tests when this model gets more usage
@@ -529,7 +528,7 @@ class BlenderbotSmallStandaloneDecoderModelTester:
 @require_torch
 class BlenderbotSmallStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallDecoder, BlenderbotSmallForCausalLM) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(

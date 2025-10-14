@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 from PIL import Image
 
@@ -36,7 +37,7 @@ IDEFICS_STANDARD_MEAN = [0.48145466, 0.4578275, 0.40821073]
 IDEFICS_STANDARD_STD = [0.26862954, 0.26130258, 0.27577711]
 
 
-class IdeficsImageProcessorKwargs(ImagesKwargs):
+class IdeficsImageProcessorKwargs(ImagesKwargs, total=False):
     """
     transform (`Callable`, *optional*):
         A custom transform function that accepts a single image can be passed for training. For example,
@@ -47,7 +48,7 @@ class IdeficsImageProcessorKwargs(ImagesKwargs):
     """
 
     transform: Optional[Callable]
-    image_size: Optional[dict[str, int]]
+    image_size: dict[str, int]
 
 
 def convert_to_rgb(image):

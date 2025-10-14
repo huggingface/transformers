@@ -142,10 +142,6 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         codec_config=None,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
-
         if codec_config is None:
             self.codec_config = AutoConfig.for_model("mimi")
             logger.info("codec_config is None, using default audio encoder config.")
@@ -183,6 +179,10 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.sliding_window = sliding_window
+
+        super().__init__(
+            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )
 
 
 __all__ = ["KyutaiSpeechToTextConfig"]

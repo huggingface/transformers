@@ -170,8 +170,13 @@ def _lazy_load_causal_conv1d():
     if is_kernels_available():
         from kernels import get_kernel
 
-        _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
-        _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
+        try:
+            _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
+        except FileNotFoundError:
+            # no kernel binary match, fallback to slow path
+            _causal_conv1d_cache = (None, None)
+        else:
+            _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
     elif is_causal_conv1d_available():
         from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 

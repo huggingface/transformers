@@ -256,7 +256,7 @@ class InstructBlipConfig(PreTrainedConfig):
     >>> qformer_config = InstructBlipQFormerConfig()
     >>> text_config = OPTConfig()
 
-    >>> config = InstructBlipConfig.from_text_vision_configs(vision_config, qformer_config, text_config)
+    >>> config = InstructBlipConfig(vision_config=vision_config, qformer_config=qformer_config, text_config=text_config)
     ```"""
 
     model_type = "instructblip"
@@ -278,24 +278,28 @@ class InstructBlipConfig(PreTrainedConfig):
         image_token_index=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. initializing the InstructBlipVisionConfig with default values.")
+        if text_config is None:
+            text_config = CONFIG_MAPPING["opt"]()
+            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
+        elif isinstance(text_config, dict):
+            text_model_type = text_config.get("model_type", "opt")
+            text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         if qformer_config is None:
-            qformer_config = {}
+            qformer_config = InstructBlipQFormerConfig()
             logger.info("qformer_config is None. Initializing the InstructBlipQFormerConfig with default values.")
+        elif isinstance(qformer_config, dict):
+            qformer_config = InstructBlipQFormerConfig(**qformer_config)
 
-        if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
+        if vision_config is None:
+            vision_config = InstructBlipVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `InstructBlipVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = InstructBlipVisionConfig(**vision_config)
 
-        self.vision_config = InstructBlipVisionConfig(**vision_config)
-        self.qformer_config = InstructBlipQFormerConfig(**qformer_config)
-        text_model_type = text_config.get("model_type", "opt")
-        self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.qformer_config = qformer_config
 
         self.num_query_tokens = num_query_tokens
         self.image_token_index = image_token_index
@@ -303,29 +307,7 @@ class InstructBlipConfig(PreTrainedConfig):
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
-
-    @classmethod
-    def from_vision_qformer_text_configs(
-        cls,
-        vision_config: InstructBlipVisionConfig,
-        qformer_config: InstructBlipQFormerConfig,
-        text_config: PreTrainedConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`InstructBlipConfig`] (or a derived class) from a InstructBLIP vision model, Q-Former and
-        language model configurations.
-
-        Returns:
-            [`InstructBlipConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            vision_config=vision_config.to_dict(),
-            qformer_config=qformer_config.to_dict(),
-            text_config=text_config.to_dict(),
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["InstructBlipConfig", "InstructBlipQFormerConfig", "InstructBlipVisionConfig"]

@@ -247,9 +247,9 @@ image
 Prepare image for the model.
 
 ```python
-from transformers import infer_device
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 inputs = processor(images=image, return_tensors="pt").to(device)
 pixel_values = inputs.pixel_values
 ```
