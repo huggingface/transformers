@@ -3664,6 +3664,8 @@ class ModelTesterMixin:
             fa_model = model_class._from_config(
                 config, attn_implementation=attn_implementation, dtype=torch.bfloat16
             ).to(torch_device)
+
+            # Used to test dropout, etc... in train mode. Also some models (eg. gemma3) need different inputs in train mode.
             if test_fwd_in_train:
                 fa_model = fa_model.train()
             else:
