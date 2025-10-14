@@ -15,7 +15,7 @@
 """Mixtral model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...core_model_loading import WeightConversion
+from ...core_model_loading import Fuse, MergeModuleList, WeightConversion, ConversionType
 from ...utils import logging
 
 
@@ -127,23 +127,6 @@ class MixtralConfig(PreTrainedConfig):
     }
     attribute_map = {
         "num_experts": "num_local_experts",
-    }
-    checkpoint_conversion_mapping = {
-        r"^(model\.layers\.\d+\.block_sparse_moe)\.experts\.\d+\.w1\.weight$": WeightConversion(
-            new_key=r"\1.experts.w1",
-            function="merge_module_list",
-            dim=0,
-        ),
-        r"^(model\.layers\.\d+\.block_sparse_moe)\.experts\.\d+\.w2\.weight$": WeightConversion(
-            new_key=r"\1.experts.w2",
-            function="merge_module_list",
-            dim=0,
-        ),
-        r"^(model\.layers\.\d+\.block_sparse_moe)\.experts\.\d+\.w3\.weight$": WeightConversion(
-            new_key=r"\1.experts.w3",
-            function="merge_module_list",
-            dim=0,
-        ),
     }
 
     def __init__(

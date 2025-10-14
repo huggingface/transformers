@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
@@ -25,178 +26,203 @@ import torch
 from .quantizers.quantizers_utils import get_module_from_name
 
 
-@dataclass(frozen=True)
-class WeightConversion:
-    """Specification for applying a post-rename weight transformation."""
+"""
+For mixtral, the fp8 quantizer should add the "quantization" op.
 
-    new_key: str
-    function: str
-    dim: Optional[int] = None
-    kwargs: Dict[str, Any] = field(default_factory=dict)
+Quantizer says wether we need all weights or not.
 
-    def instantiate(self, resolved_key: str) -> "ResolvedWeightConversion":
-        return ResolvedWeightConversion(
-            target_key=resolved_key,
-            function=self.function,
-            dim=self.dim,
-            kwargs=dict(self.kwargs),
-        )
+TP probably does not need?
 
 
-@dataclass
-class ResolvedWeightConversion:
-    target_key: str
-    function: str
-    dim: Optional[int] = None
-    kwargs: Dict[str, Any] = field(default_factory=dict)
+model.layers.0.block_sparse_moe.experts.1.w1.input_scale	[]
+model.layers.0.block_sparse_moe.experts.1.w1.weight	[14 336, 4 096]
+model.layers.0.block_sparse_moe.experts.1.w1.weight_scale	[]
+model.layers.0.block_sparse_moe.experts.1.w2.input_scale	[]
+model.layers.0.block_sparse_moe.experts.1.w2.weight	[4 096, 14 336]
+model.layers.0.block_sparse_moe.experts.1.w2.weight_scale	[]
+model.layers.0.block_sparse_moe.experts.1.w3.input_scale	[]
+model.layers.0.block_sparse_moe.experts.1.w3.weight	[14 336, 4 096]
+model.layers.0.block_sparse_moe.experts.1.w3.weight_scale	[]
+"""
 
 
-@dataclass
-class WeightConversionPlan:
-    conversion: ResolvedWeightConversion
-    source_keys: Tuple[str, ...]
-
-    def __post_init__(self):
-        self.source_index = {key: idx for idx, key in enumerate(self.source_keys)}
-
-    @property
-    def num_parts(self) -> int:
-        return len(self.source_keys)
-
-
-class ConversionAccumulator:
-    """Runtime helper that assembles tensors according to a conversion plan."""
-
-    def __init__(self, plan: WeightConversionPlan, model: Any):
-        self.plan = plan
-        module, tensor_name = get_module_from_name(model, plan.conversion.target_key)
-        self._target_template = getattr(module, tensor_name)
-        self._buffer: Optional[torch.Tensor] = None
-        self._filled = set()
-        self._parts_seen = 0
-
-    @property
-    def is_complete(self) -> bool:
-        return self._parts_seen >= self.plan.num_parts
-
-    def _allocate_buffer(self, reference: torch.Tensor) -> torch.Tensor:
-        if self._buffer is not None:
-            return self._buffer
-
-        target_shape = tuple(self._target_template.shape)
-        target_dtype = getattr(self._target_template, "dtype", reference.dtype)
-        target_device = reference.device
-        if target_dtype is None:
-            target_dtype = reference.dtype
-
-        self._buffer = torch.empty(target_shape, dtype=target_dtype, device=target_device)
-        return self._buffer
-
-    def add(self, source_index: int, tensor: torch.Tensor):
-        if source_index in self._filled:
-            raise ValueError(
-                f"Weight conversion for {self.plan.conversion.target_key} received duplicate source index {source_index}."
-            )
-
-        buffer = self._allocate_buffer(tensor)
-        conversion = self.plan.conversion
-        if conversion.function == "merge_module_list":
-            dim = 0 if conversion.dim is None else conversion.dim
-            indexer: List[slice] = [slice(None)] * buffer.ndim
-            indexer[dim] = source_index
-            buffer[tuple(indexer)].copy_(tensor.to(buffer.dtype))
-        else:
-            raise NotImplementedError(f"Unsupported weight conversion function: {conversion.function}")
-
-        self._filled.add(source_index)
-        self._parts_seen += 1
-
-    def materialize(self) -> torch.Tensor:
-        if self._buffer is None:
-            raise RuntimeError(
-                f"Attempted to materialize conversion result for {self.plan.conversion.target_key} before any data was added."
-            )
-        return self._buffer
-
-
-def build_weight_conversion_plans(
-    conversion_specs: Dict[str, WeightConversion], conversion_sources: Dict[str, Iterable[str]]
-) -> Dict[str, WeightConversionPlan]:
-    """Instantiate `WeightConversionPlan` objects for each converted key."""
-
-    plans: Dict[str, WeightConversionPlan] = {}
-    for target, source_list in conversion_sources.items():
-        plans[target] = WeightConversionPlan(
-            conversion=conversion_specs[target].instantiate(target),
-            source_keys=tuple(source_list),
-        )
-    return plans
-
-
-def collate_converted_state_dict(
-    state_dict: Dict[str, torch.Tensor], key_renaming_mapping: Dict[str, str]
-) -> Dict[str, List[Tuple[str, torch.Tensor]]]:
-    """Group tensors that map to the same resolved key.
-
-    The returned mapping keeps track of the original serialized key for each tensor so safetensors slices can be
-    retrieved lazily when needed.
+class ConversionOps:
+    """
+    Base class with a reusable buffer to avoid repeated allocations.
+    Subclasses implement `convert(collected_tensors) -> torch.Tensor` and
+    write results into a view of `self._buffer`.
     """
 
-    converted_state_dict: Dict[str, List[Tuple[str, torch.Tensor]]] = defaultdict(list)
-    for original_key, value in state_dict.items():
-        target_key = key_renaming_mapping.get(original_key)
-        if target_key is None:
-            continue
-        converted_state_dict[target_key].append((original_key, value))
-    return dict(converted_state_dict)
+    target_tensor_shape: torch.Tensor
+    can_be_quantized: bool = True
+    can_be_distributed: bool = False
+
+    # Lazily created on first use; no __init__ needed.
+    _buffer: Optional[torch.Tensor] = None
+
+    def _ensure_buffer(
+        self, required_shape: torch.Size, *, dtype: torch.dtype, device: torch.device, growth_factor: float = 1.5
+    ) -> torch.Tensor:
+        """
+        Ensure we have a buffer with enough capacity (and correct dtype/device).
+        Returns a *view* of the buffer shaped as `required_shape` without new allocation.
+        """
+        required_elems = int(torch.tensor(required_shape).prod().item()) if len(required_shape) else 1
+
+        need_new = (
+            self._buffer is None
+            or self._buffer.dtype != dtype
+            or self._buffer.device != device
+            or self._buffer.numel() < required_elems
+        )
+
+        if need_new:
+            # grow capacity to reduce future reallocations
+            capacity = max(required_elems, int(required_elems * growth_factor))
+            self._buffer = torch.empty(capacity, dtype=dtype, device=device)
+
+        # return a view with the requested shape using only the needed slice
+        return self._buffer[:required_elems].view(required_shape)
+
+    def clear_cache(self):
+        """Free the cached buffer (optional)."""
+        self._buffer = None
+
+    def convert(self, collected_tensors: Iterable[torch.Tensor]) -> torch.Tensor:
+        raise NotImplementedError
 
 
-def materialize_param_from_contributions(
-    model: Any,
-    param_name: str,
-    contributions: List[Tuple[str, torch.Tensor]],
-    plan: Optional[WeightConversionPlan],
-    conversion_runtime: Dict[str, ConversionAccumulator],
-    file_pointer: Optional[Any],
-    tensor_device: Union[str, torch.device],
-) -> Optional[torch.Tensor]:
-    """Return a tensor ready to load into the model, or `None` if more shards are required."""
+class Fuse(ConversionOps):
+    """
+    Concatenate along `dim` without allocating a fresh output each call:
+    copies into a preallocated buffer slice-by-slice.
+    """
 
-    if not contributions:
-        return None
+    dim: int = 0  # adjust if you want a different default
 
-    if plan is None:
-        original_key, tensor_value = contributions[0]
-        if file_pointer is not None:
-            return file_pointer.get_slice(original_key)
-        return tensor_value.to(tensor_device)
+    def convert(self, collected_tensors: Iterable[torch.Tensor]) -> torch.Tensor:
+        tensors = tuple(collected_tensors)
+        if not tensors:
+            # Return a zero-size view on an empty buffer on CPU by default
+            self._buffer = None
+            return torch.empty(0)
 
-    accumulator = conversion_runtime.get(param_name)
-    if accumulator is None:
-        accumulator = ConversionAccumulator(plan, model)
-        conversion_runtime[param_name] = accumulator
+        # Basic checks & canonical attrs
+        first = tensors[0]
+        dtype, device = first.dtype, first.device
+        dim = self.dim
 
-    for original_key, tensor_value in contributions:
-        if file_pointer is not None:
-            tensor_slice = file_pointer.get_slice(original_key)
-        else:
-            tensor_slice = tensor_value.to(tensor_device)
-        source_index = plan.source_index[original_key]
-        accumulator.add(source_index, tensor_slice)
+        # Validate shapes/dtypes/devices
+        base_shape = list(first.shape)
+        for t in tensors:
+            if t.dtype != dtype or t.device != device:
+                raise TypeError("All tensors must share dtype and device for Fuse.")
+            if len(t.shape) != len(base_shape):
+                raise ValueError("All tensors must have the same rank for Fuse.")
+            for d, (a, b) in enumerate(zip(base_shape, t.shape)):
+                if d == dim:
+                    continue
+                if a != b:
+                    raise ValueError(f"Non-concat dims must match; got {a} vs {b} at dim {d}.")
 
-    if not accumulator.is_complete:
-        return None
+        # Compute fused shape
+        total_along_dim = sum(t.shape[dim] for t in tensors)
+        out_shape = list(base_shape)
+        out_shape[dim] = total_along_dim
+        out_shape = torch.Size(out_shape)
 
-    conversion_runtime.pop(param_name, None)
-    return accumulator.materialize()
+        with torch.no_grad():
+            out = self._ensure_buffer(out_shape, dtype=dtype, device=device)
+
+            # Copy into preallocated buffer without creating a new result tensor
+            # We slice along `dim` and copy each piece.
+            idx = 0
+            for t in tensors:
+                slc = [slice(None)] * t.ndim
+                slc[dim] = slice(idx, idx + t.shape[dim])
+                out[tuple(slc)].copy_(t)
+                idx += t.shape[dim]
+
+        return out
 
 
-__all__ = [
-    "WeightConversion",
-    "ResolvedWeightConversion",
-    "WeightConversionPlan",
-    "ConversionAccumulator",
-    "build_weight_conversion_plans",
-    "collate_converted_state_dict",
-    "materialize_param_from_contributions",
-]
+class MergeModuleList(ConversionOps):
+    """
+    Stack tensors along a new leading dimension without allocating a new tensor:
+    writes each tensor into a preallocated [N, ...] buffer.
+    """
+
+    stack_dim: int = 0  # new dimension index in the *output*
+
+    def convert(self, collected_tensors: Iterable[torch.Tensor]) -> torch.Tensor:
+        tensors = tuple(collected_tensors)
+        if not tensors:
+            self._buffer = None
+            return torch.empty(0)
+
+        first = tensors[0]
+        dtype, device = first.dtype, first.device
+        base_shape = first.shape
+
+        # Validate consistency
+        for t in tensors:
+            if t.dtype != dtype or t.device != device:
+                raise TypeError("All tensors must share dtype and device for MergeModuleList.")
+            if t.shape != base_shape:
+                raise ValueError("All tensors must have identical shapes to stack.")
+
+        N = len(tensors)
+        # Normalize stack_dim (allow negative)
+        stack_dim = self.stack_dim % (first.ndim + 1)
+
+        # Output shape: insert N at stack_dim
+        out_shape = list(base_shape)
+        out_shape.insert(stack_dim, N)
+        out_shape = torch.Size(out_shape)
+
+        with torch.no_grad():
+            out = self._ensure_buffer(out_shape, dtype=dtype, device=device)
+
+            # Write each tensor into the appropriate slice
+            for i, t in enumerate(tensors):
+                slc = [slice(None)] * out.ndim
+                slc[stack_dim] = i
+                out[tuple(slc)].copy_(t)
+
+        return out
+
+
+class ConversionType(Enum):
+    FUSE = Fuse()
+    MERGE_MODULE_LIST = MergeModuleList()
+
+    def __call__(self, *args, **kwargs):
+        # Call enum member as a constructor: ConversionType.FUSE() -> Fuse()
+        return self.value(*args, **kwargs) @ dataclass(frozen=True)
+
+
+globals().update({member.name: member for member in ConversionType})
+
+
+class WeightConversion:
+    """Specification for applying renaming and other operations."""
+
+    new_key_name: str
+    operations: Optional[list[ConversionType]]  # if TP or quantization, some ops like "slicing" will be added?S
+
+    def __init__(self, new_key_name, operations: Optional[Union[ConversionType, list[ConversionType]]]):
+        self.new_key_name
+        self.operations = list(operations) if not isinstance(operations, list) else operations
+
+    # Ex rank1 for w1,w3 -> gate_up_proj:
+    # 1. read the weights
+    # 2. rename
+    # 3. MergeModuleList, but dim=0, and there is tp_plan on gate_up_proj -> slice to only experts of this rank
+    # 4. cat(cat(gate_4, gate_5, gate_6, gate_7), cat(up_4, up_5, up_6, up_7))
+    # 5. quantize? -> A new ConversionType op
+
+    # We want the quantizers to have:
+    # -
+
+
+__all__ = ["WeightConversion", "ConversionType"]

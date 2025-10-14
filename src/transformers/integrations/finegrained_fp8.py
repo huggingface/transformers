@@ -353,6 +353,7 @@ class FP8Linear(nn.Linear):
             return output.to(dtype=input.dtype)
 
 
+# TODO: we do need this....
 def _replace_with_fp8_linear(
     model,
     tp_plan=None,
