@@ -126,6 +126,7 @@ class TvpConfig(PreTrainedConfig):
         layer_norm_eps=1e-12,
         initializer_range=0.02,
         attention_probs_dropout_prob=0.1,
+        is_decoder=False,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
@@ -144,6 +145,7 @@ class TvpConfig(PreTrainedConfig):
             backbone_kwargs=backbone_kwargs,
         )
 
+        self.is_decoder = is_decoder
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
