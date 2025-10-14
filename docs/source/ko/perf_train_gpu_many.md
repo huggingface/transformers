@@ -65,8 +65,6 @@ DDP(DistributedDataParallel)는 GPU 간 통신 오버헤드를 줄이고, 각 GP
 
 ### ZeRO 데이터 병렬화[[zero-data-parallelism]]
 
-[Zero Redundancy Optimizer](https://www.deepspeed.ai/tutorials/zero/)는 더욱 메모리 효율적인 데이터 병렬화 유형입니다. 파라미터, 그레이디언트, 옵티마이저 상태를 데이터 병렬 프로세스 간에 분할하여 메모리 사용량을 줄임으로써 메모리 효율성을 크게 향상시킵니다. ZeRO에는 세 가지 단계가 있습니다:
-
 [Zero Redundancy Optimizer](https://www.deepspeed.ai/tutorials/zero/)는 메모리 효율을 극대화한 데이터 병렬화 방식입니다. 매개변수, 그레이디언트, 옵티마이저 상태를 데이터 병렬 프로세스 간에 분할함으로써 메모리 사용량을 크게 줄입니다. ZeRO는 다음과 같이 세 가지 단계로 나뉩니다.
 
 
