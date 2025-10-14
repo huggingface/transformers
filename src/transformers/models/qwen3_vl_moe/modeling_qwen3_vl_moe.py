@@ -145,7 +145,7 @@ class Qwen3VLMoeTextSparseMoeBlock(nn.Module):
         routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
         routing_weights, router_indices = torch.topk(routing_weights, self.top_k, dim=-1)
         routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        routing_weights = routing_weights.to(router_logits.dtype)
         router_weights = torch.zeros_like(router_logits).scatter_(1, router_indices, routing_weights)
         hidden_states = hidden_states.reshape(batch_size, -1, self.hidden_size)
         routed_out = self.experts(hidden_states, router_weights, router_indices)
