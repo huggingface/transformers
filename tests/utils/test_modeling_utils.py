@@ -295,9 +295,7 @@ if is_torch_available():
                     hub.TRANSFORMERS_CACHE = tmpdir
                     # First offline load should fail
                     try:
-                        AutoModelForImageClassification.from_pretrained(
-                            TINY_IMAGE_CLASSIF, revision="main"
-                        )
+                        AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
@@ -310,9 +308,7 @@ if is_torch_available():
 
                     LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
 
-                    AutoModelForImageClassification.from_pretrained(
-                        TINY_IMAGE_CLASSIF, revision="main"
-                    )
+                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
             finally:
                 # Tear down: reset env as it was before calling this test
                 hub._is_offline_mode = offlfine_env
