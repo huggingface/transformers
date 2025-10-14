@@ -4667,6 +4667,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _ = kwargs.pop("mirror", None)
         _ = kwargs.pop("_fast_init", True)
         _ = kwargs.pop("low_cpu_mem_usage", None)
+        _ = kwargs.pop("offload_state_dict", None)
 
         # For BC on torch_dtype argument
         if torch_dtype is not None:
