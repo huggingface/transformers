@@ -44,6 +44,7 @@ from .tokenization_utils_base import (
 )
 from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 
+from .utils import requires_backends
 
 logger = logging.get_logger(__name__)
 
@@ -1217,3 +1218,58 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
         return (ids, pair_ids, overflowing_tokens)
 
 
+def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
+    if add_prefix_space:
+        prepend_scheme = "always"
+        if not getattr(original_tokenizer, "legacy", True):
+            prepend_scheme = "first"
+    else:
+        prepend_scheme = "never"
+    return prepend_scheme
+
+
+def generate_merges(vocab, vocab_scores: Optional[dict[str, float]] = None):
+    reverse = vocab_scores is not None
+    vocab_scores = dict(vocab_scores) if reverse else vocab
+
+    merges = []
+    for merge, piece_score in vocab_scores.items():
+        local = []
+        for index in range(1, len(merge)):
+            piece_l, piece_r = merge[:index], merge[index:]
+            if piece_l in vocab and piece_r in vocab:
+                local.append((piece_l, piece_r, piece_score))
+        local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
+        merges.extend(local)
+
+    merges = sorted(merges, key=lambda val: (val[2], len(val[0]), len(val[1])), reverse=reverse)
+    merges = [(val[0], val[1]) for val in merges]
+    return merges
+
+
+class SentencePieceExtractor:
+    """
+    Extractor implementation for SentencePiece trained models. https://github.com/google/sentencepiece
+    """
+
+    def __init__(self, model: str):
+        requires_backends(self, "sentencepiece")
+        from sentencepiece import SentencePieceProcessor
+
+        self.sp = SentencePieceProcessor()
+        self.sp.Load(model)
+
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
+        """
+        By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
+        order the merges with respect to the piece scores instead.
+        """
+        sp = self.sp
+        vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+
+        # let's get the vocab_scores
+        vocab_scores = {sp.id_to_piece(i): sp.get_score(i) for i in range(sp.GetPieceSize())}
+
+        merges = generate_merges(vocab, vocab_scores)
+
+        return vocab, merges

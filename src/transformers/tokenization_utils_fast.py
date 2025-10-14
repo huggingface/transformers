@@ -101,7 +101,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", False)
-        tokenizer_backend_config = kwargs.pop("tokenizer_backend_config", None)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
@@ -127,8 +126,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs.update(tokenizer_config)
             if len(additional_kwargs) > 0:
                 kwargs.update(additional_kwargs)
-        elif tokenizer_backend_config is not None:
-            fast_tokenizer = self._build_tokenizer_backend(tokenizer_backend_config)
         elif self.slow_tokenizer_class is not None and slow_tokenizer is not False:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
@@ -586,7 +583,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 elif isinstance(t[0], str):
                     return True
                 elif isinstance(t[0], (list, tuple)):
-                    return len(t[0]) == 0 or isinstance(t[0][0], str)
+                    if len(t[0]) == 0 or isinstance(t[0][0], str):
+                        return True
+                    elif isinstance(t[0][0], (list, tuple)):
+                        return len(t[0][0]) == 0 or isinstance(t[0][0][0], str)
+                    else:
+                        return False
                 else:
                     return False
             else:
@@ -595,13 +597,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if not _is_valid_text_input(text):
             raise ValueError(
                 "text input must be of type `str` (single example), `list[str]` (batch or single pretokenized example) "
-                "or `list[list[str]]` (batch of pretokenized examples)."
+                "or `list[list[str]]` (batch of pretokenized examples) or `list[tuple[list[str], list[str]]]` (batch of pretokenized sequence pairs)."
             )
 
         if text_pair is not None and not _is_valid_text_input(text_pair):
             raise ValueError(
                 "text input must be of type `str` (single example), `list[str]` (batch or single pretokenized example) "
-                "or `list[list[str]]` (batch of pretokenized examples)."
+                "or `list[list[str]]` (batch of pretokenized examples) or `list[tuple[list[str], list[str]]]` (batch of pretokenized sequence pairs)."
             )
 
         # Batch detection (from _call_one)
@@ -918,30 +920,3 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["additional_special_tokens"] = additional_special_tokens
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
-
-    def _build_tokenizer_backend(self, tokenizer_backend_config):
-         # Build a backend tokenizer from a lightweight config (e.g., SPM from scratch)
-        build_type = tokenizer_backend_config.get("type")
-        if build_type == "spm":
-            # Import locally to avoid hard dependency unless used
-            from .create_fast_tokenizer import SpmTokenizer
-
-            spm = SpmTokenizer(
-                handle_byte_fallback=tokenizer_backend_config.get("handle_byte_fallback", True),
-                legacy=tokenizer_backend_config.get("legacy", False),
-                add_prefix_space=tokenizer_backend_config.get("add_prefix_space", True),
-                special_tokens=tokenizer_backend_config.get("special_tokens"),
-                vocab=tokenizer_backend_config.get("vocab"),
-                unk_id=tokenizer_backend_config.get("unk_id"),
-                normalizer=tokenizer_backend_config.get("normalizer"),
-                pre_tokenizer=tokenizer_backend_config.get("pre_tokenizer"),
-                decoder=tokenizer_backend_config.get("decoder"),
-                post_processor=tokenizer_backend_config.get("post_processor"),
-                tokenizer=tokenizer_backend_config.get("tokenizer"),
-            )
-            fast_tokenizer = spm.create_tokenizer()
-            return fast_tokenizer
-        else:
-            raise ValueError(
-                f"Unsupported tokenizer_backend_config type: {build_type}. Currently supported: 'spm'."
-            )

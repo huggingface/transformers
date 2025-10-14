@@ -22,7 +22,7 @@ from tokenizers.models import BPE, Unigram
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging, requires_backends
-from ...create_fast_tokenizer import _get_prepend_scheme, generate_merges
+from ...tokenization_sentencepiece import _get_prepend_scheme, generate_merges
 
 
 logger = logging.get_logger(__name__)
@@ -140,31 +140,19 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     ):
         self.legacy = legacy
         
-        # Set add_prefix_space attribute for use in override methods
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
 
         self._vocab = vocab if vocab is not None else self._vocab()
         self._merges = merges if merges is not None else generate_merges(self._vocab)
 
-        # Prepare base-class construction helpers
-        tokenizer_backend_config = None
-        if tokenizer_file is None:
-            tokenizer_backend_config = {
-                "type": "spm",
-                "handle_byte_fallback": True,
-                "legacy": legacy,
-                "add_prefix_space": add_prefix_space if add_prefix_space is not None else True,
-                "vocab": self._vocab,
-                "normalizer": self._normalizer,
-                "pre_tokenizer": self._pre_tokenizer,
-                "decoder": self._decoder,
-                "tokenizer": self._tokenizer,
-            }
+        tokenizer_object = None
 
-        # Initialize the base class which will build the backend tokenizer
+        if (vocab is not None or merges is not None) and tokenizer_file is None:
+            tokenizer_object = Tokenizer(BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None))
+
         super().__init__(
             tokenizer_file=tokenizer_file,
-            tokenizer_backend_config=tokenizer_backend_config,
+            tokenizer_object=tokenizer_object,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,
