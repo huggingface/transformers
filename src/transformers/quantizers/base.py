@@ -32,6 +32,9 @@ logger = logging.get_logger(__file__)
 
 
 def _assign_original_dtype(module, original_dtype):
+    # not very nice in a recursive function but it avoids a circular import
+    from ..modeling_utils import PreTrainedModel
+
     for child in module.children():
         if isinstance(child, PreTrainedModel):
             child.config._pre_quantization_dtype = original_dtype
