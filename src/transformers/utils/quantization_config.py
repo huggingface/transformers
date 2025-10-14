@@ -652,6 +652,9 @@ class GPTQConfig(QuantizationConfigMixin):
         desc_act (`bool`, *optional*, defaults to `False`):
             Whether to quantize columns in order of decreasing activation size. Setting it to False can significantly
             speed up inference but the perplexity may become slightly worse. Also known as act-order.
+        act_group_aware (`bool`, *optional*, defaults to `True`):
+            Use GAR (group aware activation order) during quantization. Has measurable positive impact on quantization
+            quality. Only applicable when `desc_act = False`. Will forced to be `False` when `desc_act = True`.
         sym (`bool`, *optional*, defaults to `True`):
             Whether to use symmetric quantization.
         true_sequential (`bool`, *optional*, defaults to `True`):
@@ -698,6 +701,7 @@ class GPTQConfig(QuantizationConfigMixin):
         group_size: int = 128,
         damp_percent: float = 0.1,
         desc_act: bool = False,
+        act_group_aware: bool = True,
         sym: bool = True,
         true_sequential: bool = True,
         checkpoint_format: str = "gptq",
@@ -720,6 +724,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.group_size = group_size
         self.damp_percent = damp_percent
         self.desc_act = desc_act
+        self.act_group_aware = act_group_aware
         self.sym = sym
         self.true_sequential = true_sequential
         self.checkpoint_format = checkpoint_format.lower()
@@ -769,8 +774,13 @@ class GPTQConfig(QuantizationConfigMixin):
                     ['wikitext2','c4','c4-new'], but we found {self.dataset}"""
                 )
 
+        # act_group_order is only applicable when `desc_act = False`
+        if self.desc_act and self.act_group_aware:
+            self.act_group_aware = False
+            logger.warning("`act_group_aware` has been auto-disabled as it is not compatible with `desc_act = True`.")
+
         # make sure backend default stays consistent with gptqmodel expectations
-        if is_gptqmodel_available() and self.backend is None:
+        if self.backend is None:
             self.backend = "auto"
         if self.modules_in_block_to_quantize is not None:
             optimum_version = version.parse(importlib.metadata.version("optimum"))
