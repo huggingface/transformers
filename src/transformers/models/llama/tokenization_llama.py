@@ -146,9 +146,9 @@ class LlamaTokenizer(TokenizersBackend):
         if (vocab is not None or merges is not None) and tokenizer_file is None:
             # Build a complete Tokenizer with model, decoder, normalizer and pre-tokenizer
             self._tokenizer = Tokenizer(self._model())
-            self._tokenizer.decoder = self._decoder(replacement="▁", add_prefix_space=self.add_prefix_space)
+            self._tokenizer.decoder = self._decoder(add_prefix_space=self.add_prefix_space)
             self._tokenizer.normalizer = self._normalizer()
-            self._tokenizer.pre_tokenizer = self._pre_tokenizer(replacement="▁", add_prefix_space=self.add_prefix_space)
+            self._tokenizer.pre_tokenizer = self._pre_tokenizer(add_prefix_space=self.add_prefix_space)
             tokenizer_object = self._tokenizer
 
         super().__init__(
@@ -191,7 +191,7 @@ class LlamaTokenizer(TokenizersBackend):
         }
         return vocab
 
-    def _decoder(self, replacement, add_prefix_space):
+    def _decoder(self, add_prefix_space):
         """Decoder configuration for this tokenizer."""
         sequence = [
             decoders.Replace("▁", " "),
@@ -206,10 +206,10 @@ class LlamaTokenizer(TokenizersBackend):
         """Normalizer configuration for this tokenizer."""
         return None
 
-    def _pre_tokenizer(self, replacement, add_prefix_space):
+    def _pre_tokenizer(self, add_prefix_space):
         """Pre-tokenizer configuration for this tokenizer."""
         prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
-        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+        return pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme, split=False)
 
 
 __all__ = ["LlamaTokenizer", "LlamaTokenizerFast"]
