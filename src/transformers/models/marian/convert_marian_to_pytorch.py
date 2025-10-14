@@ -105,7 +105,7 @@ def load_config_from_state_dict(opus_dict):
     import yaml
 
     cfg_str = "".join([chr(x) for x in opus_dict[CONFIG_KEY]])
-    yaml_cfg = yaml.load(cfg_str[:-1], Loader=yaml.BaseLoader)
+    yaml_cfg = yaml.safe_load(cfg_str[:-1], Loader=yaml.BaseLoader)
     return cast_marian_config(yaml_cfg)
 
 
@@ -682,7 +682,7 @@ def load_yaml(path):
     import yaml
 
     with open(path, encoding="utf-8") as f:
-        return yaml.load(f, Loader=yaml.BaseLoader)
+        return yaml.safe_load(f, Loader=yaml.BaseLoader)
 
 
 def save_json(content: Union[dict, list], path: str) -> None:
