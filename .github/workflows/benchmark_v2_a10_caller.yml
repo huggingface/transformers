@@ -1,11 +1,7 @@
 name: Benchmark v2 Scheduled Runner - A10 Single-GPU
 
 on:
-  schedule:
-    # Run daily at 16:30 UTC
-    - cron: "30 16 * * *"
-  pull_request:
-    types: [ opened, labeled, reopened, synchronize ]
+  workflow_dispatch:
 
 jobs:
   benchmark-v2-default:
