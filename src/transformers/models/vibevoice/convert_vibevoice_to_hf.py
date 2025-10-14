@@ -35,9 +35,13 @@ def update_state_dict_for_hf_model(state_dict):
         
         # Handle conv.conv -> conv mapping for semantic tokenizer SConv1d layers only
         # This removes one level of .conv nesting
-        if ".conv.conv." in key and "semantic_tokenizer" in key:
-            new_key = key.replace(".conv.conv.", ".conv.")
-        
+        if "semantic_tokenizer" in key: # TODO remove when acoustic tokeniezer updated!
+            if ".conv.conv." in key:
+                new_key = new_key.replace(".conv.conv.", ".conv.")
+            # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
+            if "downsample_layers." in key and ".0.conv." in key:
+                new_key = new_key.replace(".0.conv.", ".conv.")
+
         updated_state_dict[new_key] = value
     
     return updated_state_dict
@@ -64,15 +68,26 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     # -- cleanup
     model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-")))
     model_config["semantic_tokenizer_config"]["encoder_depths"] = list(map(int, model_config["semantic_tokenizer_config"]["encoder_depths"].split("-")))
+    # -- remove unused / constant parameters that lead to unused code paths removed in HF model
+    if "mixer_layer" in model_config["semantic_tokenizer_config"]:
+        del model_config["semantic_tokenizer_config"]["mixer_layer"]
+    if "layernorm" in model_config["semantic_tokenizer_config"]:
+        del model_config["semantic_tokenizer_config"]["layernorm"]
+    if "disable_last_norm" in model_config["semantic_tokenizer_config"]:
+        del model_config["semantic_tokenizer_config"]["disable_last_norm"]
+    if "conv_norm" in model_config["semantic_tokenizer_config"]:
+        del model_config["semantic_tokenizer_config"]["conv_norm"]
+    if "corpus_normalize" in model_config["semantic_tokenizer_config"]:
+        del model_config["semantic_tokenizer_config"]["corpus_normalize"]
 
-    # # # -- TODO clean up (possibly experimental) parameters that are fixed
-    # # if "disable_last_norm" in model_config["semantic_tokenizer_config"]:
-    # #     del model_config["semantic_tokenizer_config"]["disable_last_norm"]
+    # TODO same for acoustic tokenizer
+
 
     # 3) Update state dict to match HF model structure
     updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
 
     # 4) Create and save semantic tokenizer
+    print("\n=== Creating semantic tokenizer ===")
     semantic_config = VibeVoiceSemanticTokenizerConfig(**model_config["semantic_tokenizer_config"])
     semantic_model = VibeVoiceSemanticTokenizerModel(semantic_config).to(dtype)
     # -- filter for semantic tokenizer weights
@@ -90,10 +105,11 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         raise ValueError(f"missing keys found: {missing}")
     # -- push to hub
     if push_to_hub is not None:
-        print(f"\n=== Pushing semantic tokenizer to hub as {push_to_hub + '-SemanticTokenizer'} ===")
+        print(f"------ Pushing to hub as {push_to_hub + '-SemanticTokenizer'} ------")
         semantic_model.push_to_hub(push_to_hub + "-SemanticTokenizer")
 
     # 5) Create and save acoustic tokenizer
+    print("\n=== Creating acoustic tokenizer ===")
     acoustic_config = VibeVoiceAcousticTokenizerConfig(**model_config["acoustic_tokenizer_config"])
     acoustic_model = VibeVoiceAcousticTokenizerModel(acoustic_config).to(dtype)
     # -- filter for acoustic tokenizer weights
@@ -111,10 +127,11 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         raise ValueError(f"missing keys found: {missing}")
     # -- push to hub
     if push_to_hub is not None:
-        print(f"\n=== Pushing acoustic tokenizer to hub as {push_to_hub + '-AcousticTokenizer'} ===")
+        print(f"------ Pushing to hub as {push_to_hub + '-AcousticTokenizer'} ------")
         acoustic_model.push_to_hub(push_to_hub + "-AcousticTokenizer")
 
     # 6) Create and save full VibeVoice model
+    print("\n=== Creating full model ===")
     model_config["acoustic_tokenizer_config"] = acoustic_config.to_dict()
     model_config["semantic_tokenizer_config"] = semantic_config.to_dict()
     vibevoice_config = VibeVoiceConfig(**model_config)
@@ -127,7 +144,7 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         raise ValueError(f"missing keys found: {missing}")
     # -- push to hub
     if push_to_hub is not None:
-        print(f"\n=== Pushing full VibeVoice model to hub as {push_to_hub} ===")
+        print(f"------ Pushing full VibeVoice model to hub as {push_to_hub} ------")
         vibevoice_model.push_to_hub(push_to_hub)
 
 

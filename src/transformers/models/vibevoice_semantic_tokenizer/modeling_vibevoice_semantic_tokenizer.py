@@ -21,9 +21,7 @@
 
 import copy
 import math
-import typing as tp
 from dataclasses import dataclass
-from functools import partial
 from typing import Optional, Union
 
 import numpy as np
@@ -182,8 +180,6 @@ class SConv1d(nn.Module):
         groups: int = 1,
         bias: bool = True,
         causal: bool = False,
-        norm: str = "none",
-        norm_kwargs: dict[str, tp.Any] = {},
         pad_mode: str = "reflect",
     ):
         super().__init__()
@@ -352,7 +348,6 @@ class Convlayer(nn.Module):
         groups=1,
         bias=True,
         pad_mode="zeros",
-        norm="weight_norm",
         causal=True,
     ):
         super().__init__()
@@ -365,7 +360,6 @@ class Convlayer(nn.Module):
             groups=groups,
             bias=bias,
             pad_mode=pad_mode,
-            norm=norm,
             causal=causal,
         )
 
@@ -374,29 +368,36 @@ class Convlayer(nn.Module):
 
 
 class Block1D(nn.Module):
-    def __init__(self, dim, kernel_size=7, drop_path=0.0, mixer_layer="conv", layer_scale_init_value=1e-6, **kwargs):
+    def __init__(
+            self, 
+            dim, 
+            kernel_size=7,
+            layer_scale_init_value=1e-6, 
+            eps=1e-6,
+            pad_mode="reflect",
+            causal=True,
+            ffn_expansion=4,
+            bias=True,
+            **kwargs
+        ):
         super().__init__()
 
-        self.norm = ConvRMSNorm(dim, eps=kwargs.get("eps", 1e-6))
-        self.ffn_norm = ConvRMSNorm(dim, eps=kwargs.get("eps", 1e-6))
+        self.norm = ConvRMSNorm(dim, eps=eps)
+        self.ffn_norm = ConvRMSNorm(dim, eps=eps)
         self.mixer = Convlayer(
             dim,
             dim,
             groups=dim,
             kernel_size=kernel_size,
-            pad_mode=kwargs.get("pad_mode", "reflect"),
-            norm=kwargs.get("norm", "none"),
-            causal=kwargs.get("causal", True),
-            bias=kwargs.get("bias", True),
+            pad_mode=pad_mode,
+            causal=causal,
+            bias=bias,
         )
-
         self.ffn = FFN(
             dim,
-            kwargs.get("ffn_expansion", 4) * dim,
-            bias=kwargs.get("bias", False),
+            ffn_expansion * dim,
+            bias=bias,
         )
-        self.drop_path = nn.Identity() if drop_path <= 0.0 else nn.modules.DropPath(drop_path)
-
         if layer_scale_init_value > 0:
             self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
             self.ffn_gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
@@ -411,7 +412,10 @@ class Block1D(nn.Module):
         x = self.mixer(x)
         if self.gamma is not None:
             x = x * self.gamma.unsqueeze(-1)
-        x = residual + self.drop_path(x)
+        # Original code: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653
+        # -- uses DropPath but never actually used (and if used, it would lead to but in original code as `nn.modules.DropPath` does not exist)
+        # -- moreover, in original code, `forward` method is never even called and they do the same `residual+x`: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L768
+        x = residual + x
 
         # ffn
         residual = x
@@ -421,7 +425,8 @@ class Block1D(nn.Module):
         x = x.permute(0, 2, 1)
         if self.ffn_gamma is not None:
             x = x * self.ffn_gamma.unsqueeze(-1)
-        x = residual + self.drop_path(x)
+        # See comment above
+        x = residual + x
 
         return x
 
@@ -444,136 +449,76 @@ class TokenizerEncoder(nn.Module):
         self.ratios = list(reversed(config.ratios))
         self.depths = config.depths
         self.n_residual_layers = getattr(config, "n_residual_layers", 1)
-        self.hop_length = np.prod(self.ratios)
         self.causal = config.causal
 
         # Additional config parameters with defaults
-        kernel_size = getattr(config, "kernel_size", 7)
-        last_kernel_size = getattr(config, "last_kernel_size", 7)
-        norm = getattr(config, "norm", "none")
-        norm_params = getattr(config, "norm_params", {})
         pad_mode = getattr(config, "pad_mode", "reflect")
         bias = getattr(config, "bias", True)
-        layernorm = getattr(config, "layernorm", "LN")
         layernorm_eps = getattr(config, "layernorm_eps", 1e-6)
-        layernorm_elementwise_affine = getattr(config, "layernorm_elementwise_affine", True)
         drop_path_rate = getattr(config, "drop_path_rate", 0.0)
-        mixer_layer = getattr(config, "mixer_layer", "conv")
         layer_scale_init_value = getattr(config, "layer_scale_init_value", 0)
-        disable_last_norm = getattr(config, "disable_last_norm", False)
-
-        # determine the norm type based on layernorm
-        if layernorm == "RMSNorm":
-            norm_type = partial(ConvRMSNorm, elementwise_affine=layernorm_elementwise_affine)
-        else:
-            raise ValueError(f"Unsupported norm type: {layernorm}")
 
         # stem and intermediate downsampling conv layers
-        stem = nn.Sequential(
+        self.downsample_layers = nn.ModuleList()
+        self.downsample_layers.append(
             SConv1d(
                 self.channels,
                 self.n_filters,
-                kernel_size,
-                norm=norm,
-                norm_kwargs=norm_params,
+                kernel_size=7,
                 causal=self.causal,
                 pad_mode=pad_mode,
                 bias=bias,
-            ),
+            )
         )
-
-        self.downsample_layers = nn.ModuleList()
-        self.downsample_layers.append(stem)
         for i in range(len(self.ratios)):
             in_ch = self.n_filters * (2**i)
             out_ch = self.n_filters * (2 ** (i + 1))
-            downsample_layer = nn.Sequential(
-                SConv1d(
-                    in_ch,
-                    out_ch,
-                    kernel_size=self.ratios[i] * 2,
-                    stride=self.ratios[i],
-                    causal=self.causal,
-                    pad_mode=pad_mode,
-                    norm=norm,
-                    bias=bias,
-                )
+            downsample_layer = SConv1d(
+                in_ch,
+                out_ch,
+                kernel_size=self.ratios[i] * 2,
+                stride=self.ratios[i],
+                causal=self.causal,
+                pad_mode=pad_mode,
+                bias=bias,
             )
             self.downsample_layers.append(downsample_layer)
 
         # configure the transformer blocks
-        layer_type = partial(
-            Block1D,
-            mixer_layer=mixer_layer,
-            layernorm=layernorm,
-            eps=layernorm_eps,
-            causal=self.causal,
-            pad_mode=pad_mode,
-            norm=norm,
-            bias=bias,
-            layer_scale_init_value=layer_scale_init_value,
-        )
-
         self.stages = nn.ModuleList()
         dp_rates = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths))]
         cur = 0
 
         for i in range(len(self.depths)):
             in_ch = self.n_filters * (2**i)
-            stage = nn.Sequential(*[layer_type(dim=in_ch, drop_path=dp_rates[cur + j]) for j in range(self.depths[i])])
+            stage = nn.Sequential(*[
+                Block1D(
+                    dim=in_ch,
+                    drop_path=dp_rates[cur + j],
+                    eps=layernorm_eps,
+                    causal=self.causal,
+                    pad_mode=pad_mode,
+                    bias=bias,
+                    layer_scale_init_value=layer_scale_init_value,
+                ) for j in range(self.depths[i])
+            ])
             self.stages.append(stage)
             cur += self.depths[i]
 
-        if not disable_last_norm:
-            self.norm = norm_type(in_ch, eps=layernorm_eps)
-        else:
-            self.norm = nn.Identity()
         self.head = SConv1d(
             in_ch,
             self.dimension,
-            kernel_size=last_kernel_size,
+            kernel_size=7,
             causal=self.causal,
             pad_mode=pad_mode,
-            norm=norm,
             bias=bias,
         )
 
-    def forward_features(self, x, cache=None, sample_indices=None, use_cache=False):
-        for i in range(len(self.depths)):
-            # Apply downsampling
-            for layer in self.downsample_layers[i]:
-                if isinstance(layer, SConv1d):
-                    x = layer(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
-                else:
-                    x = layer(x)
-
-            # Apply stage (Block1D contains Convlayer which contains SConv1d)
-            for block in self.stages[i]:
-                if hasattr(block, "mixer") and hasattr(block.mixer, "conv") and isinstance(block.mixer.conv, SConv1d):
-                    # Block1D forward with cache support
-                    residual = x
-                    x = block.norm(x)
-                    x = block.mixer.conv(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
-                    if block.gamma is not None:
-                        x = x * block.gamma.unsqueeze(-1)
-                    x = residual + x
-
-                    # FFN part
-                    residual = x
-                    x = block.ffn_norm(x)
-                    x = x.permute(0, 2, 1)
-                    x = block.ffn(x)
-                    x = x.permute(0, 2, 1)
-                    if block.ffn_gamma is not None:
-                        x = x * block.ffn_gamma.unsqueeze(-1)
-                    x = residual + x
-                else:
-                    x = block(x)
-
-        return self.norm(x)
-
     def forward(self, x, cache=None, sample_indices=None, use_cache=False):
-        x = self.forward_features(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
+        for i in range(len(self.depths)):
+            x = self.downsample_layers[i](x, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
+            for block in self.stages[i]:
+                x = block(x)
         x = self.head(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
         return x
 
@@ -652,14 +597,11 @@ class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
         encoder_config.n_filters = config.encoder_n_filters
         encoder_config.ratios = config.encoder_ratios
         encoder_config.depths = encoder_depths
-        encoder_config.norm = config.conv_norm
         encoder_config.pad_mode = config.pad_mode
         encoder_config.bias = config.conv_bias
         encoder_config.layernorm_eps = config.layernorm_eps
         encoder_config.layernorm_elementwise_affine = config.layernorm_elementwise_affine
-        encoder_config.mixer_layer = config.mixer_layer
         encoder_config.layer_scale_init_value = config.layer_scale_init_value
-        encoder_config.disable_last_norm = config.disable_last_norm
 
         # Initialize encoder and decoder
         self.encoder = TokenizerEncoder(encoder_config)
