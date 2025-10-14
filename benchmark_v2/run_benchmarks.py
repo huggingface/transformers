@@ -29,7 +29,6 @@ from framework.benchmark_runner import BenchmarkRunner
 
 
 if __name__ == "__main__":
-
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=str, default="benchmark_results", help="Output dir for benchmark results")
@@ -103,5 +102,10 @@ if __name__ == "__main__":
                     benchmark_configs.append(BenchmarkConfig(**kwargs))
 
     runner = BenchmarkRunner(logger, args.output_dir, args.commit_id)
-    results = runner.run_benchmarks(args.model_id, benchmark_configs, args.num_tokens_to_profile)
+    results = runner.run_benchmarks(
+        args.model_id,
+        benchmark_configs,
+        args.num_tokens_to_profile,
+        pretty_print_summary=True,
+    )
     # runner.save_results(args.model_id, results)

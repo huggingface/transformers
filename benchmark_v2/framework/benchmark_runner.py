@@ -23,7 +23,7 @@ from transformers import (
 from transformers.generation.streamers import BaseStreamer
 
 from .benchmark_config import BenchmarkConfig
-from .data_classes import BenchmarkMetadata, BenchmarkResult, GPURawMetrics
+from .data_classes import BenchmarkMetadata, BenchmarkResult, GPURawMetrics, pretty_print_dict
 from .hardware_metrics import GPUMonitor
 
 
@@ -67,10 +67,10 @@ def compact_json_numeric_arrays(data: dict):
 
 def get_git_revision() -> str:
     base_path = pathlib.Path(__file__).parent.parent.parent
-    git_dir = base_path / '.git'
-    with (git_dir / 'HEAD').open('r') as head:
-        ref = head.readline().split(' ')[-1].strip()
-    with (git_dir / ref).open('r') as git_hash:
+    git_dir = base_path / ".git"
+    with (git_dir / "HEAD").open("r") as head:
+        ref = head.readline().split(" ")[-1].strip()
+    with (git_dir / ref).open("r") as git_hash:
         return git_hash.readline().strip()
 
 
@@ -100,14 +100,14 @@ def flush_memory():
     torch._dynamo.reset_code_caches()
     if hasattr(torch._inductor, "codecache"):
         # Clear FX graph cache
-        if hasattr(torch._inductor.codecache, 'FxGraphCache'):
+        if hasattr(torch._inductor.codecache, "FxGraphCache"):
             torch._inductor.codecache.FxGraphCache.clear()
         # Clear PyCodeCache
-        if hasattr(torch._inductor.codecache, 'PyCodeCache'):
+        if hasattr(torch._inductor.codecache, "PyCodeCache"):
             torch._inductor.codecache.PyCodeCache.cache_clear()
         # Clear TritonFuture cache (for async compilation)
-        if hasattr(torch._inductor.codecache, 'TritonFuture'):
-            if hasattr(torch._inductor.codecache.TritonFuture, '_compile_cache'):
+        if hasattr(torch._inductor.codecache, "TritonFuture"):
+            if hasattr(torch._inductor.codecache.TritonFuture, "_compile_cache"):
                 torch._inductor.codecache.TritonFuture._compile_cache.clear()
     # Clear CUDA cache
     if torch.cuda.is_available():
@@ -303,9 +303,11 @@ class BenchmarkRunner:
         model_id: str,
         benchmark_configs: list[BenchmarkConfig],
         num_tokens_to_profile: int = 0,
+        pretty_print_summary: bool = False,
     ) -> dict[str, Any]:
         all_results = {}
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        start_time = time.perf_counter()
 
         n_configs = len(benchmark_configs)
         for i, config in enumerate(benchmark_configs):
@@ -338,6 +340,24 @@ class BenchmarkRunner:
             self.cleanup()
             self.save_results(model_id, all_results, timestamp=timestamp)
         self.logger.info("All benchmarks done.")
+
+        if pretty_print_summary:
+            print()
+            print("-" * 120)
+            print(f"Finished benchmarks in {time.perf_counter() - start_time:.2f} seconds")
+            print(f"Total number of benchmarks: {len(all_results)}")
+            if len(all_results) > 0:
+                print("First run metadata:")
+                first_key = list(all_results.keys())[0]
+                first_metadata = all_results[first_key]["metadata"].to_dict()
+                hardware_info = first_metadata.pop("hardware_info")
+                pretty_print_dict(first_metadata | hardware_info, tabs=1)
+            for value in all_results.values():
+                print("-" * 120)
+                print(f"Config: {value['config'].name}\n")
+                value["measurements"].pprint(tabs=1)
+            print("-" * 120)
+
         return all_results
 
     def save_results(self, model_name: str, results: dict, timestamp: str = "") -> str:
@@ -357,7 +377,7 @@ class BenchmarkRunner:
         for cfg_hash in results.keys():
             converted_results[cfg_hash] = {
                 "metadata": results[cfg_hash]["metadata"].to_dict(),
-                "measures": results[cfg_hash]["measures"].to_dict(),
+                "measurements": results[cfg_hash]["measurements"].to_dict(),
                 "config": results[cfg_hash]["config"].to_dict(),
             }
 

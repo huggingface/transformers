@@ -28,9 +28,9 @@ class HardwareInfo:
     def __init__(self) -> None:
         # Retrieve GPU stats
         try:
-            self.gpu_name, self.gpu_memory_total_mb = get_device_name_and_memory_total()
+            self.gpu_name, self.gpu_memory_total_gb = get_device_name_and_memory_total()
         except Exception:
-            self.gpu_name, self.gpu_memory_total_mb = None, None
+            self.gpu_name, self.gpu_memory_total_gb = None, None
         # Retrieve python, torch and CUDA version
         self.python_version = f"{sys.version.split()[0]}"
         self.torch_version = torch.__version__
@@ -45,7 +45,7 @@ class HardwareInfo:
     def to_dict(self) -> dict[str, Union[None, int, float, str]]:
         return {
             "gpu_name": self.gpu_name,
-            "gpu_memory_total_mb": self.gpu_memory_total_mb,
+            "gpu_memory_total_gb": self.gpu_memory_total_gb,
             "python_version": self.python_version,
             "torch_version": self.torch_version,
         }
@@ -71,7 +71,7 @@ def get_nvidia_gpu_stats() -> tuple[int, float]:
 
 
 class GPUStatsCollector:
-    """A class to get statistics about the GPU. It serves as a wrapper that holds the GPU total memory and its name, 
+    """A class to get statistics about the GPU. It serves as a wrapper that holds the GPU total memory and its name,
     which is used to call the right function to get the utilization and memory used."""
 
     def __init__(self) -> None:
@@ -130,7 +130,7 @@ class GPUMonitor:
         self.num_available_gpus = torch.cuda.device_count()
         if self.num_available_gpus == 0:
             raise RuntimeError("No GPUs detected by torch.cuda.device_count().")
-        self.gpu_stats_getter = GPUStatsGetter()
+        self.gpu_stats_getter = GPUStatsCollector()
 
     def start(self):
         """Start monitoring GPU metrics."""
