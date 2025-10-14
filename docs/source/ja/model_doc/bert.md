@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-BERT モデルは、Jacob Devlin、Ming-Wei Chang、Kenton Lee、Kristina Toutanova によって [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) で提案されました。それは
+BERT モデルは、Jacob Devlin、Ming-Wei Chang、Kenton Lee、Kristina Toutanova によって [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://huggingface.co/papers/1810.04805) で提案されました。それは
 マスクされた言語モデリング目標と次の文の組み合わせを使用して事前トレーニングされた双方向トランスフォーマー
 Toronto Book Corpus と Wikipedia からなる大規模なコーパスでの予測。
 
@@ -76,7 +76,7 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 - [`BertForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)。
 - [`TFBertForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)。
 - [`FlaxBertForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)。
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
 
@@ -138,33 +138,16 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-<frameworkcontent>
-<pt>
 
 ## BertTokenizerFast
 
 [[autodoc]] BertTokenizerFast
 
-</pt>
-<tf>
-
-## TFBertTokenizer
-
-[[autodoc]] TFBertTokenizer
-
-</tf>
-</frameworkcontent>
 
 ## Bert specific outputs
 
 [[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
 
-[[autodoc]] models.bert.modeling_tf_bert.TFBertForPreTrainingOutput
-
-[[autodoc]] models.bert.modeling_flax_bert.FlaxBertForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## BertModel
 
@@ -211,102 +194,3 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 [[autodoc]] BertForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFBertModel
-
-[[autodoc]] TFBertModel
-    - call
-
-## TFBertForPreTraining
-
-[[autodoc]] TFBertForPreTraining
-    - call
-
-## TFBertModelLMHeadModel
-
-[[autodoc]] TFBertLMHeadModel
-    - call
-
-## TFBertForMaskedLM
-
-[[autodoc]] TFBertForMaskedLM
-    - call
-
-## TFBertForNextSentencePrediction
-
-[[autodoc]] TFBertForNextSentencePrediction
-    - call
-
-## TFBertForSequenceClassification
-
-[[autodoc]] TFBertForSequenceClassification
-    - call
-
-## TFBertForMultipleChoice
-
-[[autodoc]] TFBertForMultipleChoice
-    - call
-
-## TFBertForTokenClassification
-
-[[autodoc]] TFBertForTokenClassification
-    - call
-
-## TFBertForQuestionAnswering
-
-[[autodoc]] TFBertForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-
-## FlaxBertModel
-
-[[autodoc]] FlaxBertModel
-    - __call__
-
-## FlaxBertForPreTraining
-
-[[autodoc]] FlaxBertForPreTraining
-    - __call__
-
-## FlaxBertForCausalLM
-
-[[autodoc]] FlaxBertForCausalLM
-    - __call__
-
-## FlaxBertForMaskedLM
-
-[[autodoc]] FlaxBertForMaskedLM
-    - __call__
-
-## FlaxBertForNextSentencePrediction
-
-[[autodoc]] FlaxBertForNextSentencePrediction
-    - __call__
-
-## FlaxBertForSequenceClassification
-
-[[autodoc]] FlaxBertForSequenceClassification
-    - __call__
-
-## FlaxBertForMultipleChoice
-
-[[autodoc]] FlaxBertForMultipleChoice
-    - __call__
-
-## FlaxBertForTokenClassification
-
-[[autodoc]] FlaxBertForTokenClassification
-    - __call__
-
-## FlaxBertForQuestionAnswering
-
-[[autodoc]] FlaxBertForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>

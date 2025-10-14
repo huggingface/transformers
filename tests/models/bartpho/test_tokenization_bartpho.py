@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc. team.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,24 +30,27 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = False
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab = ["▁This", "▁is", "▁a", "▁t", "est"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.monolingual_vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["monolingual_vocab_file"])
-        with open(self.monolingual_vocab_file, "w", encoding="utf-8") as fp:
+        cls.monolingual_vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["monolingual_vocab_file"])
+        with open(cls.monolingual_vocab_file, "w", encoding="utf-8") as fp:
             for token in vocab_tokens:
                 fp.write(f"{token} {vocab_tokens[token]}\n")
 
-        tokenizer = BartphoTokenizer(SAMPLE_VOCAB, self.monolingual_vocab_file, **self.special_tokens_map)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = BartphoTokenizer(SAMPLE_VOCAB, cls.monolingual_vocab_file, **cls.special_tokens_map)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return BartphoTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return BartphoTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "This is a là test"

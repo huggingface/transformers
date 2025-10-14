@@ -13,10 +13,9 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-import os
-from typing import Dict, List, Optional, Union
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -24,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class MllamaVisionConfig(PretrainedConfig):
+class MllamaVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaVisionModel`]. It is used to instantiate an
     Mllama vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -32,8 +31,8 @@ class MllamaVisionConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1280):
@@ -59,14 +58,14 @@ class MllamaVisionConfig(PretrainedConfig):
             The size (resolution) of each image *tile*.
         patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
-        norm_eps (`float`, *optional*, defaults to 1e-5):
+        norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         max_num_tiles (`int`, *optional*, defaults to 4):
             Maximum number of tiles for image splitting.
-        intermediate_layers_indices (`List[int]`, *optional*, defaults to [3, 7, 15, 23, 30]):
+        intermediate_layers_indices (`list[int]`, *optional*, defaults to [3, 7, 15, 23, 30]):
             Indices of intermediate layers of transformer encoder from which to extract and output features.
             These output features are concatenated with final hidden state of transformer encoder.
-        supported_aspect_ratios (`List[List[int]]`, *optional*):
+        supported_aspect_ratios (`list[list[int]]`, *optional*):
             List of supported aspect ratios for image splitting. If not specified, the default supported aspect ratios
             are [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]] for `max_num_tiles=4`.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -88,6 +87,7 @@ class MllamaVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "mllama_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -103,8 +103,8 @@ class MllamaVisionConfig(PretrainedConfig):
         patch_size: int = 14,
         norm_eps: float = 1e-5,
         max_num_tiles: int = 4,
-        intermediate_layers_indices: Optional[List[int]] = None,
-        supported_aspect_ratios: Optional[List[List[int]]] = None,
+        intermediate_layers_indices: Optional[list[int]] = None,
+        supported_aspect_ratios: Optional[list[list[int]]] = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -137,25 +137,8 @@ class MllamaVisionConfig(PretrainedConfig):
     def max_aspect_ratio_id(self) -> int:
         return len(self.supported_aspect_ratios)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "mllama":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class MllamaTextConfig(PretrainedConfig):
+class MllamaTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaTextModel`]. It is used to instantiate an
     Mllama text model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -163,8 +146,8 @@ class MllamaTextConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 128256):
@@ -178,12 +161,12 @@ class MllamaTextConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If not
             specified, will default to `num_attention_heads`.
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
+        rope_theta (`float`, *optional*, defaults to `500000.0`):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
@@ -210,11 +193,11 @@ class MllamaTextConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -232,7 +215,7 @@ class MllamaTextConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        cross_attention_layers (`List[int]`, *optional*):
+        cross_attention_layers (`list[int]`, *optional*):
             Indices of the cross attention layers. If not specified, will default to [3, 8, 13, 18, 23, 28, 33, 38].
         dropout (`float`, *optional*, defaults to 0):
             The dropout probability for self- and cross-attention layers.
@@ -259,6 +242,7 @@ class MllamaTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "mllama_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -270,13 +254,13 @@ class MllamaTextConfig(PretrainedConfig):
         num_key_value_heads: int = 8,
         intermediate_size: int = 14_336,
         rope_theta: float = 500_000,
-        rope_scaling: Optional[Dict] = None,
+        rope_scaling: Optional[dict] = None,
         rms_norm_eps: float = 1e-5,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
-        cross_attention_layers: Optional[List[int]] = None,
+        cross_attention_layers: Optional[list[int]] = None,
         dropout: float = 0,
         bos_token_id: int = 128000,
         eos_token_id: int = 128001,
@@ -311,25 +295,8 @@ class MllamaTextConfig(PretrainedConfig):
             **kwargs,
         )
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "mllama":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class MllamaConfig(PretrainedConfig):
+class MllamaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaForConditionalGeneration`]. It is used to instantiate an
     Mllama model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -337,8 +304,8 @@ class MllamaConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MllamaVisionConfig`):
@@ -370,7 +337,10 @@ class MllamaConfig(PretrainedConfig):
     ```"""
 
     model_type = "mllama"
-    is_composition = True
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
+    sub_configs = {"text_config": MllamaTextConfig, "vision_config": MllamaVisionConfig}
 
     def __init__(
         self,
@@ -398,3 +368,6 @@ class MllamaConfig(PretrainedConfig):
             self.text_config = text_config
 
         super().__init__(**kwargs)
+
+
+__all__ = ["MllamaConfig"]

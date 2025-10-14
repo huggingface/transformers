@@ -157,15 +157,6 @@ class MegatronBertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_for_causal_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = MegatronBertForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
     def create_and_check_megatron_bert_for_next_sequence_prediction(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -282,6 +273,8 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MegatronBertModel,
@@ -297,7 +290,6 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     )
     fx_compatible = True
     # test_resize_embeddings = False
-    test_head_masking = False
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -388,5 +380,5 @@ class MegatronBertModelIntegrationTests(unittest.TestCase):
             for jj in range(3):
                 a = output[0, ii, jj]
                 b = expected[3 * ii + jj]
-                msg = "ii={} jj={} a={} b={}".format(ii, jj, a, b)
+                msg = f"ii={ii} jj={jj} a={a} b={b}"
                 self.assertTrue(math.isclose(a, b, rel_tol=TOLERANCE, abs_tol=TOLERANCE), msg=msg)

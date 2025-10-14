@@ -13,8 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-10-20 and added to Hugging Face Transformers on 2023-06-20.*
 
 # BORT
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 <Tip warning={true}>
 
@@ -27,7 +32,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The BORT model was proposed in [Optimal Subarchitecture Extraction for BERT](https://arxiv.org/abs/2010.10499) by
+The BORT model was proposed in [Optimal Subarchitecture Extraction for BERT](https://huggingface.co/papers/2010.10499) by
 Adrian de Wynter and Daniel J. Perry. It is an optimal subset of architectural parameters for the BERT, which the
 authors refer to as "Bort".
 
@@ -53,5 +58,3 @@ This model was contributed by [stefan-it](https://huggingface.co/stefan-it). The
 - BORT requires a specific fine-tuning algorithm, called [Agora](https://adewynter.github.io/notes/bort_algorithms_and_applications.html#fine-tuning-with-algebraic-topology) ,
   that is sadly not open-sourced yet. It would be very useful for the community, if someone tries to implement the
   algorithm to make BORT fine-tuning work.
-
-

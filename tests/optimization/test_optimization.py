@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,6 @@ if is_torch_available():
 
     from transformers import (
         Adafactor,
-        AdamW,
         get_constant_schedule,
         get_constant_schedule_with_warmup,
         get_cosine_schedule_with_warmup,
@@ -59,7 +57,7 @@ def unwrap_and_save_reload_schedule(scheduler, num_steps=10):
                 file_name = os.path.join(tmpdirname, "schedule.bin")
                 torch.save(scheduler.state_dict(), file_name)
 
-                state_dict = torch.load(file_name)
+                state_dict = torch.load(file_name, weights_only=False)
                 scheduler.load_state_dict(state_dict)
     return lrs
 
@@ -76,7 +74,7 @@ class OptimizationTest(unittest.TestCase):
         target = torch.tensor([0.4, 0.2, -0.5])
         criterion = nn.MSELoss()
         # No warmup, constant schedule, no gradient clipping
-        optimizer = AdamW(params=[w], lr=2e-1, weight_decay=0.0)
+        optimizer = torch.optim.AdamW(params=[w], lr=2e-1, weight_decay=0.0)
         for _ in range(100):
             loss = criterion(w, target)
             loss.backward()
@@ -114,7 +112,7 @@ class OptimizationTest(unittest.TestCase):
 @require_torch
 class ScheduleInitTest(unittest.TestCase):
     m = nn.Linear(50, 50) if is_torch_available() else None
-    optimizer = AdamW(m.parameters(), lr=10.0) if is_torch_available() else None
+    optimizer = torch.optim.AdamW(m.parameters(), lr=10.0) if is_torch_available() else None
     num_steps = 10
 
     def assertListAlmostEqual(self, list1, list2, tol, msg=None):
@@ -153,8 +151,8 @@ class ScheduleInitTest(unittest.TestCase):
                 [0.0, 5.0, 10.0, 8.165, 7.071, 6.325, 5.774, 5.345, 5.0, 4.714],
             ),
             get_wsd_schedule: (
-                {"num_warmup_steps": 2, "num_stable_steps": 2, "num_decay_steps": 3, "min_lr_ratio": 0.1},
-                [0.0, 5.0, 10.0, 10.0, 10.0, 7.75, 3.25, 1.0, 1.0, 1.0],
+                {**common_kwargs, "num_decay_steps": 2, "min_lr_ratio": 0.0},
+                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
             ),
         }
 
@@ -183,14 +181,34 @@ class ScheduleInitTest(unittest.TestCase):
                 "name": "warmup_stable_decay",
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
-                "scheduler_specific_kwargs": {"num_stable_steps": 1, "num_decay_steps": 3},
+                "num_training_steps": 10,
+                "scheduler_specific_kwargs": {
+                    "num_decay_steps": 2,
+                    "warmup_type": "linear",
+                    "decay_type": "linear",
+                },
             },
             {
                 "name": "warmup_stable_decay",
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
                 "num_training_steps": 10,
-                "scheduler_specific_kwargs": {"num_stable_steps": 1, "num_decay_steps": 3},
+                "scheduler_specific_kwargs": {
+                    "num_decay_steps": 2,
+                    "warmup_type": "cosine",
+                    "decay_type": "cosine",
+                },
+            },
+            {
+                "name": "warmup_stable_decay",
+                "optimizer": self.optimizer,
+                "num_warmup_steps": 2,
+                "num_training_steps": 10,
+                "scheduler_specific_kwargs": {
+                    "num_decay_steps": 2,
+                    "warmup_type": "1-sqrt",
+                    "decay_type": "1-sqrt",
+                },
             },
             {"name": "cosine", "optimizer": self.optimizer, "num_warmup_steps": 2, "num_training_steps": 10},
         ]

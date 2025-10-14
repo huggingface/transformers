@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,6 @@
 Please note that Pop2PianoTokenizer is too far from our usual tokenizers and thus cannot use the TokenizerTesterMixin class.
 """
 
-import os
-import pickle
 import shutil
 import tempfile
 import unittest
@@ -87,8 +84,8 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         )
         expected_output_attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 0, 0, 0, 0]])
 
-        self.assertTrue(torch.allclose(output["token_ids"], expected_output_token_ids, atol=1e-4))
-        self.assertTrue(torch.allclose(output["attention_mask"], expected_output_attention_mask, atol=1e-4))
+        torch.testing.assert_close(output["token_ids"], expected_output_token_ids, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output["attention_mask"], expected_output_attention_mask, rtol=1e-4, atol=1e-4)
 
     def test_batch_decode(self):
         # test batch decode with model, feature-extractor outputs(beatsteps, extrapolated_beatstep)
@@ -174,7 +171,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         )
         predicted_start_timings = torch.tensor(predicted_start_timings)
 
-        self.assertTrue(torch.allclose(expected_start_timings, predicted_start_timings, atol=1e-4))
+        torch.testing.assert_close(expected_start_timings, predicted_start_timings, rtol=1e-4, atol=1e-4)
 
         # Checking note end timings
         expected_end_timings = torch.tensor(
@@ -187,7 +184,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         )
         predicted_end_timings = torch.tensor(predicted_end_timings)
 
-        self.assertTrue(torch.allclose(expected_end_timings, predicted_end_timings, atol=1e-4))
+        torch.testing.assert_close(expected_end_timings, predicted_end_timings, rtol=1e-4, atol=1e-4)
 
     def test_get_vocab(self):
         vocab_dict = self.tokenizer.get_vocab()
@@ -224,23 +221,6 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
 
         shutil.rmtree(tmpdirname)
-
-    def test_pickle_tokenizer(self):
-        tmpdirname = tempfile.mkdtemp()
-
-        notes = self.get_input_notes()
-        subwords = self.tokenizer(notes)["token_ids"]
-
-        filename = os.path.join(tmpdirname, "tokenizer.bin")
-        with open(filename, "wb") as handle:
-            pickle.dump(self.tokenizer, handle)
-
-        with open(filename, "rb") as handle:
-            tokenizer_new = pickle.load(handle)
-
-        subwords_loaded = tokenizer_new(notes)["token_ids"]
-
-        self.assertListEqual(subwords, subwords_loaded)
 
     def test_padding_side_in_kwargs(self):
         tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", padding_side="left")

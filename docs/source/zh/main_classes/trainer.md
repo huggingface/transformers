@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 在实例化你的 [`Trainer`] 之前，创建一个 [`TrainingArguments`]，以便在训练期间访问所有定制点。
 
-这个 API 支持在多个 GPU/TPU 上进行分布式训练，支持 [NVIDIA Apex](https://github.com/NVIDIA/apex) 的混合精度和 PyTorch 的原生 AMP。
+这个 API 支持在多个 GPU/TPU 上进行分布式训练，支持 PyTorch 的原生 AMP。
 
 [`Trainer`] 包含基本的训练循环，支持上述功能。如果需要自定义训练，你可以继承 `Trainer` 并覆盖以下方法：
 
@@ -182,7 +182,7 @@ my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
 python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
 ```
 
-如果你安装了 [`accelerate`](https://github.com/huggingface/accelerate) 或 [`deepspeed`](https://github.com/microsoft/DeepSpeed)，你还可以通过以下任一方法实现相同的效果：
+如果你安装了 [`accelerate`](https://github.com/huggingface/accelerate) 或 [`deepspeed`](https://github.com/deepspeedai/DeepSpeed)，你还可以通过以下任一方法实现相同的效果：
 
 
 ```bash
@@ -281,7 +281,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 
 [`Trainer`] 已经被扩展，以支持可能显著提高训练时间并适应更大模型的库。
 
-目前，它支持第三方解决方案 [DeepSpeed](https://github.com/microsoft/DeepSpeed) 和 [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html)，它们实现了论文 [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He](https://arxiv.org/abs/1910.02054) 的部分内容。
+目前，它支持第三方解决方案 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 和 [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html)，它们实现了论文 [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He](https://huggingface.co/papers/1910.02054) 的部分内容。
 
 截至撰写本文，此提供的支持是新的且实验性的。尽管我们欢迎围绕 DeepSpeed 和 PyTorch FSDP 的issues，但我们不再支持 FairScale 集成，因为它已经集成到了 PyTorch 主线（参见 [PyTorch FSDP 集成](#pytorch-fully-sharded-data-parallel)）。
 
@@ -293,7 +293,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 
 撰写时，Deepspeed 需要在使用之前编译 CUDA C++ 代码。
 
-虽然所有安装问题都应通过 [Deepspeed](https://github.com/microsoft/DeepSpeed/issues) 的 GitHub Issues处理，但在构建依赖CUDA 扩展的任何 PyTorch 扩展时，可能会遇到一些常见问题。
+虽然所有安装问题都应通过 [Deepspeed](https://github.com/deepspeedai/DeepSpeed/issues) 的 GitHub Issues处理，但在构建依赖CUDA 扩展的任何 PyTorch 扩展时，可能会遇到一些常见问题。
 
 因此，如果在执行以下操作时遇到与 CUDA 相关的构建问题：
 
@@ -471,7 +471,6 @@ python examples/pytorch/text-classification/run_glue.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
 ```
 
 **需要注意的一些注意事项**
@@ -606,7 +605,6 @@ accelerate launch \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 4. 你也可以直接使用`accelerate launch`的cmd参数。上面的示例将映射到：
@@ -631,7 +629,6 @@ accelerate launch --num_processes=2 \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 有关更多信息，请参阅 🤗 Accelerate CLI 指南：[启动您的 🤗 Accelerate 脚本](https://huggingface.co/docs/accelerate/basic_tutorials/launch)。

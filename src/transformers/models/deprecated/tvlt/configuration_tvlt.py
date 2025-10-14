@@ -14,22 +14,22 @@
 # limitations under the License.
 """TVLT model configuration"""
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class TvltConfig(PretrainedConfig):
+class TvltConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TvltModel`]. It is used to instantiate a TVLT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the TVLT
     [ZinengTang/tvlt-base](https://huggingface.co/ZinengTang/tvlt-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         image_size (`int`, *optional*, defaults to 224):
@@ -38,9 +38,9 @@ class TvltConfig(PretrainedConfig):
             The time length of each audio spectrogram.
         frequency_length (`int`, *optional*, defaults to 128):
             The frequency length of audio spectrogram.
-        image_patch_size (`List[int]`, *optional*, defaults to `[16, 16]`):
+        image_patch_size (`list[int]`, *optional*, defaults to `[16, 16]`):
             The size (resolution) of each image patch.
-        audio_patch_size (`List[int]`, *optional*, defaults to `[16, 16]`):
+        audio_patch_size (`list[int]`, *optional*, defaults to `[16, 16]`):
             The size (resolution) of each audio patch.
         num_image_channels (`int`, *optional*, defaults to 3):
             The number of input image channels.
@@ -182,3 +182,6 @@ class TvltConfig(PretrainedConfig):
         self.task_matching = task_matching
         self.task_mae = task_mae
         self.loss_type = loss_type
+
+
+__all__ = ["TvltConfig"]

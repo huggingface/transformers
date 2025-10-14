@@ -20,7 +20,6 @@ rendered properly in your Markdown viewer.
 
 其中大多数仅在您研究库中的通用代码时才有用。
 
-
 ## Enums和namedtuples(命名元组)
 
 [[autodoc]] utils.ExplicitEnum
@@ -40,10 +39,6 @@ rendered properly in your Markdown viewer.
 [[autodoc]] utils.add_code_sample_docstrings
 
 [[autodoc]] utils.replace_return_docstrings
-
-## 特殊的属性
-
-[[autodoc]] utils.cached_property
 
 ## 其他实用程序
 

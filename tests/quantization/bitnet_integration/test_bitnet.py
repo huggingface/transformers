@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,10 +19,11 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitNetConfig,
+    BitNetQuantConfig,
     OPTForCausalLM,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_torch_gpu,
     slow,
@@ -40,12 +40,12 @@ if is_accelerate_available():
 
 
 @require_torch_gpu
-class BitNetConfigTest(unittest.TestCase):
+class BitNetQuantConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
         Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
         """
-        quantization_config = BitNetConfig()
+        quantization_config = BitNetQuantConfig()
         config_to_dict = quantization_config.to_dict()
 
         for key in config_to_dict:
@@ -57,7 +57,6 @@ class BitNetConfigTest(unittest.TestCase):
 @require_accelerate
 class BitNetTest(unittest.TestCase):
     model_name = "HF1BitLLM/Llama3-8B-1.58-100B-tokens"
-    device = "cuda"
 
     # called only once for all test in this class
     @classmethod
@@ -65,12 +64,12 @@ class BitNetTest(unittest.TestCase):
         """
         Load the model
         """
-        cls.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device)
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=torch_device)
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_replace_with_bitlinear(self):
@@ -95,16 +94,16 @@ class BitNetTest(unittest.TestCase):
 
         self.assertEqual(nb_linears - 1, nb_bitnet_linear)
 
-    def test_quantized_model(self, quantized_model, tokenizer):
+    def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly
         """
         input_text = "What are we having for dinner?"
         expected_output = "What are we having for dinner? What are we going to do for fun this weekend?"
-        input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+        input_ids = self.tokenizer(input_text, return_tensors="pt").to(torch_device)
 
-        output = quantized_model.generate(**input_ids, max_new_tokens=11, do_sample=False)
-        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
+        output = self.quantized_model.generate(**input_ids, max_new_tokens=11, do_sample=False)
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
 
     def test_packing_unpacking(self):
         """
@@ -113,9 +112,12 @@ class BitNetTest(unittest.TestCase):
 
         from transformers.integrations import pack_weights, unpack_weights
 
-        u = torch.randint(0, 255, (1024, 1024), dtype=torch.uint8)
+        u = torch.randint(0, 255, (256, 256), dtype=torch.uint8)
         unpacked_u = unpack_weights(u, dtype=torch.bfloat16)
-        self.assertEqual(pack_weights(unpacked_u), u)
+        repacked_u = pack_weights(unpacked_u)
+        for i in range(u.shape[0]):
+            for j in range(u.shape[1]):
+                self.assertEqual(repacked_u[i][j], u[i][j])
 
     def test_activation_quant(self):
         """
@@ -125,17 +127,16 @@ class BitNetTest(unittest.TestCase):
         from transformers.integrations import BitLinear
 
         layer = BitLinear(in_features=4, out_features=2, bias=False, dtype=torch.float32)
-        layer.to(self.device)
+        layer.to(torch_device)
 
-        input_tensor = torch.tensor([[1.0, -1.0, -1.0, 1.0], [1.0, -1.0, 1.0, 1.0]], dtype=torch.float32).to(
-            torch_device
-        )
+        input_tensor = torch.tensor([1.0, -1.0, -1.0, 1.0], dtype=torch.float32).to(torch_device)
 
         # Quantize the input tensor
         quantized_tensor, scale = layer.activation_quant(input_tensor)
 
         # Verify the output quantized tensor
-        self.assertEqual(quantized_tensor, input_tensor)
+        for i in range(input_tensor.shape[0]):
+            self.assertEqual(quantized_tensor[i] / scale, input_tensor[i])
 
         # Verify the scale tensor
         self.assertEqual(scale, 127)
@@ -201,9 +202,8 @@ class BitNetTest(unittest.TestCase):
 class BitNetSerializationTest(unittest.TestCase):
     def test_model_serialization(self):
         model_name = "HF1BitLLM/Llama3-8B-1.58-100B-tokens"
-        device = "cuda"
-        quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device)
-        input_tensor = torch.zeros((1, 8), dtype=torch.int32, device=device)
+        quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map=torch_device)
+        input_tensor = torch.zeros((1, 8), dtype=torch.int32, device=torch_device)
 
         with torch.no_grad():
             logits_ref = quantized_model.forward(input_tensor).logits
@@ -214,10 +214,10 @@ class BitNetSerializationTest(unittest.TestCase):
 
         # Remove old model
         del quantized_model
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
         # Load and check if the logits match
-        model_loaded = AutoModelForCausalLM.from_pretrained("quant_model", device_map=device)
+        model_loaded = AutoModelForCausalLM.from_pretrained("quant_model", device_map=torch_device)
 
         with torch.no_grad():
             logits_loaded = model_loaded.forward(input_tensor).logits

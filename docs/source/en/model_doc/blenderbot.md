@@ -13,12 +13,19 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-04-28 and added to Hugging Face Transformers on 2020-11-16.*
 
 # Blenderbot
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The Blender chatbot model was proposed in [Recipes for building an open-domain chatbot](https://arxiv.org/pdf/2004.13637.pdf) Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu,
+The Blender chatbot model was proposed in [Recipes for building an open-domain chatbot](https://huggingface.co/papers/2004.13637) Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu,
 Jing Xu, Myle Ott, Kurt Shuster, Eric M. Smith, Y-Lan Boureau, Jason Weston on 30 Apr 2020.
 
 The abstract of the paper is the following:
@@ -38,7 +45,7 @@ This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The
 
 ## Usage tips and example
 
-Blenderbot is a model with absolute position embeddings so it's usually advised to pad the inputs on the right 
+Blenderbot is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
 rather than the left.
 
 An example:
@@ -58,13 +65,12 @@ An example:
 
 ## Implementation Notes
 
-- Blenderbot uses a standard [seq2seq model transformer](https://arxiv.org/pdf/1706.03762.pdf) based architecture.
+- Blenderbot uses a standard [seq2seq model transformer](https://huggingface.co/papers/1706.03762) based architecture.
 - Available checkpoints can be found in the [model hub](https://huggingface.co/models?search=blenderbot).
 - This is the *default* Blenderbot model class. However, some smaller checkpoints, such as
   `facebook/blenderbot_small_90M`, have a different architecture and consequently should be used with
   [BlenderbotSmall](blenderbot-small).
 
-  
 ## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)
@@ -85,10 +91,6 @@ An example:
 [[autodoc]] BlenderbotTokenizerFast
     - build_inputs_with_special_tokens
 
-
-<frameworkcontent>
-<pt>
-
 ## BlenderbotModel
 
 See [`~transformers.BartModel`] for arguments to *forward* and *generate*
@@ -107,38 +109,3 @@ See [`~transformers.BartForConditionalGeneration`] for arguments to *forward* an
 
 [[autodoc]] BlenderbotForCausalLM
     - forward
-
-</pt>
-<tf>
-
-## TFBlenderbotModel
-
-[[autodoc]] TFBlenderbotModel
-    - call
-
-## TFBlenderbotForConditionalGeneration
-
-[[autodoc]] TFBlenderbotForConditionalGeneration
-    - call
-
-</tf>
-<jax>
-
-## FlaxBlenderbotModel
-
-[[autodoc]] FlaxBlenderbotModel
-    - __call__
-    - encode
-    - decode
-
-## FlaxBlenderbotForConditionalGeneration
-
-[[autodoc]] FlaxBlenderbotForConditionalGeneration
-    - __call__
-    - encode
-    - decode
-
-</jax>
-</frameworkcontent>
-
-

@@ -65,15 +65,14 @@ examples/pytorch/token-classification/run_ner.py \
 
 Most example scripts should have the first two command line arguments and some have the third one. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
 ```bash
-examples/pytorch/token-classification/run_ner.py -h
+token-classification/run_ner.py -h
 ```
 
 ## Resuming training
 
 You can resume training from a previous checkpoint like this:
 
-1. Pass `--output_dir previous_output_dir` without `--overwrite_output_dir` to resume training from the latest checkpoint in `output_dir` (what you would use if the training was interrupted, for instance).
-2. Pass `--resume_from_checkpoint path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
+1. Pass `--resume_from_checkpoint path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
 
 Should you want to turn an example into a notebook where you'd no longer have access to the command
 line, 🤗 Trainer supports resuming from a checkpoint via `trainer.train(resume_from_checkpoint)`.
@@ -90,7 +89,7 @@ To specify a given repository name, use the `--hub_model_id` argument. You will 
 
 A few notes on this integration:
 
-- you will need to be logged in to the Hugging Face website locally for it to work, the easiest way to achieve this is to run `huggingface-cli login` and then type your username and password when prompted. You can also pass along your authentication token with the `--hub_token` argument.
+- you will need to be logged in to the Hugging Face website locally for it to work, the easiest way to achieve this is to run `hf auth login` and then type your username and password when prompted. You can also pass along your authentication token with the `--hub_token` argument.
 - the `output_dir` you pick will either need to be a new folder or a local clone of the distant repository you are using.
 
 ## Distributed training and mixed precision
@@ -110,7 +109,7 @@ classification MNLI task using the `run_glue` script, with 8 GPUs:
 
 ```bash
 torchrun \
-    --nproc_per_node 8 pytorch/text-classification/run_glue.py \
+    --nproc_per_node 8 text-classification/run_glue.py \
     --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \
@@ -123,8 +122,7 @@ torchrun \
 ```
 
 If you have a GPU with mixed precision capabilities (architecture Pascal or more recent), you can use mixed precision
-training with PyTorch 1.6.0 or latest, or by installing the [Apex](https://github.com/NVIDIA/apex) library for previous
-versions. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
+training with PyTorch 1.6.0 or latest. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
 
 Using mixed precision training usually results in 2x-speedup for training with the same final results (as shown in
 [this table](https://github.com/huggingface/transformers/tree/main/examples/text-classification#mixed-precision-training)

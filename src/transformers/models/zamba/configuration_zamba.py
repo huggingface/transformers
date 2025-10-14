@@ -16,14 +16,14 @@
 
 import math
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ZambaConfig(PretrainedConfig):
+class ZambaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ZambaModel`]. It is used to instantiate a
     Zamba model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -31,8 +31,8 @@ class ZambaConfig(PretrainedConfig):
 
     [Zyphra/Zamba-7B-v1](https://huggingface.co/Zyphra/Zamba-7B-v1)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -59,8 +59,8 @@ class ZambaConfig(PretrainedConfig):
             `num_key_value_heads=None`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf).
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245).
         n_mamba_heads (`int`, *optional*, defaults to 2):
             Number of mamba heads for each mamba layer.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -106,7 +106,7 @@ class ZambaConfig(PretrainedConfig):
         mamba_expand (`int`, *optional*, defaults to 2):
             Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
         mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-            Rank of the the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+            Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
         time_step_min (`float`, *optional*, defaults to 0.001):
             Minimum `time_step` used to bound `dt_proj_bias`.
         time_step_max (`float`, *optional*, defaults to 0.1):
@@ -203,9 +203,9 @@ class ZambaConfig(PretrainedConfig):
 
         self.layers_block_type = self._layers_block_type(num_hidden_layers, attn_layer_period, attn_layer_offset)
 
-        assert (
-            self.mamba_expand * self.hidden_size
-        ) % self.n_mamba_heads == 0, "`intermediate_size` should be divisible by `n_mamba_heads`."
+        assert (self.mamba_expand * self.hidden_size) % self.n_mamba_heads == 0, (
+            "`intermediate_size` should be divisible by `n_mamba_heads`."
+        )
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -222,3 +222,6 @@ class ZambaConfig(PretrainedConfig):
             "hybrid",
         ] + ["hybrid" if i % attn_layer_period == attn_layer_offset else "mamba" for i in range(num_hidden_layers - 3)]
         return layers
+
+
+__all__ = ["ZambaConfig"]
