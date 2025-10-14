@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 import numpy as np
 import torch
@@ -1248,7 +1249,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.dropout(self.embeddings(pixel_values))
-        position_embeddings = self.get_position_embeddings(pixel_values)
+        position_embeddings = self.rope_embeddings(pixel_values)
 
         for idx, layer_module in enumerate(self.layers):
             if idx == self.num_hidden_layers - self.config.num_blocks:
@@ -1333,9 +1334,6 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    def get_position_embeddings(self, pixel_values: Tensor) -> Optional[tuple[Tensor, Tensor]]:
-        return self.rope_embeddings(pixel_values)
 
     def predict(self, logits: torch.Tensor):
         query_tokens = logits[:, : self.config.num_queries, :]

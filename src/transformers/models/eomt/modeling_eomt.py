@@ -1111,7 +1111,6 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.dropout(self.embeddings(pixel_values))
-        position_embeddings = self.get_position_embeddings(pixel_values)
 
         for idx, layer_module in enumerate(self.layers):
             if idx == self.num_hidden_layers - self.config.num_blocks:
@@ -1162,7 +1161,6 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
             hidden_states = layer_module(
                 hidden_states,
                 attention_mask=attention_mask,
-                position_embeddings=position_embeddings,
             )
 
         sequence_output = self.layernorm(hidden_states)
@@ -1196,9 +1194,6 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    def get_position_embeddings(self, pixel_values: Tensor) -> Optional[tuple[Tensor, Tensor]]:
-        return None
 
     def predict(self, logits: torch.Tensor):
         query_tokens = logits[:, : self.config.num_queries, :]

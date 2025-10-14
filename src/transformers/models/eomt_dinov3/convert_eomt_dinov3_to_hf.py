@@ -20,8 +20,9 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 import requests
 import torch
