@@ -300,15 +300,7 @@ class AutoProcessor:
         processor_config_file = cached_file(pretrained_model_name_or_path, PROCESSOR_NAME, **cached_file_kwargs)
         if processor_config_file is not None:
             config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-            processor_classes = [
-                value.get("processor_class") for value in config_dict.values() if isinstance(value, dict)
-            ]
-            processor_classes += [config_dict.get("processor_class")]
-            for processor_class in processor_classes:
-                if processor_class is not None:
-                    processor_class = processor_class
-                    break
-
+            processor_class = config_dict.get("processor_class")
             if "AutoProcessor" in config_dict.get("auto_map", {}):
                 processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
