@@ -839,7 +839,7 @@ def create_causal_mask(
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
     if _is_torch_xpu_available:
-        allow_is_causal_skip = True
+        allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and cache_position.shape[0] == 1)
     else:
         allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
 
