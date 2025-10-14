@@ -122,11 +122,13 @@ class SqueezeBertConfig(PreTrainedConfig):
         post_attention_groups=1,
         intermediate_groups=4,
         output_groups=4,
+        is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
 
+        self.is_decoder = is_decoder
+        self.pad_token_id = pad_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

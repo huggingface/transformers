@@ -181,11 +181,11 @@ class TapasConfig(PreTrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
 
         # BERT hyperparameters (with updated max_position_embeddings and type_vocab_sizes)
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.pad_token_id = pad_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

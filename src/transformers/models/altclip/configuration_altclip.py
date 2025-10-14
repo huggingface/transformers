@@ -110,6 +110,7 @@ class AltCLIPTextConfig(PreTrainedConfig):
         eos_token_id=2,
         use_cache=True,
         project_dim=768,
+        is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)

@@ -100,11 +100,13 @@ class SplinterConfig(PreTrainedConfig):
         use_cache=True,
         pad_token_id=0,
         question_token_id=104,
+        is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
 
+        self.is_decoder = is_decoder
+        self.pad_token_id = pad_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

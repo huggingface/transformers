@@ -121,6 +121,7 @@ class LightGlueConfig(PreTrainedConfig):
         attention_dropout=0.0,
         attention_bias=True,
         trust_remote_code: bool = False,
+        is_decoder=False,
         **kwargs,
     ):
         # LightGlue can be used with other models than SuperPoint as keypoint detector
@@ -145,6 +146,7 @@ class LightGlueConfig(PreTrainedConfig):
         self.width_confidence = width_confidence
         self.filter_threshold = filter_threshold
         self.initializer_range = initializer_range
+        self.is_decoder = is_decoder
 
         # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
         # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153

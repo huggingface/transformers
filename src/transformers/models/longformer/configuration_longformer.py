@@ -115,12 +115,14 @@ class LongformerConfig(PreTrainedConfig):
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
         onnx_export: bool = False,
+        is_decoder=False,
         **kwargs,
     ):
         """Constructs LongformerConfig."""
         super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
 
+        self.is_decoder = is_decoder
+        self.pad_token_id = pad_token_id
         self.attention_window = attention_window
         self.sep_token_id = sep_token_id
         self.bos_token_id = bos_token_id

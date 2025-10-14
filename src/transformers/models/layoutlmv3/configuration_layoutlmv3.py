@@ -150,6 +150,7 @@ class LayoutLMv3Config(PreTrainedConfig):
         num_channels=3,
         patch_size=16,
         classifier_dropout=None,
+        is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)

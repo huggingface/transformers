@@ -114,6 +114,7 @@ class CanineConfig(PreTrainedConfig):
         num_hash_functions=8,
         num_hash_buckets=16384,
         local_transformer_stride=128,  # Good TPU/XLA memory alignment.
+        is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -121,6 +122,10 @@ class CanineConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.is_decoder = is_decoder
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

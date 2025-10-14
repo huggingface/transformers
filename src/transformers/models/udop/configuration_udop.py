@@ -155,10 +155,7 @@ class UdopConfig(PreTrainedConfig):
                 "'gated-gelu' or 'relu'"
             )
 
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["UdopConfig"]

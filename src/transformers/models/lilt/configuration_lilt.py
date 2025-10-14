@@ -99,11 +99,13 @@ class LiltConfig(PreTrainedConfig):
         classifier_dropout=None,
         channel_shrink_ratio=4,
         max_2d_position_embeddings=1024,
+        is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
 
+        self.pad_token_id = pad_token_id
+        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

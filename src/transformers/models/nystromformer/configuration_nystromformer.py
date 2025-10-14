@@ -108,10 +108,15 @@ class NystromformerConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        is_decoder=False,
         add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -129,9 +134,6 @@ class NystromformerConfig(PreTrainedConfig):
         self.inv_coeff_init_option = inv_coeff_init_option
         self.layer_norm_eps = layer_norm_eps
         super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
 
 
 __all__ = ["NystromformerConfig"]
