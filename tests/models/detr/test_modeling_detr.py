@@ -18,11 +18,18 @@ import math
 import unittest
 from functools import cached_property
 
+from parameterized import parameterized
+
 from transformers import DetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, require_timm, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    _test_eager_matches_sdpa_inference,
+    floats_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -525,6 +532,18 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             self.assertTrue(outputs)
+
+    # override test_eager_matches_sdpa_inference to set use_attention_mask to False
+    # as masks used in test are not adapted to the ones used in the model
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        if use_attention_mask:
+            self.skipTest(
+                "This test uses attention masks which are not compatible with DETR. Skipping when use_attention_mask is True."
+            )
+        _test_eager_matches_sdpa_inference(self, name, dtype, padding_side, False, output_attentions, enable_kernels)
 
 
 TOLERANCE = 1e-4

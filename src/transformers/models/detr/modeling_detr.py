@@ -37,12 +37,12 @@ from ...utils import (
     ModelOutput,
     TransformersKwargs,
     auto_docstring,
-    can_return_tuple,
     is_timm_available,
     logging,
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
 from .configuration_detr import DetrConfig
 
 
@@ -404,7 +404,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
@@ -544,8 +544,8 @@ class DetrEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         spatial_position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
@@ -555,16 +555,13 @@ class DetrEncoderLayer(nn.Module):
             spatial_position_embeddings (`torch.FloatTensor`, *optional*):
                 Spatial position embeddings (2D positional encodings of image locations), to be added to both
                 the queries and keys in self-attention (but not to values).
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_embeddings=spatial_position_embeddings,
-            output_attentions=output_attentions,
+            **kwargs,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -586,12 +583,7 @@ class DetrEncoderLayer(nn.Module):
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class DetrDecoderLayer(GradientCheckpointingLayer):
@@ -629,8 +621,8 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         object_queries_position_embeddings: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
@@ -648,18 +640,15 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=object_queries_position_embeddings,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -667,17 +656,16 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
-        cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            hidden_states, cross_attn_weights = self.encoder_attn(
+            hidden_states, _ = self.encoder_attn(
                 hidden_states=hidden_states,
                 position_embeddings=object_queries_position_embeddings,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 encoder_position_embeddings=spatial_position_embeddings,
-                output_attentions=output_attentions,
+                **kwargs,
             )
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -693,12 +681,7 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        return outputs
+        return hidden_states
 
 
 @auto_docstring
@@ -748,6 +731,11 @@ class DetrEncoder(DetrPreTrainedModel):
         config: DetrConfig
     """
 
+    _can_record_outputs = {
+        "hidden_states": DetrEncoderLayer,
+        "attentions": OutputRecorder(DetrAttention, layer_name="self_attn", index=1),
+    }
+
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
@@ -761,15 +749,14 @@ class DetrEncoder(DetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @check_model_inputs()
     def forward(
         self,
         inputs_embeds=None,
         attention_mask=None,
         spatial_position_embeddings=None,
-        output_attentions=None,
-        output_hidden_states=None,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -785,19 +772,7 @@ class DetrEncoder(DetrPreTrainedModel):
 
             spatial_position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Spatial position embeddings (2D positional encodings) that are added to the queries and keys in each self-attention layer.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -806,11 +781,7 @@ class DetrEncoder(DetrPreTrainedModel):
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
         for i, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -819,27 +790,17 @@ class DetrEncoder(DetrPreTrainedModel):
                     to_drop = True
 
             if to_drop:
-                layer_outputs = (None, None)
+                hidden_states = None
             else:
                 # we add spatial_position_embeddings as extra input to the encoder_layer
-                layer_outputs = encoder_layer(
+                hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask,
                     spatial_position_embeddings=spatial_position_embeddings,
-                    output_attentions=output_attentions,
+                    **kwargs,
                 )
 
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class DetrDecoder(DetrPreTrainedModel):
@@ -857,6 +818,12 @@ class DetrDecoder(DetrPreTrainedModel):
         config: DetrConfig
     """
 
+    _can_record_outputs = {
+        "hidden_states": DetrDecoderLayer,
+        "attentions": OutputRecorder(DetrAttention, layer_name="self_attn", index=1),
+        "cross_attentions": OutputRecorder(DetrAttention, layer_name="encoder_attn", index=1),
+    }
+
     def __init__(self, config: DetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -870,7 +837,7 @@ class DetrDecoder(DetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @check_model_inputs()
     def forward(
         self,
         inputs_embeds=None,
@@ -879,9 +846,8 @@ class DetrDecoder(DetrPreTrainedModel):
         encoder_attention_mask=None,
         spatial_position_embeddings=None,
         object_queries_position_embeddings=None,
-        output_attentions=None,
-        output_hidden_states=None,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> DetrDecoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -908,24 +874,18 @@ class DetrDecoder(DetrPreTrainedModel):
                 Spatial position embeddings (2D positional encodings from encoder) that are added to the keys in each cross-attention layer.
             query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
                 Position embeddings for the object query slots that are added to the queries and keys in each self-attention layer.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
             input_shape = inputs_embeds.size()[:-1]
 
-        # expand encoder attention mask
+        # expand decoder attention mask (for self-attention on object queries)
+        if attention_mask is not None:
+            # [batch_size, num_queries] -> [batch_size, 1, num_queries, num_queries]
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+
+        # expand encoder attention mask (for cross-attention on encoder outputs)
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
             encoder_attention_mask = _prepare_4d_attention_mask(
@@ -936,59 +896,36 @@ class DetrDecoder(DetrPreTrainedModel):
         intermediate = () if self.config.auxiliary_loss else None
 
         # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
             if self.training:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
 
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
-                None,
+                attention_mask,
                 spatial_position_embeddings,
                 object_queries_position_embeddings,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
+                **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
             if self.config.auxiliary_loss:
                 hidden_states = self.layernorm(hidden_states)
                 intermediate += (hidden_states,)
 
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
-
         # finally, apply layernorm
         hidden_states = self.layernorm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         # stack intermediate decoder activations
         if self.config.auxiliary_loss:
             intermediate = torch.stack(intermediate)
 
-        return DetrDecoderOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
-            intermediate_hidden_states=intermediate,
-        )
+        return DetrDecoderOutput(last_hidden_state=hidden_states, intermediate_hidden_states=intermediate)
 
 
 @auto_docstring(
@@ -1041,24 +978,26 @@ class DetrModel(DetrPreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.FloatTensor] = None,
         encoder_outputs: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], DetrModelOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
+            Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for queries that are **not masked**,
+            - 0 for queries that are **masked**.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
+            can choose to directly pass a flattened representation of an image. Useful for bypassing the vision backbone.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
+            embedded representation. Useful for tasks that require custom query initialization.
 
         Examples:
 
@@ -1085,35 +1024,55 @@ class DetrModel(DetrPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 100, 256]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        if pixel_values is None and inputs_embeds is None:
+            raise ValueError("You have to specify either pixel_values or inputs_embeds")
 
-        batch_size, num_channels, height, width = pixel_values.shape
-        device = pixel_values.device
+        # If inputs_embeds are provided, use them directly instead of processing pixel_values
+        if inputs_embeds is None:
+            batch_size, num_channels, height, width = pixel_values.shape
+            device = pixel_values.device
 
-        if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
+            if pixel_mask is None:
+                pixel_mask = torch.ones(((batch_size, height, width)), device=device)
+            # First, sent pixel_values + pixel_mask through Backbone to obtain the features
+            # pixel_values should be of shape (batch_size, num_channels, height, width)
+            # pixel_mask should be of shape (batch_size, height, width)
+            # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
+            vision_features = self.backbone(pixel_values, pixel_mask)
+            feature_map, mask = vision_features[-1]
 
-        # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-        # pixel_values should be of shape (batch_size, num_channels, height, width)
-        # pixel_mask should be of shape (batch_size, height, width)
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        vision_features = self.backbone(pixel_values, pixel_mask)
-        feature_map, mask = vision_features[-1]
-
-        # Apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        # then, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
-        # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
-        projected_feature_map = self.input_projection(feature_map)
-        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        spatial_position_embeddings = (
-            self.position_embedding(shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask)
-            .flatten(2)
-            .permute(0, 2, 1)
-        )
-        flattened_mask = mask.flatten(1)
+            # Apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
+            # then, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
+            # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
+            projected_feature_map = self.input_projection(feature_map)
+            flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
+            spatial_position_embeddings = (
+                self.position_embedding(shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask)
+                .flatten(2)
+                .permute(0, 2, 1)
+            )
+            flattened_mask = mask.flatten(1)
+        else:
+            # Use the provided inputs_embeds directly
+            batch_size = inputs_embeds.shape[0]
+            device = inputs_embeds.device
+            flattened_features = inputs_embeds
+            # When using inputs_embeds, we need to infer spatial dimensions for position embeddings
+            # Assume square feature map
+            seq_len = inputs_embeds.shape[1]
+            feat_dim = int(seq_len**0.5)
+            # Create position embeddings for the inferred spatial size
+            spatial_position_embeddings = (
+                self.position_embedding(
+                    shape=torch.Size([batch_size, self.config.d_model, feat_dim, feat_dim]),
+                    device=device,
+                    dtype=inputs_embeds.dtype,
+                )
+                .flatten(2)
+                .permute(0, 2, 1)
+            )
+            # If no mask is provided with inputs_embeds, assume all positions are valid
+            flattened_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.long)
 
         # Fourth, sent flattened_features + flattened_mask + spatial position embeddings through encoder
         # flattened_features is a Tensor of shape (batch_size, height*width, hidden_size)
@@ -1123,26 +1082,29 @@ class DetrModel(DetrPreTrainedModel):
                 inputs_embeds=flattened_features,
                 attention_mask=flattened_mask,
                 spatial_position_embeddings=spatial_position_embeddings,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
+                **kwargs,
             )
 
         # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
         object_queries_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(
             batch_size, 1, 1
         )
-        queries = torch.zeros_like(object_queries_position_embeddings)
+
+        # Use decoder_inputs_embeds if provided, otherwise initialize with zeros
+        if decoder_inputs_embeds is not None:
+            queries = decoder_inputs_embeds
+        else:
+            queries = torch.zeros_like(object_queries_position_embeddings)
 
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             inputs_embeds=queries,
-            attention_mask=None,
+            attention_mask=decoder_attention_mask,
             spatial_position_embeddings=spatial_position_embeddings,
             object_queries_position_embeddings=object_queries_position_embeddings,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=flattened_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         return DetrModelOutput(
@@ -1219,18 +1181,20 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[list[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], DetrObjectDetectionOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
+            Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for queries that are **not masked**,
+            - 0 for queries that are **masked**.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
+            can choose to directly pass a flattened representation of an image. Useful for bypassing the vision backbone.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
+            embedded representation. Useful for tasks that require custom query initialization.
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
@@ -1281,8 +1245,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1361,18 +1324,21 @@ class DetrForSegmentation(DetrPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[list[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], DetrSegmentationOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
+            Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for queries that are **not masked**,
+            - 0 for queries that are **masked**.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
+            can choose to directly pass a flattened representation of an image. Note: For segmentation, this will skip
+            the backbone, so intermediate features for the mask head won't be available.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
+            embedded representation. Useful for tasks that require custom query initialization.
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss, DICE/F-1 loss and Focal loss. List of dicts, each
             dictionary containing at least the following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels,
@@ -1450,26 +1416,29 @@ class DetrForSegmentation(DetrPreTrainedModel):
                 inputs_embeds=flattened_features,
                 attention_mask=flattened_mask,
                 spatial_position_embeddings=spatial_position_embeddings,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
+                **kwargs,
             )
 
         # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
         object_queries_position_embeddings = self.detr.model.query_position_embeddings.weight.unsqueeze(0).repeat(
             batch_size, 1, 1
         )
-        queries = torch.zeros_like(object_queries_position_embeddings)
+
+        # Use decoder_inputs_embeds if provided, otherwise initialize with zeros
+        if decoder_inputs_embeds is not None:
+            queries = decoder_inputs_embeds
+        else:
+            queries = torch.zeros_like(object_queries_position_embeddings)
 
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.detr.model.decoder(
             inputs_embeds=queries,
-            attention_mask=None,
+            attention_mask=decoder_attention_mask,
             spatial_position_embeddings=spatial_position_embeddings,
             object_queries_position_embeddings=object_queries_position_embeddings,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=flattened_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs[0]
