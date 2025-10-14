@@ -20,6 +20,7 @@
 
 """Tokenization classes for LLaMA."""
 
+import importlib.util
 import os
 from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Optional
@@ -147,14 +148,12 @@ class LlamaTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         if vocab_file is None:
-            try:
-                from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
-            except ImportError as e:
+            if importlib.util.find_spec("mistral_common") is None:
                 raise ImportError(
                     "Using this tokenizer requires the `mistral-common` library. "
                     "Please install it with `pip install mistral-common`."
-                ) from e
-                
+                )
+
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
