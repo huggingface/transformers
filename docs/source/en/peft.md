@@ -183,11 +183,13 @@ model.load_adapter(file_name_1, adapter_name="default")
 model = torch.compile(model, ...)
 output_1 = model(...)
 # now you can hotswap the 2nd adapter, use the same name as for the 1st
-model.load_adapter(file_name_2, adapter_name="default", hotswap=True)
+model.load_adapter(file_name_2, adapter_name="default")
 output_2 = model(...)
 ```
 
 The `target_rank=max_rank` argument is important for setting the maximum rank among all LoRA adapters that will be loaded. If you have one adapter with rank 8 and another with rank 16, pass `target_rank=16`. You should use a higher value if in doubt. By default, this value is 128.
+
+By default, hotswapping is disabled and requires you to pass `hotswap=True` to `load_adapter`. However, if you called `enable_peft_hotswap` first, hotswapping will be enabled by default. If you want to avoid using it, you need to pass `hotswap=False`.
 
 However, there can be situations where recompilation is unavoidable. For example, if the hotswapped adapter targets more layers than the initial adapter, then recompilation is triggered. Try to load the adapter that targets the most layers first. Refer to the PEFT docs on [hotswapping](https://huggingface.co/docs/peft/main/en/package_reference/hotswap#peft.utils.hotswap.hotswap_adapter) for more details about the limitations of this feature.
 

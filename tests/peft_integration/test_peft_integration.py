@@ -991,7 +991,8 @@ class PeftHotswapIntegrationTest(unittest.TestCase):
             del model
 
             model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
-            if do_compile or (rank1 != rank2):
+            enable_hotswap = do_compile or (rank1 != rank2)
+            if enable_hotswap:
                 # calling this is only needed if we want to compile the model or if the ranks are different
                 model.enable_peft_hotswap(target_rank=max(rank1, rank2))
 
@@ -1006,7 +1007,13 @@ class PeftHotswapIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.allclose(lora_1_output, lora_1_output_loaded, atol=1e-6, rtol=1e-6))
 
             # hotswap in adapter_2 again, output should be same as lora_2_output
-            model.load_adapter(path_2, adapter_name="adapter_1", hotswap=True)
+            if enable_hotswap:
+                # after calling enable_peft_hotswap, hotswap will automatically be enabled
+                model.load_adapter(path_2, adapter_name="adapter_1")
+            else:
+                # enable_peft_hotswap was not called, need to explicitly pass hotswap=True
+                model.load_adapter(path_2, adapter_name="adapter_1", hotswap=True)
+
             with torch.inference_mode():
                 lora_2_output_loaded = model(input).logits
             self.assertTrue(torch.allclose(lora_2_output, lora_2_output_loaded, atol=1e-6, rtol=1e-6))

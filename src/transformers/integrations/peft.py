@@ -105,7 +105,7 @@ class PeftAdapterMixin:
         adapter_state_dict: Optional[dict[str, "torch.Tensor"]] = None,
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,
-        hotswap: bool = False,
+        hotswap: bool | Literal["auto"] = "auto",
         adapter_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:
         """
@@ -161,7 +161,7 @@ class PeftAdapterMixin:
             is_trainable (`bool`, *optional*, defaults to `False`):
                 Whether the adapter should be trainable or not. If `False`, the adapter will be frozen and can only be
                 used for inference.
-            hotswap : (`bool`, *optional*, defaults to `False`)
+            hotswap : (`"auto"` or `bool`, *optional*, defaults to `"auto"`)
                 Whether to substitute an existing (LoRA) adapter with the newly loaded adapter in-place. This means
                 that, instead of loading an additional adapter, this will take the existing adapter weights and replace
                 them with the weights of the new adapter. This can be faster and more memory efficient. However, the
@@ -182,9 +182,14 @@ class PeftAdapterMixin:
                 model = torch.compile(model, ...)
                 output_1 = model(...)
                 # now you can hotswap the 2nd adapter, use the same name as for the 1st
-                model.load_adapter(file_name_2, adapter_name="default", hotswap=True)
+                # hotswap is activated by default since enable_peft_hotswap was called
+                model.load_adapter(file_name_2, adapter_name="default")
                 output_2 = model(...)
                 ```
+
+                By default, hotswap is disabled and requires passing `hotswap=True`. If you called
+                `enable_peft_hotswap` first, it is enabled. You can still manually disable it in that case by passing
+                `hotswap=False`.
 
                 Note that hotswapping comes with a couple of limitations documented here:
                 https://huggingface.co/docs/peft/main/en/package_reference/hotswap
@@ -195,6 +200,12 @@ class PeftAdapterMixin:
         from peft import PeftType
 
         check_peft_version(min_version=MIN_PEFT_VERSION)
+
+        if hotswap == "auto":
+            # if user called model.enable_peft_hotswap and this is not the first adapter, enable hotswap
+            hotswap_enabled = getattr(self, "_hotswap_enabled", False)
+            not_first_adapter = bool(self._hf_peft_config_loaded and (adapter_name in self.peft_config))
+            hotswap = hotswap_enabled and not_first_adapter
 
         if hotswap:
             min_version_hotswap = "0.15.0"
@@ -431,6 +442,7 @@ class PeftAdapterMixin:
                     f"check_compiles should be one of 'error', 'warn', or 'ignore', got '{check_compiled}' instead."
                 )
 
+        self._hotswap_enabled = True
         self._prepare_peft_hotswap_kwargs = {"target_rank": target_rank, "check_compiled": check_compiled}
 
     def add_adapter(self, adapter_config, adapter_name: Optional[str] = None) -> None:
