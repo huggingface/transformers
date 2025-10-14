@@ -182,7 +182,7 @@ class RichInterface:
         self._console.print()
 
 
-class chat:
+class Chat:
     """Chat with a model from the command line."""
 
     # Defining a class to help with internal state but in practice it's just a method to call

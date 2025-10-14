@@ -348,83 +348,18 @@ class TimedModel:
         return not hasattr(self, "model") or self.model is None
 
 
-@dataclass
-class ServeArguments:
-    r"""
-    Arguments for the serve CLI.
-
-    See the metadata arg for each argument's description -- the metadata will be printed with
-    `transformers serve --help`
-    """
-
-    continuous_batching: bool = field(
-        default=False,
-        metadata={"help": "Whether to use continuous batching for chat completions."},
-    )
-    device: str = field(
-        default="auto",
-        metadata={
-            "help": "Device to use for inference; will default to `auto` and"
-            "place the model on an accelerator if available."
-        },
-    )
-    torch_dtype: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "`torch_dtype` is deprecated! Please use `dtype` argument instead.",
-            "choices": ["auto", "bfloat16", "float16", "float32"],
-        },
-    )
-    dtype: Optional[str] = field(
-        default="auto",
-        metadata={
-            "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
-            "the dtype will be automatically derived from the model's weights.",
-            "choices": ["auto", "bfloat16", "float16", "float32"],
-        },
-    )
-    trust_remote_code: bool = field(
-        default=False, metadata={"help": "Whether to trust remote code when loading a model."}
-    )
-    attn_implementation: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in "
-            "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
-        },
-    )
-    load_in_8bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
-    )
-    load_in_4bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
-    )
-    bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
-    use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
-
-    # Serving settings
-    host: str = field(default="localhost", metadata={"help": "Interface the server will listen to."})
-    port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
-    model_timeout: int = field(
-        default=300,
-        metadata={"help": "Time in seconds after which a model will be removed from memory."},
-    )
-
-    # Other settings
-    log_level: str = field(
-        default="info", metadata={"help": "Logging level as a string. Example: 'info' or 'warning'."}
-    )
-    default_seed: Optional[int] = field(
-        default=None, metadata={"help": "The default seed for torch, should be an integer."}
-    )
-    enable_cors: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Whether to enable CORS. Some apps that make requests from external domains (e.g. Cursor) require "
-                "CORS to be enabled."
+class Serve:
+    # Defining a class to help with internal state but in practice it's just a method to call
+    # TODO: refactor into a proper module with helpers + 1 main method
+    def __init__(
+        self,
+        continuous_batching: Annotated[
+            bool, typer.Option(help="Whether to use continuous batching for chat completions.")
+        ] = False,
+        device: Annotated[
+            str,
+            typer.Option(
+                help="Device to use for inference; will default to `auto` and place the model on an accelerator if available."
             ),
         ] = "auto",
         dtype: Annotated[

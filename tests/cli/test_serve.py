@@ -23,7 +23,7 @@ from huggingface_hub import ChatCompletionStreamOutput, InferenceClient
 from parameterized import parameterized
 
 from transformers import GenerationConfig
-from transformers.cli.serve import Modality, serve
+from transformers.cli.serve import Modality, Serve
 from transformers.testing_utils import require_openai, slow
 from transformers.utils.import_utils import is_openai_available
 
@@ -294,7 +294,7 @@ def test_build_chat_completion_chunk():
     Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implicitly
     confirm that empty fields are not emitted.
     """
-    dummy = serve.__new__(serve)
+    dummy = Serve.__new__(Serve)
 
     # The keys for these fields must be present in every chunk
     MANDATORY_FIELDS = ["data", "id", "choices", "created", "model", "object", "system_fingerprint"]
@@ -343,7 +343,7 @@ def test_build_response_event():
     Contrarily to the Chat Completion API, the Response API has a wide set of possible output objects. This test
     only checks a few basic assumptions -- we rely on OpenAI's pydantic models to enforce the correct schema.
     """
-    dummy = serve.__new__(serve)
+    dummy = Serve.__new__(Serve)
 
     response_created = ResponseCreatedEvent(
         type="response.created",
@@ -494,7 +494,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
             {"role": "user", "content": "Can you help me write tests?"},
         ]
-        outputs = serve.get_processor_inputs_from_inbound_messages(messages, modality)
+        outputs = Serve.processor_inputs_from_inbound_messages(messages, modality)
         self.assertListEqual(expected_outputs, outputs)
 
         messages_with_type = [
@@ -507,7 +507,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             },
             {"role": "user", "content": [{"type": "text", "text": "Can you help me write tests?"}]},
         ]
-        outputs = serve.get_processor_inputs_from_inbound_messages(messages_with_type, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages_with_type, modality)
         self.assertListEqual(expected_outputs, outputs)
 
         messages_multiple_text = [
@@ -525,7 +525,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
                 "content": "How are you doing? I'm doing great, thank you for asking! How can I assist you today?",
             },
         ]
-        outputs = serve.get_processor_inputs_from_inbound_messages(messages_multiple_text, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages_multiple_text, modality)
         self.assertListEqual(expected_outputs_multiple_text, outputs)
 
     def test_processor_inputs_from_inbound_messages_vlm_text_only(self):
@@ -547,7 +547,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "Can you help me write tests?"}]},
         ]
 
-        outputs = serve.get_processor_inputs_from_inbound_messages(messages, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages, modality)
         self.assertListEqual(expected_outputs, outputs)
 
     def test_processor_inputs_from_inbound_messages_vlm_text_and_image_in_base_64(self):
@@ -592,7 +592,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "Alright"}]},
         ]
 
-        outputs = serve.get_processor_inputs_from_inbound_messages(messages, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages, modality)
 
         for expected_output, output in zip(expected_outputs, outputs):
             expected_output_content = expected_output["content"]
@@ -624,7 +624,7 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8001
-        thread = Thread(target=serve, kwargs={"port": cls.port})
+        thread = Thread(target=Serve, kwargs={"port": cls.port})
         thread.daemon = True
         thread.start()
 
@@ -761,7 +761,7 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
         """Starts a server for tests to connect to."""
         cls.port = 8002
         thread = Thread(
-            target=serve,
+            target=Serve,
             kwargs={
                 "port": cls.port,
                 "continuous_batching": True,
@@ -917,7 +917,7 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8003
-        thread = Thread(target=serve, kwargs={"port": cls.port, "default_seed": 42})
+        thread = Thread(target=Serve, kwargs={"port": cls.port, "default_seed": 42})
         thread.daemon = True
         thread.start()
 
@@ -979,7 +979,7 @@ class ServeInfrastructureTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.port = 8042
-        thread = Thread(target=serve, kwargs={"port": cls.port})
+        thread = Thread(target=Serve, kwargs={"port": cls.port})
         thread.daemon = True
         thread.start()
 
