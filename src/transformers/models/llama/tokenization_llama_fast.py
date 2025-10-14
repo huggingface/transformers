@@ -136,6 +136,14 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_prefix_space=None,
         **kwargs,
     ):
+        if vocab_file is None:
+            try:
+                from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+            except ImportError as e:
+                raise ImportError(
+                    "Using this tokenizer requires the `mistral-common` library. "
+                    "Please install it with `pip install mistral-common`."
+                ) from e
         if legacy is None:
             logger.warning_once(
                 f"You are using the default legacy behaviour of the {self.__class__}. This is"
@@ -165,6 +173,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             legacy=legacy,
             **kwargs,
         )
+        
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.update_post_processor()
