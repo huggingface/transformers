@@ -1174,7 +1174,7 @@ class AutoTokenizer:
                 model_id = str(pretrained_model_name_or_path).lower()
                 if "voxtral" in model_id or "mistralai" in model_id:
                     raise ImportError(
-                        "The tokenizer for Voxtral or Mistral models requires the `mistral-common` package.\n"
+                        "The tokenizer for Voxtral or Mistral models requires `mistral-common` package.\n"
                         "Please install it with:\n\n    pip install mistral-common\n"
                     ) from e
                 # Otherwise, re-raise the original error
