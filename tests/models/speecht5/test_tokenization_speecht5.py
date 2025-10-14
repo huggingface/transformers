@@ -144,10 +144,6 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(tokens[-3], tokenizer.pad_token_id)
 
     @unittest.skip
-    def test_pickle_subword_regularization_tokenizer(self):
-        pass
-
-    @unittest.skip
     def test_subword_regularization_tokenizer(self):
         pass
 

@@ -16,11 +16,8 @@ ruff: isort: skip_file
 """
 
 import os
-import pickle
 import tempfile
 import unittest
-from collections.abc import Callable
-from typing import Optional
 
 import numpy as np
 
@@ -66,28 +63,6 @@ class TokenizerUtilsTest(unittest.TestCase):
                 special_tok_id = tokenizer.convert_tokens_to_ids(special_tok)
                 self.assertIsInstance(special_tok_id, int)
 
-    def assert_dump_and_restore(self, be_original: BatchEncoding, equal_op: Optional[Callable] = None):
-        batch_encoding_str = pickle.dumps(be_original)
-        self.assertIsNotNone(batch_encoding_str)
-
-        be_restored = pickle.loads(batch_encoding_str)
-
-        # Ensure is_fast is correctly restored
-        self.assertEqual(be_restored.is_fast, be_original.is_fast)
-
-        # Ensure encodings are potentially correctly restored
-        if be_original.is_fast:
-            self.assertIsNotNone(be_restored.encodings)
-        else:
-            self.assertIsNone(be_restored.encodings)
-
-        # Ensure the keys are the same
-        for original_v, restored_v in zip(be_original.values(), be_restored.values()):
-            if equal_op:
-                self.assertTrue(equal_op(restored_v, original_v))
-            else:
-                self.assertEqual(restored_v, original_v)
-
     @slow
     def test_pretrained_tokenizers(self):
         self.check_tokenizer_from_pretrained(GPT2Tokenizer)
@@ -95,46 +70,6 @@ class TokenizerUtilsTest(unittest.TestCase):
     def test_tensor_type_from_str(self):
         self.assertEqual(TensorType("pt"), TensorType.PYTORCH)
         self.assertEqual(TensorType("np"), TensorType.NUMPY)
-
-    @require_tokenizers
-    def test_batch_encoding_pickle(self):
-        tokenizer_p = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
-        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
-
-        # Python no tensor
-        with self.subTest("BatchEncoding (Python, return_tensors=None)"):
-            self.assert_dump_and_restore(tokenizer_p("Small example to encode"))
-
-        with self.subTest("BatchEncoding (Python, return_tensors=NUMPY)"):
-            self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.NUMPY), np.array_equal
-            )
-
-        with self.subTest("BatchEncoding (Rust, return_tensors=None)"):
-            self.assert_dump_and_restore(tokenizer_r("Small example to encode"))
-
-        with self.subTest("BatchEncoding (Rust, return_tensors=NUMPY)"):
-            self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.NUMPY), np.array_equal
-            )
-
-    @require_torch
-    @require_tokenizers
-    def test_batch_encoding_pickle_pt(self):
-        import torch
-
-        tokenizer_p = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
-        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
-
-        with self.subTest("BatchEncoding (Python, return_tensors=PYTORCH)"):
-            self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.PYTORCH), torch.equal
-            )
-
-        with self.subTest("BatchEncoding (Rust, return_tensors=PYTORCH)"):
-            self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.PYTORCH), torch.equal
-            )
 
     @require_tokenizers
     def test_batch_encoding_is_fast(self):

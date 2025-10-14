@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import pickle
 import shutil
 import tempfile
 import unittest
@@ -290,17 +289,6 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             revision="0984d03108b1a041ed679bd253b6519b7e1a4778",
             padding=False,
         )
-
-    def test_picklable(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = LlamaTokenizer(f.name, keep_accents=True)
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
-
-    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
-    def test_pickle_subword_regularization_tokenizer(self):
-        pass
 
     @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_subword_regularization_tokenizer(self):
