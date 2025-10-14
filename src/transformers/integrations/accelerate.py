@@ -263,8 +263,8 @@ def compute_module_sizes(model: "PreTrainedModel", hf_quantizer: "HfQuantizer" |
     """
     module_sizes = defaultdict(int)
     for name, param in model.state_dict():
-        if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, name):
-            dtype_size = hf_quantizer.dtype_byte_size(param.dtype)
+        if hf_quantizer is not None:
+            dtype_size = hf_quantizer.param_element_size(model, name)
         else:
             dtype_size = param.element_size()
         size = param.numel() * dtype_size
