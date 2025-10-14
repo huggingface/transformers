@@ -36,7 +36,6 @@ from typing import Optional, TypedDict, Union
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
 from openai.types.chat.chat_completion import Choice
-from starlette.responses import StreamingResponse
 from tokenizers.decoders import DecodeStream
 
 import transformers
@@ -665,7 +664,7 @@ class ServeCommand(BaseTransformersCLICommand):
     @staticmethod
     def chunk_to_sse_element(chunk: ChatCompletionChunk | BaseModel) -> str:
         """
-        Builds a event of a streaming OpenAI Response model or a ChatCompletion chunk.
+        Builds an event of a streaming OpenAI Response model or a ChatCompletion chunk.
 
         IMPORTANT: The serialized chunk won't contain empty fields (fields with `None`). Some downstream apps,
         like Cursor, assume that when the field exists, it has data.
@@ -690,6 +689,7 @@ class ServeCommand(BaseTransformersCLICommand):
         - POST /v1/responses: Generates responses.
         - POST /v1/audio/transcriptions: Generates transcriptions from audio.
         - GET /v1/models: Lists available models for 3rd party tools.
+        - GET /health: Health check.
 
         Requires FastAPI and Uvicorn to be installed.
         """
@@ -871,7 +871,7 @@ class ServeCommand(BaseTransformersCLICommand):
         # TODO (Joao, Lysandre): this should also work with tool support
         inputs = processor.apply_chat_template(req["messages"], return_tensors="pt", add_generation_prompt=True).to(
             model.device
-        )
+        )[0]
 
         def stream_chat_completion(request_id, decode_stream):
             try:
@@ -901,15 +901,15 @@ class ServeCommand(BaseTransformersCLICommand):
                 self.running_continuous_batching_manager.cancel_request(request_id)
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        def block_chat_completion(request_id, decode_stream):
+        def buffer_chat_completion(_request_id):
             result = None
             while self.running_continuous_batching_manager.is_running() and result is None:
-                result = self.running_continuous_batching_manager.get_result(request_id=request_id, timeout=1)
+                result = self.running_continuous_batching_manager.get_result(request_id=_request_id, timeout=1)
 
             content = tokenizer.decode(result.generated_tokens)
 
             chat_completion_result = ChatCompletion(
-                id=request_id,
+                id=_request_id,
                 created=int(time.time()),
                 object="chat.completion",
                 model=model_id_and_revision,
@@ -927,36 +927,33 @@ class ServeCommand(BaseTransformersCLICommand):
 
             return chat_completion_result
 
-        async def cancellation_wrapper(_inputs, request_id, stream: bool = True):
+        async def cancellation_wrapper_stream(_request_id):
+            # Enables cancellation in an async context
             try:
-                decode_stream = DecodeStream(_inputs.tolist(), False)
-                request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens, streaming=stream
-                )
-
-                if stream:
-                    for chunk in stream_chat_completion(request_id, decode_stream):
-                        yield self.chunk_to_sse_element(chunk)
-                        await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
-                else:
-                    chunk = block_chat_completion(request_id, decode_stream)
-                    yield chunk
-                    return
+                decode_stream = DecodeStream(inputs.tolist(), False)
+                for _chunk in stream_chat_completion(_request_id, decode_stream):
+                    yield self.chunk_to_sse_element(_chunk)
+                    await asyncio.sleep(0)
             except asyncio.CancelledError:
-                self.running_continuous_batching_manager.cancel_request(request_id)
-                logger.warning(f"Request {request_id} was cancelled.")
+                self.running_continuous_batching_manager.cancel_request(_request_id)
+                logger.warning(f"Request {_request_id} was cancelled.")
+
+        def cancellation_wrapper_buffer(_request_id):
+            # Enables cancellation in an async context
+            try:
+                return buffer_chat_completion(_request_id)
+            except asyncio.CancelledError:
+                self.running_continuous_batching_manager.cancel_request(_request_id)
+                logger.warning(f"Request {_request_id} was cancelled.")
+
+        request_id = self.running_continuous_batching_manager.add_request(
+            inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens, streaming=req.get("stream")
+        )
 
         if req.get("stream"):
-            return StreamingResponse(
-                cancellation_wrapper(inputs[0], request_id, stream=True), media_type="text/event-stream"
-            )
+            return StreamingResponse(cancellation_wrapper_stream(request_id), media_type="text/event-stream")
         else:
-
-            async def unpack_generator(agen):
-                return [x async for x in agen]
-
-            async_gen = cancellation_wrapper(inputs[0], request_id, stream=False)
-            chunk: ChatCompletion = asyncio.run(unpack_generator(async_gen))[0]
+            chunk = cancellation_wrapper_buffer(request_id)
             json_chunk = chunk.model_dump_json(exclude_none=True)
             return JSONResponse(json_chunk, media_type="application/json")
 
@@ -1221,13 +1218,9 @@ class ServeCommand(BaseTransformersCLICommand):
                 thread.join()
 
         if req.get("stream"):
-
-            def sse(_generator):
-                for chunk in _generator:
-                    yield self.chunk_to_sse_element(chunk)
-
             return StreamingResponse(
-                sse(stream_chat_completion(generation_streamer, request_id)), media_type="text/event-stream"
+                map(self.chunk_to_sse_element, stream_chat_completion(generation_streamer, request_id)),
+                media_type="text/event-stream",
             )
         else:
             content = []

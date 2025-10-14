@@ -2509,7 +2509,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 load_and_register_attn_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
-                if attn_implementation.startswith("flash_"):
+                if "flash_" in attn_implementation:
                     logger.warning_once(
                         f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
                         "from the `kernels` library instead!"
