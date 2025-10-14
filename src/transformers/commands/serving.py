@@ -26,7 +26,7 @@ import threading
 import time
 import uuid
 from argparse import ArgumentParser, Namespace
-from collections.abc import AsyncGenerator, Generator, Iterable
+from collections.abc import Generator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -614,7 +614,7 @@ class ServeCommand(BaseTransformersCLICommand):
         tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
         decode_stream: Optional[DecodeStream] = None,
         tokenizer: Optional[PreTrainedTokenizerFast] = None,
-    ) -> str:
+    ) -> ChatCompletionChunk:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
 
@@ -662,24 +662,22 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return chunk
 
-    def chunk_to_sse_element(self, chunk: ChatCompletionChunk) -> str:
-        return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
-
-    def build_response_event(self, response: "BaseModel") -> str:
+    @staticmethod
+    def chunk_to_sse_element(chunk: ChatCompletionChunk | BaseModel) -> str:
         """
-        Builds a event of a streaming OpenAI Response response.
+        Builds a event of a streaming OpenAI Response model or a ChatCompletion chunk.
 
         IMPORTANT: The serialized chunk won't contain empty fields (fields with `None`). Some downstream apps,
         like Cursor, assume that when the field exists, it has data.
 
         Args:
-            response (`BaseModel`):
+            chunk (`BaseModel` or `ChatCompletionChunk`):
                 The response to build an event from. One of the multiple OpenAI Response output types
 
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
-        return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
+        return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     def run(self):
         """
@@ -939,13 +937,10 @@ class ServeCommand(BaseTransformersCLICommand):
                 if stream:
                     for chunk in stream_chat_completion(request_id, decode_stream):
                         yield self.chunk_to_sse_element(chunk)
-                        print("within cancellation wrapper:", chunk)
-
                         await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
                 else:
                     chunk = block_chat_completion(request_id, decode_stream)
                     yield chunk
-                    print("within cancellation wrapper:", chunk)
                     return
             except asyncio.CancelledError:
                 self.running_continuous_batching_manager.cancel_request(request_id)
@@ -1380,7 +1375,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_created)
+                yield self.chunk_to_sse_element(response_created)
 
                 response_in_progress = ResponseInProgressEvent(
                     type="response.in_progress",
@@ -1401,7 +1396,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_in_progress)
+                yield self.chunk_to_sse_element(response_in_progress)
 
                 # Start the output item. Emit the assistant role to start the stream. Other chunks won't have a role,
                 # as it is implicit
@@ -1414,7 +1409,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_output_item_added)
+                yield self.chunk_to_sse_element(response_output_item_added)
 
                 # Start the content part of the event
                 response_content_part_added = ResponseContentPartAddedEvent(
@@ -1426,7 +1421,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     part=ResponseOutputText(type="output_text", text="", annotations=[]),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_content_part_added)
+                yield self.chunk_to_sse_element(response_content_part_added)
 
                 # Stream the actual generated text
                 results = ""
@@ -1453,7 +1448,7 @@ class ServeCommand(BaseTransformersCLICommand):
                                 logprobs=[],
                             )
                             sequence_number += 1
-                            yield self.build_response_event(response_output_text_delta)
+                            yield self.chunk_to_sse_element(response_output_text_delta)
                     else:
                         # Normal path: emit token deltas when not filtering CoT
                         if result:
@@ -1467,7 +1462,7 @@ class ServeCommand(BaseTransformersCLICommand):
                                 logprobs=[],
                             )
                             sequence_number += 1
-                            yield self.build_response_event(response_output_text_delta)
+                            yield self.chunk_to_sse_element(response_output_text_delta)
 
                 # Signal the end of the text generation
                 response_output_text_done = ResponseTextDoneEvent(
@@ -1480,7 +1475,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     logprobs=[],
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_output_text_done)
+                yield self.chunk_to_sse_element(response_output_text_done)
 
                 # Complete the content part
                 response_content_part_done = ResponseContentPartDoneEvent(
@@ -1493,7 +1488,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 )
                 sequence_number += 1
                 content_index += 1
-                yield self.build_response_event(response_content_part_done)
+                yield self.chunk_to_sse_element(response_content_part_done)
 
                 # Complete the output item
                 response_output_item_done = ResponseOutputItemDoneEvent(
@@ -1511,7 +1506,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 )
                 sequence_number += 1
                 output_index += 1
-                yield self.build_response_event(response_output_item_done)
+                yield self.chunk_to_sse_element(response_output_item_done)
 
                 # Finally, Complete the event
                 response_completed = ResponseCompletedEvent(
@@ -1533,7 +1528,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_completed)
+                yield self.chunk_to_sse_element(response_completed)
 
                 thread.join()
             except Exception as e:
@@ -1544,7 +1539,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     message=str(e),
                 )
                 sequence_number += 1
-                yield self.build_response_event(error_event)
+                yield self.chunk_to_sse_element(error_event)
 
                 response_failed = ResponseFailedEvent(
                     type="response.failed",
@@ -1569,7 +1564,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_failed)
+                yield self.chunk_to_sse_element(response_failed)
 
             finally:
                 thread.join()
