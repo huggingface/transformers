@@ -2974,12 +2974,7 @@ class ModelTesterMixin:
             )
 
     def flash_attn_inference_equivalence(
-        self,
-        attn_implementation: str,
-        padding_side: str,
-        atol: float = 4e-2,
-        rtol: float = 4e-2,
-        check_forward_in_train: bool = True,
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ) -> None:
         r"""
         Tests the equivalence between the eager and flash attention implementations.
@@ -3120,11 +3115,6 @@ class ModelTesterMixin:
                     torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
                 else:
                     torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
-
-                # Check it can run in training mode
-                if check_forward_in_train:
-                    model.train()
-                    _ = model(**second_inputs)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
@@ -3657,7 +3647,7 @@ class ModelTesterMixin:
 
         assert not loss.isnan().any()
 
-    def flash_attn_from_config(self, attn_implementation: str):
+    def flash_attn_from_config(self, attn_implementation: str, test_fwd_in_train: bool = True):
         r"""
         Tests if the model can be loaded with `attn_implementation` from the config and if the
         weights are not randomly initialized.
@@ -3674,8 +3664,11 @@ class ModelTesterMixin:
             fa_model = (
                 model_class._from_config(config, attn_implementation=attn_implementation, dtype=torch.bfloat16)
                 .to(torch_device)
-                .eval()
             )
+            if test_fwd_in_train:
+                fa_model = fa_model.train()
+            else:
+                fa_model = fa_model.eval()
 
             dummy_input = inputs_dict[fa_model.main_input_name]
             if dummy_input.dtype in [torch.float32, torch.float16]:

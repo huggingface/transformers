@@ -31,10 +31,10 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    is_flaky,
     is_flash_attn_2_available,
     require_deterministic_for_xpu,
     require_flash_attn,
+    require_flash_attn_3,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -349,11 +349,15 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
-        self.flash_attn_inference_equivalence(
-            attn_implementation="flash_attention_2", padding_side="left", check_forward_in_train=False
-        )
+    def test_flash_attn_2_from_config(self):
+        self.flash_attn_from_config(attn_implementation="flash_attention_2", test_fwd_in_train=False)
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @mark.flash_attn_3_test
+    @slow
+    def test_flash_attn_3_from_config(self):
+        self.flash_attn_from_config(attn_implementation="flash_attention_3", test_fwd_in_train=False)
 
 
 @slow
