@@ -615,6 +615,7 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
 
 
 class ParakeetTDTPredictor(ParakeetPreTrainedModel):
+
     def __init__(self, config: ParakeetTDTDecoderConfig):
         super().__init__(config)
         self.config = config
@@ -701,6 +702,7 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
         input_token,
         states,
         hidden_state = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         y = input_token
         g, states = self.predict(y, state=states) #, add_sos=add_sos)  # (B, U, D)
@@ -739,6 +741,13 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
 class ParakeetTDTDecoder(ParakeetPreTrainedModel):
     config: ParakeetTDTDecoderConfig
     base_model_prefix = "decoder"
+    main_input_name = "input_token"
+    _supports_flat_attention_mask = False
+    _supports_sdpa = True
+    _supports_flex_attn = False
+    _supports_attention_backend = False
+    _can_record_outputs = {}
+
     def __init__(self, config: ParakeetTDTDecoderConfig):
         super().__init__(config)
         self.config = config
@@ -756,8 +765,9 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
         self,
         input_token,
         hidden_state = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        return self.prediction(input_token, hidden_state)
+        return self.prediction(input_token, hidden_state, **kwargs)
 
 
 

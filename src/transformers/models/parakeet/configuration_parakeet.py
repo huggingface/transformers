@@ -159,9 +159,8 @@ class ParakeetTDTDecoderConfig(PreTrainedConfig):
         self,
         pred_hidden=640,
         pred_n_layers=2,
-        joint_hidden=640,
+        dropout=0,
         vocab_size=1024,
-        durations=[0,1,2,3,4],
         norm=None,
         forget_gate_bias=1.0,
         pred_dropout=0.0,
@@ -176,9 +175,8 @@ class ParakeetTDTDecoderConfig(PreTrainedConfig):
         )
         self.pred_hidden = pred_hidden
         self.pred_n_layers = pred_n_layers
-        self.joint_hidden = joint_hidden
+        self.dropout = dropout
         self.vocab_size = vocab_size
-        self.durations = durations
         self.norm = norm
         self.forget_gate_bias=forget_gate_bias
         self.t_max=t_max
