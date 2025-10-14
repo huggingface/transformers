@@ -264,10 +264,13 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
         timeout = kwargs.pop("timeout", None)
         n_jobs = kwargs.pop("n_jobs", 1)
         gc_after_trial = kwargs.pop("gc_after_trial", False)
+        catch = kwargs.pop("catch", ())
         directions = direction if isinstance(direction, list) else None
         direction = None if directions is not None else direction
         study = optuna.create_study(direction=direction, directions=directions, **kwargs)
-        study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial)
+        study.optimize(
+            _objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial, catch=catch
+        )
         if not study._is_multi_objective():
             best_trial = study.best_trial
             return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
@@ -290,6 +293,14 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    """
+    Environment:
+        - **RAY_SCOPE** (`str`, *optional*, defaults to `"last"`):
+            The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray
+            will then use the last checkpoint of all trials, compare those, and select the best one. However,
+            other options are also available. See the Ray documentation (https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial)
+            for more options
+    """
     import ray
     import ray.train
 
@@ -416,7 +427,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         num_samples=n_trials,
         **kwargs,
     )
-    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
+    ray_scope = os.getenv("RAY_SCOPE", "last")
+    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=ray_scope)
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config, analysis)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
