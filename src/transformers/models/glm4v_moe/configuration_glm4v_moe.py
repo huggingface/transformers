@@ -270,7 +270,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         topk_group=1,
         first_k_dense_replace=1,
         norm_topk_prob=True,
-        router_aux_loss_coef=0.001,
+        router_aux_loss_coef=0.0001,
         **kwargs,
     ):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
