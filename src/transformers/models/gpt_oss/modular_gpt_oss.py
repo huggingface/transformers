@@ -12,9 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional
+import math
+from typing import Optional, Unpack
 
 import torch
+import torch.distributed as dist
 from torch import nn
 from torch.nn import functional as F
 
@@ -25,7 +27,6 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -241,6 +242,34 @@ class GptOssAttention(Qwen2Attention):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+        self.hidden_size = config.hidden_size
+        self.head_dim = config.head_dim
+        self.num_attention_heads = config.num_attention_heads
+        self.num_key_value_heads = config.num_key_value_heads
+
+    def _ring_communicate(self, k_tensor, v_tensor):
+        """Helper function for ring communication."""
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+
+        send_to_rank = (rank + 1) % world_size
+        recv_from_rank = (rank - 1 + world_size) % world_size
+
+        k_recv_buffer = torch.empty_like(k_tensor)
+        v_recv_buffer = torch.empty_like(v_tensor)
+
+        ops = [
+            dist.P2POp(dist.isend, k_tensor, send_to_rank),
+            dist.P2POp(dist.isend, v_tensor, send_to_rank),
+            dist.P2POp(dist.irecv, k_recv_buffer, recv_from_rank),
+            dist.P2POp(dist.irecv, v_recv_buffer, recv_from_rank),
+        ]
+
+        reqs = dist.batch_isend_irecv(ops)
+        for req in reqs:
+            req.wait()
+
+        return k_recv_buffer, v_recv_buffer
 
     def forward(
         self,
@@ -251,40 +280,70 @@ class GptOssAttention(Qwen2Attention):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        world_size = dist.get_world_size() if dist.is_initialized() else 1
+
+        if world_size == 1:
+            return super().forward(hidden_states, position_embeddings, attention_mask, past_key_value, cache_position, **kwargs)
+
+        rank = dist.get_rank()
+        bsz, q_len, _ = hidden_states.size()
+
+        if q_len % world_size != 0:
+            raise ValueError(f"Sequence length ({q_len}) must be divisible by world size ({world_size}).")
+
+        chunk_size = q_len // world_size
+
+        hidden_states_chunk = hidden_states.chunk(world_size, dim=1)[rank]
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        cos_chunk = cos.chunk(world_size, dim=1)[rank]
+        sin_chunk = sin.chunk(world_size, dim=1)[rank]
 
-        if past_key_value is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        query_states = self.q_proj(hidden_states_chunk).view(bsz, chunk_size, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        key_states = self.k_proj(hidden_states_chunk).view(bsz, chunk_size, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = self.v_proj(hidden_states_chunk).view(bsz, chunk_size, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos_chunk, sin_chunk)
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            s_aux=self.sinks,  # diff with Llama
-            **kwargs,
-        )
+        #if past_key_value is not None:
+        #    raise NotImplementedError("Distributed KV Caching for generation is complex and not implemented in this example.")
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        key_states = torch.repeat_interleave(key_states, self.num_key_value_groups, dim=1)
+        value_states = torch.repeat_interleave(value_states, self.num_key_value_groups, dim=1)
+
+        attn_output_chunk = torch.zeros_like(query_states)
+
+        k_remote, v_remote = key_states, value_states
+
+        for i in range(world_size):
+            attn_weights = torch.matmul(query_states, k_remote.transpose(-2, -1)) / math.sqrt(self.head_dim)
+
+            if attention_mask is not None:
+                q_start_pos = rank * chunk_size
+                k_start_pos = ((rank - i + world_size) % world_size) * chunk_size
+
+                mask_chunk = attention_mask[:, :, q_start_pos:q_start_pos+chunk_size, k_start_pos:k_start_pos+chunk_size]
+                attn_weights = attn_weights + mask_chunk
+
+            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+
+            attn_output_partial = torch.matmul(attn_weights, v_remote)
+            attn_output_chunk += attn_output_partial
+
+            if i < world_size - 1:
+                k_remote, v_remote = self._ring_communicate(k_remote, v_remote)
+
+        attn_output_chunk = attn_output_chunk.transpose(1, 2).contiguous()
+        attn_output_chunk = attn_output_chunk.reshape(bsz, chunk_size, -1)
+        attn_output_chunk = self.o_proj(attn_output_chunk)
+
+        output_list = [torch.empty_like(attn_output_chunk) for _ in range(world_size)]
+        dist.all_gather(output_list, attn_output_chunk)
+
+        attn_output = torch.cat(output_list, dim=1)
+
+        return attn_output, None
 
 
 class GptOssDecoderLayer(LlamaDecoderLayer):
