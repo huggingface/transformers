@@ -404,7 +404,6 @@ def _get_device_map(
             special_dtypes = hf_quantizer.get_special_dtypes_update(model, dtype)
 
         target_dtype = dtype
-
         if hf_quantizer is not None:
             target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
 
