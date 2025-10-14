@@ -70,7 +70,7 @@ def get_nvidia_gpu_stats() -> tuple[int, float]:
     return int(gpu_stats["utilization.gpu"]), float(gpu_stats["memory.used"]) / 1024**3
 
 
-class GPUStatsGetter:
+class GPUStatsCollector:
     """A class to get statistics about the GPU. It serves as a wrapper that holds the GPU total memory and its name, 
     which is used to call the right function to get the utilization and memory used."""
 
@@ -84,7 +84,7 @@ class GPUStatsGetter:
         else:
             raise RuntimeError(f"Unsupported GPU: {self.device_name}")
 
-    def get_utilization_and_memory_used(self) -> tuple[int, float]:
+    def get_measurements(self) -> tuple[int, float]:
         """Get the utilization and memory used of the GPU, both in percent"""
         raise NotImplementedError("This method is meant to be monkey patched during __init__")
 

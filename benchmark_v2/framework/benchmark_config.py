@@ -180,7 +180,7 @@ def generate_all_configs(
     )
 
 
-def generate_useful_configs(
+def generate_default_configs(
     warmup_iterations: int = 5,
     measurement_iterations: int = 20,
     batch_size: int = 1,
