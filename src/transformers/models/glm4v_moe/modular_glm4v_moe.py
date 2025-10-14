@@ -665,7 +665,7 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)
-        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
     @auto_docstring
     def forward(
