@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from ..utils import logging
+from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
 
 
@@ -135,8 +136,13 @@ try:
             }
         },
     }
-
-    register_kernel_mapping(_KERNEL_MAPPING)
+    # We pin the version here for xpu support
+    if is_kernels_available(MIN_VERSION="0.10.2"):
+        register_kernel_mapping(_KERNEL_MAPPING)
+    else:
+        raise ImportError(
+            "kernels is not installed or uses an incompatible version. Please install the latest version with `pip install -U kernels`."
+        )
 
 except ImportError:
     _kernels_available = False
