@@ -549,7 +549,7 @@ class Qwen2VLAttention(nn.Module):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.config.rope_parameters[self.layer_type]["mrope_section"]
+            query_states, key_states, cos, sin, self.config.rope_parameters["mrope_section"]
         )
 
         if past_key_values is not None:

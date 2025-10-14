@@ -526,7 +526,7 @@ class ModernBertMLP(nn.Module):
 
 class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: ModernBertConfig, device=None):
-        pass
+        super().__init__(config, device)
 
 
 def eager_attention_forward(
