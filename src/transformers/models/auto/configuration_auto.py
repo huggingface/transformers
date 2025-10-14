@@ -973,8 +973,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("perception_encoder", "perception_lm"),
         ("pe_audio_encoder", "pe_audio"),
-        ("pe_audio_video_encoder", "pe_audio_video"),
         ("pe_video_encoder", "pe_video"),
+        ("pe_audio_video_encoder", "pe_audio_video"),
     ]
 )
 

@@ -560,7 +560,6 @@ class PEAudioContrastiveHead(nn.Module):
 
 class PEAudioPretrainedModel(PreTrainedModel):
     config: PEAudioConfig
-    base_model_prefix = "pe_audio"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -607,6 +606,7 @@ class PEAudioOutput(ModelOutput):
 
 class PEAudioEncoder(PEAudioPretrainedModel):
     config_class = PEAudioEncoderConfig
+    base_model_prefix = "audio_encoder"
 
     def __init__(self, config: PEAudioEncoderConfig):
         super().__init__(config)
@@ -646,7 +646,7 @@ class PEAudioModel(PEAudioPretrainedModel):
         self.text_model = AutoModel.from_config(config.text_config)
         self.audio_encoder = PEAudioEncoder(config.audio_config)
 
-        self.text_head = PEAudioContrastiveHead(config.text_config.hidden_size, config.projection_dim)
+        self.text_head_audio = PEAudioContrastiveHead(config.text_config.hidden_size, config.projection_dim)
         self.audio_head = PEAudioContrastiveHead(config.audio_config.hidden_size, config.projection_dim)
 
         self.logit_scale = nn.Parameter(torch.tensor([config.logit_scale_init_value]).log())

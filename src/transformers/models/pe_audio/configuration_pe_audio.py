@@ -1,12 +1,8 @@
-import math
-from typing import Optional
-
-import numpy as np
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..dac.configuration_dac import DacConfig
+
 
 class PEAudioEncoderConfig(PretrainedConfig):
     model_type = "pe_audio_encoder"
@@ -34,7 +30,7 @@ class PEAudioEncoderConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(dac_config, dict):
-            dac_config = DacConfig(**dac_config)
+            dac_config = DacConfig.from_dict(dac_config)
         elif dac_config is None:
             dac_config = DacConfig()
 
@@ -87,7 +83,7 @@ class PEAudioConfig(PretrainedConfig):
             # TODO: add log
 
         if isinstance(audio_config, dict):
-            audio_config = PEAudioEncoderConfig(**audio_config)
+            audio_config = PEAudioEncoderConfig.from_dict(audio_config)
         elif text_config is None:
             audio_config = PEAudioEncoderConfig()
             # TODO: add log
@@ -100,5 +96,6 @@ class PEAudioConfig(PretrainedConfig):
         self.logit_bias_init_value = logit_bias_init_value
         self.nth_text_layer = nth_text_layer
         self.nth_audio_layer = nth_audio_layer
+
 
 __all__ = ["PEAudioEncoderConfig", "PEAudioConfig"]

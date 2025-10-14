@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -9,9 +8,10 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs
+from ...utils import TransformersKwargs
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
+from ..clip.modeling_clip import CLIPOutput
 from ..dac.modeling_dac import DacEncoder
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
@@ -19,8 +19,7 @@ from ..qwen3.modeling_qwen3 import (
     Qwen3RMSNorm,
     Qwen3RotaryEmbedding,
 )
-from ..clip.modeling_clip import CLIPOutput
-from .configuration_pe_audio import PEAudioConfig, PEAudioEncoderConfig 
+from .configuration_pe_audio import PEAudioConfig, PEAudioEncoderConfig
 
 
 class PEAudioMaskedGroupNorm(nn.GroupNorm):
@@ -199,7 +198,6 @@ class PEAudioContrastiveHead(nn.Module):
 
 class PEAudioPretrainedModel(PreTrainedModel):
     config: PEAudioConfig
-    base_model_prefix = "pe_audio"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -213,6 +211,8 @@ class PEAudioOutput(CLIPOutput): ...
 
 class PEAudioEncoder(PEAudioPretrainedModel):
     config_class = PEAudioEncoderConfig
+    base_model_prefix = "audio_encoder"
+
     def __init__(self, config: PEAudioEncoderConfig):
         super().__init__(config)
 
@@ -251,7 +251,7 @@ class PEAudioModel(PEAudioPretrainedModel):
         self.text_model = AutoModel.from_config(config.text_config)
         self.audio_encoder = PEAudioEncoder(config.audio_config)
 
-        self.text_head = PEAudioContrastiveHead(config.text_config.hidden_size, config.projection_dim)
+        self.text_head_audio = PEAudioContrastiveHead(config.text_config.hidden_size, config.projection_dim)
         self.audio_head = PEAudioContrastiveHead(config.audio_config.hidden_size, config.projection_dim)
 
         self.logit_scale = nn.Parameter(torch.tensor([config.logit_scale_init_value]).log())
