@@ -39,12 +39,12 @@ import torch
 from torchvision import io
 from typing import Dict
 from transformers.image_utils import load_images, load_video
-from transformers import AutoModelForVision2Seq, AutoTokenizer, AutoProcessor
+from transformers import AutoModelForImageTextToText, AutoTokenizer, AutoProcessor
 from accelerate import Accelerator
 
 device = Accelerator().device
 
-model = AutoModelForVision2Seq.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     "thisisiron/Ovis2-2B-hf",
     dtype=torch.bfloat16,
 ).eval().to(device)

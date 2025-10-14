@@ -49,14 +49,6 @@ class Lfm2ModelTester(CausalLMModelTester):
 
 @require_torch
 class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Lfm2Model,
-            "text-generation": Lfm2ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False
     model_tester_class = Lfm2ModelTester
     # used in `test_torch_compile_for_training`
