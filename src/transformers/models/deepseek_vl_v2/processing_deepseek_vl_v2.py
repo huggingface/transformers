@@ -41,9 +41,8 @@ class DeepseekVLV2Processor(ProcessorMixin):
         chat_template=None,
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.image_token = tokenizer.image_token
-        self.image_token = tokenizer.image_token
-        self.num_image_tokens = num_image_tokens
+        self.image_token = "<image>"
+        self.image_token_id = self.tokenizer.vocab.get(self.image_token)
 
     def __call__(
         self,
@@ -56,7 +55,7 @@ class DeepseekVLV2Processor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         DeepseekVLV2ImageProcessor's [`~DeepseekVLV2ImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
@@ -70,10 +69,8 @@ class DeepseekVLV2Processor(ProcessorMixin):
                 tensor. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -95,7 +92,6 @@ class DeepseekVLV2Processor(ProcessorMixin):
         for img in images:
             out = self.image_processor.preprocess(img)
             batch_pixel_values.append(out["pixel_values"])
-            # shape: [num_tiles, 3, 384, 384]
             batch_spatial_crops.append([out["num_width_tiles"], out["num_height_tiles"]])
 
         max_tiles = max(pv.shape[0] for pv in batch_pixel_values)
@@ -150,3 +146,15 @@ class DeepseekVLV2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    def apply_chat_template(self, conversation, **kwargs):
+        if "chat_template" not in kwargs:
+            if self.chat_template is not None:
+                kwargs["chat_template"] = self.chat_template
+            elif self.tokenizer.chat_template is not None:
+                kwargs["chat_template"] = self.tokenizer.chat_template
+
+        return super().apply_chat_template(conversation, **kwargs)
+
+
+__all__ = ["DeepseekVLV2Processor"]

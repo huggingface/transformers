@@ -108,7 +108,7 @@ class MlpProjector(nn.Module):
         return self.layers(x)
 
 
-# @auto_docstringe
+#@auto_docstring
 class DeepseekVLV2PreTrainedModel(PreTrainedModel):
     config: DeepseekVLV2Config
     base_model_prefix = "deepseek_vl_v2"
@@ -132,7 +132,7 @@ class DeepseekVLV2PreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-# @auto_docstring(
+#@auto_docstring(
 #     custom_intro="""
 #     Base class for DeepseekVLV2 model's outputs that may also contain a past key/values (to speed up sequential decoding).
 #     """
@@ -145,10 +145,7 @@ class DeepseekVLV2BaseModelOutputWithPast(ModelOutput):
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-        encoder_sequence_length, embed_size_per_head)`.
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
         `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
@@ -161,13 +158,13 @@ class DeepseekVLV2BaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
-# @auto_docstring
+#@auto_docstring
 class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
     def __init__(self, config: DeepseekVLV2Config):
         super().__init__(config)
@@ -196,7 +193,7 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -217,11 +214,11 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
         return special_image_mask
 
     @can_return_tuple
-    # @auto_docstringe
+    #@auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -274,8 +271,6 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
     def __init__(self, config: DeepseekVLV2Config):
         super().__init__(config)
         self.config = config
-        self.model = DeepseekVLV2Model(config)
-        self.lm_head = nn.Linear(config.language_config.hidden_size, config.language_config.vocab_size, bias=False)
         self.vision_model = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModelForCausalLM.from_config(config.language_config)
 
@@ -297,7 +292,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
 
             tile_variants_num = len(candidate_resolutions)
             self.tile_indicators = nn.Parameter(
-                torch.randn(size=(tile_variants_num + 1, projector_config.n_embed) * embed_std)
+                torch.randn(size=(tile_variants_num + 1, projector_config.n_embed)) * embed_std
             )
         else:
             raise ValueError(f"Unknown tile_tag: {self.tile_tag}. It should one of the following: '1D', '2D'.")
@@ -315,7 +310,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
         raise AttributeError("Not needed for DeepseekVLV2")
 
     @can_return_tuple
-    # @auto_docstring
+    #@auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -334,6 +329,10 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
     ):
         r"""
+        images_seq_mask (<fill_type>):
+            <fill_docstring>
+        images_spatial_crop (<fill_type>):
+            <fill_docstring>
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -531,3 +530,5 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
                 inputs_embeds[idx].masked_scatter_(images_seq_mask[idx].unsqueeze(-1), images_in_this_batch)
 
         return inputs_embeds
+    
+__all__ = ["DeepseekVLV2Model", "DeepseekVLV2ForCausalLM"]

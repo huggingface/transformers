@@ -8,7 +8,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 
 
 logger = logging.get_logger(__name__)
@@ -32,6 +31,7 @@ class MlpProjectorConfig(PretrainedConfig):
         depth: int = 2,
         mlp_ratio: int = 1,
         downsample_ratio: int = 2,
+        token_pooling: bool = False,
         **kwargs,
     ):
         self.projector_type = projector_type
@@ -40,6 +40,7 @@ class MlpProjectorConfig(PretrainedConfig):
         self.depth = depth
         self.mlp_ratio = mlp_ratio
         self.downsample_ratio = downsample_ratio
+        self.token_pooling = token_pooling
 
         super().__init__(**kwargs)
 
@@ -47,7 +48,7 @@ class MlpProjectorConfig(PretrainedConfig):
 class DeepseekVLV2Config(PretrainedConfig):
     model_type = "deepseek_vl_v2"
     sub_configs = {
-        "language_config": DeepseekV2Config,
+        "language_config": AutoConfig,
         "vision_config": AutoConfig,
         "projector_config": MlpProjectorConfig,
     }
@@ -86,7 +87,7 @@ class DeepseekVLV2Config(PretrainedConfig):
             language_config = CONFIG_MAPPING[language_config["model_type"]](**language_config)
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] =  "siglip_vision_model"
+            vision_config["model_type"] = "siglip_vision_model"
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
 
         if isinstance(projector_config, dict):
@@ -94,5 +95,16 @@ class DeepseekVLV2Config(PretrainedConfig):
             projector_config = MlpProjectorConfig(**projector_config)
 
         self.language_config = language_config
+        
+        if self.language_config.kv_lora_rank is None:
+            self.language_config.kv_rank_lora = 512
+            logger.info("`kv_rank_lora` is `None`. Setting `kv_rank_lora` to 512.")
+        
+        if self.language_config.qk_rope_head_dim is None:
+            self.language_config.qk_rope_head_dim = 64
+            logger.info("`qk_rope_head_dim` is `None`. Setting `qk_rope_head_dim` to 64.")
+        
         self.vision_config = vision_config
         self.projector_config = projector_config
+        
+__all__ = ["DeepseekVLV2Config", "MlpProjectorConfig"]

@@ -1,40 +1,18 @@
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    _LazyModule,
-)
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_deepseek_vl_v2 import (
-        DeepseekVLV2Config,
-        MlpProjectorConfig,
-    )
-    from .modeling_deepseek_vl_v2 import (
-        DeepseekVLV2ForCausalLM,
-        DeepseekVLV2Model,
-        DeepseekVLV2PreTrainedModel,
-    )
-    from .processing_deepseek_vl_v2 import DeepseekVLV2Processor
-
-
+    from .configuration_deepseek_vl_v2 import *
+    from .image_processing_deepseek_vl_v2 import *
+    from .modeling_deepseek_vl_v2 import *
+    from .processing_deepseek_vl_v2 import *
 else:
     import sys
 
+    _file = globals()["__file__"]
     sys.modules[__name__] = _LazyModule(
-        __name__,
-        globals()["__file__"],
-        {
-            "configuration_deepseek_vl_v2": [
-                "DeepseekVLV2Config",
-                "MlpProjectorConfig",
-            ],
-            "modeling_deepseek_vl_v2": [
-                "DeepseekVLV2ForCausalLM",
-                "DeepseekVLV2Model",
-                "DeepseekVLV2PreTrainedModel",
-            ],
-            "processing_deepseek_vl_v2": ["DeepseekVLV2Processor"],
-        },
-        module_spec=__spec__,
+        __name__, _file, define_import_structure(_file), module_spec=__spec__
     )

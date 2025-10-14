@@ -7,7 +7,7 @@
 from typing import Optional, Union
 
 import numpy as np
-import torch 
+import torch
 from PIL import Image
 from torchvision import transforms
 
@@ -21,12 +21,22 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
 )
-from ...utils import filter_out_non_signature_kwargs, is_vision_available
+from ...processing_utils import ImagesKwargs
+from ...utils import filter_out_non_signature_kwargs, is_vision_available, TensorType
 
 
 if is_vision_available():
     import PIL
-    from PIL import ImageOps
+
+
+class DeepseekVLV2ImageProcessorKwargs(ImagesKwargs):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+    """
+
+    min_size: int
 
 
 class DeepseekVLV2ImageProcessor(BaseImageProcessor):
@@ -65,34 +75,45 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to square or not.
     """
 
     model_input_names = ["pixel_values"]
+
+    valid_kwargs = DeepseekVLV2ImageProcessorKwargs
 
     def __init__(
         self,
         image_mean: Optional[Union[float, list[float]]] = [0.5, 0.5, 0.5],
         image_std: Optional[Union[float, list[float]]] = [0.5, 0.5, 0.5],
+        do_resize: bool = True,
+        size: Optional[dict[str, int]] = None,
+        min_size: int = 14,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        do_convert_rgb: Optional[bool] = None,
+        do_pad: Optional[bool] = True,
+        candidate_resolutions: Optional[tuple[tuple[int, int]]] = None,
         patch_size: Optional[int] = None,
         downsample_ratio: Optional[int] = None,
-        candidate_resolutions: tuple[tuple[int, int]] = ((384, 384),),
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 384, "width": 384}
-        size = get_size_dict(size, default_to_square=True)
-
-        # self.do_resize = do_resize
-        self.size = size
-        # self.resample = resample
-        # self.do_rescale = do_rescale
-        # self.rescale_factor = rescale_factor
-        # self.do_normalize = do_normalize
+        self.do_resize = do_resize
+        self.size = candidate_resolutions[0][0]
+        self.resample = resample
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-        # self.do_convert_rgb = do_convert_rgb
+        self.do_convert_rgb = do_convert_rgb
 
-        # self.min_size = min_size
+        self.do_pad = do_pad
+        self.min_size = min_size
         if image_mean is None:
             self.background_color = (127, 127, 127)
         else:
@@ -101,18 +122,10 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
         self.patch_size = patch_size
         self.downsample_ratio = downsample_ratio
 
-        self.transform = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(mean=self.image_mean, std=self.image_std),
-            ]
-        )
-
     def resize(
         self,
         image: np.ndarray,
         size: Union[dict[str, int], int],
-        background_color: Optional[tuple[int, int, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -126,8 +139,6 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`dict[str, int]` or `int`):
                 The size to resize the image to. If a dictionary, it should have the keys `"height"` and `"width"`.
-            background_color (`tuple[int, int, int]`):
-                The background color to use for the padding.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -146,7 +157,6 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        background_color = background_color if background_color is not None else self.background_color
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -175,16 +185,27 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
             **kwargs,
         )
-        # Expand and pad the images to obtain a square image of dimensions `size x size`
-        image = self.pad_to_square(
-            image=image,
-            background_color=background_color,
-            input_data_format=input_data_format,
-        )
         return image
 
     @filter_out_non_signature_kwargs()
-    def preprocess(self, image: Image.Image) -> PIL.Image.Image:
+    def preprocess(
+        self,
+        image: Image.Image,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_convert_rgb: Optional[bool] = None,
+        background_color: Optional[Union[int, tuple[int, int, int]]] = None,
+        do_pad: Optional[bool] = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
 
@@ -213,13 +234,15 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
                 Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image to square or not.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -236,11 +259,11 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
             image = Image.fromarray(image)
 
         w, h = image.size
-        best_w, best_h = self.select_best_resolution(w, h)
+        best_w, best_h = self._select_best_resolution(w, h)
 
-        global_img = ImageOps.pad(image, (self.image_size, self.image_size))
+        global_img = self.pad(image, (self.image_size, self.image_size))
 
-        padded_img = ImageOps.pad(image, (best_w, best_h))
+        padded_img = self.pad(image, (best_w, best_h))
 
         local_tiles = []
         for i in range(0, best_h, self.image_size):
@@ -248,8 +271,15 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
                 tile = padded_img.crop((j, i, j + self.image_size, i + self.image_size))
                 local_tiles.append(tile)
 
-        global_tensor = self.transform(global_img)
-        local_tensors = [self.transform(t) for t in local_tiles]
+        transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(mean=self.image_mean, std=self.image_std),
+            ]
+        )
+
+        global_tensor = transform(global_img)
+        local_tensors = [transform(t) for t in local_tiles]
 
         all_tiles = torch.stack([global_tensor] + local_tensors)
 
@@ -265,7 +295,7 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
         background_color: Union[int, tuple[int, int, int]] = 0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
 
@@ -275,7 +305,7 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -290,7 +320,11 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
             `np.ndarray`: The padded image.
         """
         height, width = get_image_size(image, input_data_format)
-        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
+        num_channels = (
+            image.shape[0]
+            if input_data_format == ChannelDimension.FIRST
+            else image.shape[-1]
+        )
 
         if height == width:
             image = (
@@ -341,15 +375,23 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
 
         for width, height in candidate_resolutions:
             scale = min(width / original_width, height / original_height)
-            downscaled_width, downscaled_height = int(original_width * scale), int(original_height * scale)
-            effective_resolution = min(downscaled_width * downscaled_height, original_width * original_height)
+            downscaled_width, downscaled_height = int(original_width * scale), int(
+                original_height * scale
+            )
+            effective_resolution = min(
+                downscaled_width * downscaled_height, original_width * original_height
+            )
             wasted_resolution = (width * height) - effective_resolution
 
             if effective_resolution > max_effective_resolution or (
-                effective_resolution == max_effective_resolution and wasted_resolution < min_wasted_resolution
+                effective_resolution == max_effective_resolution
+                and wasted_resolution < min_wasted_resolution
             ):
                 max_effective_resolution = effective_resolution
                 min_wasted_resolution = wasted_resolution
                 best_fit = (width, height)
 
         return best_fit
+
+
+__all__ = ["DeepseekVLV2ImageProcessor"]

@@ -10,7 +10,9 @@ from torch.nn.utils.rnn import pad_sequence
 from PIL import Image, ImageOps
 
 from ...configuration_utils import PretrainedConfig
+from ...processing_utils import ProcessorMixin
 from ..auto import AutoConfig, AutoModel, AutoModelForCausalLM, CONFIG_MAPPING
+from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
@@ -53,6 +55,7 @@ class MlpProjectorConfig(PretrainedConfig):
         depth: int = 2,
         mlp_ratio: int = 1,
         downsample_ratio: int = 2,
+        token_pooling: bool = False,
         **kwargs,
     ):
         self.projector_type = projector_type
@@ -61,6 +64,7 @@ class MlpProjectorConfig(PretrainedConfig):
         self.depth = depth
         self.mlp_ratio = mlp_ratio
         self.downsample_ratio = downsample_ratio
+        self.token_pooling = token_pooling
 
         super().__init__(**kwargs)
 
@@ -161,7 +165,7 @@ class MlpProjector(nn.Module):
 class DeepseekVLV2Config(PretrainedConfig):
     model_type = "deepseek_vl_v2"
     sub_configs = {
-        "language_config": DeepseekV2Config,
+        "language_config": AutoConfig,
         "vision_config": AutoConfig,
         "projector_config": MlpProjectorConfig,
     }
@@ -176,6 +180,9 @@ class DeepseekVLV2Config(PretrainedConfig):
         global_view_pos: str = "head",
         candidate_resolutions: Tuple[Tuple[int, int]] = ((384, 384),),
         n_embed: int = 512,
+        language_config: dict = None,
+        vision_config: dict = None,
+        projector_config: dict = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -186,33 +193,27 @@ class DeepseekVLV2Config(PretrainedConfig):
 
         if language_config is None:
             language_config = {}
-            logger.info(
-                "`text_config` is `None`. Initializing the `LlamaConfig` with default values."
-            )
+            logger.info("`language_config` is `None`. Initializing the `DeepseekV2Config` with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info(
-                "`vision_config` is `None`. Initializing the `SiglipVisionConfig` with default values."
-            )
+            logger.info("`vision_config` is `None`. Initializing the `SiglipVisionConfig` with default values.")
 
         if isinstance(language_config, dict):
-            text_config["model_type"] = language_config.get("model_type", "deepseek_v2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+            language_config["model_type"] = language_config.get("model_type", "deepseek_v2")
+            language_config = CONFIG_MAPPING[language_config["model_type"]](**language_config)
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get(
-                "model_type", "siglip_vision_model"
-            )
+            vision_config["model_type"] = "siglip_vision_model"
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
 
         if isinstance(projector_config, dict):
-            projector_config["model_type"] = projector_config.get(
-                "model_type", "mlp_projector"
-            )
-            projector_config = CONFIG_MAPPING[projector_config["model_type"]](
-                **projector_config
-            )
+            projector_config["model_type"] = "mlp_projector"
+            projector_config = MlpProjectorConfig(**projector_config)
+
+        self.language_config = language_config
+        self.vision_config = vision_config
+        self.projector_config = projector_config
 
 
 class DeepseekVLV2PreTrainedModel(DeepseekVLPreTrainedModel):
@@ -239,7 +240,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLForConditionalGeneration):
         super().__init__(config)
         self.config = config
         self.vision_model = AutoModel.from_config(config.vision_config)
-        self.language_model = AutoModelForCausalLM(config.language_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.language_config)
 
         projector_config = config.projector_config
         self.projector = MlpProjector(projector_config)
@@ -265,9 +266,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLForConditionalGeneration):
 
             tile_variants_num = len(candidate_resolutions)
             self.tile_indicators = nn.Parameter(
-                torch.randn(
-                    size=(tile_variants_num + 1, projector_config.n_embed) * embed_std
-                )
+                torch.randn(size=(tile_variants_num + 1, projector_config.n_embed)) * embed_std
             )
         else:
             raise ValueError(
@@ -576,8 +575,14 @@ class DeepseekVLV2ImageProcessor(DeepseekVLImageProcessor):
                 tile = padded_img.crop((j, i, j + self.image_size, i + self.image_size))
                 local_tiles.append(tile)
 
-        global_tensor = self.transform(global_img)
-        local_tensors = [self.transform(t) for t in local_tiles]
+        transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(mean=self.image_mean, std=self.image_std),
+            ]
+        )
+        global_tensor = transform(global_img)
+        local_tensors = [transform(t) for t in local_tiles]
 
         all_tiles = torch.stack([global_tensor] + local_tensors)
 
@@ -588,7 +593,7 @@ class DeepseekVLV2ImageProcessor(DeepseekVLImageProcessor):
         }
 
 
-class DeepseekVLV2Processor(DeepseekVLProcessor):
+class DeepseekVLV2Processor(DeepseekVLProcessor, ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template", "num_image_tokens"]
     image_processor_class = "AutoImageProcessor"
@@ -622,7 +627,6 @@ class DeepseekVLV2Processor(DeepseekVLProcessor):
         for img in images:
             out = self.image_processor.preprocess(img)
             batch_pixel_values.append(out["pixel_values"])
-            # shape: [num_tiles, 3, 384, 384]
             batch_spatial_crops.append(
                 [out["num_width_tiles"], out["num_height_tiles"]]
             )
@@ -660,4 +664,9 @@ class DeepseekVLV2Processor(DeepseekVLProcessor):
                 "images_spatial_crop": images_spatial_crop,
                 "images_seq_mask": images_seq_mask,
             }
+        )
+
+    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
+        return ProcessorMixin.apply_chat_template(
+            self, conversations, chat_template, **kwargs
         )
