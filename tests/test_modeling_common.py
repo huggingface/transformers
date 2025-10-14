@@ -367,9 +367,6 @@ def _test_eager_matches_sdpa_inference(
                         "output_hidden_states": True,
                     }
                 )
-                # check signature of model_eager.forward and pop decoder_input_ids if it does not exist
-                if "decoder_input_ids" not in inspect.signature(model_eager.forward).parameters:
-                    processed_inputs.pop("decoder_input_ids")
             else:
                 processed_inputs.update(
                     {
@@ -412,7 +409,6 @@ def _test_eager_matches_sdpa_inference(
                     prepared_inputs = {
                         k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
                     }
-                    print("prepared_inputs", prepared_inputs.keys())
                     outputs_eager = model_eager(**prepared_inputs)
                     outputs_sdpa = model_sdpa(**prepared_inputs)
 

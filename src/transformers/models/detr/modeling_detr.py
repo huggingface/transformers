@@ -20,7 +20,6 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
-from torch import Tensor
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
@@ -348,8 +347,8 @@ class DetrSinePositionEmbedding(nn.Module):
         shape: torch.Size,
         device: Union[torch.device, str],
         dtype: torch.dtype,
-        mask: Optional[Tensor] = None,
-    ) -> Tensor:
+        mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if mask is None:
             mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
         y_embed = mask.cumsum(1, dtype=dtype)
@@ -382,7 +381,11 @@ class DetrLearnedPositionEmbedding(nn.Module):
 
     @compile_compatible_method_lru_cache(maxsize=1)
     def forward(
-        self, shape: torch.Size, device: Union[torch.device, str], dtype: torch.dtype, mask: Optional[Tensor] = None
+        self,
+        shape: torch.Size,
+        device: Union[torch.device, str],
+        dtype: torch.dtype,
+        mask: Optional[torch.Tensor] = None,
     ):
         height, width = shape[-2:]
         width_values = torch.arange(width, device=device)
@@ -1012,11 +1015,8 @@ class DetrModel(DetrPreTrainedModel):
             self.position_embedding = DetrLearnedPositionEmbedding(config.d_model // 2)
         else:
             raise ValueError(f"Not supported {config.position_embedding_type}")
-
-        # Create projection layer
-        self.input_projection = nn.Conv2d(self.backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
-
         self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
+        self.input_projection = nn.Conv2d(self.backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
 
         self.encoder = DetrEncoder(config)
         self.decoder = DetrDecoder(config)
@@ -1088,23 +1088,17 @@ class DetrModel(DetrPreTrainedModel):
         if pixel_values is None and inputs_embeds is None:
             raise ValueError("You have to specify either pixel_values or inputs_embeds")
 
-        # If inputs_embeds are provided, use them directly instead of processing pixel_values
         if inputs_embeds is None:
             batch_size, num_channels, height, width = pixel_values.shape
             device = pixel_values.device
 
             if pixel_mask is None:
                 pixel_mask = torch.ones(((batch_size, height, width)), device=device)
-            # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-            # pixel_values should be of shape (batch_size, num_channels, height, width)
-            # pixel_mask should be of shape (batch_size, height, width)
-            # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
             vision_features = self.backbone(pixel_values, pixel_mask)
             feature_map, mask = vision_features[-1]
 
-            # Apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-            # then, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
-            # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
+            # Apply 1x1 conv to map (N, C, H, W) -> (N, d_model, H, W), then flatten to (N, HW, d_model)
+            # (feature map and position embeddings are flattened and permuted to (batch_size, sequence_length, hidden_size))
             projected_feature_map = self.input_projection(feature_map)
             flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
             spatial_position_embeddings = (
@@ -1114,7 +1108,6 @@ class DetrModel(DetrPreTrainedModel):
             )
             flattened_mask = mask.flatten(1)
         else:
-            # Use the provided inputs_embeds directly
             batch_size = inputs_embeds.shape[0]
             device = inputs_embeds.device
             flattened_features = inputs_embeds
@@ -1132,12 +1125,14 @@ class DetrModel(DetrPreTrainedModel):
                 .flatten(2)
                 .permute(0, 2, 1)
             )
-            # If no mask is provided with inputs_embeds, assume all positions are valid
-            flattened_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.long)
+            # If a pixel_mask is provided with inputs_embeds, interpolate it to feat_dim, then flatten.
+            if pixel_mask is not None:
+                mask = nn.functional.interpolate(pixel_mask[None].float(), size=(feat_dim, feat_dim)).to(torch.bool)[0]
+                flattened_mask = mask.flatten(1)
+            else:
+                # If no mask provided, assume all positions are valid
+                flattened_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.long)
 
-        # Fourth, sent flattened_features + flattened_mask + spatial position embeddings through encoder
-        # flattened_features is a Tensor of shape (batch_size, height*width, hidden_size)
-        # flattened_mask is a Tensor of shape (batch_size, height*width)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 inputs_embeds=flattened_features,
@@ -1146,12 +1141,11 @@ class DetrModel(DetrPreTrainedModel):
                 **kwargs,
             )
 
-        # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
         object_queries_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(
             batch_size, 1, 1
         )
 
-        # Use decoder_inputs_embeds if provided, otherwise initialize with zeros
+        # Use decoder_inputs_embeds as queries if provided, otherwise initialize with zeros
         if decoder_inputs_embeds is not None:
             queries = decoder_inputs_embeds
         else:
@@ -1394,9 +1388,8 @@ class DetrForSegmentation(DetrPreTrainedModel):
             - 1 for queries that are **not masked**,
             - 0 for queries that are **masked**.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image. Note: For segmentation, this will skip
-            the backbone, so intermediate features for the mask head won't be available.
+            Kept for backward compatibility, but cannot be used for segmentation, as segmentation requires
+            multi-scale features from the backbone that are not available when bypassing it with inputs_embeds.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation. Useful for tasks that require custom query initialization.
@@ -1448,16 +1441,10 @@ class DetrForSegmentation(DetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=device)
 
-        # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-        # pixel_values should be of shape (batch_size, num_channels, height, width)
-        # pixel_mask should be of shape (batch_size, height, width)
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
         vision_features = self.detr.model.backbone(pixel_values, pixel_mask)
         feature_map, mask = vision_features[-1]
 
-        # Apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        # then, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
-        # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
+        # Apply 1x1 conv to map (N, C, H, W) -> (N, d_model, H, W), then flatten to (N, HW, d_model)
         projected_feature_map = self.detr.model.input_projection(feature_map)
         flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
         spatial_position_embeddings = (
@@ -1469,9 +1456,6 @@ class DetrForSegmentation(DetrPreTrainedModel):
         )
         flattened_mask = mask.flatten(1)
 
-        # Fourth, sent flattened_features + flattened_mask + spatial position embeddings through encoder
-        # flattened_features is a Tensor of shape (batch_size, height*width, hidden_size)
-        # flattened_mask is a Tensor of shape (batch_size, height*width)
         if encoder_outputs is None:
             encoder_outputs = self.detr.model.encoder(
                 inputs_embeds=flattened_features,
@@ -1480,18 +1464,16 @@ class DetrForSegmentation(DetrPreTrainedModel):
                 **kwargs,
             )
 
-        # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
         object_queries_position_embeddings = self.detr.model.query_position_embeddings.weight.unsqueeze(0).repeat(
             batch_size, 1, 1
         )
 
-        # Use decoder_inputs_embeds if provided, otherwise initialize with zeros
+        # Use decoder_inputs_embeds as queries if provided, otherwise initialize with zeros
         if decoder_inputs_embeds is not None:
             queries = decoder_inputs_embeds
         else:
             queries = torch.zeros_like(object_queries_position_embeddings)
 
-        # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.detr.model.decoder(
             inputs_embeds=queries,
             attention_mask=decoder_attention_mask,
@@ -1504,7 +1486,6 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         sequence_output = decoder_outputs[0]
 
-        # Sixth, compute logits, pred_boxes and pred_masks
         logits = self.detr.class_labels_classifier(sequence_output)
         pred_boxes = self.detr.bbox_predictor(sequence_output).sigmoid()
 
@@ -1512,9 +1493,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         memory = encoder_outputs[0].permute(0, 2, 1).view(batch_size, self.config.d_model, height, width)
         mask = flattened_mask.view(batch_size, height, width)
 
-        # FIXME h_boxes takes the last one computed, keep this in mind
-        # important: we need to reverse the mask, since in the original implementation the mask works reversed
-        # bbox_mask is of shape (batch_size, num_queries, number_of_attention_heads in bbox_attention, height/32, width/32)
+        # Note: mask is reversed because the original DETR implementation works with reversed masks
         bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
 
         seg_masks = self.mask_head(
@@ -1595,7 +1574,7 @@ class DetrMaskHeadSmallConv(nn.Module):
                 nn.init.kaiming_uniform_(m.weight, a=1)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x: Tensor, bbox_mask: Tensor, fpns: list[Tensor]):
+    def forward(self, x: torch.Tensor, bbox_mask: torch.Tensor, fpns: list[torch.Tensor]):
         # here we concatenate x, the projected feature map, of shape (batch_size, d_model, height/32, width/32) with
         # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32).
         # We expand the projected feature map to match the number of heads.
@@ -1650,7 +1629,7 @@ class DetrMHAttentionMap(nn.Module):
 
         self.normalize_fact = float(hidden_dim / self.num_heads) ** -0.5
 
-    def forward(self, q, k, mask: Optional[Tensor] = None):
+    def forward(self, q, k, mask: Optional[torch.Tensor] = None):
         q = self.q_linear(q)
         k = nn.functional.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
         queries_per_head = q.view(q.shape[0], q.shape[1], self.num_heads, self.hidden_dim // self.num_heads)
