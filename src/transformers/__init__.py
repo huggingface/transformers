@@ -175,7 +175,7 @@ _import_structure = {
     "processing_utils": ["ProcessorMixin"],
     "quantizers": [],
     "testing_utils": [],
-    "tokenization_sentencepiece": ["PreTrainedSentencePieceTokenizer"],
+    "tokenization_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
         "AddedToken",
@@ -281,7 +281,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
+    _import_structure["tokenization_tokenizers"] = ["TokenizersBackend", "PreTrainedTokenizerFast"]
 
 
 try:
@@ -711,14 +711,15 @@ if TYPE_CHECKING:
     from .pytorch_utils import prune_layer as prune_layer
 
     # Tokenization
-    from .tokenization_sentencepiece import PreTrainedSentencePieceTokenizer as PreTrainedSentencePieceTokenizer
+    from .tokenization_sentencepiece import SentencePieceBackend as SentencePieceBackend
     from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan
     from .tokenization_utils_base import PreTrainedTokenizerBase as PreTrainedTokenizerBase
     from .tokenization_utils_base import TokenSpan as TokenSpan
-    from .tokenization_utils_fast import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+    from .tokenization_tokenizers import TokenizersBackend as TokenizersBackend
+    from .tokenization_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
 
     # Trainer
     from .trainer import Trainer as Trainer

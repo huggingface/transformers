@@ -48,9 +48,9 @@ from .configuration_auto import (
 )
 
 if is_tokenizers_available():
-    from ...tokenization_utils_fast import PreTrainedTokenizerFast
+    from ...tokenization_tokenizers import TokenizersBackend
 else:
-    PreTrainedTokenizerFast = None
+    TokenizersBackend = None
 
 logger = logging.get_logger(__name__)
 
@@ -355,7 +355,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         (
             "llama",
             (
-                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizer" if is_tokenizers_available() else None,
             ),
         ),
         (
@@ -1218,10 +1219,10 @@ class AutoTokenizer:
 
                 if vocab_file_exists:
                     logger.info(
-                        "Falling back to PreTrainedSentencePieceTokenizer since tokenizer.model file was found "
+                        "Falling back to SentencePieceBackend since tokenizer.model file was found "
                         "but no config or tokenizer class could be determined."
                     )
-                    return PreTrainedSentencePieceTokenizer.from_pretrained(
+                    return SentencePieceBackend.from_pretrained(
                         pretrained_model_name_or_path, *inputs, **kwargs
                     )
 

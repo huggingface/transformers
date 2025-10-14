@@ -1,8 +1,8 @@
 import unittest
 import tempfile
 
-from transformers import AutoTokenizer, AddedToken, PreTrainedTokenizerFast
-from transformers.models.llama.tokenization_llama_fast import LlamaTokenizerFast
+from transformers import AutoTokenizer, AddedToken, TokenizersBackend
+from transformers.models.llama.tokenization_llama import LlamaTokenizer
 from transformers.tokenization_sentencepiece import SentencePieceExtractor
 from transformers.testing_utils import (
     require_sentencepiece, 
@@ -37,8 +37,8 @@ expected_token_ids = [1, 910, 338, 263, 1243, 13, 29902, 471, 6345, 297, 29871, 
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # TokenizerTesterMixin configuration
     from_pretrained_id = ["hf-internal-testing/llama-tokenizer"]
-    tokenizer_class = LlamaTokenizerFast  # We'll set this dynamically
-    rust_tokenizer_class = LlamaTokenizerFast
+    tokenizer_class = LlamaTokenizer  # We'll set this dynamically
+    rust_tokenizer_class = LlamaTokenizer
     test_rust_tokenizer = False # we're going to just test the fast one I'll remove this
     test_sentencepiece = True
     from_pretrained_kwargs = {}
@@ -57,7 +57,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         extractor = SentencePieceExtractor(vocab_file)
         vocab, merges = extractor.extract()
-        tok_from_vocab = LlamaTokenizerFast(vocab=vocab, merges=merges)
+        tok_from_vocab = LlamaTokenizer(vocab=vocab, merges=merges)
         tok_from_vocab.pad_token = tok_from_vocab.eos_token
 
         cls.tokenizers = [tok_auto, tok_from_vocab]

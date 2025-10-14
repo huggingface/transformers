@@ -290,7 +290,7 @@ class Trie:
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
-class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
+class SentencePieceBackend(PreTrainedTokenizerBase):
     """
     Base class for SentencePiece-based tokenizers that load from sentencepiece.model files.
 

@@ -20,7 +20,7 @@ from tokenizers import processors
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE, Unigram
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_tokenizers import TokenizersBackend
 from ...utils import is_sentencepiece_available, logging, requires_backends
 from ...tokenization_sentencepiece import _get_prepend_scheme, generate_merges
 
@@ -41,16 +41,16 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
-class LlamaTokenizerFast(PreTrainedTokenizerFast):
+class LlamaTokenizer(TokenizersBackend):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
 
     This uses notably ByteFallback and no normalization.
 
     ```python
-    >>> from transformers import LlamaTokenizerFast
+    >>> from transformers import LlamaTokenizer
 
-    >>> tokenizer = LlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
+    >>> tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
     >>> tokenizer.encode("Hello this is a test")
     [1, 15043, 445, 338, 263, 1243]
     ```
@@ -87,25 +87,21 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to add an `eos_token` at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used
-        legacy (`bool`, *optional*):
-            Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
-            and #25224 which includes fixes to properly handle tokens that appear after special tokens.
-            Make sure to also set `from_slow` to `True`.
             A simple example:
 
             - `legacy=True`:
             ```python
-            >>> from transformers import LlamaTokenizerFast
+    >>> from transformers import LlamaTokenizer
 
-            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=True, from_scratch=True)
+            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=True, from_scratch=True)
             >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
             [1, 15043, 29871, 1, 869]
             ```
             - `legacy=False`:
             ```python
-            >>> from transformers import LlamaTokenizerFast
+            >>> from transformers import LlamaTokenizer
 
-            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_scratch=True)
+            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False, from_scratch=True)
             >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
             [1, 15043, 29871, 1, 29889]
             ```
@@ -211,4 +207,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
 
 
-__all__ = ["LlamaTokenizerFast"]
+__all__ = ["LlamaTokenizer", "LlamaTokenizerFast"]
+
+# Backward alias
+LlamaTokenizerFast = LlamaTokenizer

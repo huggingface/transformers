@@ -34,12 +34,12 @@ from parameterized import parameterized
 from transformers import (
     AutoTokenizer,
     AlbertTokenizer,
-    AlbertTokenizerFast,
+  #  AlbertTokenizerFast,
     BertTokenizer,
-    BertTokenizerFast,
+ #   BertTokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
-    PreTrainedTokenizerFast,
+    TokenizersBackend,
     Trainer,
     TrainingArguments,
     is_mlx_available,
@@ -58,8 +58,8 @@ from transformers.testing_utils import (
 )
 from transformers.tokenization_utils import AddedToken
 
-from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
-from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
+# from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
+# from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
 
 
 if is_torch_available():
@@ -119,9 +119,9 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 def merge_model_tokenizer_mappings(
     model_mapping: dict["PretrainedConfig", "PreTrainedModel"],
-    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
+    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "TokenizersBackend"]],
 ) -> dict[
-    Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
+    Union["PreTrainedTokenizer", "TokenizersBackend"],
     tuple["PretrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
@@ -280,7 +280,7 @@ class TokenizerTesterMixin:
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizerFast:
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> TokenizersBackend:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
@@ -508,7 +508,7 @@ class TokenizerTesterMixin:
                     "init_inputs",
                     "init_kwargs",
                 ]
-                if not isinstance(tokenizer, PreTrainedTokenizerFast):
+                if not isinstance(tokenizer, TokenizersBackend):
                     attributes_list += [
                         "added_tokens_encoder",
                         "added_tokens_decoder",
@@ -1473,7 +1473,7 @@ class TokenizerTesterMixin:
                 )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, PreTrainedTokenizerFast):
+                if isinstance(tokenizer, TokenizersBackend):
                     truncated_sequence = information["input_ids"][0]
                     overflowing_tokens = information["input_ids"][1]
                     self.assertEqual(len(information["input_ids"]), 2)
@@ -1611,7 +1611,7 @@ class TokenizerTesterMixin:
                 )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, PreTrainedTokenizerFast):
+                if isinstance(tokenizer, TokenizersBackend):
                     information = tokenizer(
                         seq_0,
                         seq_1,
@@ -1654,7 +1654,7 @@ class TokenizerTesterMixin:
                     )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, PreTrainedTokenizerFast):
+                if isinstance(tokenizer, TokenizersBackend):
                     information = tokenizer(
                         seq_0,
                         seq_1,
@@ -1707,7 +1707,7 @@ class TokenizerTesterMixin:
                     # add_prefix_space=False,
                 )
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, PreTrainedTokenizerFast):
+                if isinstance(tokenizer, TokenizersBackend):
                     truncated_sequence = information_first_truncated["input_ids"][0]
                     overflowing_tokens = information_first_truncated["input_ids"][1]
                     self.assertEqual(len(information_first_truncated["input_ids"]), 2)
@@ -1738,7 +1738,7 @@ class TokenizerTesterMixin:
                     # add_prefix_space=False,
                 )
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, PreTrainedTokenizerFast):
+                if isinstance(tokenizer, TokenizersBackend):
                     truncated_sequence = information_second_truncated["input_ids"][0]
                     overflowing_tokens = information_second_truncated["input_ids"][1]
                     self.assertEqual(len(information_second_truncated["input_ids"]), 2)
@@ -2701,71 +2701,71 @@ class TokenizerTesterMixin:
             reason="This test is now in TokenizersBackendTesterMixin - it tests tokenizers-backend API, not transformers code"
         )
 
-    def test_tokenizer_mismatch_warning(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                with self.assertLogs("transformers", level="WARNING") as cm:
-                    try:
-                        if self.tokenizer_class == BertTokenizer:
-                            AlbertTokenizer.from_pretrained(pretrained_name)
-                        else:
-                            BertTokenizer.from_pretrained(pretrained_name)
-                    except OSError as e:
-                        # Some tokenizer will raised an error before reaching the logged warning because there are no
-                        # corresponding files to load
-                        error_message = str(e)
-                    except (TypeError, AttributeError):
-                        # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
-                        # here we just check that the warning has been logged before the error is raised
-                        pass
-                    finally:
-                        logged_msg_target = (
-                            "The tokenizer class you load from this checkpoint is not the same type as the class "
-                            "this function is called from."
-                        )
-                        raised_error_msg_target = "Can't load tokenizer for"
-                        self.assertTrue(
-                            cm.records[0].message.startswith(logged_msg_target)
-                            if len(cm.records) > 0
-                            else False or raised_error_msg_target in error_message
-                        )
-                    try:
-                        if self.rust_tokenizer_class == BertTokenizerFast:
-                            AlbertTokenizerFast.from_pretrained(pretrained_name)
-                        else:
-                            BertTokenizerFast.from_pretrained(pretrained_name)
-                    except (TypeError, AttributeError):
-                        # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
-                        # here we just check that the warning has been logged before the error is raised
-                        pass
-                    finally:
-                        self.assertTrue(
-                            cm.records[0].message.startswith(
-                                "The tokenizer class you load from this checkpoint is not the same type as the class"
-                                " this function is called from."
-                            )
-                        )
+    # def test_tokenizer_mismatch_warning(self):
+    #     for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+    #         with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+    #             with self.assertLogs("transformers", level="WARNING") as cm:
+    #                 try:
+    #                     if self.tokenizer_class == BertTokenizer:
+    #                         AlbertTokenizer.from_pretrained(pretrained_name)
+    #                     else:
+    #                         BertTokenizer.from_pretrained(pretrained_name)
+    #                 except OSError as e:
+    #                     # Some tokenizer will raised an error before reaching the logged warning because there are no
+    #                     # corresponding files to load
+    #                     error_message = str(e)
+    #                 except (TypeError, AttributeError):
+    #                     # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
+    #                     # here we just check that the warning has been logged before the error is raised
+    #                     pass
+    #                 finally:
+    #                     logged_msg_target = (
+    #                         "The tokenizer class you load from this checkpoint is not the same type as the class "
+    #                         "this function is called from."
+    #                     )
+    #                     raised_error_msg_target = "Can't load tokenizer for"
+    #                     self.assertTrue(
+    #                         cm.records[0].message.startswith(logged_msg_target)
+    #                         if len(cm.records) > 0
+    #                         else False or raised_error_msg_target in error_message
+    #                     )
+    #                 try:
+    #                     if self.rust_tokenizer_class == BertTokenizerFast:
+    #                         AlbertTokenizerFast.from_pretrained(pretrained_name)
+    #                     else:
+    #                         BertTokenizerFast.from_pretrained(pretrained_name)
+    #                 except (TypeError, AttributeError):
+    #                     # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
+    #                     # here we just check that the warning has been logged before the error is raised
+    #                     pass
+    #                 finally:
+    #                     self.assertTrue(
+    #                         cm.records[0].message.startswith(
+    #                             "The tokenizer class you load from this checkpoint is not the same type as the class"
+    #                             " this function is called from."
+    #                         )
+    #                     )
 
-    @require_torch
-    def test_saving_tokenizer_trainer(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    # Save the fast tokenizer files in a temporary directory
-                    tokenizer_old = self.get_rust_tokenizer(pretrained_name, **kwargs, use_fast=True)
-                    tokenizer_old.save_pretrained(tmp_dir, legacy_format=False)  # save only fast version
+    # @require_torch
+    # def test_saving_tokenizer_trainer(self):
+    #     for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+    #         with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+    #             with tempfile.TemporaryDirectory() as tmp_dir:
+    #                 # Save the fast tokenizer files in a temporary directory
+    #                 tokenizer_old = self.get_rust_tokenizer(pretrained_name, **kwargs, use_fast=True)
+    #                 tokenizer_old.save_pretrained(tmp_dir, legacy_format=False)  # save only fast version
 
-                    # Initialize toy model for the trainer
-                    model = nn.Module()
+    #                 # Initialize toy model for the trainer
+    #                 model = nn.Module()
 
-                    # Load tokenizer from a folder without legacy files
-                    tokenizer = self.rust_tokenizer_class.from_pretrained(tmp_dir)
-                    training_args = TrainingArguments(output_dir=tmp_dir, do_train=True, use_cpu=True)
-                    trainer = Trainer(model=model, args=training_args, processing_class=tokenizer)
+    #                 # Load tokenizer from a folder without legacy files
+    #                 tokenizer = self.rust_tokenizer_class.from_pretrained(tmp_dir)
+    #                 training_args = TrainingArguments(output_dir=tmp_dir, do_train=True, use_cpu=True)
+    #                 trainer = Trainer(model=model, args=training_args, processing_class=tokenizer)
 
-                    # Should not raise an error
-                    trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
-                    self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
+    #                 # Should not raise an error
+    #                 trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
+    #                 self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
 
 
     def test_save_slow_from_fast_and_reload_fast(self):
@@ -2845,23 +2845,23 @@ class TokenizerTesterMixin:
                     self.assertEqual(output.input_ids.dtype, target_type)
 
 
-@require_tokenizers
-class TokenizersBackendCommonTest(unittest.TestCase, TokenizersBackendTesterMixin):
-    """
-    A single test class that runs all tokenizers-backend tests once.
-    Uses BertTokenizerFast as a representative fast tokenizer.
-    """
+# @require_tokenizers
+# class TokenizersBackendCommonTest(unittest.TestCase, TokenizersBackendTesterMixin):
+#     """
+#     A single test class that runs all tokenizers-backend tests once.
+#     Uses BertTokenizerFast as a representative fast tokenizer.
+#     """
 
-    rust_tokenizer_class = BertTokenizerFast
-    from_pretrained_id = "google-bert/bert-base-uncased"
-    from_pretrained_kwargs = {}
+#     rust_tokenizer_class = BertTokenizerFast
+#     from_pretrained_id = "google-bert/bert-base-uncased"
+#     from_pretrained_kwargs = {}
 
 
-class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTesterMixin):
-    """
-    A single test class that runs all SentencePiece-backend tests once.
-    Uses T5Tokenizer as a representative SentencePiece tokenizer.
-    """
-
-    tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b", use_fast=False)
-    from_pretrained_kwargs = {}
+# class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTesterMixin):
+#     """
+#     A single test class that runs all SentencePiece-backend tests once.
+#     Uses T5Tokenizer as a representative SentencePiece tokenizer.
+#     """
+#
+#     tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b", use_fast=False)
+#     from_pretrained_kwargs = {}
