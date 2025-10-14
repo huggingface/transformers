@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -23,7 +22,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import ModelOutput, MoeModelOutputWithPast
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -43,7 +42,11 @@ from ..glm4_moe.modeling_glm4_moe import (
 )
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vTextRotaryEmbedding, rotate_half
-from ..mixtral.modeling_mixtral import load_balancing_loss_func
+from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
+    Qwen3VLMoeCausalLMOutputWithPast,
+    Qwen3VLMoeModelOutputWithPast,
+    load_balancing_loss_func,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -150,9 +153,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
             Whether to normalize the topk probabilities.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the loss.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned. Note that this should only be enabled during training.
-
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
 
@@ -213,7 +213,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         first_k_dense_replace=1,
         norm_topk_prob=True,
         router_aux_loss_coef=0.001,
-        output_router_logits=False,
         **kwargs,
     ):
         PreTrainedConfig.__init__(self, tie_word_embeddings=tie_word_embeddings, **kwargs)
@@ -251,7 +250,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.router_aux_loss_coef = router_aux_loss_coef
-        self.output_router_logits = output_router_logits
 
 
 class Glm4vMoeConfig(Glm4vConfig):
@@ -311,46 +309,8 @@ class Glm4vMoeConfig(Glm4vConfig):
         super().__init__()
 
 
-@dataclass
-class Glm4vMoeModelOutputWithPast(ModelOutput):
-    """
-    Base class for model's outputs, with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
-
-            Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
-            loss for Mixture of Experts models.
-         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-     The rope index difference between sequence length and multimodal rope.
-    """
-
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    router_logits: Optional[tuple[torch.FloatTensor]] = None
-    rope_deltas: Optional[torch.LongTensor] = None
+class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
+    pass
 
 
 def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
@@ -503,55 +463,8 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     }
 
 
-@dataclass
-class Glm4vMoeCausalLMOutputWithPast(ModelOutput):
-    """
-    Base class for causal language model (or autoregressive) with mixture of experts outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-
-        aux_loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
-            aux_loss for the sparse modules.
-
-        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
-
-            Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
-            loss for Mixture of Experts models.
-
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    aux_loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    router_logits: Optional[tuple[torch.FloatTensor]] = None
-    rope_deltas: Optional[torch.LongTensor] = None
+class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
+    pass
 
 
 @auto_docstring
@@ -663,9 +576,6 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
 
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
-    def __init__(self, config):
-        super().__init__(config)
-        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
     @auto_docstring
     def forward(
@@ -681,7 +591,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        output_router_logits: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vMoeCausalLMOutputWithPast]:
@@ -701,8 +610,8 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         >>> import requests
         >>> from transformers import AutoProcessor, Glm4vMoeForConditionalGeneration
 
-        >>> model = Glm4vMoeForConditionalGeneration.from_pretrained("THUDM/GLM-4.5V")
-        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4.5V")
+        >>> model = Glm4vMoeForConditionalGeneration.from_pretrained("zai-org/GLM-4.5V")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V")
 
         >>> messages = [
             {
@@ -725,10 +634,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         "The image shows a street scene with a red stop sign in the foreground. In the background, there is a large red gate with Chinese characters ..."
         ```"""
 
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
-        )
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -739,13 +644,11 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            output_router_logits=output_router_logits,
             cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs.last_hidden_state
-
+        hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -755,7 +658,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
         aux_loss = None
-        if output_router_logits:
+        if kwargs.get("output_router_logits", False):
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
@@ -763,7 +666,9 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
                 attention_mask,
             )
             if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                loss += self.config.text_config.router_aux_loss_coef * aux_loss.to(
+                    loss.device
+                )  # make sure to reside in the same device
 
         return Glm4vMoeCausalLMOutputWithPast(
             loss=loss,
@@ -772,7 +677,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
             rope_deltas=outputs.rope_deltas,
         )
 

@@ -208,9 +208,6 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
             Whether to normalize the topk probabilities.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the loss.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned. Note that this should only be enabled during training.
-
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
 
@@ -274,7 +271,6 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         first_k_dense_replace=1,
         norm_topk_prob=True,
         router_aux_loss_coef=0.001,
-        output_router_logits=False,
         **kwargs,
     ):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
@@ -312,7 +308,6 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.router_aux_loss_coef = router_aux_loss_coef
-        self.output_router_logits = output_router_logits
 
 
 class Glm4vMoeConfig(PreTrainedConfig):
