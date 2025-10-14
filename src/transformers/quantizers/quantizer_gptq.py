@@ -60,9 +60,7 @@ class GptqHfQuantizer(HfQuantizer):
         if not gptq_supports_cpu and not torch.cuda.is_available():
             raise RuntimeError("GPU is required to quantize or run quantize model.")
         elif not is_gptqmodel_available():
-            raise ImportError(
-                "Loading a GPTQ quantized model requires gptqmodel (`pip install gptqmodel`) library."
-            )
+            raise ImportError("Loading a GPTQ quantized model requires gptqmodel (`pip install gptqmodel`) library.")
         elif is_gptqmodel_available() and (
             version.parse(importlib.metadata.version("gptqmodel")) < version.parse("1.4.3")
             or version.parse(importlib.metadata.version("optimum")) < version.parse("1.23.99")

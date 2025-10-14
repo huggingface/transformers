@@ -240,9 +240,7 @@ class GPTQTest(unittest.TestCase):
                 # We expect tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
                 # TODO: Remove this once GPTQModel exllama kernels supports packing
                 quant_type = "tritonv2"
-            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, device_map=self.device_map
-            )
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
             self.check_inference_correctness(quantized_model_from_saved)
