@@ -146,6 +146,15 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_prefix_space=True,
         **kwargs,
     ):
+        if vocab_file is None:
+            try:
+                from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+            except ImportError as e:
+                raise ImportError(
+                    "Using this tokenizer requires the `mistral-common` library. "
+                    "Please install it with `pip install mistral-common`."
+                ) from e
+                
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
