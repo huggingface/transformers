@@ -755,7 +755,7 @@ class TrainingArguments:
 
         use_model_cache (`Optional[bool]`, *optional*, defaults to `None`):
             Whether or not to enable cache for the model (`use_cache`). For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`.
-            Defaults to `False` unless we have a peft model
+            Defaults to `None`. If `None`, we will disable the cache unless we have a peft model."
 
     """
 
@@ -1405,7 +1405,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "Whether or not to use cache for the model (`use_cache`). For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`."
-            "Defaults to `None`. If `None`, we will set the model config`use_cache` to False unless we have a peft model. "
+            "Defaults to `None`. If `None`, we will disable the cache unless we have a peft model. "
         },
     )
 
