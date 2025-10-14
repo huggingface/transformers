@@ -17,7 +17,6 @@
 import importlib
 import os
 import re
-import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar, Union

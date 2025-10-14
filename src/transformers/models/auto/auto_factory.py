@@ -18,7 +18,6 @@ import copy
 import importlib
 import json
 import os
-import warnings
 from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar, Union
@@ -284,8 +283,8 @@ class _BaseAutoModelClass:
         if is_peft_available():
             if adapter_kwargs is None:
                 adapter_kwargs = {}
-                if token is not None:
-                    adapter_kwargs["token"] = token
+                if "token" in hub_kwargs:
+                    adapter_kwargs["token"] = hub_kwargs["token"]
 
             maybe_adapter_path = find_adapter_config_file(
                 pretrained_model_name_or_path, _commit_hash=commit_hash, **adapter_kwargs

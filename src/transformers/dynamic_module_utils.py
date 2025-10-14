@@ -26,7 +26,6 @@ import shutil
 import signal
 import sys
 import threading
-import warnings
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional, Union
@@ -323,7 +322,7 @@ def get_cached_module_file(
     revision: Optional[str] = None,
     local_files_only: bool = False,
     repo_type: Optional[str] = None,
-    _commit_hash: Optional[str] = None
+    _commit_hash: Optional[str] = None,
 ) -> str:
     """
     Prepares Downloads a module from a local folder or a distant repo and returns its path inside the cached
