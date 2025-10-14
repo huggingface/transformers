@@ -22,7 +22,7 @@ class BenchmarkConfig:
         self,
         warmup_iterations: int = 5,
         measurement_iterations: int = 20,
-        gpu_monitoring: bool = True,
+        gpu_monitoring: bool = False,  # False by default because it slows down the benchmark by a lot
         batch_size: int = 1,
         sequence_length: int = 128,
         num_tokens_to_generate: int = 128,
@@ -49,6 +49,9 @@ class BenchmarkConfig:
         self.compile_mode = compile_mode
         self.compile_options = compile_options if compile_options is not None else {}
         self.kernelize = kernelize
+        # Constant parameters
+        self.dtype = "torch.bfloat16"
+        self.device = "cuda"
 
         self.check_validity(skip_validity_check)
         self.name = name if name is not None else self.infer_name()
@@ -62,14 +65,6 @@ class BenchmarkConfig:
         if is_fa:
             logger.warning("Flash attention does not support compile mode. Turning off compile mode.")
             self.compile_mode = None
-
-    @property
-    def device(self) -> str:
-        return "cuda"
-
-    @property
-    def dtype(self) -> str:
-        return "torch.bfloat16"
 
     @property
     def hash(self) -> str:
@@ -87,7 +82,7 @@ class BenchmarkConfig:
             "kernelized" if self.kernelize else "unkernelized",
         ])
 
-    def to_dict(self) -> dict[str, Union[None, int, float, str]]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "warmup_iterations": self.warmup_iterations,
@@ -104,20 +99,21 @@ class BenchmarkConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BenchmarkConfig":
+    def from_dict(cls, data: dict[str, Any], skip_validity_check: bool = False) -> "BenchmarkConfig":
         return cls(
-            warmup_iterations=data["warmup_iterations"],
-            measurement_iterations=data["measurement_iterations"],
-            gpu_monitoring=data["gpu_monitoring"],
-            batch_size=data["batch_size"],
-            sequence_length=data["sequence_length"],
-            num_tokens_to_generate=data["num_tokens_to_generate"],
-            attn_implementation=data["attn_implementation"],
-            sdpa_backend=data["sdpa_backend"],
-            compile_mode=data["compile_mode"],
-            compile_options=data["compile_options"],
-            kernelize=data["kernelize"],
+            warmup_iterations=data.get("warmup_iterations", 5),
+            measurement_iterations=data.get("measurement_iterations", 20),
+            gpu_monitoring=data.get("gpu_monitoring", False),
+            batch_size=data.get("batch_size", 1),
+            sequence_length=data.get("sequence_length", 128),
+            num_tokens_to_generate=data.get("num_tokens_to_generate", 128),
+            attn_implementation=data.get("attn_implementation", "eager"),
+            sdpa_backend=data.get("sdpa_backend"),
+            compile_mode=data.get("compile_mode"),
+            compile_options=data.get("compile_options"),
+            kernelize=data.get("kernelize", False),
             name=data.get("name"),
+            skip_validity_check=skip_validity_check,
         )
 
 
