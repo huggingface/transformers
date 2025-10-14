@@ -57,6 +57,12 @@ try:
                     layer_name="LigerRMSNorm",
                 )
             },
+            "xpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/rmsnorm",
+                    layer_name="RMSNorm",
+                )
+            },
         },
         "MLP": {
             "cuda": LayerRepository(
