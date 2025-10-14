@@ -576,7 +576,6 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
 
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
-
     @auto_docstring
     def forward(
         self,
