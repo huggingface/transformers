@@ -51,7 +51,7 @@ Library:
 - continuous batching: @remi-or @ArthurZucker @McPatate
 - pipelines: @Rocketknight1
 - tokenizers: @ArthurZucker and @itazap
-- trainer: @SunMarc @qgallouedec
+- trainer: @SunMarc
 - attention: @vasqu @ArthurZucker @CyrilVallez
 - model loading (from pretrained, etc): @CyrilVallez
 - distributed: @3outeille @ArthurZucker
