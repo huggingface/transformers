@@ -18,7 +18,7 @@ import unittest
 
 from tests.test_tokenization_common import TokenizerTesterMixin
 from transformers import AutoTokenizer
-from transformers.models.gemma.tokenization_gemma_fast import GemmaTokenizerFast
+from transformers.models.gemma.tokenization_gemma import GemmaTokenizer
 from transformers.testing_utils import (
     require_tokenizers,
 )
@@ -26,15 +26,15 @@ from transformers.testing_utils import (
 
 input_string = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61 生活的真谛是 Hi  Hello Hi   <s> Hello<s>how▁▁ and ▁<bos>Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!   "
 
-expected_tokens = ['Hey', '<eos>', '.', '▁', '\t\t', '▁', '\n\n', 'you', '▁▁', 'é', '▁▁', '@#', '😈', '▁▁', '🤗', '!', '▁▁▁▁▁▁▁', ',', '▁', '1', '2', '3', '4', '▁', '1', '5', '▁', '5', ',', '6', '1', '▁生活', '的', '真', '谛', '是', '▁Hi', '▁▁', 'Hello', '▁Hi', '▁▁▁', '<s>', '▁Hello', '<s>', 'how', '▁▁', '▁and', '▁▁', '<bos>', 'Hey', '<eos>', '.', '▁', '\t\t', '▁', '\n\n', 'you', '▁▁', 'é', '▁▁', '@#', '😈', '▁▁', '🤗', '!', '▁▁▁']
+expected_tokens = ["Hey", "<eos>", ".", "▁", "\t\t", "▁", "\n\n", "you", "▁▁", "é", "▁▁", "@#", "😈", "▁▁", "🤗", "!", "▁▁▁▁▁▁▁", ",", "▁", "1", "2", "3", "4", "▁", "1", "5", "▁", "5", ",", "6", "1", "▁生活", "的", "真", "谛", "是", "▁Hi", "▁▁", "Hello", "▁Hi", "▁▁▁", "<s>", "▁Hello", "<s>", "how", "▁▁", "▁and", "▁▁", "<bos>", "Hey", "<eos>", ".", "▁", "\t\t", "▁", "\n\n", "you", "▁▁", "é", "▁▁", "@#", "😈", "▁▁", "🤗", "!", "▁▁▁"]
 expected_token_ids = [2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274, 64001, 235370, 235710, 245467, 235427, 11192, 139, 4521, 11192, 140, 204, 25957, 204, 1139, 139, 578, 139, 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 140]
 
 
 @require_tokenizers
 class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):  # TEMP we won't use the mixin in v5
     from_pretrained_id = "google/gemma-7b"
-    tokenizer_class = GemmaTokenizerFast
-    rust_tokenizer_class = GemmaTokenizerFast
+    tokenizer_class = GemmaTokenizer
+    rust_tokenizer_class = GemmaTokenizer
     test_slow_tokenizer = True
     test_rust_tokenizer = False  # we're going to just test the fast one I'll remove this
     space_between_special_tokens = False

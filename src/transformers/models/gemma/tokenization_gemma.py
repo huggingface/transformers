@@ -14,10 +14,10 @@
 # limitations under the License.
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_tokenizers import TokenizersBackend
 from ...utils import logging
 
 
@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 
-class GemmaTokenizerFast(PreTrainedTokenizerFast):
+class GemmaTokenizer(TokenizersBackend):
     """
     Construct a fast Gemma tokenizer (backed by HuggingFace's tokenizers library).
 
@@ -70,30 +70,32 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
         add_eos_token: bool = False,
         from_scratch: bool = False,
         vocab_scores: Optional[list[tuple[str, float]]] = None,
+        vocab: Optional[dict] = None,
+        merges: Optional[list[tuple[str, str]]] = None,
         **kwargs,
     ):
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
 
-        # Build a backend config when no tokenizer_file is provided (from scratch / programmatic init)
-        tokenizer_backend_config = None
-        if tokenizer_file is None:
-            self._vocab_scores = (
-                vocab_scores if vocab_scores is not None else (self._default_vocab_scores() if from_scratch else None)
-            )
+        if vocab_scores is None and (vocab is not None or merges is not None):
+            raise ValueError("GemmaTokenizer requires 'vocab_scores' when 'vocab' or 'merges' are provided.")
 
-            if self._vocab_scores is not None:
-                tokenizer_backend_config = {
-                    "type": "unigram",
-                    "normalizer": self._normalizer,
-                    "pre_tokenizer": self._pre_tokenizer,
-                    "decoder": self._decoder,
-                    "tokenizer": self._tokenizer,
-                }
+        # Convert to strings in case they're AddedToken objects
+        self._vocab_scores = (
+            vocab_scores
+            if vocab_scores is not None
+            else self._default_vocab_scores(str(pad_token), str(eos_token), str(bos_token), str(unk_token))
+        )
+
+        self._tokenizer = Tokenizer(Unigram(self._vocab_scores, unk_id=self._unk_id(), byte_fallback=True))
+        self._tokenizer.decoder = decoders.Sequence([decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()])
+        self._tokenizer.normalizer = normalizers.Replace(" ", "▁")
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Split(" ", "merged_with_previous")
+        tokenizer_object = self._tokenizer
 
         super().__init__(
-            tokenizer_file=tokenizer_file,
-            tokenizer_backend_config=tokenizer_backend_config,
+            tokenizer_file=None,
+            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -103,36 +105,26 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        # Ensure special tokens exist in the vocabulary
-        self.add_tokens([token for token in self.all_special_tokens], special_tokens=True)
+        self._post_init()
 
-        # Set the post-processor to manage BOS/EOS as configured
+    def _post_init(self):
+        """Post-initialization setup that needs to run after _tokenizer is set."""
+        self.add_tokens(list(self.all_special_tokens), special_tokens=True)
         self.update_post_processor()
 
-    # Backend construction helpers
     def _unk_id(self) -> int:
         # Align with historical Gemma convention: pad, eos, bos, unk
         return 3
 
-    def _default_vocab_scores(self) -> list[tuple[str, float]]:
+    def _default_vocab_scores(
+        self, pad_token: str, eos_token: str, bos_token: str, unk_token: str
+    ) -> list[tuple[str, float]]:
         return [
-            (self.pad_token, 0.0),
-            (self.eos_token, 0.0),
-            (self.bos_token, 0.0),
-            (self.unk_token, 0.0),
+            (pad_token, 0.0),
+            (eos_token, 0.0),
+            (bos_token, 0.0),
+            (unk_token, 0.0),
         ]
 
-    def _tokenizer(self) -> Tokenizer:
-        return Tokenizer(Unigram(self._vocab_scores, unk_id=self._unk_id(), byte_fallback=True))
 
-    def _normalizer(self):
-        return normalizers.Replace(" ", "▁")
-
-    def _pre_tokenizer(self, replacement=None, add_prefix_space=None):
-        return pre_tokenizers.Split(" ", "merged_with_previous")
-
-    def _decoder(self, replacement=None, add_prefix_space=None):
-        return decoders.Sequence([decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()])
-
-
-__all__ = ["GemmaTokenizerFast"]
+__all__ = ["GemmaTokenizer"]

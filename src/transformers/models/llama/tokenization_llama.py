@@ -12,17 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-from shutil import copyfile
-from typing import Optional
 
-from tokenizers import processors
-from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
-from tokenizers.models import BPE, Unigram
+from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers
+from tokenizers.models import BPE
 
-from ...tokenization_tokenizers import TokenizersBackend
-from ...utils import is_sentencepiece_available, logging, requires_backends
 from ...tokenization_sentencepiece import _get_prepend_scheme, generate_merges
+from ...tokenization_tokenizers import TokenizersBackend
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -122,18 +118,34 @@ class LlamaTokenizer(TokenizersBackend):
         **kwargs,
     ):
         self.legacy = legacy
-        
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
 
-        self._vocab = vocab if vocab is not None else self._vocab()
-        self._merges = merges if merges is not None else generate_merges(self._vocab)
-
-        self._tokenizer = Tokenizer(self._model())
-        self._tokenizer.decoder = self._decoder(add_prefix_space=self.add_prefix_space)
-        self._tokenizer.normalizer = self._normalizer()
-        self._tokenizer.pre_tokenizer = self._pre_tokenizer(add_prefix_space=self.add_prefix_space)
-        tokenizer_object = self._tokenizer
+        if vocab is not None:
+            self._vocab = vocab
+        else:
+            self._vocab = {
+                "<unk>": 0,
+                "<s>": 1,
+                "</s>": 2,
+            }
         
+        self._merges = merges if merges is not None else generate_merges(self._vocab)
+        self._tokenizer = Tokenizer(BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None))
+        self._tokenizer.normalizer = None
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False)
+
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+
+        if self.add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+
+        self._tokenizer.decoder = decoders.Sequence(sequence)
+        tokenizer_object = self._tokenizer
+
         super().__init__(
             tokenizer_file=None,
             tokenizer_object=tokenizer_object,
@@ -152,50 +164,18 @@ class LlamaTokenizer(TokenizersBackend):
         self._add_eos_token = add_eos_token
         self.use_default_system_prompt = use_default_system_prompt
         self.vocab_file = vocab_file
-        
+
         self._post_init()
 
     def _post_init(self):
         """Post-initialization setup that needs to run after _tokenizer is set."""
         # TODO: how to do this cleanly? Need to trigger re-adding special tokens after setting the normalizer in Tokenizers
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False)
-        self._tokenizer.normalizer = None #normalizers.Sequence([normalizers.Prepend("▁"), normalizers.Replace(pattern=" ", content="▁")])
+        self._tokenizer.normalizer = (
+            None  # normalizers.Sequence([normalizers.Prepend("▁"), normalizers.Replace(pattern=" ", content="▁")])
+        )
         self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
         self.update_post_processor()
-        
-
-    def _model(self):
-        """Model (BPE) configuration for this tokenizer."""
-        return BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
-
-    def _vocab(self):
-        """Vocabulary handling for this tokenizer."""
-        vocab = {
-            "<unk>": 0,
-            "<s>": 1,
-            "</s>": 2,
-        }
-        return vocab
-
-    def _decoder(self, add_prefix_space):
-        """Decoder configuration for this tokenizer."""
-        sequence = [
-            decoders.Replace("▁", " "),
-            decoders.ByteFallback(),
-            decoders.Fuse(),
-        ]
-        if add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
-        return decoders.Sequence(sequence)
-
-    def _normalizer(self):
-        """Normalizer configuration for this tokenizer."""
-        return None
-
-    def _pre_tokenizer(self, add_prefix_space):
-        """Pre-tokenizer configuration for this tokenizer."""
-        prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
-        return pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme, split=False)
 
 
 __all__ = ["LlamaTokenizer", "LlamaTokenizerFast"]

@@ -654,7 +654,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
         ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
         ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
-        ("splinter", ("SplinterTokenizer", "SplinterTokenizerFast")),
+        ("splinter", ("SplinterTokenizer" if is_tokenizers_available() else None, None)),
         (
             "squeezebert",
             ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
@@ -720,13 +720,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer", None)),
         ("whisper", ("WhisperTokenizer", "WhisperTokenizerFast" if is_tokenizers_available() else None)),
         ("xclip", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
-        (
-            "xglm",
-            (
-                "XGLMTokenizer" if is_sentencepiece_available() else None,
-                "XGLMTokenizerFast" if is_tokenizers_available() else None,
-            ),
-        ),
+        ("xglm", ("XGLMTokenizer" if is_tokenizers_available() else None, None)),
         ("xlm", ("XLMTokenizer", None)),
         ("xlm-prophetnet", ("XLMProphetNetTokenizer" if is_sentencepiece_available() else None, None)),
         (

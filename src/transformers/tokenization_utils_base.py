@@ -1,3 +1,4 @@
+#base
 # coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
@@ -1660,7 +1661,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
             if not has_tokenizer_file:
-                init_kwargs.pop("tokenizer_file", None)
+                init_kwargs.get("tokenizer_file", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
