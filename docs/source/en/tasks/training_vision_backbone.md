@@ -127,7 +127,7 @@ train_dataset = train_dataset.with_transform(train_transform)
 ```
 
 
-We can now build COCO-style annotations to pass them to image processor.
+Build COCO-style annotations for the image processor.
 
 ```py
 import torch
