@@ -600,15 +600,16 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
         pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
 
-        # Remove padding images - padding images are full 0.
-        nb_values_per_image = pixel_values.shape[1:].numel()
-        real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
+        # # Remove padding images - padding images are full 0.
+        # nb_values_per_image = pixel_values.shape[1:].numel()
+        # real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
 
-        if not any(real_images_inds):
-            # no images, leave one empty image.
-            real_images_inds[0] = True
+        # if not any(real_images_inds):
+        #     # no images, leave one empty image.
+        #     real_images_inds[0] = True
 
-        pixel_values = pixel_values[real_images_inds].contiguous()
+        # pixel_values = pixel_values[real_images_inds].contiguous()
+
         # Handle the vision attention mask
         if pixel_attention_mask is None:
             pixel_attention_mask = torch.ones(
@@ -616,10 +617,10 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
                 dtype=torch.bool,
                 device=pixel_values.device,
             )
-        else:
-            # Remove padding images from the mask
-            pixel_attention_mask = pixel_attention_mask.view(batch_size * num_images, *pixel_attention_mask.shape[2:])
-            pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
+        # else:
+        #     # Remove padding images from the mask
+        #     pixel_attention_mask = pixel_attention_mask.view(batch_size * num_images, *pixel_attention_mask.shape[2:])
+        #     pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
         patch_size = self.config.vision_config.patch_size
         patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
         patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
