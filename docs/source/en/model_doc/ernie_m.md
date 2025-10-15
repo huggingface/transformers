@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 *This model was released on 2020-12-31 and added to Hugging Face Transformers on 2023-06-20 and contributed by [susnato](https://huggingface.co/susnato).*
 
 > [!WARNING]
-> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # ErnieM
 
@@ -52,6 +54,10 @@ print(f"Predicted label: {label}")
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- ERNIE-M uses two novel techniques instead of MaskedLM for pretraining: Cross-attention Masked Language Modeling and Back-translation Masked Language Modeling. These LMHead objectives aren't implemented yet.
 
 ## ErnieMConfig
 

@@ -49,6 +49,13 @@ print(tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The model expects sequences in a specific format with special language ID tokens. Source text format: `X [eos, src_lang_code]` where `X` is the source text. Target text format: `[tgt_lang_code] X [eos]`. The `bos` token is never used.
+- For fine-tuning with a single language, language tokens may not be needed. Refer to the paper for details.
+- Use the regular `call()` method to encode source text format (pass text as first argument or with `text` keyword). Use `text_target` keyword for target text format.
+- Set `decoder_start_token_id` to the target language ID when generating text.
+
 ## PLBartConfig
 
 [[autodoc]] PLBartConfig

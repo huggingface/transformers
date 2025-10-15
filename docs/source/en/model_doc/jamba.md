@@ -55,6 +55,11 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Don't quantize the Mamba blocks. This prevents model performance degradation.
+- Use optimized Mamba kernels for better performance. Mamba without kernels results in significantly lower latencies. Set `use_mamba_kernels=False` in [`~AutoModel.from_pretrained`] if you need to disable kernels.
+
 ## JambaConfig
 
 [[autodoc]] JambaConfig

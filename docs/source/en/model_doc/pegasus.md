@@ -53,6 +53,12 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use AdaFactor as the optimizer for fine-tuning Pegasus.
+- This implementation inherits from [`BartForConditionalGeneration`] but uses static/sinusoidal positional embeddings instead.
+- Pegasus starts generating with `pad_token_id` as the prefix and uses `num_beams=8`.
+
 ## PegasusConfig
 
 [[autodoc]] PegasusConfig

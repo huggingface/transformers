@@ -54,6 +54,11 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. BioGPT uses absolute position embeddings.
+- BioGPT reuses previously computed key-value attention pairs. Access this feature with the `past_key_values` parameter in [`BioGPTModel.forward`].
+
 ## BioGptConfig
 
 [[autodoc]] BioGptConfig

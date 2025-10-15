@@ -65,6 +65,16 @@ print(f"Starting position: {start_idx}, Ending position: {end_idx}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Splinter was trained to predict answer spans conditioned on a special `[QUESTION]` token. These tokens contextualize to question representations for answer prediction.
+- The QASS layer is the default behavior in [`SplinterForQuestionAnswering`]. It handles question-aware span selection.
+- Use [`SplinterTokenizer`] instead of [`BertTokenizer`]. It contains the special token and uses it by default when two sequences are given.
+- Keep the question token in mind when using Splinter outside `run_qa.py`. It's important for model success, especially in few-shot settings.
+- Two checkpoint variants exist for each Splinter size:
+  - `tau/splinter-base-qass` and `tau/splinter-large-qass`: Include pretrained QASS layer weights
+  - `tau/splinter-base` and `tau/splinter-large`: Don't include QASS weights for random initialization during fine-tuning
+- Random initialization of the QASS layer during fine-tuning yields better results in some cases.
 
 ## SplinterConfig
 

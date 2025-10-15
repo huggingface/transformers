@@ -15,6 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2020-04-20 and added to Hugging Face Transformers on 2023-06-20 and contributed by [shangz](https://huggingface.co/shangz).*
 
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
+
 # QDQBERT
 
 [QDQBERT](https://huggingface.co/papers/2004.09602) explores integer quantization to decrease Deep Neural Network sizes and enhance inference speed through high-throughput integer instructions. The paper examines quantization parameters and evaluates their impact across various neural network models in vision, speech, and language domains. It highlights techniques compatible with processors featuring high-throughput integer pipelines. A workflow for 8-bit quantization is introduced, ensuring accuracy within 1% of the floating-point baseline across all studied networks, including challenging models like MobileNets and BERT-large.
@@ -50,6 +55,16 @@ print(f"Predicted word: {predicted_word}")
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- QDQBERT adds fake quantization operations (QuantizeLinear/DequantizeLinear ops) to linear layer inputs and weights, matmul inputs, and residual add inputs in BERT.
+- Install the PyTorch Quantization Toolkit: `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`.
+- Load QDQBERT from any HuggingFace BERT checkpoint (e.g., `google-bert/bert-base-uncased`) to perform Quantization Aware Training or Post Training Quantization.
+- See the [complete example](https://github.com/huggingface/transformers-research-projects/tree/main/quantization-qdqbert) for Quantization Aware Training and Post Training Quantization on the SQUAD task.
+- QDQBERT uses `TensorQuantizer` from the PyTorch Quantization Toolkit. `TensorQuantizer` quantizes tensors using `QuantDescriptor` to define quantization parameters.
+- Set the default `QuantDescriptor` before creating a QDQBERT model.
+- Export to ONNX for TensorRT deployment. Fake quantization becomes QuantizeLinear/DequantizeLinear ONNX ops. Set `TensorQuantizer`'s static member to use PyTorch's fake quantization functions, then follow [`torch.onnx`](https://pytorch.org/docs/stable/onnx.html) instructions.
 
 ## QDQBertConfig
 

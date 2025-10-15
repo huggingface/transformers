@@ -57,6 +57,10 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. BERT uses absolute position embeddings.
+
 ## BertConfig
 
 [[autodoc]] BertConfig

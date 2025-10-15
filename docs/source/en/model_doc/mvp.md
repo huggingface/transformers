@@ -58,6 +58,10 @@ print(tokenizer.decode(outputs[0]))
 </hfopton>
 </hfoptions>
 
+## Usage tips
+
+- Use [`set_lightweight_tuning`] for lightweight prompt tuning following prefix-tuning.
+
 ## MvpConfig
 
 [[autodoc]] MvpConfig

@@ -25,62 +25,38 @@ rendered properly in your Markdown viewer.
 
 # Ernie 4.5
 
-## Overview
+[Ernie 4.5](https://ernie.baidu.com/blog/posts/ernie4.5/) introduces three major innovations. First, it uses Multimodal Heterogeneous MoE pre-training, jointly training on text and images through modality-isolated routing, router orthogonal loss, and multimodal token-balanced loss to ensure effective cross-modal learning. Second, it employs a scaling-efficient infrastructure with heterogeneous hybrid parallelism, FP8 mixed precision, recomputation strategies, and advanced quantization (4-bit/2-bit) to achieve high training and inference efficiency across hardware platforms. Finally, modality-specific post-training tailors models for language and vision tasks using Supervised Fine-Tuning, Direct Preference Optimization, and a new Unified Preference Optimization method.
 
-The Ernie 4.5 model was released in the [Ernie 4.5 Model Family](https://ernie.baidu.com/blog/posts/ernie4.5/) release by baidu.
-This family of models contains multiple different architectures and model sizes. This model in specific targets the base text
-model without mixture of experts (moe) with 0.3B parameters in total. It uses the standard [Llama](./llama) at its core.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-Other models from the family can be found at [Ernie 4.5 Moe](./ernie4_5_moe).
+```py
+import torch
+from transformers import pipeline
 
-<div class="flex justify-center">
-    <img src="https://ernie.baidu.com/blog/posts/ernie4.5/overview.png"/>
-</div>
+pipeline = pipeline(task="text-generation", model="baidu/ERNIE-4.5-0.3B-PT", dtype="auto")
+pipeline("Plants generate energy through a process known as  ")
+```
 
-## Usage Tips
+</hfoption>
+<hfoption id="AutoModel">
 
-### Generate text
-
-```python
+```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_name = "baidu/ERNIE-4.5-0.3B-PT"
+model = AutoModelForCausalLM.from_pretrained("baidu/ERNIE-4.5-0.3B-PT", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-0.3B-PT")
 
-# load the tokenizer and the model
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    device_map="auto",
-    dtype=torch.bfloat16,
-)
+messages = [{"role": "user", "content": "How do plants generate energy?"}]
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 
-# prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
-prompt = "Hey, are you conscious? Can you talk to me?"
-messages = [
-    {"role": "user", "content": prompt}
-]
-text = tokenizer.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True
-)
-model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
-
-# conduct text completion
-generated_ids = model.generate(
-    **model_inputs,
-    max_new_tokens=32,
-)
-output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
-
-# decode the generated ids
-generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
+outputs = model.generate(input_ids, max_new_tokens=100, do_sample=True, temperature=0.3,)
+print(tokenizer.decode(outputs[0]))
 ```
 
-This model was contributed by [Anton Vlasjuk](https://huggingface.co/AntonV).
-The original code can be found [here](https://github.com/PaddlePaddle/ERNIE).
+</hfoption>
+</hfoptions>
 
 ## Ernie4_5Config
 

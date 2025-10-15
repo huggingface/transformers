@@ -58,6 +58,12 @@ print(tokenizer.decode(outputs[0]))
 </hfopton>
 </hfoptions>
 
+## Usage tips
+
+- UMT5 was only pre-trained on mC4 without supervised training. Fine-tune the model before using it on downstream tasks (unlike the original T5 model).
+- UMT5 was pre-trained unsupervised, so task prefixes don't help during single-task fine-tuning. Use prefixes for multi-task fine-tuning.
+- UMT5 is based on mT5 with non-shared relative positional bias computed for each layer. The model sets `has_relative_bias` for each layer. The conversion script differs because the model was saved in t5x's latest checkpointing format.
+
 ## UMT5Config
 
 [[autodoc]] UMT5Config

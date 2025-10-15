@@ -51,6 +51,15 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- This implementation extends [`RobertaModel`] with entity embeddings and an entity-aware self-attention mechanism. This improves performance on tasks involving entity reasoning.
+- LUKE treats entities as input tokens. It takes `entity_ids`, `entity_attention_mask`, `entity_token_type_ids`, and `entity_position_ids` as extra input. Get these using [`LukeTokenizer`].
+- [`LukeTokenizer`] takes entities and `entity_spans` (character-based start and end positions) as extra input. Entities typically consist of `[MASK]` entities or Wikipedia entities.
+- `[MASK]` entities are used to mask entities during pretraining. LUKE predicts the original entity by gathering information from input text. Use these for entity typing, relation classification, and named entity recognition.
+- LUKE learns rich information about Wikipedia entities during pretraining and stores it in entity embeddings. These enrich token representations with real-world knowledge. Use these for tasks requiring real-world knowledge like question answering.
+- [`LukeTokenizer`] has a `task` argument. Specify `task="entity_classification"`, `task="entity_pair_classification"`, or `task="entity_span_classification"` to easily create inputs for these head models.
+
 ## LukeConfig
 
 [[autodoc]] LukeConfig

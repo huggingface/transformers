@@ -56,6 +56,11 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Attention sinks with flex attention require special handling. Unlike standard attention implementations where sinks add directly to attention scores, flex attention `score_mod` function operates on individual score elements rather than the full attention matrix.
+- Apply attention sinks renormalization after flex attention computations. Renormalize the outputs using the log-sum-exp (LSE) values returned by flex attention.
+
 ## GptOssConfig
 
 [[autodoc]] GptOssConfig

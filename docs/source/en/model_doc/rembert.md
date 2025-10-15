@@ -51,6 +51,12 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- For fine-tuning, RemBERT is like a bigger version of mBERT with ALBERT-like embedding factorization.
+- Embeddings aren't tied during pre-training (unlike BERT). This enables smaller input embeddings (preserved during fine-tuning) and bigger output embeddings (discarded at fine-tuning).
+- The tokenizer is similar to ALBERT's tokenizer rather than BERT's.
+
 ## RemBertConfig
 
 [[autodoc]] RemBertConfig
