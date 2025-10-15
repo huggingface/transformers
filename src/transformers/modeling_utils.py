@@ -5575,7 +5575,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
-            # keep_vars=True as we need to original tensors
+            # keep_vars=True as we need the original tensors, so that the "_is_hf_initialized" is present on them
             not_initialized_parameters = list(
                 {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)}
             )
