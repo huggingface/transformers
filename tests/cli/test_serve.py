@@ -56,8 +56,8 @@ def test_help(cli):
 def test_host_port_blocking(cli):
     """Minimal test: we can set arguments through the CLI - blocking"""
     with (
-        patch("transformers.cli.serve.uvicorn.Config") as ConfigMock,
-        patch("transformers.cli.serve.uvicorn.Server") as ServerMock,
+        patch("uvicorn.Config") as ConfigMock,
+        patch("uvicorn.Server") as ServerMock,
     ):
         server_instance = Mock()
         ServerMock.return_value = server_instance
@@ -78,9 +78,9 @@ def test_host_port_blocking(cli):
 def test_host_port_non_blocking(cli):
     """Minimal test: we can set arguments through the CLI - non-blocking"""
     with (
-        patch("transformers.cli.serve.uvicorn.Config") as ConfigMock,
-        patch("transformers.cli.serve.uvicorn.Server") as ServerMock,
-        patch("transformers.cli.serve.Serve.start_server") as start_mock,
+        patch("uvicorn.Config") as ConfigMock,
+        patch("uvicorn.Server") as ServerMock,
+        patch("Serve.start_server") as start_mock,
     ):
         server_instance = Mock()
         ServerMock.return_value = server_instance
