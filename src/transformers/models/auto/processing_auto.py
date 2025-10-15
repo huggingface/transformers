@@ -100,6 +100,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
         ("lfm2_vl", "Lfm2VlProcessor"),
+        ("lightonocr", "LightOnOCRProcessor"),
         ("llama4", "Llama4Processor"),
         ("llava", "LlavaProcessor"),
         ("llava_next", "LlavaNextProcessor"),

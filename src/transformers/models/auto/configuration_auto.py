@@ -693,6 +693,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("lfm2_moe", "Lfm2Moe"),
         ("lfm2_vl", "Lfm2Vl"),
         ("lightglue", "LightGlue"),
+        ("lightonocr", "lightonocr"),
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
