@@ -132,6 +132,10 @@ class Idefics3Config(PreTrainedConfig):
             The scale factor for the image encoder.
         pad_token_id (`int`, *optional*, defaults to 128002):
             The id of the padding token.
+        use_export_friendly (`bool`, *optional*, defaults to `False`):
+            Whether to use export-friendly mode for model operations. When True, uses simplified
+            operations that are compatible with export frameworks (e.g., skips dynamic padding detection).
+            Only enable this when exporting the model or when you're certain the input won't have padding.
 
     Example:
     ```python
@@ -156,11 +160,13 @@ class Idefics3Config(PreTrainedConfig):
         text_config=None,
         scale_factor=2,
         pad_token_id=128_002,
+        use_export_friendly=False,
         **kwargs,
     ):
         self.image_token_id = image_token_id
         self.use_cache = use_cache
         self.tie_word_embeddings = tie_word_embeddings
+        self.use_export_friendly = use_export_friendly
 
         if vision_config is None:
             self.vision_config = Idefics3VisionConfig()
