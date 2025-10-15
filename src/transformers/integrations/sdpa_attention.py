@@ -29,7 +29,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 def use_gqa_in_sdpa(attention_mask: Optional[torch.Tensor], key: torch.Tensor) -> bool:
     # GQA can only be used under the following conditions
-    # 1.cuda
+    # 1.cuda or Ascend NPU
     #   - torch version >= 2.5
     #   - attention_mask is None (otherwise it will fall back to the math kernel)
     #   - key is not a torch.fx.Proxy (otherwise it will fail with a tracing error)
