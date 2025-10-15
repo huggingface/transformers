@@ -173,7 +173,7 @@ training_args = TrainingArguments(
     output_dir="./license-plate-detr-dinov3",
     per_device_train_batch_size=4,
     per_device_eval_batch_size=4,
-    num_train_epochs=4,
+    num_train_epochs=8,
     learning_rate=1e-5,
     weight_decay=1e-4,
     warmup_steps=500,
@@ -246,3 +246,5 @@ def plot_results(image, results, threshold):
 image = Image.open(requests.get("https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/license-plates.jpg", stream=True).raw)
 plot_results(image, results, threshold=0.05)
 ```
+
+![Results](https://huggingface.co/datasets/huggingface/documentation-images/results/main/transformers/tasks/backbone_training_results.png)
