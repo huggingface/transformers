@@ -27,7 +27,6 @@ from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
-    require_jinja,
     require_read_token,
     require_sentencepiece,
     require_tokenizers,

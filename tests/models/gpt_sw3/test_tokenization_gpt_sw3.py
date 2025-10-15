@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import GPTSw3Tokenizer
-from transformers.testing_utils import get_tests_dir, require_jinja, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

@@ -18,7 +18,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers import BloomTokenizerFast
-from transformers.testing_utils import require_jinja, require_tokenizers
+from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
