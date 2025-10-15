@@ -16,7 +16,7 @@
 import os
 import unittest
 
-from transformers import LxmertTokenizer, LxmertTokenizerFast
+from transformers import LxmertTokenizer, AutoTokenizer
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -27,8 +27,8 @@ from ...test_tokenization_common import TokenizerTesterMixin
 class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "unc-nlp/lxmert-base-uncased"
     tokenizer_class = LxmertTokenizer
-    rust_tokenizer_class = LxmertTokenizerFast
-    test_rust_tokenizer = True
+    rust_tokenizer_class = LxmertTokenizer
+    test_rust_tokenizer = False
     space_between_special_tokens = True
 
     @classmethod

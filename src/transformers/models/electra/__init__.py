@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_electra import *
     from .modeling_electra import *
     from .tokenization_electra import *
-    from .tokenization_electra_fast import *
 else:
     import sys
 

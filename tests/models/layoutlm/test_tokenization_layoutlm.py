@@ -16,7 +16,7 @@
 import os
 import unittest
 
-from transformers import LayoutLMTokenizer, LayoutLMTokenizerFast
+from transformers import LayoutLMTokenizer
 from transformers.models.layoutlm.tokenization_layoutlm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -27,8 +27,8 @@ from ...test_tokenization_common import TokenizerTesterMixin
 class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "microsoft/layoutlm-base-uncased"
     tokenizer_class = LayoutLMTokenizer
-    rust_tokenizer_class = LayoutLMTokenizerFast
-    test_rust_tokenizer = True
+    rust_tokenizer_class = LayoutLMTokenizer
+    test_rust_tokenizer = False
     space_between_special_tokens = True
 
     @classmethod
@@ -70,8 +70,3 @@ class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("UNwant\u00e9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
-
-    @unittest.skip
-    def test_special_tokens_as_you_expect(self):
-        """If you are training a seq2seq model that expects a decoder_prefix token make sure it is prepended to decoder_input_ids"""
-        pass

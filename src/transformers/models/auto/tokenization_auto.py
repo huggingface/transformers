@@ -29,7 +29,6 @@ from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
-from ...utils.hub import has_file, cached_file
 from ...utils import (
     cached_file,
     extract_commit_hash,
@@ -38,6 +37,7 @@ from ...utils import (
     is_tokenizers_available,
     logging,
 )
+from ...utils.hub import cached_file, has_file
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -47,6 +47,7 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+
 
 if is_tokenizers_available():
     from ...tokenization_tokenizers import TokenizersBackend
@@ -72,11 +73,11 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "AlbertTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
-        ("align", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("align", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("arcee", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("aria", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("aya_vision", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
-        ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("bark", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("bart", ("BartTokenizer", "BartTokenizerFast")),
         (
             "barthez",
@@ -86,7 +87,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("bartpho", ("BartphoTokenizer", None)),
-        ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("bert", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("bert-generation", ("BertGenerationTokenizer" if is_sentencepiece_available() else None, None)),
         ("bert-japanese", ("BertJapaneseTokenizer", None)),
         ("bertweet", ("BertweetTokenizer", None)),
@@ -102,12 +103,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("bitnet", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
         ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
-        ("blip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("blip", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("blip-2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
         ("blt", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
-        ("bridgetower", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
-        ("bros", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("bridgetower", ("RobertaTokenizer", None)),
+        ("bros", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("byt5", ("ByT5Tokenizer", None)),
         (
             "camembert",
@@ -124,13 +125,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
-        ("chinese_clip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("chinese_clip", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         (
             "clap",
-            (
-                "RobertaTokenizer",
-                "RobertaTokenizerFast" if is_tokenizers_available() else None,
-            ),
+            ("RobertaTokenizer", None),
         ),
         (
             "clip",
@@ -159,7 +157,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("cohere2", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
         ("colpali", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("colqwen2", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
-        ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
+        ("convbert", ("ConvBertTokenizer", "ConvBertTokenizer" if is_tokenizers_available() else None)),
         (
             "cpm",
             (
@@ -171,7 +169,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("csm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("ctrl", ("CTRLTokenizer", None)),
         ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
-        ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+        ("data2vec-text", ("RobertaTokenizer", None)),
         ("dbrx", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("deberta", ("DebertaTokenizer", "DebertaTokenizerFast" if is_tokenizers_available() else None)),
         (
@@ -217,7 +215,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
-        ("distilbert", ("DistilBertTokenizer", "DistilBertTokenizerFast" if is_tokenizers_available() else None)),
+        ("distilbert", ("DistilBertTokenizer", "DistilBertTokenizer" if is_tokenizers_available() else None)),
         (
             "dpr",
             (
@@ -225,9 +223,9 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "DPRQuestionEncoderTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
-        ("electra", ("ElectraTokenizer", "ElectraTokenizerFast" if is_tokenizers_available() else None)),
+        ("electra", ("ElectraTokenizer", "ElectraTokenizer" if is_tokenizers_available() else None)),
         ("emu3", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
-        ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("ernie", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("ernie4_5", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("ernie4_5_moe", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
@@ -292,7 +290,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "GemmaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
-        ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("git", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("glm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4_moe", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
@@ -311,12 +309,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("granitemoe", ("GPT2Tokenizer", None)),
         ("granitemoehybrid", ("GPT2Tokenizer", None)),
         ("granitemoeshared", ("GPT2Tokenizer", None)),
-        ("grounding-dino", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("grounding-dino", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("helium", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
         ("hubert", ("Wav2Vec2CTCTokenizer", None)),
-        ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+        ("ibert", ("RobertaTokenizer", None)),
         ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("idefics2", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("idefics3", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
@@ -406,8 +404,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "MBart50TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
-        ("mega", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
-        ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("mega", ("RobertaTokenizer", None)),
+        ("megatron-bert", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         (
             "metaclip_2",
             (
@@ -443,14 +441,14 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("mllama", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
-        ("mm-grounding-dino", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
-        ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
+        ("mm-grounding-dino", ("BertTokenizer" if is_tokenizers_available() else None, None)),
+        ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizer" if is_tokenizers_available() else None)),
         ("modernbert", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("moonshine", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("moshi", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
         ("mpt", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
-        ("mra", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+        ("mra", ("RobertaTokenizer", None)),
         (
             "mt5",
             (
@@ -463,7 +461,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("mvp", ("MvpTokenizer", "MvpTokenizerFast" if is_tokenizers_available() else None)),
         ("myt5", ("MyT5Tokenizer", None)),
         ("nemotron", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
-        ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("nezha", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         (
             "nllb",
             (
@@ -546,7 +544,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
         ("prophetnet", ("ProphetNetTokenizer", None)),
-        ("qdqbert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("qdqbert", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         (
             "qwen2",
             (
@@ -613,10 +611,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
-        ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+        ("roberta", ("RobertaTokenizer", None)),
         (
             "roberta-prelayernorm",
-            ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None),
+            ("RobertaTokenizer", None),
         ),
         ("roc_bert", ("RoCBertTokenizer", None)),
         ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
@@ -654,10 +652,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
         ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
         ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
-        ("splinter", ("SplinterTokenizer" if is_tokenizers_available() else None, None)),
+        ("splinter", ("SplinterTokenizer", "SplinterTokenizer")),
         (
             "squeezebert",
-            ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
+            ("SqueezeBertTokenizer", "SqueezeBertTokenizer" if is_tokenizers_available() else None),
         ),
         ("stablelm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         ("starcoder2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -685,7 +683,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("tapas", ("TapasTokenizer", None)),
         ("tapex", ("TapexTokenizer", None)),
         ("transfo-xl", ("TransfoXLTokenizer", None)),
-        ("tvp", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("tvp", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         (
             "udop",
             (
@@ -701,9 +699,9 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("video_llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
-        ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("vilt", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("vipllava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
-        ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("visual_bert", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("vits", ("VitsTokenizer", None)),
         (
             "voxtral",
@@ -812,16 +810,16 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
 
 
 def get_tokenizer_config(
-        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
-        cache_dir: Optional[Union[str, os.PathLike[str]]] = None,
-        force_download: bool = False,
-        resume_download: Optional[bool] = None,
-        proxies: Optional[dict[str, str]] = None,
-        token: Optional[Union[bool, str]] = None,
-        revision: Optional[str] = None,
-        local_files_only: bool = False,
-        subfolder: str = "",
-        **kwargs,
+    pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+    cache_dir: Optional[Union[str, os.PathLike[str]]] = None,
+    force_download: bool = False,
+    resume_download: Optional[bool] = None,
+    proxies: Optional[dict[str, str]] = None,
+    token: Optional[Union[bool, str]] = None,
+    revision: Optional[str] = None,
+    local_files_only: bool = False,
+    subfolder: str = "",
+    **kwargs,
 ) -> dict[str, Any]:
     """
     Loads the tokenizer configuration from a pretrained model tokenizer configuration.
@@ -1092,11 +1090,11 @@ class AutoTokenizer:
 
         has_remote_code = tokenizer_auto_map is not None
         has_local_code = type(config) in TOKENIZER_MAPPING or (
-                config_tokenizer_class is not None
-                and (
-                        tokenizer_class_from_name(config_tokenizer_class) is not None
-                        or tokenizer_class_from_name(config_tokenizer_class + "Fast") is not None
-                )
+            config_tokenizer_class is not None
+            and (
+                tokenizer_class_from_name(config_tokenizer_class) is not None
+                or tokenizer_class_from_name(config_tokenizer_class + "Fast") is not None
+            )
         )
         if has_remote_code:
             if use_fast and tokenizer_auto_map[1] is not None:
@@ -1123,7 +1121,9 @@ class AutoTokenizer:
             fast_tokenizer_class = None
             if use_fast:
                 fast_candidate = (
-                    f"{config_tokenizer_class}Fast" if not config_tokenizer_class.endswith("Fast") else config_tokenizer_class
+                    f"{config_tokenizer_class}Fast"
+                    if not config_tokenizer_class.endswith("Fast")
+                    else config_tokenizer_class
                 )
                 fast_tokenizer_class = tokenizer_class_from_name(fast_candidate)
             if fast_tokenizer_class is None:
@@ -1134,14 +1134,14 @@ class AutoTokenizer:
                 tokenizer_class = fast_tokenizer_class
 
             if use_fast and fast_tokenizer_class is not None:
-                # If tokenizer.json exists, load the tokenizers-backend 
+                # If tokenizer.json exists, load the tokenizers-backend
                 try:
                     tokenizer_json_exists = has_file(
                         pretrained_model_name_or_path,
                         "tokenizer.json",
-                        revision=kwargs.get("revision", None),
-                        token=kwargs.get("token", None),
-                        cache_dir=kwargs.get("cache_dir", None),
+                        revision=kwargs.get("revision"),
+                        token=kwargs.get("token"),
+                        cache_dir=kwargs.get("cache_dir"),
                         local_files_only=kwargs.get("local_files_only", False),
                     )
                 except Exception:
@@ -1154,9 +1154,9 @@ class AutoTokenizer:
                     spm_exists = has_file(
                         pretrained_model_name_or_path,
                         "tokenizer.model",
-                        revision=kwargs.get("revision", None),
-                        token=kwargs.get("token", None),
-                        cache_dir=kwargs.get("cache_dir", None),
+                        revision=kwargs.get("revision"),
+                        token=kwargs.get("token"),
+                        cache_dir=kwargs.get("cache_dir"),
                         local_files_only=kwargs.get("local_files_only", False),
                     )
                 except Exception:
@@ -1166,11 +1166,11 @@ class AutoTokenizer:
                         resolved_spm = cached_file(
                             pretrained_model_name_or_path,
                             "tokenizer.model",
-                            cache_dir=kwargs.get("cache_dir", None),
+                            cache_dir=kwargs.get("cache_dir"),
                             force_download=kwargs.get("force_download", False),
-                            proxies=kwargs.get("proxies", None),
-                            token=kwargs.get("token", None),
-                            revision=kwargs.get("revision", None),
+                            proxies=kwargs.get("proxies"),
+                            token=kwargs.get("token"),
+                            revision=kwargs.get("revision"),
                             local_files_only=kwargs.get("local_files_only", False),
                             subfolder=kwargs.get("subfolder", ""),
                         )
@@ -1179,7 +1179,10 @@ class AutoTokenizer:
                     if resolved_spm is not None:
                         try:
                             from ...create_fast_tokenizer import SentencePieceExtractor
-                            fast_sig = inspect.signature(getattr(fast_tokenizer_class, "__init__", fast_tokenizer_class))
+
+                            fast_sig = inspect.signature(
+                                getattr(fast_tokenizer_class, "__init__", fast_tokenizer_class)
+                            )
                             if "vocab" in fast_sig.parameters and "merges" in fast_sig.parameters:
                                 try:
                                     vocab, merges = SentencePieceExtractor(resolved_spm).extract()
@@ -1196,9 +1199,9 @@ class AutoTokenizer:
                     vocab_file_exists = has_file(
                         pretrained_model_name_or_path,
                         "tokenizer.model",
-                        revision=kwargs.get("revision", None),
-                        token=kwargs.get("token", None),
-                        cache_dir=kwargs.get("cache_dir", None),
+                        revision=kwargs.get("revision"),
+                        token=kwargs.get("token"),
+                        cache_dir=kwargs.get("cache_dir"),
                         local_files_only=kwargs.get("local_files_only", False),
                     )
                 except Exception:
@@ -1209,9 +1212,7 @@ class AutoTokenizer:
                         "Falling back to SentencePieceBackend since tokenizer.model file was found "
                         "but no config or tokenizer class could be determined."
                     )
-                    return SentencePieceBackend.from_pretrained(
-                        pretrained_model_name_or_path, *inputs, **kwargs
-                    )
+                    return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
                 raise ValueError(
                     f"Could not load tokenizer from {pretrained_model_name_or_path}. "
