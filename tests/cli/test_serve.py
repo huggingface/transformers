@@ -80,7 +80,7 @@ def test_host_port_non_blocking(cli):
     with (
         patch("uvicorn.Config") as ConfigMock,
         patch("uvicorn.Server") as ServerMock,
-        patch("Serve.start_server") as start_mock,
+        patch.object(Serve, "start_server") as start_mock,
     ):
         server_instance = Mock()
         ServerMock.return_value = server_instance
