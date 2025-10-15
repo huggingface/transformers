@@ -1911,53 +1911,39 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @tp_plan.setter
     def tp_plan(self, plan: dict[str, str]):
-        if plan is not None:
-            # Validate that all parallel styles in the plan are supported
-            from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
+        if not isinstance(plan, dict):
+            raise ValueError("Can only set a dictionary as `tp_plan`")
 
-            for layer_pattern, parallel_style in plan.items():
-                if parallel_style not in ALL_PARALLEL_STYLES:
-                    raise ValueError(
-                        f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
-                        f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
-                    )
+        # Validate that all parallel styles in the plan are supported
+        from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 
-            # Validate that the layer patterns match existing model structure
-            # We check this by getting all parameter names and seeing if any match the patterns
-            if hasattr(self, "named_parameters"):
-                model_param_names = [name for name, _ in self.named_parameters()]
-                if model_param_names:  # Only validate if model has parameters
-                    for layer_pattern in plan.keys():
-                        # Convert pattern to regex (replace * with .*)
-                        regex_pattern = layer_pattern.replace("*", r"\d+")
-                        pattern_matched = False
-                        for param_name in model_param_names:
-                            if re.match(regex_pattern, param_name):
-                                pattern_matched = True
-                                break
-                        if not pattern_matched:
-                            # Try more flexible matching - check if pattern components exist
-                            pattern_parts = layer_pattern.split(".")
-                            flexible_matched = False
-                            for param_name in model_param_names:
-                                param_parts = param_name.split(".")
-                                if len(pattern_parts) <= len(param_parts):
-                                    match_count = 0
-                                    for i, pattern_part in enumerate(pattern_parts):
-                                        if pattern_part == "*":
-                                            match_count += 1
-                                        elif i < len(param_parts) and pattern_part == param_parts[i]:
-                                            match_count += 1
-                                    if match_count == len(pattern_parts):
-                                        flexible_matched = True
-                                        break
-                            if not flexible_matched:
-                                warnings.warn(
-                                    f"Layer pattern '{layer_pattern}' does not match any parameters in the model. "
-                                    f"This rule may not be applied during tensor parallelization."
-                                )
+        # Ensure the styles are all valid
+        for layer_pattern, parallel_style in plan.items():
+            if parallel_style not in ALL_PARALLEL_STYLES:
+                raise ValueError(
+                    f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
+                    f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+                )
 
-        self._tp_plan = plan if plan is not None else {}
+        # Validate that the layer patterns match existing model structure. We check this by getting all parameter
+        # names and seeing if any match the patterns
+        model_param_names = [name for name, _ in self.named_parameters()]
+        for layer_pattern in plan.keys():
+            # Convert pattern to regex (replace * with .*)
+            regex_pattern = layer_pattern.replace("*", r"\d+")
+            pattern_matched = False
+            for param_name in model_param_names:
+                if re.match(regex_pattern, param_name):
+                    pattern_matched = True
+                    break
+            if not pattern_matched:
+                warnings.warn(
+                    f"Layer pattern '{layer_pattern}' does not match any parameter in the model. This rule may not "
+                    "be applied during tensor parallelization, or may lead to dimension mismatches"
+                )
+
+        # Set the plan
+        self._tp_plan = plan
 
     @pp_plan.setter
     def pp_plan(self, plan: dict[str, tuple[str, str]]):
