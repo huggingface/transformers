@@ -114,7 +114,7 @@ dict_keys(['metadata', 'weight_map'])
 
 
 ```py
->>> from transformers.modeling_utils import load_sharded_checkpoint
+>>> from transformers.trainer_utils import load_sharded_checkpoint
 
 >>> with tempfile.TemporaryDirectory() as tmp_dir:
 ...     model.save_pretrained(tmp_dir, max_shard_size="200MB")
