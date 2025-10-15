@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import asyncio
 import json
 import os
@@ -23,6 +21,7 @@ import time
 from collections.abc import AsyncIterator
 from typing import Annotated, Optional
 
+import click
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -180,6 +179,29 @@ class RichInterface:
         self._console.print(f"[bold blue]Model: {self.model_id}\n")
         self._console.print(f"[bold blue]{config}")
         self._console.print()
+
+
+class ChatCommand(typer.core.TyperCommand):
+    """Custom Click command to override missing parameter error message.
+
+    Transformers v5 introduced a breaking change in the `transformers chat` command: the `model_id` parameter
+    is now required, and the command can no longer starts a server. This class overrides the default error message
+    to provide a more helpful message to users who may be used to the old behavior.
+    """
+
+    def parse_args(self, ctx, args):
+        try:
+            return super().parse_args(ctx, args)
+        except click.MissingParameter as e:
+            if e.param and e.param.name == "model_id":
+                typer.echo("Error: Missing argument 'MODEL_ID'.\n")
+                typer.echo(
+                    "Launching a server directly from the `transformers chat` command is no longer supported. "
+                    "Please use `transformers serve` to launch a server. "
+                    "Use --help for more information.",
+                )
+                ctx.exit(1)
+            raise
 
 
 class Chat:
