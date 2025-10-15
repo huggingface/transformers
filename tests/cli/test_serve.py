@@ -75,8 +75,12 @@ def test_host_port_blocking(cli):
 
 
 @require_openai
-def test_host_port_non_blocking(cli):
+def test_host_port_non_blocking(cli, caplog):
     """Minimal test: we can set arguments through the CLI - non-blocking"""
+    caplog.set_level(100000)
+    # ^ hack to avoid an issue happening only in CI. We don't check logs anyway so it's fine.
+    #   Source: https://github.com/pallets/click/issues/824#issuecomment-562581313
+
     with (
         patch("uvicorn.Config") as ConfigMock,
         patch("uvicorn.Server") as ServerMock,
