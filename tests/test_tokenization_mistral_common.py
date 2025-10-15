@@ -822,7 +822,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
 
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=True).input_ids,
+            self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=True),
             expected_tokenized.text,
         )
         self.assertEqual(
