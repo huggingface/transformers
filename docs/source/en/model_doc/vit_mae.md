@@ -52,6 +52,11 @@ reconstruction = outputs.logits
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- ViTMAE is typically used in two stages. First, do self-supervised pretraining with [`ViTMAEForPreTraining`]. Then discard the decoder and fine-tune the encoder. After fine-tuning, plug the weights into a model like [`ViTForImageClassification`].
+- Use [`ViTImageProcessor`] for input preparation.
+
 ## ViTMAEConfig
 
 [[autodoc]] ViTMAEConfig

@@ -62,6 +62,11 @@ Image.fromarray(depth.astype("uint8"))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- DepthAnythingV2 was released in June 2024. It uses the same architecture as Depth Anything and is compatible with all code examples and existing workflows.
+- The model uses synthetic data and a larger capacity teacher model to achieve much finer and more robust depth predictions.
+
 ## DepthAnythingConfig
 
 [[autodoc]] DepthAnythingConfig

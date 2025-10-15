@@ -57,6 +57,19 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Checkpoint names follow the pattern `mobilenet_v1_{depth_multiplier}_{resolution}`, like `mobilenet_v1_1.0_224`. 1.0 is the depth multiplier and 224 is the image resolution.
+- While trained on images of specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV1ImageProcessor`] handles the necessary preprocessing.
+- MobileNet is pretrained on ImageNet-1k, a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
+- The original TensorFlow checkpoints determine the padding amount at inference because it depends on the input image size. Set `tf_padding=False` in [`MobileNetV1Config`] to use the native PyTorch padding behavior.
+- The Transformers implementation doesn't support the following features:
+
+    - Uses global average pooling instead of the optional 7x7 average pooling with stride 2. For larger inputs, this gives a pooled output that's larger than a 1x1 pixel.
+    - Doesn't support other `output_stride` values (fixed at 32). For smaller output strides, the original implementation uses dilated convolution to prevent spatial resolution from being reduced further.
+    - `output_hidden_states=True` returns all intermediate hidden states. It's not possible to extract the output from specific layers for other downstream purposes.
+    - Doesn't include the quantized models from the original checkpoints because they include "FakeQuantization" operations to unquantize the weights.
+
 ## MobileNetV1Config
 
 [[autodoc]] MobileNetV1Config

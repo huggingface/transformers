@@ -15,6 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2022-06-02 and added to Hugging Face Transformers on 2023-06-20 and contributed by [novice03](https://huggingface.co/novice03) and [Bearnardd](https://huggingface.co/Bearnardd).*
 
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
+
 # EfficientFormer
 
 [EfficientFormer: Vision Transformers at MobileNet Speed](https://huggingface.co/papers/2206.01191) proposes a dimension-consistent pure transformer designed for mobile devices, addressing the speed limitations of traditional Vision Transformers (ViT). By revisiting and optimizing the architecture and operators used in ViT-based models, EfficientFormer achieves high performance with low latency. Experiments demonstrate that EfficientFormer-L1 matches MobileNetV2×1.4 in speed (1.6 ms inference latency on iPhone 12) while achieving 79.2% top-1 accuracy on ImageNet-1K. The largest model, EfficientFormer-L7, reaches 83.3% accuracy with 7.0 ms latency, proving that transformers can be effectively deployed on mobile devices for real-time applications.

@@ -70,6 +70,14 @@ visualized_images = processor.visualize_keypoint_matching(images, processed_outp
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- EfficientLoFTR is designed for efficiency while maintaining high accuracy. It uses an aggregated attention mechanism with adaptive token selection to reduce computational overhead compared to the original LoFTR.
+- The model produces semi-dense matches, offering a good balance between match density and computational efficiency. It excels in handling large viewpoint changes and texture-poor scenarios.
+- Use the [`post_process_keypoint_matching`] method to get matches in a more readable format for better visualization and analysis.
+- Visualize matches between images using the built-in plotting functionality.
+- EfficientLoFTR uses a novel two-stage correlation layer that achieves accurate subpixel correspondences, improving upon the original LoFTR's fine correlation module.
+
 ## EfficientLoFTRConfig
 
 [[autodoc]] EfficientLoFTRConfig

@@ -63,6 +63,16 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Check out demo [notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) for inference and fine-tuning on custom data. Replace [`ViTImageProcessor`] with [`BeitImageProcessor`] and [`ViTForImageClassification`] with [`BeitForImageClassification`].
+- A demo [notebook](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/BEiT) shows how to combine DALL-E's image tokenizer with BEiT for masked image modeling.
+- BEiT models expect each image to be the same size (resolution). Use [`BeitImageProcessor`] to resize and normalize images for the model.
+- Checkpoint names reflect patch resolution and image resolution used during pre-training or fine-tuning. For example, `microsoft/beit-base-patch16-224` refers to a base-sized architecture with 16x16 patch resolution and 224x224 fine-tuning resolution. All checkpoints are available on the hub.
+- Available checkpoints are either (1) pre-trained on ImageNet-22k only (14 million images and 22k classes), (2) also fine-tuned on ImageNet-22k, or (3) also fine-tuned on ImageNet-1k (ILSVRC 2012, 1.3 million images and 1,000 classes).
+- BEiT uses relative position embeddings inspired by the T5 model. During pre-training, authors shared relative position bias among self-attention layers. During fine-tuning, each layer's relative position bias initializes with the shared relative position bias from pre-training.
+- To pre-train a model from scratch, set the `use_relative_position_bias` attribute of [`BeitConfig`] to `True` to add position embeddings.
+
 ## BEiT specific outputs
 
 [[autodoc]] models.beit.modeling_beit.BeitModelOutputWithPooling

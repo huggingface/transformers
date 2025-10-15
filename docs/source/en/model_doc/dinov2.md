@@ -53,6 +53,10 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [torch.jit.trace](https://docs.pytorch.org/docs/stable/generated/torch.jit.trace.html) to speed up inference. However, it produces some mismatched elements. The difference between the original and traced model is 1e-4.
+
 ## Dinov2Config
 
 [[autodoc]] Dinov2Config

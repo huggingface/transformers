@@ -57,6 +57,11 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- PoolFormer has a hierarchical architecture. Instead of attention, it uses a simple average pooling layer. All checkpoints are available on the hub.
+- Use [`PoolFormerImageProcessor`] to prepare images for the model.
+
 ## PoolFormerConfig
 
 [[autodoc]] PoolFormerConfig
