@@ -43,13 +43,13 @@ import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    task="sentiment-analysis",
-    model="cardiffnlp/twitter-roberta-base-sentiment",
+    task="fill-mask",
+    model="FacebookAI/roberta-base",
     dtype=torch.float16,
     device=0
 )
-# Returns: [{'label': 'POSITIVE', 'score': 0.98}]
-pipeline("I love using RoBERTa for NLP tasks!")
+# Returns: [{'sequence': 'I love using RoBERTa for NLP tasks!', 'score': 0.95, 'token': 5, 'token_str': 'RoBERTa'}]
+pipeline("I love using <mask> for NLP tasks!")
 ```
 
 </hfoption>
@@ -57,34 +57,36 @@ pipeline("I love using RoBERTa for NLP tasks!")
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
-model = AutoModelForSequenceClassification.from_pretrained(
-    "cardiffnlp/twitter-roberta-base-sentiment",
+model = AutoModelForMaskedLM.from_pretrained(
+    "FacebookAI/roberta-base",
     dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
 
-# Classify sentiment of a sample sentence
-text = "This model is absolutely amazing!"
-inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(model.device)
+# Predict masked token in a sample sentence
+text = "I love using <mask> for NLP tasks!"
+inputs = tokenizer(text, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
-    predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
-    predicted_class = predictions.argmax().item()
-    confidence = predictions[0][predicted_class].item()
+    predictions = outputs.logits
 
-print(f"Predicted class: {predicted_class}, Confidence: {confidence:.3f}")
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
 <hfoption id="transformers CLI">
 
 ```bash
-echo "I love using RoBERTa for NLP tasks!" | transformers run --task sentiment-analysis --model cardiffnlp/twitter-roberta-base-sentiment --device 0
+echo "I love using <mask> for NLP tasks!" | transformers run --task fill-mask --model FacebookAI/roberta-base --device 0
 ```
 
 </hfoption>
