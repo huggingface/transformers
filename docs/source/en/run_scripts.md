@@ -61,7 +61,7 @@ The example below fine-tunes [T5-small](https://huggingface.co/google-t5/t5-smal
 
 The example script downloads and preprocesses a dataset, and then fine-tunes it with [`Trainer`] with a supported model architecture.
 
-Resuming training from a checkpoint is very useful if training is interrupted because you don't have to start over again: 
+Resuming training from a checkpoint is very useful if training is interrupted because you don't have to start over again:
 
 * `--resume_from_checkpoint path_to_specific_checkpoint` resumes training from a specific checkpoint folder.
 
