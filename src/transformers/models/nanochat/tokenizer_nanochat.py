@@ -132,15 +132,15 @@ class NanoGPTTokenizer(PreTrainedTokenizerFast):
         if add_generation_prompt:
             token_ids.append(self.special_token_ids["assistant_start"])
         if tokenize:
-            return self(
-                [token_ids],
-                add_special_tokens=False,
-                return_tensors=return_tensors,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                **kwargs,
-            )
+            # Convert token_ids to the appropriate tensor format
+            if return_tensors == "pt":
+                import torch
+                return torch.tensor([token_ids], dtype=torch.long)
+            elif return_tensors == "np":
+                import numpy as np
+                return np.array([token_ids], dtype=np.int64)
+            else:
+                return {"input_ids": [token_ids], "attention_mask": [[1] * len(token_ids)]}
         return self.decode(token_ids, skip_special_tokens=False)
 
     def _encode_text(self, text: str) -> List[int]:
