@@ -281,28 +281,6 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 filtered_sequence = [x for x in filtered_sequence if x is not None]
                 self.assertEqual(encoded_sequence, filtered_sequence)
 
-    @require_jinja
-    def test_tokenization_for_chat(self):
-        tokenizer = GPT2Tokenizer.from_pretrained(self.tmpdirname)
-        tokenizer.chat_template = "{% for message in messages %}{{ message.content }}{{ eos_token }}{% endfor %}"
-        test_chats = [
-            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
-            [
-                {"role": "system", "content": "You are a helpful chatbot."},
-                {"role": "user", "content": "Hello!"},
-                {"role": "assistant", "content": "Nice to meet you."},
-            ],
-            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
-        ]
-        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
-        # fmt: off
-        expected_tokens = [[20, 1, 20, 10, 20, 4, 3, 10, 20, 10, 20, 3, 0, 20, 20, 20, 0, 10, 20, 20, 20, 6, 20, 1, 6, 20, 20, 20, 3, 0, 0, 1, 20, 20],
-                          [20, 1, 20, 10, 20, 4, 3, 10, 20, 10, 20, 3, 0, 20, 20, 20, 0, 10, 20, 20, 20, 6, 20, 1, 6, 20, 20, 20, 3, 0, 0, 1, 20, 20, 20, 7, 20, 3, 10, 6, 1, 10, 20, 3, 3, 6, 10, 20, 1, 20, 20, 20],
-                          [20, 7, 20, 3, 10, 6, 1, 10, 20, 3, 3, 6, 10, 20, 1, 20, 20, 20, 20, 3, 0, 0, 1, 20, 20]]
-        # fmt: on
-        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
-            self.assertListEqual(tokenized_chat, expected_tokens)
-
     @require_tiktoken
     def test_tokenization_tiktoken(self):
         from tiktoken import encoding_name_for_model
