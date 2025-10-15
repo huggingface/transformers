@@ -118,8 +118,6 @@ class LightOnOCRMultiModalProjector(nn.Module):
 
 
 class LightOnOCRPreTrainedModel(PreTrainedModel):
-    """PreTrainedModel wrapper for LightOnOCR."""
-
     config_class = LightOnOCRConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -165,8 +163,6 @@ class LightOnOCRPreTrainedModel(PreTrainedModel):
 
 # Text model components - explicitly renamed from Qwen3 (LightOnOCRTextRMSNorm already defined above)
 class LightOnOCRTextPreTrainedModel(PreTrainedModel):
-    """PreTrainedModel wrapper for LightOnOCR text model."""
-
     config_class = LightOnOCRTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -526,8 +522,6 @@ class LightOnOCRText(LightOnOCRTextPreTrainedModel):
 
 # Vision model components - explicitly renamed from Pixtral
 class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
-    """PreTrainedModel wrapper for LightOnOCR vision encoder."""
-
     config_class = LightOnOCRVisionConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
@@ -1138,4 +1132,12 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
         return model_kwargs
 
 
-__all__ = ["LightOnOCRForConditionalGeneration", "LightOnOCRModel"]
+__all__ = [
+    "LightOnOCRPreTrainedModel",
+    "LightOnOCRText",
+    "LightOnOCRTextPreTrainedModel",
+    "LightOnOCRVision",
+    "LightOnOCRVisionPreTrainedModel",
+    "LightOnOCRForConditionalGeneration",
+    "LightOnOCRModel",
+]
