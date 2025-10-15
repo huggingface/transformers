@@ -267,15 +267,7 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
         size = kwargs.pop("size", None)
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
-
+        max_size = None if size is None else 1333
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
@@ -295,8 +287,6 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "pad_and_return_pixel_mask" in kwargs:
             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
@@ -532,13 +522,6 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
                 "use `do_pad` instead."
             )
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead."
-            )
-            kwargs["size"] = kwargs.pop("max_size")
 
         return super().preprocess(images, **kwargs)
 

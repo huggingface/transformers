@@ -786,18 +786,7 @@ class YolosImageProcessor(BaseImageProcessor):
         pad_size: Optional[dict[str, int]] = None,
         **kwargs,
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
-
+        max_size = None if size is None else 1333
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
@@ -839,21 +828,6 @@ class YolosImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
-
-    @classmethod
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->Yolos
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `YolosImageProcessor.from_pretrained(checkpoint, size=600,
-        max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
-        if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation
     def prepare_annotation(
@@ -923,15 +897,7 @@ class YolosImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size, max_size=None, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             new_size = get_resize_output_image_size(
                 image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
@@ -1264,20 +1230,6 @@ class YolosImageProcessor(BaseImageProcessor):
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
                 height and width in the batch.
         """
-        if "pad_and_return_pixel_mask" in kwargs:
-            logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.33, "
-                "use `do_pad` instead.",
-            )
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in v4.33, use"
-                " `size['longest_edge']` instead.",
-            )
-            size = kwargs.pop("max_size")
-
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
         size = get_size_dict(size=size, default_to_square=False)

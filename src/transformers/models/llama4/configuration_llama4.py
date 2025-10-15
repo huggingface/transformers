@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...utils import logging
@@ -123,20 +122,6 @@ class Llama4VisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.rope_theta = rope_theta
-
-        self._vision_feature_layer = kwargs.get("vision_feature_layer", -1)
-
-        @property
-        def vision_feature_layer(self):
-            warnings.warn(
-                "The `vision_feature_layer` attribute is deprecated and will be removed in v4.58.0.",
-                FutureWarning,
-            )
-            return self._vision_feature_layer
-
-        @vision_feature_layer.setter
-        def vision_feature_layer(self, value):
-            self._vision_feature_layer = value
 
         super().__init__(**kwargs)
 
