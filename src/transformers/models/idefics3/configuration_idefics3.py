@@ -56,6 +56,10 @@ class Idefics3VisionConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        use_export_friendly (`bool`, *optional*, defaults to `False`):
+            Whether to use export-friendly mode for vision model operations. When True, uses simplified
+            operations that are compatible with export frameworks (e.g., avoids data-dependent loops).
+            Only enable this when exporting the model.
 
     Example:
 
@@ -89,6 +93,7 @@ class Idefics3VisionConfig(PreTrainedConfig):
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         initializer_range=0.02,
+        use_export_friendly=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -104,6 +109,7 @@ class Idefics3VisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.use_export_friendly = use_export_friendly
 
 
 class Idefics3Config(PreTrainedConfig):
@@ -169,11 +175,17 @@ class Idefics3Config(PreTrainedConfig):
         self.use_export_friendly = use_export_friendly
 
         if vision_config is None:
-            self.vision_config = Idefics3VisionConfig()
+            self.vision_config = Idefics3VisionConfig(use_export_friendly=use_export_friendly)
             logger.info("vision_config is None, using default vision config")
         elif isinstance(vision_config, dict):
+            # Propagate use_export_friendly to vision_config if not explicitly set
+            if "use_export_friendly" not in vision_config:
+                vision_config["use_export_friendly"] = use_export_friendly
             self.vision_config = Idefics3VisionConfig(**vision_config)
         elif isinstance(vision_config, Idefics3VisionConfig):
+            # Propagate use_export_friendly to vision_config if not explicitly set
+            if not hasattr(vision_config, "use_export_friendly"):
+                vision_config.use_export_friendly = use_export_friendly
             self.vision_config = vision_config
 
         if isinstance(text_config, dict):
