@@ -44,11 +44,15 @@ def _apply_rotary_pos_emb(
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    cos = cos.unsqueeze(1)
-    sin = sin.unsqueeze(1)
-    query_rot = (query * cos) + (_rotate_half(query) * sin)
-    key_rot = (key * cos) + (_rotate_half(key) * sin)
-    return query_rot, key_rot
+    # Expects query/key as [B, T, H, D] and cos/sin as [1, T, 1, D//2]
+    d = query.shape[3] // 2
+    q1, q2 = query[..., :d], query[..., d:]
+    k1, k2 = key[..., :d], key[..., d:]
+    
+    query_rot = torch.cat([q1 * cos + q2 * sin, q1 * (-sin) + q2 * cos], dim=-1)
+    key_rot = torch.cat([k1 * cos + k2 * sin, k1 * (-sin) + k2 * cos], dim=-1)
+    
+    return query_rot.to(query.dtype), key_rot.to(key.dtype)
 
 
 def _rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -95,14 +99,19 @@ class NanoGPTAttention(nn.Module):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         del kwargs
         batch, seq_len, _ = hidden_states.shape
-        head_shape = (batch, seq_len, -1, self.head_dim)
 
-        query = self.q_proj(hidden_states).view(head_shape).transpose(1, 2)
-        key = self.k_proj(hidden_states).view(head_shape).transpose(1, 2)
-        value = self.v_proj(hidden_states).view(head_shape).transpose(1, 2)
+        query = self.q_proj(hidden_states).view(batch, seq_len, self.num_heads, self.head_dim)
+        key = self.k_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
+        value = self.v_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
 
         cos, sin = position_embeddings
         query, key = _apply_rotary_pos_emb(query, key, cos, sin)
+        query = F.rms_norm(query, (query.size(-1),), eps=self.config.rms_norm_eps)
+        key = F.rms_norm(key, (key.size(-1),), eps=self.config.rms_norm_eps)
+        
+        query = query.transpose(1, 2)
+        key = key.transpose(1, 2)
+        value = value.transpose(1, 2)
 
         if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
@@ -111,14 +120,22 @@ class NanoGPTAttention(nn.Module):
         key = _repeat_kv(key, self.num_key_value_groups)
         value = _repeat_kv(value, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query, key.transpose(-1, -2)) * self.scaling
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
+        # Use F.scaled_dot_product_attention like the original implementation
+        query_len = query.size(2)
+        key_len = key.size(2)
+        
+        if query_len == key_len:
+            attn_output = F.scaled_dot_product_attention(query, key, value, is_causal=True)
+        elif query_len == 1:
+            attn_output = F.scaled_dot_product_attention(query, key, value, is_causal=False)
+        else:
+            attn_mask = torch.zeros((query_len, key_len), dtype=torch.bool, device=query.device)
+            prefix_len = key_len - query_len
+            if prefix_len > 0:
+                attn_mask[:, :prefix_len] = True
+            attn_mask[:, prefix_len:] = torch.tril(torch.ones((query_len, query_len), dtype=torch.bool, device=query.device))
+            attn_output = F.scaled_dot_product_attention(query, key, value, attn_mask=attn_mask)
 
-        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-        attn_weights = F.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-
-        attn_output = torch.matmul(attn_weights, value)
         attn_output = attn_output.transpose(1, 2).contiguous().view(batch, seq_len, -1)
         attn_output = self.o_proj(attn_output)
         return attn_output, None
@@ -219,9 +236,8 @@ class NanoGPTModel(NanoGPTPreTrainedModel):
         freqs = torch.arange(0, head_dim, 2, dtype=torch.float32, device=device)
         inv_freq = 1.0 / (self.config.rope_theta ** (freqs / head_dim))
         angles = torch.einsum("i,j->ij", positions, inv_freq)
-        angles = torch.cat([angles, angles], dim=-1)
-        cos = angles.cos()[None, :, :]
-        sin = angles.sin()[None, :, :]
+        cos = angles.cos()[None, :, None, :]
+        sin = angles.sin()[None, :, None, :]
         self._rotary_cos = cos.to(dtype=dtype)
         self._rotary_sin = sin.to(dtype=dtype)
         return self._rotary_cos, self._rotary_sin
@@ -272,7 +288,8 @@ class NanoGPTModel(NanoGPTPreTrainedModel):
         cos = cos[:, cache_position]
         sin = sin[:, cache_position]
 
-        hidden_states = F.rms_norm(inputs_embeds, (inputs_embeds.size(-1),), eps=self.config.rms_norm_eps)
+        hidden_states = inputs_embeds
+        hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
@@ -289,7 +306,6 @@ class NanoGPTModel(NanoGPTPreTrainedModel):
 
 
 class NanoGPTForCausalLM(NanoGPTPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
