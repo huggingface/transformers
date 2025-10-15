@@ -25,7 +25,7 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import AsyncGenerator, Generator, Iterable
+from collections.abc import Generator, Iterable
 from contextlib import asynccontextmanager
 from io import BytesIO
 from threading import Thread
@@ -90,6 +90,8 @@ if serve_dependencies_available:
     from openai.types.audio.transcription import Transcription
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
     from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageParam
+    from openai.types.chat import ChatCompletionMessageParam
+    from openai.types.chat.chat_completion import Choice
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
         ChoiceDelta,
@@ -464,6 +466,170 @@ class Serve:
             self.last_model = model_id_and_revision
             self.load_model_and_processor(model_id_and_revision)
 
+        @asynccontextmanager
+        async def lifespan(app: "FastAPI"):
+            yield
+            for model in self.loaded_models.values():
+                model.delete_model()
+            if self.running_continuous_batching_manager is not None:
+                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+
+        if self.args.force_model:
+            model_id_and_revision = self.process_model_name(self.args.force_model)
+            self.last_model = model_id_and_revision
+            self.load_model_and_processor(model_id_and_revision)
+        app = FastAPI(lifespan=lifespan)
+
+        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
+        # security purposes, it's disabled by default
+        if self.enable_cors:
+            app.add_middleware(
+                CORSMiddleware,
+                allow_origins=["*"],
+                allow_credentials=True,
+                allow_methods=["*"],
+                allow_headers=["*"],
+            )
+            logger.warning_once(
+                "CORS allow origin is set to `*`. This is not recommended for production environments."
+            )
+
+        from fastapi import Request
+
+        @app.post("/v1/chat/completions")
+        def chat_completion(request: Request, body: dict):
+            self.validate_chat_completion_request(request=body)
+
+            if self.continuous_batching:
+                output = self.continuous_batching_chat_completion(body, request.state.request_id)
+            else:
+                output = self.generate_chat_completion(body)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.post("/v1/responses")
+        def responses(request: dict):
+            self.validate_response_request(request=request)
+            # Support non-streaming mode when `stream=false` is provided
+            stream = request.get("stream", True)
+            if not stream:
+                response_obj = self.generate_response_non_streaming(request)
+                return JSONResponse(response_obj)
+
+            output = self.generate_response(request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.post("/v1/audio/transcriptions")
+        async def audio_transcriptions(request: Request):
+            # Parses the multipart/form-data request into the request format used by other endpoints
+            async with request.form() as form:
+                parsed_request = TransformersTranscriptionCreateParams(
+                    file=await form["file"].read(),
+                    model=form["model"],
+                    # TODO: add other fields
+                )
+                logger.debug(
+                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
+                    f"size: {form['file'].size / 1024:.2f} KiB"
+                )
+            self.validate_transcription_request(request=parsed_request)
+
+            output = self.generate_transcription(parsed_request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.options("/v1/models")
+        @app.get("/v1/models")
+        def get_all_models():
+            return JSONResponse({"object": "list", "data": self.get_gen_models()})
+
+        @app.get("/health")
+        def healthcheck():
+            return JSONResponse({"status": "ok"})
+
+        @app.middleware("http")
+        async def get_or_set_request_id(request: Request, call_next):
+            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
+            request.state.request_id = request_id
+            response = await call_next(request)
+            response.headers[X_REQUEST_ID] = request_id
+            return response
+
+        uvicorn.run(app, host=self.host, port=self.port, log_level=self.log_level)
+        app = FastAPI(lifespan=lifespan)
+
+        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
+        # security purposes, it's disabled by default
+        if self.enable_cors:
+            app.add_middleware(
+                CORSMiddleware,
+                allow_origins=["*"],
+                allow_credentials=True,
+                allow_methods=["*"],
+                allow_headers=["*"],
+            )
+            logger.warning_once(
+                "CORS allow origin is set to `*`. This is not recommended for production environments."
+            )
+
+        from fastapi import Request
+
+        @app.post("/v1/chat/completions")
+        def chat_completion(request: Request, body: dict):
+            self.validate_chat_completion_request(request=body)
+
+            if self.continuous_batching:
+                return self.continuous_batching_chat_completion(body, request.state.request_id)
+            else:
+                return self.generate_chat_completion(body)
+
+        @app.post("/v1/responses")
+        def responses(request: dict):
+            self.validate_response_request(request=request)
+            # Support non-streaming mode when `stream=false` is provided
+            stream = request.get("stream", True)
+            if not stream:
+                response_obj = self.generate_response_non_streaming(request)
+                return JSONResponse(response_obj)
+
+            output = self.generate_response(request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.post("/v1/audio/transcriptions")
+        async def audio_transcriptions(request: Request):
+            # Parses the multipart/form-data request into the request format used by other endpoints
+            async with request.form() as form:
+                parsed_request = TransformersTranscriptionCreateParams(
+                    file=await form["file"].read(),
+                    model=form["model"],
+                    # TODO: add other fields
+                )
+                logger.debug(
+                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
+                    f"size: {form['file'].size / 1024:.2f} KiB"
+                )
+            self.validate_transcription_request(request=parsed_request)
+
+            output = self.generate_transcription(parsed_request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.options("/v1/models")
+        @app.get("/v1/models")
+        def get_all_models():
+            return JSONResponse({"object": "list", "data": self.get_gen_models()})
+
+        @app.get("/health")
+        def healthcheck():
+            return JSONResponse({"status": "ok"})
+
+        @app.middleware("http")
+        async def get_or_set_request_id(request: Request, call_next):
+            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
+            request.state.request_id = request_id
+            response = await call_next(request)
+            response.headers[X_REQUEST_ID] = request_id
+            return response
+
+        uvicorn.run(app, host=self.host, port=self.port, log_level=self.log_level)
+
     def _validate_request(
         self,
         request: dict,
@@ -611,106 +777,7 @@ class Serve:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
-
-    def run(self):
-        """
-        Setup and run the FastAPI server for transformers serve.
-
-        Models will be loaded and unloaded automatically based on usage and a timeout.
-
-        The server will expose the following endpoints:
-        - POST /v1/chat/completions: Generates chat completions.
-        - POST /v1/responses: Generates responses.
-        - POST /v1/audio/transcriptions: Generates transcriptions from audio.
-        - GET /v1/models: Lists available models for 3rd party tools.
-
-        Requires FastAPI and Uvicorn to be installed.
-        """
-
-        @asynccontextmanager
-        async def lifespan(app: FastAPI):
-            yield
-            for model in self.loaded_models.values():
-                model.delete_model()
-            if self.running_continuous_batching_manager is not None:
-                self.running_continuous_batching_manager.stop(block=True, timeout=5)
-
-        app = FastAPI(lifespan=lifespan)
-
-        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
-        # security purposes, it's disabled by default
-        if self.enable_cors:
-            app.add_middleware(
-                CORSMiddleware,
-                allow_origins=["*"],
-                allow_credentials=True,
-                allow_methods=["*"],
-                allow_headers=["*"],
-            )
-            logger.warning_once(
-                "CORS allow origin is set to `*`. This is not recommended for production environments."
-            )
-
-        from fastapi import Request
-
-        @app.post("/v1/chat/completions")
-        def chat_completion(request: Request, body: dict):
-            self.validate_chat_completion_request(request=body)
-
-            if self.use_continuous_batching:
-                output = self.continuous_batching_chat_completion(body, request.state.request_id)
-            else:
-                output = self.generate_chat_completion(body)
-            return StreamingResponse(output, media_type="text/event-stream")
-
-        @app.post("/v1/responses")
-        def responses(request: dict):
-            self.validate_response_request(request=request)
-            # Support non-streaming mode when `stream=false` is provided
-            stream = request.get("stream", True)
-            if not stream:
-                response_obj = self.generate_response_non_streaming(request)
-                return JSONResponse(response_obj)
-
-            output = self.generate_response(request)
-            return StreamingResponse(output, media_type="text/event-stream")
-
-        @app.post("/v1/audio/transcriptions")
-        async def audio_transcriptions(request: Request):
-            # Parses the multipart/form-data request into the request format used by other endpoints
-            async with request.form() as form:
-                parsed_request = TransformersTranscriptionCreateParams(
-                    file=await form["file"].read(),
-                    model=form["model"],
-                    # TODO: add other fields
-                )
-                logger.debug(
-                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
-                    f"size: {form['file'].size / 1024:.2f} KiB"
-                )
-            self.validate_transcription_request(request=parsed_request)
-
-            output = self.generate_transcription(parsed_request)
-            return StreamingResponse(output, media_type="text/event-stream")
-
-        @app.options("/v1/models")
-        @app.get("/v1/models")
-        def get_all_models():
-            return JSONResponse({"object": "list", "data": self.get_gen_models()})
-
-        @app.get("/health")
-        def healthcheck():
-            return JSONResponse({"status": "ok"})
-
-        @app.middleware("http")
-        async def get_or_set_request_id(request: Request, call_next):
-            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
-            request.state.request_id = request_id
-            response = await call_next(request)
-            response.headers[X_REQUEST_ID] = request_id
-            return response
-
-        uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
+        return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
     @functools.cache
     def get_gen_models(self) -> list[dict[str, any]]:
@@ -959,8 +1026,8 @@ class Serve:
         Returns:
             `Generator[str, None, None]`: A generator that yields the OpenAI Chat Completion chunks.
         """
-        if self.force_model is not None:
-            req["model"] = self.force_model
+        if self.args.force_model is not None:
+            req["model"] = self.args.force_model
 
         messages: Iterable[ChatCompletionMessageParam] = req["messages"]
 
@@ -1820,7 +1887,7 @@ class Serve:
 
 
 # set docstring separately to make it look nice (Typer doesn't play well with the class command)
-serve.__doc__ = """
+Serve.__doc__ = """
 Run a FastAPI server to serve models on-demand with an OpenAI compatible API.
 
 Models will be loaded and unloaded automatically based on usage and a timeout.
@@ -1836,4 +1903,4 @@ Requires FastAPI and Uvicorn to be installed.
 """
 
 if __name__ == "__main__":
-    serve = serve()
+    serve = Serve()
