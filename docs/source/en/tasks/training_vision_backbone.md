@@ -218,7 +218,8 @@ results = obj_detector("https://huggingface.co/datasets/merve/vlm_test_images/re
 print(results)
 ```
 
-Let's visualize the result.
+Visualize the results.
+
 ```py
 from PIL import Image, ImageDraw
 import numpy as np
