@@ -164,7 +164,7 @@ def collate_fn(examples):
     return inputs
 ```
 
-We can now initialize our Trainer in usual way. We initialize `TrainingArguments`, below is a good setup for model convergence. Then, we pass the datasets, the data collator, the arguments and the model to Trainer and start training.
+Initialize the [`Trainer`] and set up [`TrainingArguments`] for model convergence. Pass datasets, data collator, arguments, and model to `Trainer` to start training.
 
 ```py
 from transformers import Trainer, TrainingArguments
