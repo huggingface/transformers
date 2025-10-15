@@ -544,8 +544,6 @@
         title: Helium
       - local: model_doc/herbert
         title: HerBERT
-      - local: model_doc/hgnet_v2
-        title: HGNet-V2
       - local: model_doc/hunyuan_v1_dense
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
