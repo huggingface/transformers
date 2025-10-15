@@ -57,6 +57,10 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- XLM-RoBERTa-XL doesn't require `lang` tensors to understand the input language. It automatically detects the language from `input_ids`.
+
 ## XLMRobertaXLConfig
 
 [[autodoc]] XLMRobertaXLConfig

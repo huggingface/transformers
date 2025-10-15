@@ -54,6 +54,10 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- GPT-NeoX-20B uses a different tokenizer than GPT-J-6B and GPT-Neo. The new tokenizer allocates additional tokens to whitespace characters. This makes the model more suitable for code generation tasks.
+
 ## GPTNeoXConfig
 
 [[autodoc]] GPTNeoXConfig

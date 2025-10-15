@@ -54,6 +54,16 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`LongT5ForConditionalGeneration`] extends [`T5ForConditionalGeneration`] by replacing the traditional encoder self-attention layer with efficient local attention or transient-global (tglobal) attention.
+- Unlike T5, LongT5 doesn't use a task prefix. It uses a different pre-training objective inspired by [`PegasusForConditionalGeneration`].
+- LongT5 works efficiently on long-range sequence-to-sequence tasks where input sequences exceed 512 tokens. It handles input sequences up to 16,384 tokens.
+- Local attention uses a sparse sliding-window operation. A token attends only to r tokens to the left and right (r=127 by default). Local attention doesn't introduce new parameters. Complexity is linear: O(l*r).
+- Transient Global Attention extends Local Attention. Each input token interacts with all other tokens in the layer. This splits input sequences into blocks of fixed length k (k=16 by default).
+- A global token for each block is obtained by summing and normalizing embeddings of every token in the block. Each token attends to nearby tokens (like Local attention) and every global token (like standard global attention).
+- TGlobal attention introduces new parameters: global relative position biases and layer normalization for global token embeddings. Complexity is O(l(r + l/k)).
+
 ## LongT5Config
 
 [[autodoc]] LongT5Config

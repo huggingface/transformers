@@ -51,6 +51,13 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The YOSO attention algorithm uses custom CUDA kernels. These are functions written in CUDA C++ that execute multiple times in parallel on a GPU.
+- The kernels provide a `fast_hash` function that approximates random projections of queries and keys using the Fast Hadamard Transform. The `lsh_cumulation` function uses these hash codes to approximate self-attention via LSH-based Bernoulli sampling.
+- Set `config.use_expectation = False` to use custom kernels. Install the correct version of PyTorch and cudatoolkit to ensure kernels compile successfully.
+- By default, `config.use_expectation = True` uses YOSO-E and doesn't require compiling CUDA kernels.
+
 ## YosoConfig
 
 [[autodoc]] YosoConfig

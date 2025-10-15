@@ -54,6 +54,10 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. GPT uses absolute position embeddings.
+
 ## GPTNeoConfig
 
 [[autodoc]] GPTNeoConfig

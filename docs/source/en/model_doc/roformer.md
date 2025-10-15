@@ -51,6 +51,11 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The current RoFormer implementation is an encoder-only model.
+- Find the original code in the [ZhuiyiTechnology/roformer](https://github.com/ZhuiyiTechnology/roformer) repository.
+
 ## RoFormerConfig
 
 [[autodoc]] RoFormerConfig

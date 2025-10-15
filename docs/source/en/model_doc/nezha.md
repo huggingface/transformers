@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 *This model was released on 2019-08-31 and added to Hugging Face Transformers on 2023-06-20 and contributed by [sijunhe](https://huggingface.co/sijunhe).*
 
 > [!WARNING]
-> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # Nezha
 

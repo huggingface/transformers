@@ -59,6 +59,13 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`EncoderDecoderModel`] initializes with any pretrained encoder and decoder. Cross-attention layers may be randomly initialized depending on the decoder architecture.
+- These models require downstream fine-tuning. Use [`from_encoder_decoder_pretrained`] to combine encoder and decoder checkpoints.
+- Fine-tune encoder-decoder models like BART or T5. Only `input_ids` and `labels` are required to compute loss. See this [notebook](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for detailed training examples.
+- [`EncoderDecoderModel`] can be randomly initialized from encoder and decoder configs.
+
 ## EncoderDecoderConfig
 
 [[autodoc]] EncoderDecoderConfig

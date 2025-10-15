@@ -20,62 +20,34 @@ rendered properly in your Markdown viewer.
 
 [Doge-20M](https://huggingface.co/papers/PAPER_ID) is utilized for text generation, demonstrating its capability to produce coherent and contextually relevant responses. For question answering, Doge-20M-Instruct is employed, showcasing enhanced performance in understanding and generating answers through a structured conversational format. The model leverages specific generation configurations, including temperature and top-p sampling, to ensure varied and engaging outputs.
 
-## Usage
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-<details>
-<summary>Using Doge-Base for text generation</summary>
+```py
+import torch
+from transformers import pipeline
 
-```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
+pipeline = pipeline(task="text-generation", model="SmallDoge/Doge-20M", dtype="auto")
+pipeline("Plants generate energy through a process known as  ")
+```
 
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
-model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M")
-inputs = tokenizer("Hey how are you doing?", return_tensors="pt")
 
-outputs = model.generate(**inputs, max_new_tokens=100)
-print(tokenizer.batch_decode(outputs))
+inputs = tokenizer("Plants generate energy through a process known as  ", return_tensors='pt', return_token_type_ids=False)
+outputs = model.generate(**inputs, max_new_tokens=64)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
 ```
 
-</details>
-
-<details>
-<summary>Using Doge-Instruct for question answering</summary>
-
-```python
-from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig, TextStreamer
-
-tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M-Instruct")
-model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M-Instruct")
-
-generation_config = GenerationConfig(
-      max_new_tokens=100, 
-      use_cache=True, 
-      do_sample=True, 
-      temperature=0.8, 
-      top_p=0.9,
-      repetition_penalty=1.0
-)
-steamer = TextStreamer(tokenizer=tokenizer, skip_prompt=True)
-
-prompt = "Hi, how are you doing today?"
-conversation = [
-      {"role": "user", "content": prompt}
-]
-inputs = tokenizer.apply_chat_template(
-    conversation=conversation,
-    tokenize=True,
-    return_tensors="pt",
-)
-
-outputs = model.generate(
-    inputs, 
-    tokenizer=tokenizer,
-    generation_config=generation_config, 
-    streamer=steamer
-)
-```
-
-</details>
+</hfoption>
+</hfoptions>
 
 ## DogeConfig
 

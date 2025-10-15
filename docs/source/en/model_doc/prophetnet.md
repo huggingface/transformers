@@ -48,6 +48,11 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. ProphetNet uses absolute position embeddings.
+- The model architecture is based on the original Transformer. It replaces the "standard" self-attention mechanism in the decoder with a main self-attention mechanism and a self and n-stream (predict) self-attention mechanism.
+
 ## ProphetNetConfig
 
 [[autodoc]] ProphetNetConfig

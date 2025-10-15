@@ -22,6 +22,14 @@ rendered properly in your Markdown viewer.
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="adept/fuyu-8b", dtype="auto")
+pipeline("Plants generate energy through a process known as  ")
+```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -47,6 +55,16 @@ print(generation_text[0])
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- Fuyu models trained with bfloat16, but original inference uses float16. Hub checkpoints use `dtype='float16'`. The AutoModel API casts checkpoints from `torch.float32` to `torch.float16`.
+- Online weight dtype matters only when using `dtype="auto"`. The model downloads first (using checkpoint dtype), then casts to torch's default dtype (`torch.float32`). Specify your desired dtype or it defaults to `torch.float32`.
+- Don't fine-tune in float16. It produces NaN values. Fine-tune in bfloat16 instead.
+- Clone the original repository to convert the model: `git clone https://github.com/persimmon-ai-labs/adept-inference`.
+- Pass inputs through a specific Processor for correct formats. A processor needs an `image_processor` and a `tokenizer`.
+- Fuyu uses a sentencepiece-based tokenizer with a Unigram model. It supports bytefallback (available in `tokenizers==0.14.0` for the fast tokenizer). [`LlamaTokenizer`] wraps sentencepiece as a standard wrapper.
+- Use this prompt for image captioning: `f"Generate a coco-style caption.\\n"`.
 
 ## FuyuConfig
 

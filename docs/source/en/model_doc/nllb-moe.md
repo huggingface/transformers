@@ -48,6 +48,12 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`M2M100ForConditionalGeneration`] is the base model for both NLLB and NLLB MoE.
+- The tokenizer is the same as the NLLB models.
+- Set `forced_bos_token_id` to the target language ID when generating text.
+- English (`eng_Latn`) is the default source language. Specify a different source language using the BCP-47 code in the `src_lang` keyword argument.
 
 ## NllbMoeConfig
 

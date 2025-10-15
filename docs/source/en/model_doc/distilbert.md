@@ -58,6 +58,11 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- DistilBERT doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. Just separate segments with `tokenizer.sep_token` (or `[SEP]`).
+- DistilBERT doesn't support `position_ids` input. This could be added if needed.
+
 ## DistilBertConfig
 
 [[autodoc]] DistilBertConfig

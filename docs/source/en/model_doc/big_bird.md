@@ -51,6 +51,13 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. BigBird uses absolute position embeddings.
+- BigBird supports `original_full` and `block_sparse` attention. Use `original_full` for sequences under 1024 tokens since sparse patterns don't help much with smaller inputs.
+- Current implementation uses 3-block window size and 2 global blocks. It only supports ITC-implementation and doesn't support `num_random_blocks=0`.
+- Sequence length must be divisible by the block size.
+
 ## BigBirdConfig
 
 [[autodoc]] BigBirdConfig

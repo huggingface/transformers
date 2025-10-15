@@ -56,6 +56,12 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- This model is very similar to Llama. The main difference is [`Phi3SuScaledRotaryEmbedding`] and [`Phi3YarnScaledRotaryEmbedding`], which extend the context of rotary embeddings.
+- Query, key, and values are fused. The MLP's up and gate projection layers are also fused.
+- The tokenizer is identical to [`LlamaTokenizer`], except for additional tokens.
+
 ## Phi3Config
 
 [[autodoc]] Phi3Config

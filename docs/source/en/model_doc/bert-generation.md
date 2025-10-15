@@ -48,6 +48,12 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`BertGenerationEncoder`] and [`BertGenerationDecoder`] with [`EncoderDecoderModel`] for sequence-to-sequence tasks.
+- Summarization, sentence splitting, sentence fusion, and translation don't require special tokens in the input.
+- Don't add `EOS` tokens to the end of inputs for most generation tasks.
+
 ## BertGenerationConfig
 
 [[autodoc]] BertGenerationConfig

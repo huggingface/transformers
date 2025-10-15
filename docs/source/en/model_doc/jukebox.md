@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 *This model was released on 2020-04-30 and added to Hugging Face Transformers on 2023-06-20 and contributed by [ArthurZ](https://huggingface.co/ArthurZ).*
 
 > [!WARNING]
-> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # Jukebox
 
@@ -44,6 +46,13 @@ with torch.no_grad():
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- This model only supports inference. Training requires excessive memory. Open a PR to add full integration with the Hugging Face [`Trainer`].
+- The model is very slow. It takes 8 hours to generate a minute-long audio using the 5B top prior on a V100 GPU. Use Accelerate to automatically handle device placement.
+- Contrary to the paper, the order of priors goes from 0 to 1. This feels more intuitive since we sample starting from 0.
+- Primed sampling (conditioning on raw audio) requires more memory than ancestral sampling. Set `fp16=True` when using primed sampling.
 
 ## JukeboxConfig
 

@@ -15,6 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2020-02-10 and added to Hugging Face Transformers on 2023-06-20 and contributed by [qqaatw](https://huggingface.co/qqaatw).*
 
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
+
 # REALM
 
 [REALM: Retrieval-Augmented Language Model Pre-Training](https://huggingface.co/papers/2002.08909) enhances language model pre-training by integrating a latent knowledge retriever. This retriever allows the model to access and utilize documents from a large corpus like Wikipedia during pre-training, fine-tuning, and inference. The model is trained in an unsupervised manner using masked language modeling, with the retrieval step considered during backpropagation across millions of documents. REALM significantly outperforms existing models on Open-domain Question Answering benchmarks, offering improvements of 4-16% in accuracy. It also provides benefits in interpretability and modularity.

@@ -54,6 +54,14 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Set `config.pretraining_tp` to a value besides 1 to activate more accurate but slower computation of linear layers. This matches the original logits better.
+- The original model uses `pad_id = -1` to indicate a padding token. The Transformers implementation requires adding a padding token and resizing the token embedding accordingly.
+- Initialize the `embed_tokens` layer to ensure encoding the padding token outputs zeros.
+- The tokenizer is a byte-pair encoding model based on SentencePiece. During decoding, if the first token starts a word (like "Banana"), the tokenizer doesn't prepend the prefix space to the string.
+- Don't use the `dtype` parameter in [`~AutoModel.from_pretrained`] with FlashAttention-2. It only supports `fp16` or `bf16`. Use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set `fp16` or `bf16` to `True` with [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
+
 ## LlamaConfig
 
 [[autodoc]] LlamaConfig

@@ -47,6 +47,11 @@ processor.decode(predict_answer_tokens).strip()
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- In addition to `input_ids`, [`~MarkupLMModel.forward`] expects 2 additional inputs: `xpath_tags_seq` and `xpath_subs_seq`. These are the XPATH tags and subscripts respectively for each token in the input sequence.
+- Use [`MarkupLMProcessor`] to prepare all data for the model. Refer to the usage guide for more information.
+
 ## MarkupLMConfig
 
 [[autodoc]] MarkupLMConfig

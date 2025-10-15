@@ -55,6 +55,14 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- MarianMT models are ~298MB on disk. There are more than 1000 models available. Check the [supported language pairs list](https://huggingface.co/models?library=transformers&pipeline_tag=translation&sort=downloads) for available options.
+- Language codes may be inconsistent. Two-digit codes are available in the [language codes list](https://huggingface.co/models?library=transformers&pipeline_tag=translation&sort=downloads). Three-digit codes may require further searching.
+- Models that require BPE preprocessing aren't supported.
+- All model names use this format: `Helsinki-NLP/opus-mt-{src}-{tgt}`. Language codes like `es_AR` refer to `code_{region}`. For example, `es_AR` refers to Spanish from Argentina.
+- If a model outputs multiple languages, prepend the desired output language to `src_txt`. New multilingual models from the Tatoeba-Challenge require 3-character language codes. Older multilingual models use 2-character language codes.
+
 ## MarianConfig
 
 [[autodoc]] MarianConfig

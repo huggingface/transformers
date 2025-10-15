@@ -47,6 +47,10 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- FSMT uses separate source and target vocabulary pairs. It doesn't share embedding tokens. The tokenizer is similar to [`XLMTokenizer`] and the main model derives from [`BartModel`].
+
 ## FSMTConfig
 
 [[autodoc]] FSMTConfig

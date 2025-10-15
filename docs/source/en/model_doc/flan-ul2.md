@@ -47,3 +47,7 @@ print(tokenizer.decode(outputs[0]))
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- The model is heavy (~40GB in half precision). Load the model in 8-bit and use `device_map="auto"` to avoid out-of-memory issues.

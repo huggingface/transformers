@@ -51,6 +51,10 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- MPNet doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. Just separate segments with the separation token `tokenizer.sep_token` (or `[sep]`).
+
 ## MPNetConfig
 
 [[autodoc]] MPNetConfig

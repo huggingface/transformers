@@ -55,6 +55,11 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The architecture is similar to LLaMA but with key differences: RoPE applied to 25% of head embedding dimensions, LayerNorm instead of RMSNorm, and optional QKV bias terms.
+- StableLM 3B 4E1T-based models use the same tokenizer as [`GPTNeoXTokenizerFast`].
+
 ## StableLmConfig
 
 [[autodoc]] StableLmConfig

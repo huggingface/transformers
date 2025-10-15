@@ -57,6 +57,11 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- RoBERTa doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment.
+- Separate segments with the separation token `tokenizer.sep_token` or `</s>`.
+
 ## RobertaConfig
 
 [[autodoc]] RobertaConfig

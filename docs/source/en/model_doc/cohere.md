@@ -57,6 +57,10 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Don't use the `dtype` parameter in [`~AutoModel.from_pretrained`] with FlashAttention-2. It only supports `fp16` or `bf16`. Use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set `fp16` or `bf16` to `True` with [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
+
 ## CohereConfig
 
 [[autodoc]] CohereConfig
