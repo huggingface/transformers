@@ -409,7 +409,9 @@ def sdpa_mask_recent_torch(
     # padding mask. Thus, we allow early exit here if we do not detect any modification to the base mask function
     if mask_function is bidirectional_mask_function:
         if padding_mask is not None:
-            return padding_mask[:, None, None, kv_offset : kv_offset + kv_length].expand(-1, -1, q_length, -1)
+            # used for slicing without data-dependent slicing
+            mask_indices = torch.arange(kv_length, device=cache_position.device) + kv_offset
+            return padding_mask[:, None, None, mask_indices].expand(-1, -1, q_length, -1)
         else:
             return torch.ones(batch_size, 1, q_length, kv_length, dtype=torch.bool, device=cache_position.device)
 
