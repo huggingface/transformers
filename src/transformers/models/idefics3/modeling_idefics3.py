@@ -140,7 +140,7 @@ class Idefics3VisionEmbeddings(nn.Module):
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
         if self.config.use_export_friendly:
-            # Export-friendly version: assumes full attention mask and computes position IDs statically
+            # Export-friendly version: assumes image input batch_size = 1
             # This avoids the data-dependent loop over batch dimension
             nb_patches_h = max_im_h // self.patch_size
             nb_patches_w = max_im_w // self.patch_size
