@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The X-MOD model was proposed in [Lifting the Curse of Multilinguality by Pre-training Modular Transformers](https://huggingface.co/papers/2205.06266) by Jonas Pfeiffer, Naman Goyal, Xi Lin, Xian Li, James Cross, Sebastian Riedel, and Mikel Artetxe.
-X-MOD extends multilingual masked language models like [XLM-R](xlm-roberta) to include language-specific modular components (_language adapters_) during pre-training. For fine-tuning, the language adapters in each transformer layer are frozen.
+X-MOD extends multilingual masked language models like [XLM-R](xlm-roberta) to include language-specific modular components (*language adapters*) during pre-training. For fine-tuning, the language adapters in each transformer layer are frozen.
 
 The abstract from the paper is the following:
 
