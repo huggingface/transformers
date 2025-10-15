@@ -16,14 +16,11 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any, Optional, Union
 
 import torch
-
-from .quantizers.quantizers_utils import get_module_from_name
 
 
 """
@@ -47,27 +44,120 @@ model.layers.0.block_sparse_moe.experts.1.w3.weight_scale	[]
 
 
 class ConversionOps:
-    """
-    Base class with a reusable buffer to avoid repeated allocations.
-    Subclasses implement `convert(collected_tensors) -> torch.Tensor` and
-    write results into a view of `self._buffer`.
+    """Base class for weight conversion operations.
+
+    If you chain operations, they need to be ordered properly.
+    Some flags will help. Probably "typing" them ( TP op, Quant OP, Other OP)?
+
+    Tricky part is you can go from
+
+    model.layers.0.a                      -> [model.layers.0.a | model.layers.0.b]  # ex: chunk when saving, or quantization
+    [model.layers.0.a | model.layers.0.b] ->          model.layers.0.a
+    model.layers.0.a                      ->          model.layers.0.b
+
+    and before everything, you have to do the renaming!
+    1. weight rename (because the tp plan will be defined only for the renamed weights)
+      -> you get many keys with the same tensor
+      -> use default dict list
+
+    Case 1: Sequence[ Fuse nn list, Fuse gate and up]
+    ---------------------------------------------------------------------------------
+      "model.layers.0.block_sparse_moe.experts.(0, 1, ..., 7).w1.weight"
+      +
+      "model.layers.0.block_sparse_moe.experts.(0, 1, ..., 7).w3.weight"
+      =>
+      "model.layers.0.block_sparse_moe.experts.gate_up_proj.weight": [0.w1, 0.w2, ..., 7.w1, 7.w2]  if 8 experts -> Final name and tensors
+    ---------------------------------------------------------------------------------
+
+    Case 2: fuse qkv
+    ---------------------------------------------------------------------------------
+      "model.layers.0.self_attn.q_proj.weight"
+      +
+      "model.layers.0.self_attn.k_proj.weight"
+      +
+      "model.layers.0.self_attn.v_proj.weight"
+      =>
+      "model.layers.0.self_attn.qkv_proj.weight": [q, k, v]
+    ---------------------------------------------------------------------------------
+
+    Case 3: chunk
+    ---------------------------------------------------------------------------------
+      "model.layers.0.mlp.gate_up_proj.weight"
+      =>
+      "model.layers.0.mlp.gate_proj.weight"
+      +
+      "model.layers.0.mlp.up_proj.weight"
+    ---------------------------------------------------------------------------------
+
+    Case 4: Quantize
+    ---------------------------------------------------------------------------------
+      "model.layers.0.mlp.gate_up_proj.weight"
+      =>
+      "model.layers.0.mlp.gate_proj.blocks"
+      +
+      "model.layers.0.mlp.up_proj.scales"
+    ---------------------------------------------------------------------------------
+
+
+
+    1. ALWAYS TP FIRST !!! If we compute we compute fast locally -> communicate async.
+
+
+    rename region
+    -------------------
+        collect region
+        --------------
+            here we have a list of un-materialized weights! (merge module list, or fuse. Any "cat" operation will give us a list.
+
+            BUT IF WE TP 0.w1[rank], 0.w3[rank] then we need to slice the tensor and not the list of tensors!
+
+            which we always TP first (shard) then we apply the ops (merging)
+            TP REGION
+            ---------
+                Materialize only the correct shards
+                Concat, Chunk. If you need to split a layer into 2 here, then each split is potentially quantizable
+
+                    Quantization region
+                    -------------------
+                     Can produce 2 "weights" from 1 (blocks and scales)
+            Based on quant_layout, we might need to all reduce the scales -> the quantization op tells us to do it or not
+            ---------
+            torch.distributed.all_reduce(max_abs, op=torch.distributed.ReduceOp.MAX, group=tp_group)
+        ----------------
+    -------------------------
+    Say we want to quantize:
+
+
+
+
+    We are probably gonna be reading from left to right -> FuseGateUp and MergeModuleList and FuseQkv are prob the only
+    ops we currently need. With potentially RotateQkv.
+
+
+
+    3. a. If not quantization, or can be quantized independently (EP or som quantization) -> Shard
+    3. b. If needs full tensor for quantize: materialize the tensor on cpu, quantize -> Shard
+    4.
     """
 
-    target_tensor_shape: torch.Tensor
-    can_be_quantized: bool = True
-    can_be_distributed: bool = False
-
-    # Lazily created on first use; no __init__ needed.
+    # Reusable scratch buffer to avoid reallocations.
     _buffer: Optional[torch.Tensor] = None
+    # The inverse operation class, will be used when saving the checkpoint
+    _inverse_op: type[ConversionOps]
 
     def _ensure_buffer(
-        self, required_shape: torch.Size, *, dtype: torch.dtype, device: torch.device, growth_factor: float = 1.5
+        self,
+        required_shape: torch.Size,
+        *,
+        dtype: torch.dtype,
+        device: torch.device,
+        growth_factor: float = 1.5,
     ) -> torch.Tensor:
-        """
-        Ensure we have a buffer with enough capacity (and correct dtype/device).
-        Returns a *view* of the buffer shaped as `required_shape` without new allocation.
-        """
-        required_elems = int(torch.tensor(required_shape).prod().item()) if len(required_shape) else 1
+        """Ensure a pre-allocated buffer large enough for ``required_shape`` exists."""
+
+        required_elems = 1
+        for dim in required_shape:
+            required_elems *= int(dim)
 
         need_new = (
             self._buffer is None
@@ -77,168 +167,143 @@ class ConversionOps:
         )
 
         if need_new:
-            # grow capacity to reduce future reallocations
             capacity = max(required_elems, int(required_elems * growth_factor))
             self._buffer = torch.empty(capacity, dtype=dtype, device=device)
 
-        # return a view with the requested shape using only the needed slice
         return self._buffer[:required_elems].view(required_shape)
 
-    def clear_cache(self):
-        """Free the cached buffer (optional)."""
+    def clear_cache(self) -> None:
+        """Free any cached buffers."""
         self._buffer = None
 
-    def convert(self, collected_tensors: Iterable[torch.Tensor]) -> torch.Tensor:
+    def convert(self, value: Union[Sequence[torch.Tensor], torch.Tensor], *, context: dict[str, Any]) -> torch.Tensor:
         raise NotImplementedError
 
 
-class Fuse(ConversionOps):
-    """
-    Concatenate along `dim` without allocating a fresh output each call:
-    copies into a preallocated buffer slice-by-slice.
-    """
+class Chunk(ConversionOps):
+    pass
 
-    dim: int = 0  # adjust if you want a different default
 
-    def convert(self, collected_tensors: Iterable[torch.Tensor]) -> torch.Tensor:
-        tensors = tuple(collected_tensors)
+class Concatenate(ConversionOps):
+    """Concatenate tensors along `dim` using a reusable buffer."""
+
+    _inverse_op: type[ConversionOps]
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+        self._inverse_op = Chunk
+
+    def convert(self, value: Sequence[torch.Tensor], *, context: dict[str, Any]) -> torch.Tensor:
+        tensors = tuple(value)
         if not tensors:
-            # Return a zero-size view on an empty buffer on CPU by default
-            self._buffer = None
-            return torch.empty(0)
+            raise ValueError("Fuse requires at least one tensor to concatenate.")
 
-        # Basic checks & canonical attrs
-        first = tensors[0]
-        dtype, device = first.dtype, first.device
-        dim = self.dim
-
-        # Validate shapes/dtypes/devices
-        base_shape = list(first.shape)
-        for t in tensors:
-            if t.dtype != dtype or t.device != device:
-                raise TypeError("All tensors must share dtype and device for Fuse.")
-            if len(t.shape) != len(base_shape):
-                raise ValueError("All tensors must have the same rank for Fuse.")
-            for d, (a, b) in enumerate(zip(base_shape, t.shape)):
-                if d == dim:
-                    continue
-                if a != b:
-                    raise ValueError(f"Non-concat dims must match; got {a} vs {b} at dim {d}.")
-
-        # Compute fused shape
-        total_along_dim = sum(t.shape[dim] for t in tensors)
-        out_shape = list(base_shape)
-        out_shape[dim] = total_along_dim
-        out_shape = torch.Size(out_shape)
+        out_shape = tensors[0].shape
+        out_shape[self.dim] *= len(tensors)
 
         with torch.no_grad():
-            out = self._ensure_buffer(out_shape, dtype=dtype, device=device)
-
-            # Copy into preallocated buffer without creating a new result tensor
-            # We slice along `dim` and copy each piece.
-            idx = 0
-            for t in tensors:
-                slc = [slice(None)] * t.ndim
-                slc[dim] = slice(idx, idx + t.shape[dim])
-                out[tuple(slc)].copy_(t)
-                idx += t.shape[dim]
-
+            out = self._ensure_buffer(out_shape, dtype=tensors[0].dtype, device=tensors[0].device)
+            offset = 0
+            for tensor in tensors:
+                index = [slice(None)] * tensor.ndim
+                index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
+                out[tuple(index)].copy_(tensor, async_op=True)
+                offset += tensor.shape[self.dim]
         return out
 
 
 class MergeModuleList(ConversionOps):
-    """
-    Stack tensors along a new leading dimension without allocating a new tensor:
-    writes each tensor into a preallocated [N, ...] buffer.
-    """
+    """Stack tensors along a new leading dimension."""
 
-    stack_dim: int = 0  # new dimension index in the *output*
+    def __init__(self, stack_dim: int = 0):
+        self.stack_dim = stack_dim
 
-    def convert(self, collected_tensors: Iterable[torch.Tensor]) -> torch.Tensor:
-        tensors = tuple(collected_tensors)
+    def convert(self, value: Sequence[torch.Tensor], *, context: dict[str, Any]) -> torch.Tensor:
+        tensors = tuple(value)
         if not tensors:
-            self._buffer = None
-            return torch.empty(0)
+            raise ValueError("MergeModuleList requires at least one tensor to merge.")
 
         first = tensors[0]
         dtype, device = first.dtype, first.device
-        base_shape = first.shape
-
-        # Validate consistency
-        for t in tensors:
-            if t.dtype != dtype or t.device != device:
-                raise TypeError("All tensors must share dtype and device for MergeModuleList.")
-            if t.shape != base_shape:
-                raise ValueError("All tensors must have identical shapes to stack.")
-
-        N = len(tensors)
-        # Normalize stack_dim (allow negative)
-        stack_dim = self.stack_dim % (first.ndim + 1)
-
-        # Output shape: insert N at stack_dim
-        out_shape = list(base_shape)
-        out_shape.insert(stack_dim, N)
-        out_shape = torch.Size(out_shape)
+        out_shape = tensors[0].shape
+        out_shape[0] *= len(tensors)
 
         with torch.no_grad():
             out = self._ensure_buffer(out_shape, dtype=dtype, device=device)
-
-            # Write each tensor into the appropriate slice
-            for i, t in enumerate(tensors):
-                slc = [slice(None)] * out.ndim
-                slc[stack_dim] = i
-                out[tuple(slc)].copy_(t)
-
+            for index, tensor in enumerate(tensors):
+                slice = slice(index, index + 1)
+                out[slice].copy_(tensor)
         return out
 
+
+class Shard(ConversionOps):
+    def __init__(self, device_mesh, rank, dim):
+        self.dim = dim
+        self.device_mesh = device_mesh
+        self.rank = rank
+
+    def convert(self, param, empty_param):
+        param_dim = empty_param.dim()
+        # Flatten the mesh to get the total number of devices
+        mesh_shape = self.device_mesh.shape
+        world_size = reduce(operator.mul, mesh_shape)
+
+        if self.rank >= world_size:
+            raise ValueError(f"Rank {self.rank} is out of bounds for mesh size {world_size}")
+
+        shard_size = math.ceil(empty_param.shape[self.dim] / world_size)
+        start = self.rank * shard_size
+
+        # Construct slicing index dynamically
+        end = min(start + shard_size, empty_param.shape[self.dim])
+        slice_indices = [slice(None)] * param_dim
+        if start < empty_param.shape[self.dim]:
+            slice_indices[self.dim] = slice(start, end)
+            return param[tuple(slice_indices)]
+        dimensions = list(param.shape)
+        dimensions[self.dim] = 0
+        return torch.empty(tuple(dimensions), dtype=torch.int64)
+
+
 class Fp8Quantize(ConversionOps):
-    def convert(self, collected_tensors):
-        from .quantizers.quantizers_finegrained_fp8 import FineGrainedFP8HfQuantizer
-        return FineGrainedFP8HfQuantizer.create_quantized_param(collected_tensors)
+    """
+    A quantization operation that creates two tensors, weight and scale out of a weight.
+    """
+
+    def convert(self, param_value, param_name: str) -> dict[str, torch.Tensor]:
+        param_value = param_value.to(target_device)
+
+        # Get FP8 min/max values
+        fp8_min = torch.finfo(torch.float8_e4m3fn).min
+        fp8_max = torch.finfo(torch.float8_e4m3fn).max
+
+        block_size_m, block_size_n = self.quantization_config.weight_block_size
+
+        rows, cols = param_value.shape[-2:]
+
+        if rows % block_size_m != 0 or cols % block_size_n != 0:
+            raise ValueError(
+                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_size_m}, {block_size_n})"
+            )
+        param_value_orig_shape = param_value.shape
+        param_value = param_value.reshape(-1, rows // block_size_m, block_size_m, cols // block_size_n, block_size_n)
+
+        # Calculate scaling factor for each block
+        max_abs = torch.amax(torch.abs(param_value), dim=(2, 4))
+        scale = fp8_max / max_abs
+        scale_orig_shape = scale.shape
+        scale = scale.unsqueeze(-1).unsqueeze(-1)
+
+        quantized_param = torch.clamp(param_value * scale, min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
+        quantized_param = quantized_param.reshape(param_value_orig_shape)
+        scale = scale.reshape(scale_orig_shape).squeeze().reciprocal()
+
+        return {param_name: quantized_param, param_name.rsplit(".")[0] + ".scale": scale}
 
 
-class Slice(ConversionOps):
-    # TODO: implement slicing for tp
-    def convert(self, inputs):
-        return inputs
-
-class ConversionType(Enum):
-    FUSE = Fuse()
-    MERGE_MODULE_LIST = MergeModuleList()
-    FP8_QUANTIZE = Fp8Quantize()
-    SLICE = Slice()
-    def __call__(self, *args, **kwargs):
-        # Call enum member as a constructor: ConversionType.FUSE() -> Fuse()
-        return self.value(*args, **kwargs) @ dataclass(frozen=True)
-
-
-globals().update({member.name: member for member in ConversionType})
-
-
+@dataclass(frozen=True)
 class WeightConversion:
-    """
+    """Describe how a serialized weight maps to a model parameter."""
 
-    Specification for applying renaming and other operations.
-
-    Most probably take the tp_plan here, the quantization_config, and call all the different ops 
-    """
-
-    new_key_name: str
-    operations: Optional[list[ConversionType]]  # if TP or quantization, some ops like "slicing" will be added?S
-
-    def __init__(self, new_key_name, operations: Optional[Union[ConversionType, list[ConversionType]]]):
-        self.new_key_name
-        self.operations = list(operations) if not isinstance(operations, list) else operations
-
-    # Ex rank1 for w1,w3 -> gate_up_proj:
-    # 1. read the weights
-    # 2. rename
-    # 3. MergeModuleList, but dim=0, and there is tp_plan on gate_up_proj -> slice to only experts of this rank
-    # 4. cat(cat(gate_4, gate_5, gate_6, gate_7), cat(up_4, up_5, up_6, up_7))
-    # 5. quantize? -> A new ConversionType op
-
-    # We want the quantizers to have:
-    # -
-
-
-__all__ = ["WeightConversion", "ConversionType"]
+    new_key: str
+    operations: tuple[Union[type[ConversionType], type[ConversionOps]]]

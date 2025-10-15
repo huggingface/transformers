@@ -4736,6 +4736,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         key_mapping: Optional[dict[str, str]] = None,
         loading_base_model_from_task_state_dict: bool = False,
         loading_task_model_from_base_state_dict: bool = False,
+        *,
+        quantization_method: Optional[str] = None,
+        tp_plan: Optional[dict[str, str]] = None,
     ):
         """
         Compute a mapping between the serialized keys on disk `checkpoint_keys`, and the keys that the model
@@ -4821,7 +4824,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             logger.info_once(warning_msg)
 
         if conversion_sources:
-            self._weight_conversion_plans = build_weight_conversion_plans(conversion_specs, conversion_sources)
+            self._weight_conversion_plans = build_weight_conversion_plans(
+                conversion_specs,
+                conversion_sources,
+                tp_plan=tp_plan,
+                quantization_method=quantization_method,
+            )
         else:
             self._weight_conversion_plans = {}
         # Reset runtime accumulators whenever we recompute the mapping
@@ -4887,11 +4895,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
 
         # Find the key names that the model expects from the serialized keys
+        quant_method = None
+        if hf_quantizer is not None:
+            quant_method = getattr(hf_quantizer.quantization_config, "quant_method", None)
+            if isinstance(quant_method, QuantizationMethod):
+                quant_method = quant_method.value
+
+        current_tp_plan = None
+        if hasattr(model, "tp_plan"):
+            try:
+                current_tp_plan = dict(model.tp_plan)
+            except Exception:
+                current_tp_plan = getattr(model, "_tp_plan", None)
+
         key_renaming_mapping = model._get_key_renaming_mapping(
             original_checkpoint_keys,
             key_mapping,
             loading_base_model_from_task_state_dict,
             loading_task_model_from_base_state_dict,
+            quantization_method=quant_method,
+            tp_plan=current_tp_plan,
         )
         checkpoint_keys = list(key_renaming_mapping.values())
 
