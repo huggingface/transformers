@@ -1,0 +1,360 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
+from typing import Optional, Union
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import PreTrainedModel
+from ...utils import logging
+from ...utils.generic import TransformersKwargs
+from ...modeling_layers import (
+    GenericForQuestionAnswering,
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+)
+from .configuration_nanogpt import NanoGPTConfig
+
+
+logger = logging.get_logger(__name__)
+
+
+def _apply_rotary_pos_emb(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    cos = cos.unsqueeze(1)
+    sin = sin.unsqueeze(1)
+    query_rot = (query * cos) + (_rotate_half(query) * sin)
+    key_rot = (key * cos) + (_rotate_half(key) * sin)
+    return query_rot, key_rot
+
+
+def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+    x1, x2 = x.split(x.size(-1) // 2, dim=-1)
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def _repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    batch, num_key_value_heads, seq_len, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, seq_len, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, seq_len, head_dim)
+
+
+class NanoGPTAttention(nn.Module):
+    def __init__(self, config: NanoGPTConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.num_kv_heads = config.num_key_value_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.num_key_value_groups = self.num_heads // self.num_kv_heads
+
+        self.attention_dropout = config.attention_dropout
+        self.scaling = self.head_dim**-0.5
+
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.qkv_bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: TransformersKwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        del kwargs
+        batch, seq_len, _ = hidden_states.shape
+        head_shape = (batch, seq_len, -1, self.head_dim)
+
+        query = self.q_proj(hidden_states).view(head_shape).transpose(1, 2)
+        key = self.k_proj(hidden_states).view(head_shape).transpose(1, 2)
+        value = self.v_proj(hidden_states).view(head_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query, key = _apply_rotary_pos_emb(query, key, cos, sin)
+
+        if past_key_values is not None:
+            cache_kwargs = {"cache_position": cache_position}
+            key, value = past_key_values.update(key, value, self.layer_idx, cache_kwargs)
+
+        key = _repeat_kv(key, self.num_key_value_groups)
+        value = _repeat_kv(value, self.num_key_value_groups)
+
+        attn_weights = torch.matmul(query, key.transpose(-1, -2)) * self.scaling
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
+
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+        attn_weights = F.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+
+        attn_output = torch.matmul(attn_weights, value)
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch, seq_len, -1)
+        attn_output = self.o_proj(attn_output)
+        return attn_output, None
+
+
+class NanoGPTMLP(nn.Module):
+    def __init__(self, config: NanoGPTConfig):
+        super().__init__()
+        self.fc = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc(hidden_states)
+        hidden_states = F.relu(hidden_states).square()
+        hidden_states = self.proj(hidden_states)
+        return hidden_states
+
+
+class NanoGPTDecoderLayer(nn.Module):
+    def __init__(self, config: NanoGPTConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.self_attn = NanoGPTAttention(config, layer_idx)
+        self.mlp = NanoGPTMLP(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: TransformersKwargs,
+    ) -> torch.Tensor:
+        del kwargs, position_ids
+        residual = hidden_states
+        hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
+class NanoGPTPreTrainedModel(PreTrainedModel):
+    config_class = NanoGPTConfig
+    base_model_prefix = "model"
+    _no_split_modules = ["NanoGPTDecoderLayer"]
+
+    def _init_weights(self, module: nn.Module) -> None:
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+
+        for name, param in module.named_parameters():
+            if name == "o_proj.weight":
+                nn.init.normal_(
+                    param,
+                    mean=0.0,
+                    std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers),
+                )
+
+
+class NanoGPTModel(NanoGPTPreTrainedModel):
+    def __init__(self, config: NanoGPTConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList([NanoGPTDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        self.register_buffer("_rotary_cos", None, persistent=False)
+        self.register_buffer("_rotary_sin", None, persistent=False)
+        self.gradient_checkpointing = False
+
+        self.post_init()
+
+    def _precompute_rotary_embeddings(self, device: torch.device, dtype: torch.dtype) -> tuple[torch.Tensor, torch.Tensor]:
+        if self._rotary_cos is not None and self._rotary_cos.device == device and self._rotary_cos.dtype == dtype:
+            return self._rotary_cos, self._rotary_sin
+
+        head_dim = self.config.hidden_size // self.config.num_attention_heads
+        positions = torch.arange(self.config.max_position_embeddings, device=device, dtype=torch.float32)
+        freqs = torch.arange(0, head_dim, 2, dtype=torch.float32, device=device)
+        inv_freq = 1.0 / (self.config.rope_theta ** (freqs / head_dim))
+        angles = torch.einsum("i,j->ij", positions, inv_freq)
+        angles = torch.cat([angles, angles], dim=-1)
+        cos = angles.cos()[None, :, :]
+        sin = angles.sin()[None, :, :]
+        self._rotary_cos = cos.to(dtype=dtype)
+        self._rotary_sin = sin.to(dtype=dtype)
+        return self._rotary_cos, self._rotary_sin
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, new_embeddings: nn.Embedding) -> None:
+        self.embed_tokens = new_embeddings
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: TransformersKwargs,
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device)
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        cos, sin = self._precompute_rotary_embeddings(inputs_embeds.device, inputs_embeds.dtype)
+        cos = cos[:, cache_position]
+        sin = sin[:, cache_position]
+
+        hidden_states = F.rms_norm(inputs_embeds, (inputs_embeds.size(-1),), eps=self.config.rms_norm_eps)
+        for decoder_layer in self.layers:
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=(cos, sin),
+            )
+
+        hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values if use_cache else None)
+
+
+class NanoGPTForCausalLM(NanoGPTPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
+    def __init__(self, config: NanoGPTConfig):
+        super().__init__(config)
+        self.model = NanoGPTModel(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, new_embeddings: nn.Embedding) -> None:
+        self.model.set_input_embeddings(new_embeddings)
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: TransformersKwargs,
+    ) -> CausalLMOutputWithPast:
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        if self.config.logits_soft_cap is not None:
+            cap = self.config.logits_soft_cap
+            logits = cap * torch.tanh(logits / cap)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = [
+    "NanoGPTPreTrainedModel",
+    "NanoGPTModel",
+    "NanoGPTForCausalLM",
+]
+
+
+
