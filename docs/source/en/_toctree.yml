@@ -284,6 +284,8 @@
         title: Knowledge Distillation for Computer Vision
       - local: tasks/keypoint_matching
         title: Keypoint matching
+      - local: tasks/training_vision_backbone
+        title: Training vision models using Backbone API
       title: Computer vision
     - sections:
       - local: tasks/image_captioning
