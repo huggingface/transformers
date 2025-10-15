@@ -88,20 +88,6 @@ def get_resize_output_image_size(
 
 
 class LightOnOCRProcessor(ProcessorMixin):
-    r"""
-    Processor combining LightOnOCR image processor and Qwen3 tokenizer.
-
-    Args:
-        image_processor: Required image processor instance.
-        tokenizer: Required tokenizer instance.
-        patch_size: Patch size from vision tower.
-        spatial_merge_size: Downsampling factor for spatial merge.
-        chat_template: Jinja template for converting chat messages to tokenizable strings.
-        image_token: Token denoting image location.
-        image_break_token: Token marking end of image line.
-        image_end_token: Token marking end of image input.
-    """
-
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"

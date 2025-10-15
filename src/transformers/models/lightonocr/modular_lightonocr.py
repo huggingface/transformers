@@ -54,24 +54,6 @@ class LightOnOCRVisionConfig(PixtralVisionConfig):
 
 
 class LightOnOCRConfig(PretrainedConfig):
-    r"""
-    Configuration for LightOnOCR multimodal model.
-
-    Args:
-        spatial_merge_size: Downsampling factor for merging vision tokens in grid
-        image_token_index: Token ID for image patches, defaults to 151655 (corresponds to <|image_pad|>).
-        vision_config: Vision encoder configuration dict.
-        text_config: Text decoder configuration dict.
-
-    Example:
-        ```python
-        >>> from transformers import LightOnOCRForConditionalGeneration, LightOnOCRConfig
-        >>> configuration = LightOnOCRConfig()
-        >>> model = LightOnOCRForConditionalGeneration(configuration)
-        >>> configuration = model.config
-        ```
-    """
-
     model_type = "lightonocr"
 
     def __init__(
@@ -167,20 +149,6 @@ class PixtralProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class LightOnOCRProcessor(ProcessorMixin):
-    r"""
-    Processor combining LightOnOCR image processor and Qwen3 tokenizer.
-
-    Args:
-        image_processor: Required image processor instance.
-        tokenizer: Required tokenizer instance.
-        patch_size: Patch size from vision tower.
-        spatial_merge_size: Downsampling factor for spatial merge.
-        chat_template: Jinja template for converting chat messages to tokenizable strings.
-        image_token: Token denoting image location.
-        image_break_token: Token marking end of image line.
-        image_end_token: Token marking end of image input.
-    """
-
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
