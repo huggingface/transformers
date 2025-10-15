@@ -22,7 +22,7 @@ The Transformers library implements these models and the [backbone API](../backb
 
 ![Backbone Explanation](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Backbone.png)
 
-In this notebook, we will load [DINOv3 with ConvNext architecture](https://huggingface.co/facebook/dinov3-convnext-large-pretrain-lvd1689m) with [DETR head](https://huggingface.co/facebook/detr-resnet-50), and train the model on [license plate detection dataset](https://huggingface.co/datasets/merve/license-plates). We have picked DINOv3 as it's the most performant model as of the time this tutorial is written. This model is gated, so make sure to go to [the model repository](https://huggingface.co/facebook/dinov3-convnext-large-pretrain-lvd1689m) and ask for access before running this tutorial.
+This guide combines [DINOv3 with ConvNext architecture](https://huggingface.co/facebook/dinov3-convnext-large-pretrain-lvd1689m) and a [DETR head](https://huggingface.co/facebook/detr-resnet-50). You'll train on the [license plate detection dataset](https://huggingface.co/datasets/merve/license-plates). DINOv3 delivers the best performance as of this writing.
 
 Let's begin by installing [trackio](https://github.com/gradio-app/trackio) for experiment tracking and [albumentations](https://albumentations.ai/) library for data augmentation. Make sure to have latest version of transformers library.
 
