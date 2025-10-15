@@ -16,7 +16,7 @@ limitations under the License.
 
 -->
 
-*This model was released on 2025-09-01 and added to Hugging Face Transformers on 2025-10-07 and contributed by [Molbap](https://huggingface.co/Molbap).*
+*This model was released on 2025-09-01 and added to Hugging Face Transformers on 2025-09-17 and contributed by [Molbap](https://huggingface.co/Molbap).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
