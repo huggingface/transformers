@@ -217,7 +217,7 @@ class LightOnOCRVisionConfig(PreTrainedConfig):
     LightOnOCR vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to the vision encoder used by LightOnOCR-12B.
 
-    e.g. [light_on_o_c_r-hf/light_on_o_c_r-9b](https://huggingface.co/light_on_o_c_r-hf/light_on_o_c_r-9b)
+    e.g. [lightonocr-hf/lightonocr-9b](https://huggingface.co/lightonocr-hf/lightonocr-9b)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -295,24 +295,6 @@ class LightOnOCRVisionConfig(PreTrainedConfig):
 
 
 class LightOnOCRConfig(PretrainedConfig):
-    r"""
-    Configuration for LightOnOCR multimodal model.
-
-    Args:
-        spatial_merge_size: Downsampling factor for merging vision tokens in grid
-        image_token_index: Token ID for image patches, defaults to 151655 (corresponds to <|image_pad|>).
-        vision_config: Vision encoder configuration dict.
-        text_config: Text decoder configuration dict.
-
-    Example:
-        ```python
-        >>> from transformers import LightOnOCRForConditionalGeneration, LightOnOCRConfig
-        >>> configuration = LightOnOCRConfig()
-        >>> model = LightOnOCRForConditionalGeneration(configuration)
-        >>> configuration = model.config
-        ```
-    """
-
     model_type = "lightonocr"
 
     def __init__(
