@@ -560,13 +560,16 @@ class Block1D(nn.Module):
         super().__init__()
 
         if kwargs.get('layernorm', 'LN') == 'LN':
+            # print("[acoustic] using ConvLayerNorm")
             self.norm = ConvLayerNorm(dim, eps=kwargs.get('eps', 1e-6))
             self.ffn_norm = ConvLayerNorm(dim, eps=kwargs.get('eps', 1e-6))
         elif kwargs.get('layernorm', 'RMSNorm') == 'RMSNorm':
+            # print("[acoustic] using ConvRMSNorm")
             self.norm = ConvRMSNorm(dim, eps=kwargs.get('eps', 1e-6))
             self.ffn_norm = ConvRMSNorm(dim, eps=kwargs.get('eps', 1e-6))
 
         if mixer_layer == 'conv':
+            # print("[acoustic] using Convlayer (conv)")
             self.mixer = Convlayer(dim, dim, groups=kwargs.get('groups', 1),
                                 kernel_size=kernel_size,
                                 pad_mode=kwargs.get('pad_mode', 'reflect'),
@@ -575,6 +578,7 @@ class Block1D(nn.Module):
                                 bias=kwargs.get('bias', True),
                                 )
         elif mixer_layer == 'depthwise_conv':
+            # print("[acoustic] using Convlayer (depthwise_conv)")
             self.mixer = Convlayer(dim, dim, groups=dim,
                                 kernel_size=kernel_size,
                                 pad_mode=kwargs.get('pad_mode', 'reflect'),
@@ -900,41 +904,6 @@ class VibeVoiceTokenizerEncoderOutput:
     mean: torch.Tensor
     std: Optional[Union[float, torch.Tensor]] = None
 
-    def sample(self, dist_type='fix'):
-        """
-        Sample from the distribution.
-        
-        Args:
-            dist_type (`str`): Sampling method, either 'fix' or 'gaussian'.
-                
-        Returns:
-            `torch.FloatTensor`: Sampled values.
-            `torch.FloatTensor` (optional): Standard deviation used (only when dist_type='gaussian').
-        """
-        if dist_type == 'fix':
-            x = self.mean + self.std * torch.randn_like(self.mean)
-            return x, self.std
-        elif dist_type == 'gaussian':
-            batch_size = self.mean.size(0)
-            value = self.std / 0.8
-            std = torch.randn(batch_size, device=self.mean.device, dtype=self.mean.dtype) * value
-
-            while std.dim() < self.mean.dim():
-                std = std.unsqueeze(-1)
-
-            x = self.mean + std * torch.randn_like(self.mean)
-            return x, std
-        else:
-            return self.mean, self.std
-
-    def kl(self):
-        """Compute KL divergence between this distribution and a standard normal."""
-        target = torch.zeros_like(self.mean)
-        return F.mse_loss(self.mean, target, reduction='none')
-
-    def mode(self):
-        """Return the distribution mode (which is the mean for Gaussian)."""
-        return self.mean
 
 class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
     """VibeVoice speech tokenizer model combining encoder and decoder for acoustic tokens"""
@@ -949,6 +918,8 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
         super().__init__(config)
 
         self.register_buffer('fix_std', torch.tensor(config.fix_std), persistent=False)
+        
+        # TODO (ebezzam): change to flag like in SemanticTokenizer
         self.std_dist_type = getattr(config, "std_dist_type", "fix")
 
         # Parse encoder depths
@@ -1022,16 +993,17 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
         return VibeVoiceTokenizerEncoderOutput(mean=latents.permute(0, 2, 1), std=self.fix_std)
 
     @torch.no_grad()
-    def sampling(self, encoder_output, dist_type=None):
-        """Sample from the encoder output distribution"""
-        dist_type = dist_type or self.std_dist_type
+    def sample(self, encoder_output):
+        """Sample from the encoder output distribution with a Gaussian distribution."""
+        batch_size = encoder_output.mean.size(0)
+        value = encoder_output.std / 0.8
+        std = torch.randn(batch_size, device=encoder_output.mean.device, dtype=encoder_output.mean.dtype) * value
 
-        if dist_type == 'fix':
-            return encoder_output.sample(dist_type='fix')
-        elif dist_type == 'gaussian':
-            return encoder_output.sample(dist_type='gaussian')
-        else:
-            raise ValueError(f"Unsupported dist_type: {dist_type}, expected 'fix' or 'gaussian'")
+        while std.dim() < encoder_output.mean.dim():
+            std = std.unsqueeze(-1)
+
+        x = encoder_output.mean + std * torch.randn_like(encoder_output.mean)
+        return x, std
 
     @torch.no_grad()
     def decode(self, latents, cache=None, sample_indices=None, use_cache=False, debug=False):
@@ -1047,7 +1019,10 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
     def forward(self, audio, cache=None, sample_indices=None, use_cache=False, debug=False):
         """Full forward pass: encode audio to latents, then decode back to audio"""
         encoder_output = self.encode(audio, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
-        sampled_latents, _ = self.sampling(encoder_output)
+        if self.std_dist_type is not None:
+            sampled_latents, _ = self.sample(encoder_output)
+        else:
+            sampled_latents = encoder_output.mean
         reconstructed = self.decode(sampled_latents, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
         return reconstructed, sampled_latents
 

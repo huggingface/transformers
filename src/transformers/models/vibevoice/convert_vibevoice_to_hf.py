@@ -35,7 +35,7 @@ def update_state_dict_for_hf_model(state_dict):
         
         # Handle conv.conv -> conv mapping for semantic tokenizer SConv1d layers only
         # This removes one level of .conv nesting
-        if "semantic_tokenizer" in key: # TODO remove when acoustic tokeniezer updated!
+        if "semantic_tokenizer" in key: # TODO remove when acoustic tokeniezer also updated!
             if ".conv.conv." in key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
             # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
@@ -79,6 +79,9 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         del model_config["semantic_tokenizer_config"]["conv_norm"]
     if "corpus_normalize" in model_config["semantic_tokenizer_config"]:
         del model_config["semantic_tokenizer_config"]["corpus_normalize"]
+    if "std_dist_type" in model_config["semantic_tokenizer_config"]:
+        model_config["semantic_tokenizer_config"]["sample_latent"] = False if model_config["semantic_tokenizer_config"]["std_dist_type"] == "none" else True
+        del model_config["semantic_tokenizer_config"]["std_dist_type"]
 
     # TODO same for acoustic tokenizer
 

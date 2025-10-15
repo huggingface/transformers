@@ -33,6 +33,20 @@ from ...modeling_utils import PreTrainedModel
 from .configuration_vibevoice_semantic_tokenizer import VibeVoiceSemanticTokenizerConfig
 
 
+@dataclass
+class VibeVoiceTokenizerEncoderOutput:
+    """
+    Output of VibeVoice tokenizer encoder, representing a Gaussian distribution with fixed variance.
+
+    Args:
+        mean (`torch.FloatTensor`): The mean parameters of the distribution.
+        std (`float` or `torch.FloatTensor`): Fixed standard deviation value.
+    """
+
+    mean: torch.Tensor
+    std: Optional[Union[float, torch.Tensor]] = None
+
+
 # Normalization modules
 class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-5, elementwise_affine=True, weight_shape=None):
@@ -430,7 +444,7 @@ class Block1D(nn.Module):
         return x
 
 
-class TokenizerEncoder(nn.Module):
+class VibeVoiceSemanticTokenizerEncoder(nn.Module):
     """
     Encoder component for the VibeVoice tokenizer that converts audio to latent representations.
 
@@ -441,21 +455,19 @@ class TokenizerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        kernel_size = 7
+
         # Extract parameters from config
         self.channels = config.channels
         self.dimension = config.dimension
         self.n_filters = config.n_filters
         self.ratios = list(reversed(config.ratios))
         self.depths = config.depths
-        self.n_residual_layers = getattr(config, "n_residual_layers", 1)
         self.causal = config.causal
-
-        # Additional config parameters with defaults
-        pad_mode = getattr(config, "pad_mode", "reflect")
-        bias = getattr(config, "bias", True)
-        layernorm_eps = getattr(config, "layernorm_eps", 1e-6)
-        drop_path_rate = getattr(config, "drop_path_rate", 0.0)
-        layer_scale_init_value = getattr(config, "layer_scale_init_value", 0)
+        pad_mode = config.pad_mode
+        bias = config.bias
+        layernorm_eps = config.layernorm_eps
+        layer_scale_init_value = config.layer_scale_init_value
 
         # stem and intermediate downsampling conv layers
         self.downsample_layers = nn.ModuleList()
@@ -463,7 +475,7 @@ class TokenizerEncoder(nn.Module):
             SConv1d(
                 self.channels,
                 self.n_filters,
-                kernel_size=7,
+                kernel_size=kernel_size,
                 causal=self.causal,
                 pad_mode=pad_mode,
                 bias=bias,
@@ -485,32 +497,25 @@ class TokenizerEncoder(nn.Module):
 
         # configure the transformer blocks
         self.stages = nn.ModuleList()
-        dp_rates = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths))]
-        cur = 0
-
         for i in range(len(self.depths)):
             in_ch = self.n_filters * (2**i)
-            stage = nn.Sequential(
-                *[
-                    Block1D(
-                        dim=in_ch,
-                        drop_path=dp_rates[cur + j],
-                        eps=layernorm_eps,
-                        causal=self.causal,
-                        pad_mode=pad_mode,
-                        bias=bias,
-                        layer_scale_init_value=layer_scale_init_value,
-                    )
-                    for j in range(self.depths[i])
-                ]
-            )
+            stage = nn.ModuleList([
+                Block1D(
+                    dim=in_ch,
+                    eps=layernorm_eps,
+                    causal=self.causal,
+                    pad_mode=pad_mode,
+                    bias=bias,
+                    layer_scale_init_value=layer_scale_init_value,
+                )
+                for _ in range(self.depths[i])
+            ])
             self.stages.append(stage)
-            cur += self.depths[i]
 
         self.head = SConv1d(
             in_ch,
             self.dimension,
-            kernel_size=7,
+            kernel_size=kernel_size,
             causal=self.causal,
             pad_mode=pad_mode,
             bias=bias,
@@ -525,56 +530,6 @@ class TokenizerEncoder(nn.Module):
         return x
 
 
-@dataclass
-class VibeVoiceTokenizerEncoderOutput:
-    """
-    Output of VibeVoice tokenizer encoder, representing a Gaussian distribution with fixed variance.
-
-    Args:
-        mean (`torch.FloatTensor`): The mean parameters of the distribution.
-        std (`float` or `torch.FloatTensor`): Fixed standard deviation value.
-    """
-
-    mean: torch.Tensor
-    std: Optional[Union[float, torch.Tensor]] = None
-
-    def sample(self, dist_type="fix"):
-        """
-        Sample from the distribution.
-
-        Args:
-            dist_type (`str`): Sampling method, either 'fix' or 'gaussian'.
-
-        Returns:
-            `torch.FloatTensor`: Sampled values.
-            `torch.FloatTensor` (optional): Standard deviation used (only when dist_type='gaussian').
-        """
-        if dist_type == "fix":
-            x = self.mean + self.std * torch.randn_like(self.mean)
-            return x, self.std
-        elif dist_type == "gaussian":
-            batch_size = self.mean.size(0)
-            value = self.std / 0.8
-            std = torch.randn(batch_size, device=self.mean.device, dtype=self.mean.dtype) * value
-
-            while std.dim() < self.mean.dim():
-                std = std.unsqueeze(-1)
-
-            x = self.mean + std * torch.randn_like(self.mean)
-            return x, std
-        else:
-            return self.mean, self.std
-
-    def kl(self):
-        """Compute KL divergence between this distribution and a standard normal."""
-        target = torch.zeros_like(self.mean)
-        return F.mse_loss(self.mean, target, reduction="none")
-
-    def mode(self):
-        """Return the distribution mode (which is the mean for Gaussian)."""
-        return self.mean
-
-
 class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
     """VibeVoice speech tokenizer model with only encoder for semantic tokens"""
 
@@ -582,23 +537,19 @@ class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
     base_model_prefix = "vibevoice_semantic_tokenizer"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _no_split_modules = ["TokenizerEncoder"]
+    _no_split_modules = ["VibeVoiceSemanticTokenizerEncoder"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        # Parse encoder depths
-        if isinstance(config.encoder_depths, str):
-            encoder_depths = [int(d) for d in config.encoder_depths.split("-")]
-        else:
-            encoder_depths = config.encoder_depths
+        self.sample_latent = config.sample_latent
 
         # Create encoder config
         encoder_config = copy.deepcopy(config)
         encoder_config.dimension = config.vae_dim
         encoder_config.n_filters = config.encoder_n_filters
         encoder_config.ratios = config.encoder_ratios
-        encoder_config.depths = encoder_depths
+        encoder_config.depths = config.encoder_depths
         encoder_config.pad_mode = config.pad_mode
         encoder_config.bias = config.conv_bias
         encoder_config.layernorm_eps = config.layernorm_eps
@@ -606,7 +557,7 @@ class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
         encoder_config.layer_scale_init_value = config.layer_scale_init_value
 
         # Initialize encoder and decoder
-        self.encoder = TokenizerEncoder(encoder_config)
+        self.encoder = VibeVoiceSemanticTokenizerEncoder(encoder_config)
 
         # Initialize weights
         self.apply(self._init_weights)
@@ -632,14 +583,25 @@ class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
         return VibeVoiceTokenizerEncoderOutput(mean=latents.permute(0, 2, 1))
 
     @torch.no_grad()
-    def sampling(self, encoder_output, dist_type=None):
-        """Sample from the encoder output distribution"""
-        return encoder_output.sample(dist_type="none")
+    def sample(self, encoder_output):
+        """Sample from the encoder output distribution with a Gaussian distribution."""
+        batch_size = encoder_output.mean.size(0)
+        value = encoder_output.std / 0.8
+        std = torch.randn(batch_size, device=encoder_output.mean.device, dtype=encoder_output.mean.dtype) * value
+
+        while std.dim() < encoder_output.mean.dim():
+            std = std.unsqueeze(-1)
+
+        x = encoder_output.mean + std * torch.randn_like(encoder_output.mean)
+        return x, std
 
     def forward(self, audio, cache=None, sample_indices=None, use_cache=False):
-        """Full forward pass: encode audio to latents, then decode back to audio"""
         encoder_output = self.encode(audio, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
-        sampled_latents, _ = self.sampling(encoder_output, dist_type="none")
+        if self.sample_latent:
+            sampled_latents, _ = self.sample(encoder_output)
+        else:
+            sampled_latents = encoder_output.mean
+        # first output is for reconstructed audio, which is not applicable here since encoder only
         return None, sampled_latents
 
 

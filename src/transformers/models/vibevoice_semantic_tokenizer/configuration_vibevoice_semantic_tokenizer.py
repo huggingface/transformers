@@ -42,7 +42,7 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         causal: bool = True,
         vae_dim: int = 64,
         fix_std: float = 0,
-        std_dist_type: str = 'none',
+        sample_latent: bool = False,
         pad_mode: str = 'constant',
         layernorm_eps: float = 1e-5,
         layernorm_elementwise_affine: bool = True,
@@ -59,7 +59,7 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         self.causal = causal
         self.vae_dim = vae_dim
         self.fix_std = fix_std
-        self.std_dist_type = std_dist_type
+        self.sample_latent = sample_latent
 
         # common parameters
         self.pad_mode = pad_mode
