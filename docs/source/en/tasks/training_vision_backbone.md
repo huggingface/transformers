@@ -199,7 +199,7 @@ trainer = Trainer(
 trainer.train()
 ```
 
-We can push the trainer and image processor.
+Push the trainer and image processor to the Hub.
 
 ```py
 trainer.push_to_hub()
