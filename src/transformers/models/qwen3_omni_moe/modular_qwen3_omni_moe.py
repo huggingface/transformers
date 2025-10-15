@@ -526,7 +526,6 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         speaker_id=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if code_predictor_config is None:
             code_predictor_config = {}
             self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig()
@@ -560,6 +559,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         self.audio_start_token_id = audio_start_token_id
         self.vision_start_token_id = vision_start_token_id
         self.speaker_id = speaker_id
+        super().__init__(**kwargs)
 
 
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
@@ -738,7 +738,6 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         assistant_token_id=77091,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if thinker_config is None:
             thinker_config = {}
             logger.info("thinker_config is None. Initializing thinker model with default values")
@@ -763,6 +762,7 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         self.system_token_id = system_token_id
         self.user_token_id = user_token_id
         self.assistant_token_id = assistant_token_id
+        super().__init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """
@@ -2585,6 +2585,7 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": True,
+            "truncation": False,
             "return_attention_mask": True,
         },
     }
@@ -2672,9 +2673,9 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
     def __call__(
         self,
         text: TextInput = None,
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        audio: AudioInput = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs,
     ):
         """
@@ -2716,7 +2717,6 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
 
         if audio is not None:
-            output_kwargs["audio_kwargs"]["padding"] = True  # Setting to True to avoid default truncation
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"

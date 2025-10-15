@@ -16,6 +16,7 @@ import inspect
 import json
 import re
 import types
+from collections.abc import Callable
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
@@ -23,7 +24,6 @@ from functools import lru_cache
 from inspect import isfunction
 from typing import (
     Any,
-    Callable,
     Literal,
     Optional,
     Union,

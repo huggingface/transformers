@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -167,10 +168,6 @@ def eager_attention_forward(
     # This is actually dropping out entire tokens to attend to, which might
     # seem a bit unusual, but is taken from the original Transformer paper.
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
-    if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()

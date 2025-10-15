@@ -94,7 +94,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow>=10.0.1,<=15.0",
-    "accelerate>=0.26.0",
+    "accelerate>=1.1.0",
     "av",
     "beautifulsoup4",
     "blobfile",
@@ -114,7 +114,7 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub==1.0.0.rc2",
+    "huggingface-hub==1.0.0.rc5",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -162,7 +162,6 @@ _deps = [
     "scikit-learn",
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
-    "sigopt",
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
@@ -171,7 +170,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.19,!=1.0.18",
     "tokenizers>=0.22.0,<=0.23.0",
-    "torch>=2.2",
+    "torch>=2.2,<2.9",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -274,7 +273,6 @@ extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
-extras["sigopt"] = deps_list("sigopt")
 extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
@@ -414,7 +412,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.57.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="5.0.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",
@@ -434,7 +432,7 @@ setup(
             "transformers=transformers.commands.transformers_cli:main",
         ]
     },
-    python_requires=">=3.9.0",
+    python_requires=">=3.10.0",
     install_requires=list(install_requires),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -444,7 +442,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",

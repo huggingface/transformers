@@ -14,8 +14,9 @@
 # limitations under the License.
 """PyTorch SAM 2 model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -70,13 +71,13 @@ from .configuration_sam2 import (
 logger = logging.get_logger(__name__)
 
 
-class Sam2FastImageProcessorKwargs(ImagesKwargs):
+class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
     """
 
-    mask_size: Optional[dict[str, int]]
+    mask_size: dict[str, int]
 
 
 @auto_docstring
@@ -287,7 +288,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
-                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
             if apply_non_overlapping_constraints:
                 interpolated_mask = self._apply_non_overlapping_constraints(interpolated_mask)

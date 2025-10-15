@@ -126,7 +126,7 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GitVisionModel,) if is_torch_available() else ()
     fx_compatible = True
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -450,6 +450,10 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @unittest.skip(reason="GIT has pixel values as additional input")
     def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="GIT input and output sequence lengths are not equal due to pixel values additional input")
+    def test_forward_with_logits_to_keep(self):
         pass
 
 

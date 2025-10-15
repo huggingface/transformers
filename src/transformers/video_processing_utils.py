@@ -16,11 +16,13 @@
 import json
 import os
 import warnings
+from collections.abc import Callable
 from copy import deepcopy
 from functools import partial
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
+from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
 from .image_processing_utils import (
@@ -55,12 +57,12 @@ from .video_utils import (
     VideoInput,
     VideoMetadata,
     group_videos_by_shape,
+    infer_channel_dimension_format,
     is_valid_video,
     load_video,
     make_batched_metadata,
     make_batched_videos,
     reorder_videos,
-    to_channel_dimension_format,
 )
 
 
@@ -336,9 +338,15 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         for video in videos:
             # `make_batched_videos` always returns a 4D array per video
             if isinstance(video, np.ndarray):
-                video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_data_format)
                 # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
                 video = torch.from_numpy(video).contiguous()
+
+            # Infer the channel dimension format if not provided
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(video)
+
+            if input_data_format == ChannelDimension.LAST:
+                video = video.permute(0, 3, 1, 2).contiguous()
 
             if device is not None:
                 video = video.to(device)
@@ -358,6 +366,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             captured_kwargs=kwargs.keys(),
             valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
         )
+
+        # Perform type validation on received kwargs
+        validate_typed_dict(self.valid_kwargs, kwargs)
+
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:

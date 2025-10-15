@@ -65,8 +65,13 @@ def _lazy_load_causal_conv1d():
     if is_kernels_available():
         from kernels import get_kernel
 
-        _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
-        _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
+        try:
+            _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
+        except FileNotFoundError:
+            # no kernel binary match, fallback to slow path
+            _causal_conv1d_cache = (None, None)
+        else:
+            _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
     elif is_causal_conv1d_available():
         from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 
@@ -822,6 +827,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,  # for now we need this for generation
     ) -> Union[tuple, MambaCausalLMOutput]:
         r"""
@@ -847,9 +853,11 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             attention_mask=attention_mask,
         )
-        hidden_states = mamba_outputs[0]
 
-        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
+        hidden_states = mamba_outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:
