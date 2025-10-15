@@ -8,7 +8,7 @@
 from .core_model_loading import ConversionType, Fuse, MergeModuleList, WeightConversion
 
 _checkpoint_conversion_mapping = { "mixtral": {
-    "experts.*.(w1|w2).weight$": WeightConversion(
+    "experts.*.(w1|w3).weight$": WeightConversion(
         "experts.gate_up_proj.weight", [ConversionType.MERGE_MODULE_LIST, ConversionType.FUSE]
     ),
     "self_attn.(q|k|v)_proj": WeightConversion("self_attn.qkv_proj", ConversionType.FUSE),
