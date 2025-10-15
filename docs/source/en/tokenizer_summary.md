@@ -166,9 +166,9 @@ base vocabulary, we obtain:
 ```
 
 BPE then counts the frequency of each possible symbol pair and picks the symbol pair that occurs most frequently. In
-the example above `"h"` followed by `"u"` is present _10 + 5 = 15_ times (10 times in the 10 occurrences of
+the example above `"h"` followed by `"u"` is present *10 + 5 = 15* times (10 times in the 10 occurrences of
 `"hug"`, 5 times in the 5 occurrences of `"hugs"`). However, the most frequent symbol pair is `"u"` followed by
-`"g"`, occurring _10 + 5 + 5 = 20_ times in total. Thus, the first merge rule the tokenizer learns is to group all
+`"g"`, occurring *10 + 5 + 5 = 20* times in total. Thus, the first merge rule the tokenizer learns is to group all
 `"u"` symbols followed by a `"g"` symbol together. Next, `"ug"` is added to the vocabulary. The set of words then
 becomes
 
@@ -222,8 +222,8 @@ So what does this mean exactly? Referring to the previous example, maximizing th
 equivalent to finding the symbol pair, whose probability divided by the probabilities of its first symbol followed by
 its second symbol is the greatest among all symbol pairs. *E.g.* `"u"`, followed by `"g"` would have only been
 merged if the probability of `"ug"` divided by `"u"`, `"g"` would have been greater than for any other symbol
-pair. Intuitively, WordPiece is slightly different to BPE in that it evaluates what it _loses_ by merging two symbols
-to ensure it's _worth it_.
+pair. Intuitively, WordPiece is slightly different to BPE in that it evaluates what it *loses* by merging two symbols
+to ensure it's *worth it*.
 
 <a id='unigram'></a>
 

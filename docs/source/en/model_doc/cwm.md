@@ -12,11 +12,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-
 
 # Code World Model (CWM)
 
@@ -53,7 +51,8 @@ CWM requires a dedicated system prompt to function optimally during inference. W
 configuration, CWM's output quality may be significantly degraded. The following serves as the default
 system prompt for reasoning tasks. For agentic workflows, append the relevant tool specifications
 after this base prompt. Checkout the original code repository for more details.
-```
+
+```text
 You are a helpful AI assistant. You always reason before responding, using the following format:
 
 <think>
@@ -110,6 +109,7 @@ generated_ids = model.generate(
 output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
 print(tokenizer.decode(output_ids))
 ```
+
 <details>
 <summary>Produces the following output:</summary>
 

@@ -41,19 +41,18 @@ A longer, in-depth article with examples, visualizations and timelines is availa
 - On top of those three base classes, the library provides two APIs: [`pipeline`] for quickly
     using a model for inference on a given task and [`Trainer`] to quickly train or fine-tune a PyTorch model.
 
-
 ## Core tenets
 
 The following tenets solidified over time, and they're detailed in our new philosophy [blog post](https://huggingface.co/spaces/transformers-community/Transformers-tenets). They guide maintainer decisions when reviewing PRs and contributions.
 
 > - **Source of Truth.** Implementations must be faithful to official results and intended behavior.
->- **One Model, One File.** Core inference/training logic is visible top-to-bottom in the model file users read.
->- **Code is the Product.** Optimize for reading and diff-ing. Prefer explicit names over clever indirection.
->- **Standardize, Don’t Abstract.** Keep model-specific behavior in the model. Use shared interfaces only for generic infra.
->- **DRY\*** (Repeat when it helps users). End-user modeling files remain self-contained. Infra is factored out.
->- **Minimal User API.** Few codepaths, predictable kwargs, stable methods.
->- **Backwards Compatibility.** Public surfaces should not break. Old Hub artifacts have to keep working..
->- **Consistent Public Surface.** Naming, outputs, and optional diagnostics are aligned and tested.
+> - **One Model, One File.** Core inference/training logic is visible top-to-bottom in the model file users read.
+> - **Code is the Product.** Optimize for reading and diff-ing. Prefer explicit names over clever indirection.
+> - **Standardize, Don’t Abstract.** Keep model-specific behavior in the model. Use shared interfaces only for generic infra.
+> - **DRY\*** (Repeat when it helps users). End-user modeling files remain self-contained. Infra is factored out.
+> - **Minimal User API.** Few codepaths, predictable kwargs, stable methods.
+> - **Backwards Compatibility.** Public surfaces should not break. Old Hub artifacts have to keep working..
+> - **Consistent Public Surface.** Naming, outputs, and optional diagnostics are aligned and tested.
 
 ## Main classes
 
@@ -63,7 +62,6 @@ The following tenets solidified over time, and they're detailed in our new philo
 - **Modular transformers.** Contributors write a small `modular_*.py` shard that declares reuse from existing components. The library auto-expands this into the visible `modeling_*.py` file that users read/debug. Maintainers review the shard; users hack the expanded file. This preserves “One Model, One File” without boilerplate drift. See [the contributing documentation](https://huggingface.co/docs/transformers/en/modular_transformers) for more information.
 
 - **Preprocessing classes** convert the raw data into a format accepted by the model. A [tokenizer](main_classes/tokenizer) stores the vocabulary for each model and provides methods for encoding and decoding strings in a list of token embedding indices. [Image processors](main_classes/image_processor) preprocess vision inputs, [video processors](https://huggingface.co/docs/transformers/en/main_classes/video_processor) preprocess videos inputs, [feature extractors](main_classes/feature_extractor) preprocess audio inputs, and [processors](main_classes/processors) preprocess multimodal inputs.
-
 
 All these classes can be instantiated from pretrained instances, saved locally, and shared on the Hub with three methods:
 

@@ -37,7 +37,7 @@ The original code can be found [here](https://github.com/mu-cai/ViP-LLaVA).
 
 This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada)
 
-## Usage tips:
+## Usage tips
 
 - The architecture is similar than llava architecture except that the multi-modal projector takes a set of concatenated vision hidden states and has an additional layernorm layer on that module.
 

@@ -50,7 +50,6 @@ found [here](https://github.com/microsoft/UniSpeech/tree/main/UniSpeech).
 - UniSpeech model can be fine-tuned using connectionist temporal classification (CTC) so the model output has to be
   decoded using [`Wav2Vec2CTCTokenizer`].
 
-
 ## Resources
 
 - [Audio classification task guide](../tasks/audio_classification)

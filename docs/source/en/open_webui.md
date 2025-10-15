@@ -1,4 +1,4 @@
-#  Audio transcriptions with WebUI and `transformers serve`
+# Audio transcriptions with WebUI and `transformers serve`
 
 This guide shows how to do audio transcription for chat purposes, using `transformers serve` and [Open WebUI](https://openwebui.com/). This guide assumes you have Open WebUI installed on your machine and ready to run. Please refer to the examples above to use the text functionalities of `transformer serve` with Open WebUI -- the instructions are the same.
 

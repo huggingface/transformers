@@ -120,7 +120,7 @@ print(answer)
     ```py
     >>> import re
     >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
-from accelerate import Accelerator
+    >>> from accelerate import Accelerator
     >>> from datasets import load_dataset
     >>> import torch
 
@@ -162,9 +162,9 @@ from accelerate import Accelerator
 
     ```py
     >>> import re
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
-from accelerate import Accelerator
+    >>> from accelerate import Accelerator
     >>> from datasets import load_dataset
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
     >>> import torch
 
     >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")

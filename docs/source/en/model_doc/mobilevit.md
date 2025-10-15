@@ -99,7 +99,6 @@ print(f"The predicted class label is:{predicted_class_label}")
 
 [[autodoc]] MobileViTConfig
 
-
 ## MobileViTImageProcessor
 
 [[autodoc]] MobileViTImageProcessor
