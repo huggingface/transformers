@@ -173,14 +173,12 @@ def recursive_parse(
             return parsed_schema
         elif isinstance(node_content, dict):
             for key, child_node in node_schema.get("properties", {}).items():
-                # TODO Error if required keys are not present
                 if key in node_content:
                     parsed_schema[key] = recursive_parse(node_content[key], child_node)
                 elif "default" in child_node:
-                    # TODO Do I want to allow defaults?
                     parsed_schema[key] = child_node["default"]
                 else:
-                    pass  # TODO Add an error for required keys not present
+                    pass
             if "additionalProperties" in node_schema:
                 for key, value in node_content.items():
                     if key not in node_schema.get("properties", {}):
@@ -234,8 +232,5 @@ def recursive_parse(
         else:
             # String type
             return node_content
-    elif node_type == "any":
-        # TODO Is there a better way of handling this? Not sure if 'any' is in the spec, but we need something like it
-        return node_content
     else:
         raise TypeError(f"Unsupported schema type {node_type} for node: {node_content}")
