@@ -50,6 +50,11 @@ print(f"Predicted label: {label}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- CANINE skips tokenization entirely. It works directly on raw characters, not subwords. Use it with or without a tokenizer. For batched inference and training, use the tokenizer to pad and truncate all sequences to the same length.
+- CANINE is designed for fine-tuning on downstream tasks. The pretrained model handles masked language modeling or next sentence prediction.
+
 ## CanineConfig
 
 [[autodoc]] CanineConfig

@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 
 # LFM2
 
-## Overview
-
 [LFM2](https://www.liquid.ai/blog/liquid-foundation-models-v2-our-second-series-of-generative-ai-models) models are ultra-efficient foundation models optimized for on-device use, offering up to 2x faster CPU decoding than Qwen3 and 3x faster training efficiency than the prior generation. They use a new hybrid architecture with multiplicative gates and short convolutions across 16 blocks, achieving strong benchmark performance in knowledge, math, multilingual tasks, and instruction following. LFM2 comes in 0.35B, 0.7B, and 1.2B parameter sizes and consistently outperforms larger peers like Gemma 3 and Llama 3.2 in its class. Designed for phones, laptops, vehicles, and edge devices, these models balance speed, memory efficiency, and privacy for real-time, local AI deployment
 
 <hfoptions id="usage">

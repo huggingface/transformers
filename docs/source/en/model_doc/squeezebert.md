@@ -51,6 +51,12 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. SqueezeBERT uses absolute position embeddings.
+- SqueezeBERT is similar to BERT and relies on masked language modeling (MLM). It's efficient at predicting masked tokens and natural language understanding, but not optimal for text generation. Models trained with causal language modeling (CLM) are better for text generation.
+- For best results on sequence classification tasks, start with the `squeezebert/squeezebert-mnli-headless` checkpoint.
+
 ## SqueezeBertConfig
 
 [[autodoc]] SqueezeBertConfig

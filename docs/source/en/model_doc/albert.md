@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # ALBERT
 
-[ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://huggingface.co/papers/1909.11942) presents parameter-reduction techniques to enhance BERT by splitting the embedding matrix and using repeating layers. These methods reduce memory usage and training time, enabling better scalability. The model employs a self-supervised loss to improve inter-sentence coherence, achieving state-of-the-art results on GLUE, RACE, and SQuAD benchmarks with fewer parameters than BERT-large.
+[ALBERT](https://huggingface.co/papers/1909.11942) presents parameter-reduction techniques to enhance BERT by splitting the embedding matrix and using repeating layers. These methods reduce memory usage and training time, enabling better scalability. The model employs a self-supervised loss to improve inter-sentence coherence, achieving state-of-the-art results on GLUE, RACE, and SQuAD benchmarks with fewer parameters than BERT-large.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -56,6 +56,12 @@ print(f"Predicted word: {predicted_word}")
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- ALBERT uses absolute position embeddings. Pad inputs on the right, not the left.
+
+- The embedding size E differs from hidden size H for good reason. Embeddings represent individual tokens (context-independent). Hidden states represent token sequences (context-dependent). This makes H >> E logical. The embedding matrix spans V × E dimensions, where V is vocabulary size. Keeping E < H reduces parameter count.
 
 ## AlbertConfig
 

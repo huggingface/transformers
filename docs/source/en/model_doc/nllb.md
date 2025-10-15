@@ -55,6 +55,11 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The tokenizer was updated in April 2023. It now prefixes the source sequence with the source language instead of the target language. This prioritizes zero-shot performance at a minor cost to supervised performance.
+- For non-English languages, specify the language's BCP-47 code with the `src_lang` keyword.
+
 ## NllbTokenizer
 
 [[autodoc]] NllbTokenizer

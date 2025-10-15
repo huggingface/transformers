@@ -56,6 +56,10 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Update Transformers to version 4.37.0 or higher. Qwen2 requires `Transformers>=4.37.0` for full support.
+
 ## Qwen2Config
 
 [[autodoc]] Qwen2Config

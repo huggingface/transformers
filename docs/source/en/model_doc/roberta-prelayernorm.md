@@ -15,7 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2019-04-01 and added to Hugging Face Transformers on 2022-12-19 and contributed by [andreasmadsen](https://huggingface.co/andreasmadsen).*
 
-
 # RoBERTa-PreLayerNorm
 
 [RoBERTa-PreLayerNorm](https://huggingface.co/papers/1904.01038) is part of the fairseq toolkit, which facilitates training custom models for tasks like translation and summarization. Built on PyTorch, fairseq supports distributed training, mixed-precision training, and inference on modern GPUs. This specific model variant applies layer normalization before the self-attention and feed-forward layers, differing from the standard RoBERTa configuration.
@@ -51,6 +50,12 @@ print(f"Predicted word: {predicted_word}")
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- The implementation is the same as RoBERTa except it uses Norm and Add instead of Add and Norm.
+- Add and Norm refers to Addition and LayerNormalization as described in ["Attention Is All You Need"](https://arxiv.org/abs/1706.03762).
+- This is identical to using the `--encoder-normalize-before` flag in fairseq.
 
 ## RobertaPreLayerNormConfig
 

@@ -51,7 +51,9 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
-## Resources
+## Usage tips
+
+- Pad inputs on the right. MobileBERT uses absolute position embeddings.
 
 ## MobileBertConfig
 

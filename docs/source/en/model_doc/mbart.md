@@ -55,6 +55,15 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Check the full list of language codes via `tokenizer.lang_code_to_id.keys()`.
+- mBART requires a special language ID token in the source and target text during training. Source text format: `X [eos, src_lang_code]` where `X` is the source text. Target text format: `[tgt_lang_code] X [eos]`. The `bos` token is never used.
+- [`~PreTrainedTokenizerBase._call_`] encodes the source text format passed as the first argument or with the `text` keyword. The target text format is passed with the `text_label` keyword.
+- Set the `decoder_start_token_id` to the target language ID for mBART.
+- mBART-50 has a different text format. The language ID token is used as the prefix for the source and target text. Text format: `[lang_code] X [eos]` where `lang_code` is the source language ID for source text and target language ID for target text. `X` is the source or target text respectively.
+- Set the `eos_token_id` as the `decoder_start_token_id` for mBART-50. The target language ID is used as the first generated token by passing `forced_bos_token_id` to [`generate`].
+
 ## MBartConfig
 
 [[autodoc]] MBartConfig

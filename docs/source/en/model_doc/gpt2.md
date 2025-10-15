@@ -55,6 +55,12 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. GPT-2 uses absolute position embeddings.
+- GPT-2 reuses previously computed key-value attention pairs. Access this feature with the `past_key_values` parameter in [`GPT2Model.forward`].
+- Enable the [`GPT2Config.scale_attn_by_inverse_layer_idx`] and [`GPT2Config.reorder_and_upcast_attn`] parameters to apply training stability improvements from Mistral.
+
 ## GPT2Config
 
 [[autodoc]] GPT2Config

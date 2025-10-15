@@ -50,6 +50,15 @@ print(f"Predicted label: {label}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Control the specific attention pattern at training and test time using the `perm_mask` input.
+- XLNet is pretrained using only a subset of output tokens as targets. These are selected with the `target_mapping` input. Training a fully autoregressive model over various factorization orders is difficult.
+- Use XLNet for sequential decoding (not in fully bidirectional setting) with `perm_mask` and `target_mapping` inputs to control attention span and outputs. See examples in `examples/pytorch/text-generation/run_generation.py`.
+- XLNet has no sequence length limit, unlike most other models.
+- XLNet isn't a traditional autoregressive model but uses a training strategy that builds on that approach. It permutes tokens in the sentence, then lets the model use the last n tokens to predict token n+1. This uses a mask, so the sentence feeds into the model in the right order. Instead of masking the first n tokens for n+1, XLNet uses a mask that hides previous tokens in some given permutation of 1,…,sequence length.
+- XLNet uses the same recurrence mechanism as Transformer-XL to build long-term dependencies.
+
 ## XLNetConfig
 
 [[autodoc]] XLNetConfig

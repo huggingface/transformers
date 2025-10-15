@@ -48,6 +48,11 @@ print(tokenizer.decode(outputs[0]))
 </hfopton>
 </hfoptions>
 
+## Usage tips
+
+- Use the tokenizer for batched inference and training.
+- ByT5 uses top byte values (258, 257, etc.) for masking instead of sentinel tokens like `{extra_id_0}`.
+
 ## ByT5Tokenizer
 
 [[autodoc]] ByT5Tokenizer

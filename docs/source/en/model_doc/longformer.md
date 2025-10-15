@@ -53,6 +53,12 @@ print(tokenizer.decode(logits[0, (input_ids[0] == tokenizer.mask_token_id).nonze
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Longformer is based on RoBERTa and doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. Just separate segments with the separation token `</s>` or `tokenizer.sep_token`.
+- Set which tokens attend locally and which attend globally with the `global_attention_mask` at inference. A value of 0 means a token attends locally. A value of 1 means a token attends globally.
+- [`LongformerForMaskedLM`] is trained like [`RobertaForMaskedLM`] and should be similarly.
+
 ## LongformerConfig
 
 [[autodoc]] LongformerConfig

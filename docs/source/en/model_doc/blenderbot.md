@@ -48,6 +48,12 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. Blenderbot uses absolute position embeddings.
+- Blenderbot uses a standard seq2seq transformer architecture.
+- This is the default Blenderbot model class. Smaller checkpoints like `facebook/blenderbot_small_90M` have different architectures and need [`BlenderbotSmall`].
+
 ## BlenderbotConfig
 
 [[autodoc]] BlenderbotConfig

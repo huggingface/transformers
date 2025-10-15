@@ -16,26 +16,23 @@ rendered properly in your Markdown viewer.
 *This model was released on 2019-01-09 and added to Hugging Face Transformers on 2023-06-20 and contributed by [thomwolf](https://huggingface.co/thomwolf).*
 
 > [!WARNING]
-> This model is in maintenance mode only, so we won’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.35.0. You can do so by running the following command: pip install -U transformers==4.35.0.
+> This model is in maintenance mode only, so we won’t accept any new PRs changing its code.
 >
-> This model was deprecated due to security issues linked to `pickle.load`. To continue using TransfoXL, use a specific revision to ensure you're downloading safe files from the Hub and set the environment variable `TRUST_REMOTE_CODE` to `True`.
->
-> ```py
-> import os
-> from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
-> 
-> os.environ["TRUST_REMOTE_CODE"] = "True"
-> 
-> checkpoint = 'transfo-xl/transfo-xl-wt103'
-> revision = '40a186da79458c9f9de846edfaea79c412137f97'
-> 
-> tokenizer = TransfoXLTokenizer.from_pretrained(checkpoint, revision=revision)
-> model = TransfoXLLMHeadModel.from_pretrained(checkpoint, revision=revision)
-> ```
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.35.0. You can do so by running the following command: pip install -U transformers==4.35.0.
 
 # Transformer XL
 
 [Transformer-XL](https://huggingface.co/papers/1901.02860) extends the Transformer architecture with a segment-level recurrence mechanism and relative positional encoding to handle longer-term dependencies without losing temporal coherence. It achieves significant improvements in capturing long-range dependencies, outperforming RNNs and vanilla Transformers in both short and long sequences. Transformer-XL demonstrates state-of-the-art results on various benchmarks, including enwiki8, text8, WikiText-103, One Billion Word, and Penn Treebank, and can generate coherent text articles with thousands of tokens.
+
+## Usage tips
+
+- Transformer-XL uses relative sinusoidal positional embeddings. Pad inputs on the left or right. The original implementation trains on SQuAD with left padding, so padding defaults to left.
+- Transformer-XL has no sequence length limit, unlike most other models.
+- Transformer-XL works like a regular GPT model but introduces a recurrence mechanism for consecutive segments. A segment is a number of consecutive tokens (like 512) that may span across multiple documents. Segments are fed in order to the model.
+- The model concatenates hidden states from the previous segment to the current input to compute attention scores. This lets the model attend to information from both the previous and current segments. Stacking multiple attention layers increases the receptive field to multiple previous segments.
+- This changes positional embeddings to relative positional embeddings. Regular positional embeddings would give the same results for the current input and current hidden state at a given position. The model makes adjustments in how attention scores are computed.
+- Transformer-XL doesn't work with `torch.nn.DataParallel` due to a bug in PyTorch. See [issue #36035](https://github.com/pytorch/pytorch/issues/36035).
+- This model was deprecated due to security issues with `pickle.load`. Use a specific revision to download safe files from the Hub. Set `TRUST_REMOTE_CODE=True` as an environment variable.
 
 ## TransfoXLConfig
 

@@ -48,6 +48,22 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`GraniteMoeHybridForCausalLM`] supports padding-free training. This concatenates distinct training examples while processing inputs as separate batches. Expect ~2x inference acceleration (varies by model and data distribution). Memory usage drops when examples have varying lengths since you avoid padding token overhead.
+
+- Padding-free training requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages. Pass these arguments alongside `input_ids` and `labels`:
+
+  - `position_ids`: `torch.LongTensor` - position index of each token in each sequence
+  - `seq_idx`: `torch.IntTensor` - index of each sequence in the batch
+  - FlashAttentionKwargs:
+    - `cu_seq_lens_q`: `torch.LongTensor` - cumulative sequence lengths of all queries
+    - `cu_seq_lens_k`: `torch.LongTensor` - cumulative sequence lengths of all keys
+    - `max_length_q`: `int` - longest query length in the batch
+    - `max_length_k`: `int` - longest key length in the batch
+
+- Don't provide `attention_mask` inputs. The [`DataCollatorWithFlattening`] generates these arguments automatically when you set `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See the [Improving Hugging Face Training Efficiency Through Packing with Flash Attention](https://huggingface.co/blog/packing-flash-attention) blog post for additional information.
+
 ## GraniteMoeHybridConfig
 
 [[autodoc]] GraniteMoeHybridConfig
