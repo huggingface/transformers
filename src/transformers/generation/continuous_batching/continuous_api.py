@@ -30,7 +30,6 @@ from tqdm import tqdm
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import LogitsProcessor
-from ...integrations.hub_kernels import load_and_register_attn_kernel
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -743,7 +742,9 @@ class ContinuousBatchingManager:
             from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 
             if attn_implementation not in ALL_ATTENTION_FUNCTIONS._global_mapping:  # when its a kernel
+                # load_and_register_attn_kernel is imported here to avoid CUDA init
                 from ...integrations.flash_paged import paged_attention_forward
+                from ...integrations.hub_kernels import load_and_register_attn_kernel
 
                 load_and_register_attn_kernel(attn_implementation, paged_attention_forward)
 
