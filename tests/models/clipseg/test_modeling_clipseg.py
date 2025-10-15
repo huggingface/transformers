@@ -139,7 +139,7 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (CLIPSegVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -296,7 +296,7 @@ class CLIPSegTextModelTester:
 class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPSegTextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
@@ -423,7 +423,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (CLIPSegModel, CLIPSegForImageSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": CLIPSegModel} if is_torch_available() else {}
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
 
@@ -489,33 +489,6 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    # override as the some parameters require custom initialization
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if "logit_scale" in name:
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif "film" in name or "transposed_conv" in name or "reduce" in name:
-                        # those parameters use PyTorch' default nn.Linear initialization scheme
-                        pass
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

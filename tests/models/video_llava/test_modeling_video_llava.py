@@ -22,6 +22,7 @@ from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
+    BitsAndBytesConfig,
     VideoLlavaConfig,
     VideoLlavaForConditionalGeneration,
     VideoLlavaModel,
@@ -201,7 +202,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         else ()
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     _is_composite = True
 
@@ -414,7 +415,9 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
+        model = VideoLlavaForConditionalGeneration.from_pretrained(
+            "LanguageBind/Video-LLaVA-7B-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
 
         prompt = "USER: <video>\nWhy is this video funny? ASSISTANT:"
         video_file = hf_hub_download(
@@ -438,7 +441,9 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_mixed_inputs(self):
-        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
+        model = VideoLlavaForConditionalGeneration.from_pretrained(
+            "LanguageBind/Video-LLaVA-7B-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
 
         prompts = [
             "USER: <image>\nWhat are the cats in the image doing? ASSISTANT:",
@@ -469,7 +474,9 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama(self):
-        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
+        model = VideoLlavaForConditionalGeneration.from_pretrained(
+            "LanguageBind/Video-LLaVA-7B-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
         prompt = "USER: <video>\nDescribe the video in details. ASSISTANT:"
@@ -494,7 +501,9 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
-        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
+        model = VideoLlavaForConditionalGeneration.from_pretrained(
+            "LanguageBind/Video-LLaVA-7B-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
         processor.tokenizer.padding_side = "left"
 

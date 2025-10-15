@@ -27,7 +27,6 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     divide_to_patches,
     group_images_by_shape,
     reorder_images,
@@ -43,17 +42,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-
-
-class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    image_grid_pinpoints (`list[list[int]]`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-        method.
-    """
-
-    image_grid_pinpoints: Optional[list[list[int]]]
+from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
 @auto_docstring
@@ -71,14 +60,14 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
-    valid_kwargs = LlavaOnevisionFastImageProcessorKwargs
+    valid_kwargs = LlavaOnevisionImageProcessorKwargs
     model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
 
-    def __init__(self, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
             batch_num_images = [len(x) for x in images]
@@ -87,8 +76,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             batch_num_images = [1] * len(images)
         else:
             batch_num_images = [1]
-        kwargs["batch_num_images"] = batch_num_images
-        return super().preprocess(images, **kwargs)
+        return super().preprocess(images, batch_num_images, **kwargs)
 
     def _resize_for_patching(
         self,
@@ -213,6 +201,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
+        batch_num_images: list[int],
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
@@ -225,7 +214,6 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        batch_num_images: list[int],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,

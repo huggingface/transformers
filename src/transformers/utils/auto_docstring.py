@@ -66,6 +66,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "kosmos2-5": "Kosmos2_5Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
+    "parakeet": "ParakeetCTCConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
@@ -98,6 +99,13 @@ class ImageProcessorArgs:
     size = {
         "description": """
     Describes the maximum input dimensions to the model.
+    """,
+        "shape": None,
+    }
+
+    size_divisor = {
+        "description": """
+    The size by which to make sure both the height and width can be divided.
     """,
         "shape": None,
     }

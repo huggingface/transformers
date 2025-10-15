@@ -104,7 +104,7 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     # The UnivNetModel is not a transformer and does not use any attention mechanisms, so skip transformer/attention
     # related tests.
-    test_pruning = False
+
     test_resize_embeddings = False
     test_resize_position_embeddings = False
     # UnivNetModel is not a sequence classification model.

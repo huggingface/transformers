@@ -14,7 +14,7 @@
 # limitations under the License.
 """ViT Hybrid model configuration"""
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 from ...auto.configuration_auto import CONFIG_MAPPING
 from ...bit import BitConfig
@@ -23,18 +23,18 @@ from ...bit import BitConfig
 logger = logging.get_logger(__name__)
 
 
-class ViTHybridConfig(PretrainedConfig):
+class ViTHybridConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTHybridModel`]. It is used to instantiate a ViT
     Hybrid model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ViT Hybrid
     [google/vit-hybrid-base-bit-384](https://huggingface.co/google/vit-hybrid-base-bit-384) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
+        backbone_config (`Union[dict[str, Any], PreTrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this

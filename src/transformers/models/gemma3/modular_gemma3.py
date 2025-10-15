@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
@@ -30,7 +30,6 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -44,7 +43,7 @@ from ..gemma2.modeling_gemma2 import (
     eager_attention_forward,
 )
 from ..paligemma.modeling_paligemma import (
-    PaligemmaCausalLMOutputWithPast,
+    PaliGemmaCausalLMOutputWithPast,
     PaliGemmaForConditionalGeneration,
     PaliGemmaModel,
     PaligemmaModelOutputWithPast,
@@ -56,14 +55,14 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
+class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3TextModel`]. It is used to instantiate an Gemma3Text
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Gemma3Text-7B.
     e.g. [google/gemma3_text-7b](https://huggingface.co/google/gemma3_text-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 262208):
@@ -210,7 +209,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         use_bidirectional_attention=False,
         **kwargs,
     ):
-        PretrainedConfig.__init__(
+        PreTrainedConfig.__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
@@ -256,7 +255,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
-class Gemma3Config(PretrainedConfig):
+class Gemma3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3ForConditionalGeneration`]. It is used to instantiate an
     Gemma3ForConditionalGeneration according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -264,8 +263,8 @@ class Gemma3Config(PretrainedConfig):
 
     e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[Gemma3TextConfig, dict]`, *optional*):
@@ -354,7 +353,7 @@ class Gemma3ModelOutputWithPast(PaligemmaModelOutputWithPast):
     pass
 
 
-class Gemma3CausalLMOutputWithPast(PaligemmaCausalLMOutputWithPast):
+class Gemma3CausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
     pass
 
 
@@ -398,7 +397,6 @@ class Gemma3Attention(Gemma2Attention):
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -461,7 +459,6 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -725,7 +722,7 @@ class Gemma3MultiModalProjector(nn.Module):
 
 
 def create_causal_mask_mapping(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
@@ -767,7 +764,7 @@ def create_causal_mask_mapping(
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
         image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-        image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
+        image_group_ids = torch.where(is_image, image_group_ids, -1)
         mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
             token_type_ids.to(cache_position.device), image_group_ids
         )

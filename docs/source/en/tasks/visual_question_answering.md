@@ -364,12 +364,13 @@ Let's illustrate how you can use this model for VQA. First, let's load the model
 GPU, if available, which we didn't need to do earlier when training, as [`Trainer`] handles this automatically:
 
 ```py
->>> from transformers import AutoProcessor, Blip2ForConditionalGeneration, infer_device
+>>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
+from accelerate import Accelerator
 >>> import torch
 
 >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
 >>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16)
->>> device = infer_device()
+>>> device = Accelerator().device
 >>> model.to(device)
 ```
 

@@ -126,7 +126,7 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GitVisionModel,) if is_torch_available() else ()
     fx_compatible = True
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -416,12 +416,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester._test_batched_generate_captioning(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
@@ -456,6 +450,10 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @unittest.skip(reason="GIT has pixel values as additional input")
     def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="GIT input and output sequence lengths are not equal due to pixel values additional input")
+    def test_forward_with_logits_to_keep(self):
         pass
 
 

@@ -23,7 +23,7 @@ import tempfile
 import warnings
 from concurrent import futures
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, TypedDict, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -62,7 +62,7 @@ from . import __version__, logging
 from .generic import working_or_temp_dir
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
-    _torch_version,
+    get_torch_version,
     is_torch_available,
     is_training_run_on_sagemaker,
 )
@@ -74,6 +74,18 @@ CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+
+class DownloadKwargs(TypedDict, total=False):
+    cache_dir: Optional[Union[str, os.PathLike]]
+    force_download: bool
+    proxies: Optional[dict[str, str]]
+    local_files_only: bool
+    token: Optional[Union[str, bool]]
+    revision: Optional[str]
+    subfolder: str
+    commit_hash: Optional[str]
+
 
 _is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
 
@@ -227,7 +239,7 @@ def http_user_agent(user_agent: Union[dict, str, None] = None) -> str:
     """
     ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():
-        ua += f"; torch/{_torch_version}"
+        ua += f"; torch/{get_torch_version()}"
     if constants.HF_HUB_DISABLE_TELEMETRY:
         return ua + "; telemetry/off"
     if is_training_run_on_sagemaker():
@@ -277,9 +289,6 @@ def cached_file(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -324,7 +333,6 @@ def cached_files(
     filenames: list[str],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -354,9 +362,6 @@ def cached_files(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -481,7 +486,6 @@ def cached_files(
                 user_agent=user_agent,
                 force_download=force_download,
                 proxies=proxies,
-                resume_download=resume_download,
                 token=token,
                 local_files_only=local_files_only,
             )
@@ -495,7 +499,6 @@ def cached_files(
                 user_agent=user_agent,
                 force_download=force_download,
                 proxies=proxies,
-                resume_download=resume_download,
                 token=token,
                 local_files_only=local_files_only,
             )
@@ -1023,7 +1026,6 @@ def get_checkpoint_shard_files(
     cache_dir=None,
     force_download=False,
     proxies=None,
-    resume_download=None,
     local_files_only=False,
     token=None,
     user_agent=None,
@@ -1077,7 +1079,6 @@ def get_checkpoint_shard_files(
         cache_dir=cache_dir,
         force_download=force_download,
         proxies=proxies,
-        resume_download=resume_download,
         local_files_only=local_files_only,
         token=token,
         user_agent=user_agent,

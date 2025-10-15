@@ -14,17 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class HeliumConfig(PretrainedConfig):
+class HeliumConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HeliumModel`]. It is used to instantiate an Helium
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Helium 2b model.
     e.g. [kyutai/helium-2b](https://huggingface.co/kyutai/helium-2b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 48000):
