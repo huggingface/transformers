@@ -44,7 +44,7 @@ from transformers import pipeline
 
 pipeline = pipeline(
     task="sentiment-analysis",
-    model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+    model="cardiffnlp/twitter-roberta-base-sentiment",
     dtype=torch.float16,
     device=0
 )
@@ -61,7 +61,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
 model = AutoModelForSequenceClassification.from_pretrained(
-    "cardiffnlp/twitter-roberta-base-sentiment-latest",
+    "cardiffnlp/twitter-roberta-base-sentiment",
     dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
@@ -84,7 +84,7 @@ print(f"Predicted class: {predicted_class}, Confidence: {confidence:.3f}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo "I love using RoBERTa for NLP tasks!" | transformers run --task sentiment-analysis --model cardiffnlp/twitter-roberta-base-sentiment-latest --device 0
+echo "I love using RoBERTa for NLP tasks!" | transformers run --task sentiment-analysis --model cardiffnlp/twitter-roberta-base-sentiment --device 0
 ```
 
 </hfoption>
