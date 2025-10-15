@@ -23,8 +23,8 @@ import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -38,8 +38,13 @@ if is_vision_available():
     from transformers import GroundingDinoImageProcessor
 
 
+if is_torchvision_available():
+    from transformers import GroundingDinoImageProcessorFast
+
+
 @require_torch
 @require_vision
+@require_torchvision
 class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     from_pretrained_id = "IDEA-Research/grounding-dino-base"
     processor_class = GroundingDinoProcessor
@@ -108,6 +113,10 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(cls, **kwargs):
         return GroundingDinoImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.get_image_processor_fast with CLIP->GroundingDino
+    def get_image_processor_fast(cls, **kwargs):
+        return GroundingDinoImageProcessorFast.from_pretrained(cls.tmpdirname, **kwargs)
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
@@ -150,6 +159,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
+        image_processor_fast = self.get_image_processor_fast()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             processor_slow = GroundingDinoProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
@@ -167,20 +177,20 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor_fast.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor_fast.to_json_string())
         self.assertIsInstance(processor_slow.image_processor, GroundingDinoImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, GroundingDinoImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, GroundingDinoImageProcessorFast)
 
     # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_save_load_pretrained_additional_features with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
     def test_save_load_pretrained_additional_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             processor = GroundingDinoProcessor(
-                tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
+                tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor_fast()
             )
             processor.save_pretrained(tmpdir)
 
             tokenizer_add_kwargs = BertTokenizer.from_pretrained(tmpdir, bos_token="(BOS)", eos_token="(EOS)")
-            image_processor_add_kwargs = GroundingDinoImageProcessor.from_pretrained(
+            image_processor_add_kwargs = GroundingDinoImageProcessorFast.from_pretrained(
                 tmpdir, do_normalize=False, padding_value=1.0
             )
 
@@ -192,7 +202,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, GroundingDinoImageProcessor)
+        self.assertIsInstance(processor.image_processor, GroundingDinoImageProcessorFast)
 
     # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_image_processor with CLIP->GroundingDino
     def test_image_processor(self):

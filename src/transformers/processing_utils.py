@@ -36,24 +36,6 @@ from .audio_utils import AudioInput, load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available
-from .utils.chat_template_utils import render_jinja_template
-from .utils.type_validators import (
-    device_validator,
-    image_size_validator,
-    padding_validator,
-    positive_any_number,
-    positive_int,
-    resampling_validator,
-    tensor_type_validator,
-    truncation_validator,
-    video_metadata_validator,
-)
-from .video_utils import VideoInput, VideoMetadataType
-
-
-if is_vision_available():
-    from .image_utils import PILImageResampling
-
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -79,12 +61,27 @@ from .utils import (
     list_repo_templates,
     logging,
 )
+from .utils.chat_template_utils import render_jinja_template
 from .utils.deprecation import deprecate_kwarg
+from .utils.type_validators import (
+    device_validator,
+    image_size_validator,
+    padding_validator,
+    positive_any_number,
+    positive_int,
+    resampling_validator,
+    tensor_type_validator,
+    truncation_validator,
+    video_metadata_validator,
+)
+from .video_utils import VideoInput, VideoMetadataType
 
 
 if is_torch_available():
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
+if is_vision_available():
+    from .image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
 
@@ -95,11 +92,48 @@ SpecificProcessorType = TypeVar("SpecificProcessorType", bound="ProcessorMixin")
 transformers_module = direct_transformers_import(Path(__file__).parent)
 
 
+class _LazyAutoProcessorMapping(dict):
+    """
+    Lazy dictionary to avoid circular imports.
+    The mapping names are only imported when accessed.
+    """
+
+    _MAPPING_NAMES = {
+        "image_processor": ("transformers.models.auto.image_processing_auto", "IMAGE_PROCESSOR_MAPPING_NAMES"),
+        "video_processor": ("transformers.models.auto.video_processing_auto", "VIDEO_PROCESSOR_MAPPING_NAMES"),
+        "feature_extractor": (
+            "transformers.models.auto.feature_extraction_auto",
+            "FEATURE_EXTRACTOR_MAPPING_NAMES",
+        ),
+        "tokenizer": ("transformers.models.auto.tokenization_auto", "TOKENIZER_MAPPING_NAMES"),
+    }
+
+    def __getitem__(self, key):
+        if key not in self._MAPPING_NAMES:
+            raise KeyError(key)
+        module_name, attr_name = self._MAPPING_NAMES[key]
+        module = __import__(module_name, fromlist=[attr_name])
+        return getattr(module, attr_name)
+
+    def __contains__(self, key):
+        return key in self._MAPPING_NAMES
+
+    def keys(self):
+        return self._MAPPING_NAMES.keys()
+
+
+MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
+
 AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoTokenizer": "PreTrainedTokenizerBase",
     "AutoFeatureExtractor": "FeatureExtractionMixin",
     "AutoImageProcessor": "ImageProcessingMixin",
     "AutoVideoProcessor": "BaseVideoProcessor",
+}
+
+SPECIAL_MODULE_TO_MODEL_NAME_MAPPING = {
+    "kosmos2_5": "kosmos-2.5",
+    "kosmos2": "kosmos-2",
 }
 
 if sys.version_info >= (3, 11):
@@ -1497,30 +1531,45 @@ class ProcessorMixin(PushToHubMixin):
         via methods like `AutoTokenizer.register()`. If neither of these conditions are fulfilled, this method
         will be unable to find the relevant subcomponent class and will raise an error.
         """
-        args = []
-        for attribute_name in cls.attributes:
-            class_name = getattr(cls, f"{attribute_name}_class")
-            if isinstance(class_name, tuple):
-                classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
-                if attribute_name == "image_processor":
-                    # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
-                    use_fast = kwargs.get("use_fast")
-                    if use_fast is None:
-                        logger.warning_once(
-                            "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                            "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
-                            "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
-                        )
-                else:
-                    use_fast = kwargs.get("use_fast", True)
-                if use_fast and classes[1] is not None:
-                    attribute_class = classes[1]
-                else:
-                    attribute_class = classes[0]
-            else:
-                attribute_class = cls.get_possibly_dynamic_module(class_name)
+        # Lazy import to avoid circular imports
 
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+        args = []
+        # get args from processor init signature
+        model_name_lowercase = cls.__module__.split(".")[-1].replace("processing_", "").split(".")[0]
+        sub_processors = inspect.signature(cls.__init__).parameters.keys()
+        for sub_processor_type in sub_processors:
+            if sub_processor_type not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in sub_processor_type:
+                sub_processor_type = "tokenizer"
+            if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
+                sub_processor_names = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type].get(
+                    model_name_lowercase, None
+                )
+                if sub_processor_names is None:
+                    sub_processor_names = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type].get(
+                        model_name_lowercase.replace("_", "-"), None
+                    )
+                if sub_processor_names is None:
+                    sub_processor_names = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type].get(
+                        SPECIAL_MODULE_TO_MODEL_NAME_MAPPING.get(model_name_lowercase, None), None
+                    )
+                if sub_processor_names is None:
+                    raise ValueError(
+                        f"Could not find component class name for {sub_processor_type} and {model_name_lowercase}"
+                    )
+                if isinstance(sub_processor_names, tuple):
+                    use_fast = kwargs.get("use_fast", True)
+                    if use_fast and sub_processor_names[1] is not None:
+                        sub_processor_name = sub_processor_names[1]
+                    else:
+                        sub_processor_name = sub_processor_names[0]
+                else:
+                    sub_processor_name = sub_processor_names
+
+                if hasattr(transformers_module, sub_processor_name):
+                    sub_processor_class = getattr(transformers_module, sub_processor_name)
+                    args.append(sub_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+                else:
+                    raise ValueError(f"Could not find module {sub_processor_name} in `transformers`.")
 
         return args
 

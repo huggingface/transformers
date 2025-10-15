@@ -35,8 +35,8 @@ class CLIPSegProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("ViTImageProcessor", "ViTImageProcessorFast")
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)

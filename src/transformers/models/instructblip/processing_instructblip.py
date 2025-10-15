@@ -66,7 +66,7 @@ class InstructBlipProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
-    image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
 

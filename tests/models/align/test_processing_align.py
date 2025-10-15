@@ -23,13 +23,15 @@ import pytest
 from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import IMAGE_PROCESSOR_NAME, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import AlignProcessor, EfficientNetImageProcessor
+if is_torchvision_available():
+    from transformers import EfficientNetImageProcessorFast
 
 
 @require_vision
@@ -80,6 +82,9 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return EfficientNetImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
+    def get_image_processor_fast(self, **kwargs):
+        return EfficientNetImageProcessorFast.from_pretrained(self.tmpdirname, **kwargs)
+
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
@@ -87,12 +92,13 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
+        image_processor_fast = self.get_image_processor_fast()
 
         processor_slow = AlignProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
         processor_slow.save_pretrained(self.tmpdirname)
         processor_slow = AlignProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = AlignProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+        processor_fast = AlignProcessor(tokenizer=tokenizer_fast, image_processor=image_processor_fast)
         processor_fast.save_pretrained(self.tmpdirname)
         processor_fast = AlignProcessor.from_pretrained(self.tmpdirname)
 
@@ -103,16 +109,16 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor_fast.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor_fast.to_json_string())
         self.assertIsInstance(processor_slow.image_processor, EfficientNetImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, EfficientNetImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, EfficientNetImageProcessorFast)
 
     def test_save_load_pretrained_additional_features(self):
         processor = AlignProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+        image_processor_add_kwargs = self.get_image_processor_fast(do_normalize=False, padding_value=1.0)
 
         processor = AlignProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
@@ -122,7 +128,7 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, EfficientNetImageProcessor)
+        self.assertIsInstance(processor.image_processor, EfficientNetImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -132,8 +138,8 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_image_proc = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, return_tensors="pt")
 
         for key in input_image_proc:
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)

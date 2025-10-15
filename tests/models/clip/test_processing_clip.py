@@ -18,9 +18,9 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, CLIPTokenizer, CLIPTokenizerFast
-from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
+from transformers import AutoImageProcessor, AutoTokenizer, CLIPTokenizer, CLIPTokenizerFast
+from transformers.testing_utils import require_torchvision, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -28,11 +28,15 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from transformers import CLIPImageProcessor, CLIPProcessor
 
+if is_torchvision_available():
+    from transformers import CLIPImageProcessorFast
+
 
 TEST_MODEL_PATH = "openai/clip-vit-base-patch32"
 
 
 @require_vision
+@require_torchvision
 class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = CLIPProcessor
 
@@ -40,7 +44,7 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         tokenizer = AutoTokenizer.from_pretrained(TEST_MODEL_PATH)
-        image_processor = CLIPImageProcessor.from_pretrained(TEST_MODEL_PATH)
+        image_processor = AutoImageProcessor.from_pretrained(TEST_MODEL_PATH)
         processor = CLIPProcessor(
             image_processor=image_processor,
             tokenizer=tokenizer,
@@ -60,6 +64,10 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return CLIPImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
+    def get_image_processor_fast(cls, **kwargs):
+        return CLIPImageProcessorFast.from_pretrained(cls.tmpdirname, **kwargs)
+
+    @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname)
 
@@ -67,6 +75,7 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
+        image_processor_fast = self.get_image_processor_fast()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             processor_slow = CLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
@@ -84,17 +93,17 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor_fast.tokenizer, CLIPTokenizerFast)
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor_fast.to_json_string())
         self.assertIsInstance(processor_slow.image_processor, CLIPImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, CLIPImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, CLIPImageProcessorFast)
 
     def test_save_load_pretrained_additional_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            processor = CLIPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+            processor = CLIPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor_fast())
             processor.save_pretrained(tmpdir)
 
             tokenizer_add_kwargs = CLIPTokenizer.from_pretrained(tmpdir, bos_token="(BOS)", eos_token="(EOS)")
-            image_processor_add_kwargs = CLIPImageProcessor.from_pretrained(
+            image_processor_add_kwargs = CLIPImageProcessorFast.from_pretrained(
                 tmpdir, do_normalize=False, padding_value=1.0
             )
 
@@ -106,7 +115,7 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
+        self.assertIsInstance(processor.image_processor, CLIPImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
