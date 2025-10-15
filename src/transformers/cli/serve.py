@@ -34,6 +34,7 @@ from typing import Annotated, Optional, TypedDict, Union
 import typer
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
+from openai.types.chat.chat_completion import Choice
 from tokenizers.decoders import DecodeStream
 
 import transformers
@@ -88,13 +89,15 @@ if serve_dependencies_available:
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.audio.transcription import Transcription
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
-    from openai.types.chat import ChatCompletionMessageParam
+    from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageParam
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
-        Choice,
         ChoiceDelta,
         ChoiceDeltaToolCall,
         ChoiceDeltaToolCallFunction,
+    )
+    from openai.types.chat.chat_completion_chunk import (
+        Choice as ChoiceChunk,
     )
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.responses import (
@@ -334,26 +337,94 @@ class TimedModel:
             self._timer.cancel()
 
     def timeout_reached(self):
-        self.delete_model()
-        logger.info(f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity")
+        if self.timeout_seconds > 0:
+            self.delete_model()
+            logger.info(
+                f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
+            )
 
     def is_deleted(self):
         """Check if the instances have been deleted."""
         return not hasattr(self, "model") or self.model is None
 
 
-class serve:
-    # Defining a class to help with internal state but in practice it's just a method to call
-    # TODO: refactor into a proper module with helpers + 1 main method
-    def __init__(
-        self,
-        continuous_batching: Annotated[
-            bool, typer.Option(help="Whether to use continuous batching for chat completions.")
-        ] = False,
-        device: Annotated[
-            str,
-            typer.Option(
-                help="Device to use for inference; will default to `auto` and place the model on an accelerator if available."
+@dataclass
+class ServeArguments:
+    r"""
+    Arguments for the serve CLI.
+
+    See the metadata arg for each argument's description -- the metadata will be printed with
+    `transformers serve --help`
+    """
+
+    continuous_batching: bool = field(
+        default=False,
+        metadata={"help": "Whether to use continuous batching for chat completions."},
+    )
+    device: str = field(
+        default="auto",
+        metadata={
+            "help": "Device to use for inference; will default to `auto` and"
+            "place the model on an accelerator if available."
+        },
+    )
+    torch_dtype: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "`torch_dtype` is deprecated! Please use `dtype` argument instead.",
+            "choices": ["auto", "bfloat16", "float16", "float32"],
+        },
+    )
+    dtype: Optional[str] = field(
+        default="auto",
+        metadata={
+            "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
+            "the dtype will be automatically derived from the model's weights.",
+            "choices": ["auto", "bfloat16", "float16", "float32"],
+        },
+    )
+    trust_remote_code: bool = field(
+        default=False, metadata={"help": "Whether to trust remote code when loading a model."}
+    )
+    attn_implementation: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in "
+            "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
+        },
+    )
+    load_in_8bit: bool = field(
+        default=False,
+        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
+    )
+    load_in_4bit: bool = field(
+        default=False,
+        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
+    )
+    bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
+    use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
+
+    # Serving settings
+    host: str = field(default="localhost", metadata={"help": "Interface the server will listen to."})
+    port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
+    model_timeout: int = field(
+        default=300,
+        metadata={"help": "Time in seconds after which a model will be removed from memory."},
+    )
+
+    # Other settings
+    log_level: str = field(
+        default="info", metadata={"help": "Logging level as a string. Example: 'info' or 'warning'."}
+    )
+    default_seed: Optional[int] = field(
+        default=None, metadata={"help": "The default seed for torch, should be an integer."}
+    )
+    enable_cors: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to enable CORS. Some apps that make requests from external domains (e.g. Cursor) require "
+                "CORS to be enabled."
             ),
         ] = "auto",
         dtype: Annotated[
@@ -450,90 +521,13 @@ class serve:
         self.last_kv_cache = None
         self.last_model = None
 
-        @asynccontextmanager
-        async def lifespan(app: FastAPI):
-            yield
-            for model in self.loaded_models.values():
-                model.delete_model()
-            if self.running_continuous_batching_manager is not None:
-                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+        if self.args.model_timeout is None:
+            self.args.model_timeout = -1 if self.args.force_model else 300
 
-        app = FastAPI(lifespan=lifespan)
-
-        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
-        # security purposes, it's disabled by default
-        if self.enable_cors:
-            app.add_middleware(
-                CORSMiddleware,
-                allow_origins=["*"],
-                allow_credentials=True,
-                allow_methods=["*"],
-                allow_headers=["*"],
-            )
-            logger.warning_once(
-                "CORS allow origin is set to `*`. This is not recommended for production environments."
-            )
-
-        from fastapi import Request
-
-        @app.post("/v1/chat/completions")
-        def chat_completion(request: Request, body: dict):
-            self.validate_chat_completion_request(request=body)
-
-            if self.continuous_batching:
-                output = self.continuous_batching_chat_completion(body, request.state.request_id)
-            else:
-                output = self.generate_chat_completion(body)
-            return StreamingResponse(output, media_type="text/event-stream")
-
-        @app.post("/v1/responses")
-        def responses(request: dict):
-            self.validate_response_request(request=request)
-            # Support non-streaming mode when `stream=false` is provided
-            stream = request.get("stream", True)
-            if not stream:
-                response_obj = self.generate_response_non_streaming(request)
-                return JSONResponse(response_obj)
-
-            output = self.generate_response(request)
-            return StreamingResponse(output, media_type="text/event-stream")
-
-        @app.post("/v1/audio/transcriptions")
-        async def audio_transcriptions(request: Request):
-            # Parses the multipart/form-data request into the request format used by other endpoints
-            async with request.form() as form:
-                parsed_request = TransformersTranscriptionCreateParams(
-                    file=await form["file"].read(),
-                    model=form["model"],
-                    # TODO: add other fields
-                )
-                logger.debug(
-                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
-                    f"size: {form['file'].size / 1024:.2f} KiB"
-                )
-            self.validate_transcription_request(request=parsed_request)
-
-            output = self.generate_transcription(parsed_request)
-            return StreamingResponse(output, media_type="text/event-stream")
-
-        @app.options("/v1/models")
-        @app.get("/v1/models")
-        def get_all_models():
-            return JSONResponse({"object": "list", "data": self.get_gen_models()})
-
-        @app.get("/health")
-        def healthcheck():
-            return JSONResponse({"status": "ok"})
-
-        @app.middleware("http")
-        async def get_or_set_request_id(request: Request, call_next):
-            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
-            request.state.request_id = request_id
-            response = await call_next(request)
-            response.headers[X_REQUEST_ID] = request_id
-            return response
-
-        uvicorn.run(app, host=self.host, port=self.port, log_level=self.log_level)
+        if self.args.force_model:
+            model_id_and_revision = self.process_model_name(self.args.force_model)
+            self.last_model = model_id_and_revision
+            self.load_model_and_processor(model_id_and_revision)
 
     def _validate_request(
         self,
@@ -618,7 +612,7 @@ class serve:
         tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
         decode_stream: Optional[DecodeStream] = None,
         tokenizer: Optional[PreTrainedTokenizerFast] = None,
-    ) -> str:
+    ) -> ChatCompletionChunk:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
 
@@ -644,12 +638,13 @@ class serve:
         """
         if decode_stream is not None and content is not None and tokenizer is not None:
             content = decode_stream.step(tokenizer._tokenizer, content)
+
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
             model=model,
             choices=[
-                Choice(
+                ChoiceChunk(
                     delta=ChoiceDelta(
                         content=content,
                         role=role,
@@ -662,23 +657,125 @@ class serve:
             system_fingerprint="",
             object="chat.completion.chunk",
         )
-        return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
-    def build_response_event(self, response: "BaseModel") -> str:
+        return chunk
+
+    @staticmethod
+    def chunk_to_sse_element(chunk: ChatCompletionChunk | BaseModel) -> str:
         """
-        Builds a event of a streaming OpenAI Response response.
+        Builds an event of a streaming OpenAI Response model or a ChatCompletion chunk.
 
         IMPORTANT: The serialized chunk won't contain empty fields (fields with `None`). Some downstream apps,
         like Cursor, assume that when the field exists, it has data.
 
         Args:
-            response (`BaseModel`):
+            chunk (`BaseModel` or `ChatCompletionChunk`):
                 The response to build an event from. One of the multiple OpenAI Response output types
 
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
-        return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
+        return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+
+    def run(self):
+        """
+        Setup and run the FastAPI server for transformers serve.
+
+        Models will be loaded and unloaded automatically based on usage and a timeout.
+
+        The server will expose the following endpoints:
+        - POST /v1/chat/completions: Generates chat completions.
+        - POST /v1/responses: Generates responses.
+        - POST /v1/audio/transcriptions: Generates transcriptions from audio.
+        - GET /v1/models: Lists available models for 3rd party tools.
+
+        Requires FastAPI and Uvicorn to be installed.
+        """
+
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            yield
+            for model in self.loaded_models.values():
+                model.delete_model()
+            if self.running_continuous_batching_manager is not None:
+                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+
+        app = FastAPI(lifespan=lifespan)
+
+        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
+        # security purposes, it's disabled by default
+        if self.enable_cors:
+            app.add_middleware(
+                CORSMiddleware,
+                allow_origins=["*"],
+                allow_credentials=True,
+                allow_methods=["*"],
+                allow_headers=["*"],
+            )
+            logger.warning_once(
+                "CORS allow origin is set to `*`. This is not recommended for production environments."
+            )
+
+        from fastapi import Request
+
+        @app.post("/v1/chat/completions")
+        def chat_completion(request: Request, body: dict):
+            self.validate_chat_completion_request(request=body)
+
+            if self.use_continuous_batching:
+                output = self.continuous_batching_chat_completion(body, request.state.request_id)
+            else:
+                output = self.generate_chat_completion(body)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.post("/v1/responses")
+        def responses(request: dict):
+            self.validate_response_request(request=request)
+            # Support non-streaming mode when `stream=false` is provided
+            stream = request.get("stream", True)
+            if not stream:
+                response_obj = self.generate_response_non_streaming(request)
+                return JSONResponse(response_obj)
+
+            output = self.generate_response(request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.post("/v1/audio/transcriptions")
+        async def audio_transcriptions(request: Request):
+            # Parses the multipart/form-data request into the request format used by other endpoints
+            async with request.form() as form:
+                parsed_request = TransformersTranscriptionCreateParams(
+                    file=await form["file"].read(),
+                    model=form["model"],
+                    # TODO: add other fields
+                )
+                logger.debug(
+                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
+                    f"size: {form['file'].size / 1024:.2f} KiB"
+                )
+            self.validate_transcription_request(request=parsed_request)
+
+            output = self.generate_transcription(parsed_request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.options("/v1/models")
+        @app.get("/v1/models")
+        def get_all_models():
+            return JSONResponse({"object": "list", "data": self.get_gen_models()})
+
+        @app.get("/health")
+        def healthcheck():
+            return JSONResponse({"status": "ok"})
+
+        @app.middleware("http")
+        async def get_or_set_request_id(request: Request, call_next):
+            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
+            request.state.request_id = request_id
+            response = await call_next(request)
+            response.headers[X_REQUEST_ID] = request_id
+            return response
+
+        uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
     @functools.cache
     def get_gen_models(self) -> list[dict[str, any]]:
@@ -726,7 +823,7 @@ class serve:
                 for model in model_infos
             ]
 
-    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> AsyncGenerator[str, None]:
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -739,14 +836,16 @@ class serve:
 
         model_id_and_revision = self.process_model_name(req["model"])
         must_discard_cache = model_id_and_revision != self.last_model
+
         self.last_model = model_id_and_revision
+
+        # When switching models, terminate a continuous batching manager if it is running.
         if must_discard_cache:
-            # When switching models, terminate a continuous batching manager if it is running.
             if self.running_continuous_batching_manager is not None:
                 self.running_continuous_batching_manager.stop(block=True, timeout=2)
                 self.running_continuous_batching_manager = None
-        model, processor = self.load_model_and_processor(model_id_and_revision)
 
+        model, processor = self.load_model_and_processor(model_id_and_revision)
         tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
 
         generation_config = create_generation_config_from_req(
@@ -761,18 +860,17 @@ class serve:
 
         if self.running_continuous_batching_manager is None:
             self.running_continuous_batching_manager = model.init_continuous_batching(
-                generation_config=generation_config, streaming=True
+                generation_config=generation_config
             )
 
-            # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching
-            # and correctly applied in non-cb
+            # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb
             self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
         inputs = processor.apply_chat_template(req["messages"], return_tensors="pt", add_generation_prompt=True).to(
             model.device
-        )
+        )[0]
 
         def stream_chat_completion(request_id, decode_stream):
             try:
@@ -802,21 +900,61 @@ class serve:
                 self.running_continuous_batching_manager.cancel_request(request_id)
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        async def cancellation_wrapper(_inputs, request_id):
-            try:
-                decode_stream = DecodeStream(_inputs.tolist(), False)
-                # XXX: using returned request_id as safety in case it is None
-                request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
-                )
-                for chunk in stream_chat_completion(request_id, decode_stream):
-                    yield chunk
-                    await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
-            except asyncio.CancelledError:
-                self.running_continuous_batching_manager.cancel_request(request_id)
-                logger.warning(f"Request {request_id} was cancelled.")
+        def buffer_chat_completion(_request_id):
+            result = None
+            while self.running_continuous_batching_manager.is_running() and result is None:
+                result = self.running_continuous_batching_manager.get_result(request_id=_request_id, timeout=1)
 
-        return cancellation_wrapper(inputs[0], request_id)
+            content = tokenizer.decode(result.generated_tokens)
+
+            chat_completion_result = ChatCompletion(
+                id=_request_id,
+                created=int(time.time()),
+                object="chat.completion",
+                model=model_id_and_revision,
+                choices=[
+                    Choice(
+                        # TODO check the index
+                        index=0,
+                        message=ChatCompletionMessage(content=content, role="assistant"),
+                        finish_reason="stop",
+                    )
+                ],
+                # TODO implement function calling
+                # TODO implement usage
+            )
+
+            return chat_completion_result
+
+        async def cancellation_wrapper_stream(_request_id):
+            # Enables cancellation in an async context
+            try:
+                decode_stream = DecodeStream(inputs.tolist(), False)
+                for _chunk in stream_chat_completion(_request_id, decode_stream):
+                    yield self.chunk_to_sse_element(_chunk)
+                    await asyncio.sleep(0)
+            except asyncio.CancelledError:
+                self.running_continuous_batching_manager.cancel_request(_request_id)
+                logger.warning(f"Request {_request_id} was cancelled.")
+
+        def cancellation_wrapper_buffer(_request_id):
+            # Enables cancellation in an async context
+            try:
+                return buffer_chat_completion(_request_id)
+            except asyncio.CancelledError:
+                self.running_continuous_batching_manager.cancel_request(_request_id)
+                logger.warning(f"Request {_request_id} was cancelled.")
+
+        request_id = self.running_continuous_batching_manager.add_request(
+            inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens, streaming=req.get("stream")
+        )
+
+        if req.get("stream"):
+            return StreamingResponse(cancellation_wrapper_stream(request_id), media_type="text/event-stream")
+        else:
+            chunk = cancellation_wrapper_buffer(request_id)
+            json_chunk = chunk.model_dump_json(exclude_none=True)
+            return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
     def get_model_modality(model: "PreTrainedModel") -> Modality:
@@ -876,7 +1014,7 @@ class serve:
             processor_inputs.append(parsed_message)
         return processor_inputs
 
-    def generate_chat_completion(self, req: dict) -> Generator[str, None, None]:
+    def generate_chat_completion(self, req: dict) -> StreamingResponse | JSONResponse:
         """
         Generates an OpenAI Chat Completion using `generate`.
 
@@ -1055,7 +1193,10 @@ class serve:
                                 )
 
                             yield self.build_chat_completion_chunk(
-                                request_id=_request_id, role=None, tool_calls=[tool], model=model_id_and_revision
+                                request_id=_request_id,
+                                role=None,
+                                tool_calls=[tool],
+                                model=model_id_and_revision,
                             )
                             continue
                     # ====== END OF TOOL CALL LOGIC ======
@@ -1075,7 +1216,47 @@ class serve:
             finally:
                 thread.join()
 
-        return stream_chat_completion(generation_streamer, request_id)
+        if req.get("stream"):
+            return StreamingResponse(
+                map(self.chunk_to_sse_element, stream_chat_completion(generation_streamer, request_id)),
+                media_type="text/event-stream",
+            )
+        else:
+            content = []
+            finish_reason = "stop"
+
+            generator = stream_chat_completion(generation_streamer, request_id)
+            usage = None
+
+            for chunk in generator:
+                choice = chunk.choices[0]
+                if getattr(choice.delta, "content", None):
+                    content.append(choice.delta.content)
+                if choice.finish_reason:
+                    finish_reason = choice.finish_reason
+                if getattr(chunk, "usage", None):
+                    usage = chunk.usage
+
+            chat_completion_result = ChatCompletion(
+                id=request_id,
+                created=int(time.time()),
+                object="chat.completion",
+                model=model_id_and_revision,
+                choices=[
+                    Choice(
+                        # TODO check the index
+                        index=0,
+                        message=ChatCompletionMessage(content="".join(content), role="assistant"),
+                        finish_reason=finish_reason,
+                    )
+                ],
+                # TODO implement function calling
+                usage=usage,
+            )
+
+            result = chat_completion_result.model_dump(exclude_none=True)
+
+            return JSONResponse(result, media_type="application/json")
 
     def generate_response(self, req: dict) -> Generator[str, None, None]:
         """
@@ -1186,7 +1367,7 @@ class serve:
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_created)
+                yield self.chunk_to_sse_element(response_created)
 
                 response_in_progress = ResponseInProgressEvent(
                     type="response.in_progress",
@@ -1207,7 +1388,7 @@ class serve:
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_in_progress)
+                yield self.chunk_to_sse_element(response_in_progress)
 
                 # Start the output item. Emit the assistant role to start the stream. Other chunks won't have a role,
                 # as it is implicit
@@ -1220,7 +1401,7 @@ class serve:
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_output_item_added)
+                yield self.chunk_to_sse_element(response_output_item_added)
 
                 # Start the content part of the event
                 response_content_part_added = ResponseContentPartAddedEvent(
@@ -1232,7 +1413,7 @@ class serve:
                     part=ResponseOutputText(type="output_text", text="", annotations=[]),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_content_part_added)
+                yield self.chunk_to_sse_element(response_content_part_added)
 
                 # Stream the actual generated text
                 results = ""
@@ -1259,7 +1440,7 @@ class serve:
                                 logprobs=[],
                             )
                             sequence_number += 1
-                            yield self.build_response_event(response_output_text_delta)
+                            yield self.chunk_to_sse_element(response_output_text_delta)
                     else:
                         # Normal path: emit token deltas when not filtering CoT
                         if result:
@@ -1273,7 +1454,7 @@ class serve:
                                 logprobs=[],
                             )
                             sequence_number += 1
-                            yield self.build_response_event(response_output_text_delta)
+                            yield self.chunk_to_sse_element(response_output_text_delta)
 
                 # Signal the end of the text generation
                 response_output_text_done = ResponseTextDoneEvent(
@@ -1286,7 +1467,7 @@ class serve:
                     logprobs=[],
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_output_text_done)
+                yield self.chunk_to_sse_element(response_output_text_done)
 
                 # Complete the content part
                 response_content_part_done = ResponseContentPartDoneEvent(
@@ -1299,7 +1480,7 @@ class serve:
                 )
                 sequence_number += 1
                 content_index += 1
-                yield self.build_response_event(response_content_part_done)
+                yield self.chunk_to_sse_element(response_content_part_done)
 
                 # Complete the output item
                 response_output_item_done = ResponseOutputItemDoneEvent(
@@ -1317,7 +1498,7 @@ class serve:
                 )
                 sequence_number += 1
                 output_index += 1
-                yield self.build_response_event(response_output_item_done)
+                yield self.chunk_to_sse_element(response_output_item_done)
 
                 # Finally, Complete the event
                 response_completed = ResponseCompletedEvent(
@@ -1339,7 +1520,7 @@ class serve:
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_completed)
+                yield self.chunk_to_sse_element(response_completed)
 
                 thread.join()
             except Exception as e:
@@ -1350,7 +1531,7 @@ class serve:
                     message=str(e),
                 )
                 sequence_number += 1
-                yield self.build_response_event(error_event)
+                yield self.chunk_to_sse_element(error_event)
 
                 response_failed = ResponseFailedEvent(
                     type="response.failed",
@@ -1375,7 +1556,7 @@ class serve:
                     ),
                 )
                 sequence_number += 1
-                yield self.build_response_event(response_failed)
+                yield self.chunk_to_sse_element(response_failed)
 
             finally:
                 thread.join()

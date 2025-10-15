@@ -51,6 +51,228 @@ def test_help(cli):
     output = cli("serve", "--help")
     assert output.exit_code == 0
     assert "serve" in output.output
+class ServeCLITest(unittest.TestCase):
+    def test_help(self):
+        """Minimal test: we can invoke the help command."""
+        with patch("sys.argv", ["transformers", "serve", "--help"]), CaptureStd() as cs:
+            with self.assertRaises(SystemExit):
+                cli.main()
+        self.assertIn("serve", cs.out.lower())
+
+    def test_parsed_args(self):
+        """Minimal test: we can set arguments through the CLI."""
+        with (
+            patch.object(ServeCommand, "__init__", return_value=None) as init_mock,
+            patch.object(ServeCommand, "run") as run_mock,
+            patch("sys.argv", ["transformers", "serve", "--host", "0.0.0.0", "--port", "9000"]),
+        ):
+            cli.main()
+        init_mock.assert_called_once()
+        run_mock.assert_called_once()
+        parsed_args = init_mock.call_args[0][0]
+        self.assertEqual(parsed_args.host, "0.0.0.0")
+        self.assertEqual(parsed_args.port, 9000)
+
+    def test_build_chat_completion_chunk(self):
+        """
+        Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implicitly
+        confirm that empty fields are not emitted.
+        """
+        dummy = ServeCommand.__new__(ServeCommand)
+        dummy.args = type("Args", (), {})()
+
+        # The keys for these fields must be present in every chunk
+        MANDATORY_FIELDS = ["data", "id", "choices", "created", "model", "object", "system_fingerprint"]
+
+        # Case 1: most fields are provided
+        chunk = ServeCommand.build_chat_completion_chunk(
+            dummy, request_id="req0", content="hello", finish_reason="stop", role="user", model="dummy_model@main"
+        )
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
+        self.assertIn(
+            '"choices":[{"delta":{"content":"hello","role":"user"},"finish_reason":"stop","index":0}]', chunk
+        )
+
+        # Case 2: only the role is provided -- other fields in 'choices' are omitted
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", role="user", model="dummy_model@main")
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
+        self.assertIn('"choices":[{"delta":{"role":"user"},"index":0}]', chunk)
+
+        # Case 3: only the content is provided -- other fields in 'choices' are omitted
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", content="hello", model="dummy_model@main")
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
+        self.assertIn('"choices":[{"delta":{"content":"hello"},"index":0}]', chunk)
+
+        # Case 4: tool calls support a list of ChoiceDeltaToolCall objects
+        tool_call = ChoiceDeltaToolCall(
+            index=0,
+            function=ChoiceDeltaToolCallFunction(name="foo_bar", arguments='{"foo1": "bar1", "foo2": "bar2"}'),
+            type="function",
+        )
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", tool_calls=[tool_call], model="dummy_model@main")
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
+        expected_choices_content = (
+            'choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"foo1\\": \\"bar1\\", '
+            '\\"foo2\\": \\"bar2\\"}","name":"foo_bar"},"type":"function"}]},"index":0}]'
+        )
+        self.assertIn(expected_choices_content, chunk)
+
+    def test_build_response_event(self):
+        """
+        Tests that the events are correctly built for the Response API.
+
+        Contrarily to the Chat Completion API, the Response API has a wide set of possible output objects. This test
+        only checks a few basic assumptions -- we rely on OpenAI's pydantic models to enforce the correct schema.
+        """
+        dummy = ServeCommand.__new__(ServeCommand)
+        dummy.args = type("Args", (), {})()
+
+        response_created = ResponseCreatedEvent(
+            type="response.created",
+            sequence_number=0,
+            response=Response(
+                id="resp_0",
+                created_at=time.time(),
+                status="queued",
+                model="dummy_model@main",
+                instructions=None,  # <--- is set to None = should NOT be in the output.
+                text={"format": {"type": "text"}},
+                object="response",
+                tools=[],  # <--- empty lists should be in the output (they are often mandatory fields)
+                output=[],
+                parallel_tool_calls=False,
+                tool_choice="auto",
+                metadata=None,
+            ),
+        )
+
+        event = dummy.build_response_event(response_created)
+        self.assertTrue(event.startswith("data: "))  # Sanity check: event formatting
+        self.assertIn('"model":"dummy_model@main"', event)  # Sanity check: set field
+        self.assertIn('"status":"queued"', event)
+        self.assertIn("tools", event)  # empty lists should be in the output
+        self.assertIn("output", event)
+        self.assertNotIn("instructions", event)  # None fields should NOT be in the output
+        self.assertNotIn("metadata", event)
+        self.assertNotIn("error", event)  # Unset optional fields should NOT be in the output
+        self.assertNotIn("top_p", event)
+class ServeCLITest(unittest.TestCase):
+    def test_help(self):
+        """Minimal test: we can invoke the help command."""
+        with patch("sys.argv", ["transformers", "serve", "--help"]), CaptureStd() as cs:
+            with self.assertRaises(SystemExit):
+                cli.main()
+        self.assertIn("serve", cs.out.lower())
+
+    def test_parsed_args(self):
+        """Minimal test: we can set arguments through the CLI."""
+        with (
+            patch.object(ServeCommand, "__init__", return_value=None) as init_mock,
+            patch.object(ServeCommand, "run") as run_mock,
+            patch("sys.argv", ["transformers", "serve", "--host", "0.0.0.0", "--port", "9000"]),
+        ):
+            cli.main()
+        init_mock.assert_called_once()
+        run_mock.assert_called_once()
+        parsed_args = init_mock.call_args[0][0]
+        self.assertEqual(parsed_args.host, "0.0.0.0")
+        self.assertEqual(parsed_args.port, 9000)
+
+    def test_build_chat_completion_chunk(self):
+        """
+        Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implicitly
+        confirm that empty fields are not emitted.
+        """
+        dummy = ServeCommand.__new__(ServeCommand)
+        dummy.args = type("Args", (), {})()
+
+        # The keys for these fields must be present in every chunk
+        MANDATORY_FIELDS = ["data", "id", "choices", "created", "model", "object", "system_fingerprint"]
+
+        # Case 1: most fields are provided
+        chunk = ServeCommand.build_chat_completion_chunk(
+            dummy, request_id="req0", content="hello", finish_reason="stop", role="user", model="dummy_model@main"
+        )
+        chunk = ServeCommand.chunk_to_sse_element(chunk)
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
+        self.assertIn(
+            '"choices":[{"delta":{"content":"hello","role":"user"},"finish_reason":"stop","index":0}]', chunk
+        )
+
+        # Case 2: only the role is provided -- other fields in 'choices' are omitted
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", role="user", model="dummy_model@main")
+        chunk = ServeCommand.chunk_to_sse_element(chunk)
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
+        self.assertIn('"choices":[{"delta":{"role":"user"},"index":0}]', chunk)
+
+        # Case 3: only the content is provided -- other fields in 'choices' are omitted
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", content="hello", model="dummy_model@main")
+        chunk = ServeCommand.chunk_to_sse_element(chunk)
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
+        self.assertIn('"choices":[{"delta":{"content":"hello"},"index":0}]', chunk)
+
+        # Case 4: tool calls support a list of ChoiceDeltaToolCall objects
+        tool_call = ChoiceDeltaToolCall(
+            index=0,
+            function=ChoiceDeltaToolCallFunction(name="foo_bar", arguments='{"foo1": "bar1", "foo2": "bar2"}'),
+            type="function",
+        )
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", tool_calls=[tool_call], model="dummy_model@main")
+        chunk = ServeCommand.chunk_to_sse_element(chunk)
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
+        expected_choices_content = (
+            'choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"foo1\\": \\"bar1\\", '
+            '\\"foo2\\": \\"bar2\\"}","name":"foo_bar"},"type":"function"}]},"index":0}]'
+        )
+        self.assertIn(expected_choices_content, chunk)
+
+    def test_build_response_event(self):
+        """
+        Tests that the events are correctly built for the Response API.
+
+        Contrarily to the Chat Completion API, the Response API has a wide set of possible output objects. This test
+        only checks a few basic assumptions -- we rely on OpenAI's pydantic models to enforce the correct schema.
+        """
+        dummy = ServeCommand.__new__(ServeCommand)
+        dummy.args = type("Args", (), {})()
+
+        response_created = ResponseCreatedEvent(
+            type="response.created",
+            sequence_number=0,
+            response=Response(
+                id="resp_0",
+                created_at=time.time(),
+                status="queued",
+                model="dummy_model@main",
+                instructions=None,  # <--- is set to None = should NOT be in the output.
+                text={"format": {"type": "text"}},
+                object="response",
+                tools=[],  # <--- empty lists should be in the output (they are often mandatory fields)
+                output=[],
+                parallel_tool_calls=False,
+                tool_choice="auto",
+                metadata=None,
+            ),
+        )
+
+        event = dummy.chunk_to_sse_element(response_created)
+        self.assertTrue(event.startswith("data: "))  # Sanity check: event formatting
+        self.assertIn('"model":"dummy_model@main"', event)  # Sanity check: set field
+        self.assertIn('"status":"queued"', event)
+        self.assertIn("tools", event)  # empty lists should be in the output
+        self.assertIn("output", event)
+        self.assertNotIn("instructions", event)  # None fields should NOT be in the output
+        self.assertNotIn("metadata", event)
+        self.assertNotIn("error", event)  # Unset optional fields should NOT be in the output
+        self.assertNotIn("top_p", event)
 
 
 @require_openai
