@@ -2976,7 +2976,7 @@ class ModelTesterMixin:
 
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
-    ):
+    ) -> None:
         r"""
         Tests the equivalence between the eager and flash attention implementations.
         This test is only for inference and runs with `dtype=torch.bfloat16`.
@@ -3114,9 +3114,6 @@ class ModelTesterMixin:
                 torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
                 if padding_side == "left":
                     torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
-                    # Check it can run in training mode
-                    model.train()
-                    _ = model(**second_inputs)
                 else:
                     torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
 
@@ -3651,7 +3648,7 @@ class ModelTesterMixin:
 
         assert not loss.isnan().any()
 
-    def flash_attn_from_config(self, attn_implementation: str):
+    def flash_attn_from_config(self, attn_implementation: str, test_fwd_in_train: bool = True):
         r"""
         Tests if the model can be loaded with `attn_implementation` from the config and if the
         weights are not randomly initialized.
@@ -3668,6 +3665,14 @@ class ModelTesterMixin:
             fa_model = model_class._from_config(
                 config, attn_implementation=attn_implementation, dtype=torch.bfloat16
             ).to(torch_device)
+
+            # By default, we perform the forward pass in train mode, because it's more sctrict than eval mode. If the
+            # forward pass is successful in train mode, it will also be successful in eval mode. But since some models
+            # (eg. gemma3) need different inputs in train mode we have the option to test the forward pass in eval mode.
+            if test_fwd_in_train:
+                fa_model = fa_model.train()
+            else:
+                fa_model = fa_model.eval()
 
             dummy_input = inputs_dict[fa_model.main_input_name]
             if dummy_input.dtype in [torch.float32, torch.float16]:
