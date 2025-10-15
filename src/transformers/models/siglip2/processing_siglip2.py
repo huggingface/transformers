@@ -37,11 +37,11 @@ class Siglip2Processor(ProcessorMixin):
     r"""
     Constructs a Siglip2 processor which wraps a Siglip2 image processor and a Gemma tokenizer into a single processor.
 
-    [`Siglip2Processor`] offers all the functionalities of [`Siglip2ImageProcessor`] and [`GemmaTokenizerFast`]. See the
+    [`Siglip2Processor`] offers all the functionalities of [`AutoImageProcessor`] and [`GemmaTokenizerFast`]. See the
     [`~Siglip2Processor.__call__`] and [`~Siglip2Processor.decode`] for more information.
 
     Args:
-        image_processor ([`Siglip2ImageProcessor`]):
+        image_processor ([`AutoImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`GemmaTokenizerFast`]):
             The tokenizer is a required input.

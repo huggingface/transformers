@@ -21,6 +21,13 @@ from tempfile import TemporaryDirectory
 import numpy as np
 import pytest
 
+from transformers import (
+    AutoProcessor,
+    Kosmos2Processor,
+    PreTrainedTokenizerFast,
+    XLMRobertaTokenizer,
+    XLMRobertaTokenizerFast,
+)
 from transformers.image_utils import load_image
 from transformers.models.auto.processing_auto import processor_class_from_name
 from transformers.testing_utils import (
@@ -28,9 +35,10 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torchvision,
     require_vision,
 )
-from transformers.utils import is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -38,15 +46,9 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 if is_vision_available():
     from PIL import Image
 
-    from transformers import (
-        AutoProcessor,
-        CLIPImageProcessor,
-        Kosmos2Processor,
-        PreTrainedTokenizerFast,
-        XLMRobertaTokenizer,
-        XLMRobertaTokenizerFast,
-    )
 
+if is_torchvision_available():
+    from transformers import CLIPImageProcessorFast
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -54,6 +56,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 @require_vision
+@require_torchvision
 class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2Processor
 
@@ -61,7 +64,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = CLIPImageProcessor(do_center_crop=False)
+        image_processor = CLIPImageProcessorFast(do_center_crop=False)
 
         # We have a SentencePiece fixture for testing
         slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)
@@ -99,10 +102,10 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_processor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
-        image_processor = CLIPImageProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
+        image_processor = CLIPImageProcessorFast.from_pretrained("microsoft/kosmos-2-patch14-224")
         with TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
-            reloaded_image_processor = CLIPImageProcessor.from_pretrained(tmp_dir)
+            reloaded_image_processor = CLIPImageProcessorFast.from_pretrained(tmp_dir)
             assert image_processor.to_dict() == reloaded_image_processor.to_dict()
             assert image_processor.to_json_string() == reloaded_image_processor.to_json_string()
 
@@ -122,7 +125,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
+        self.assertIsInstance(processor.image_processor, CLIPImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -132,8 +135,8 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_image_processor = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_image_processor = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, return_tensors="pt")
 
         for key in input_image_processor:
             self.assertAlmostEqual(input_image_processor[key].sum(), input_processor[key].sum(), delta=1e-2)
@@ -189,7 +192,8 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_full_processor(self):
         url = url_to_local_path("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg")
 
-        processor = Kosmos2Processor.from_pretrained("microsoft/kosmos-2-patch14-224")
+        # BC with use_square_size
+        processor = Kosmos2Processor.from_pretrained("microsoft/kosmos-2-patch14-224", size=(224, 224))
 
         # test with different input formats.
         # fmt: off
@@ -395,8 +399,8 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             outputs.image_embeds_position_mask,
             [0] * 2 + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[0]) - 1),
         )
-        np.testing.assert_allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
-        np.testing.assert_allclose(outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9)
+        np.testing.assert_allclose(outputs.pixel_values[0][:3, :3, :3].numpy(), EXPECTED_PIXEL_VALUES_1, atol=1e-4)
+        np.testing.assert_allclose(outputs.pixel_values[0][:3, -3:, -3:].numpy(), EXPECTED_PIXEL_VALUES_2, atol=1e-4)
 
         # test with image in batch (right padding)
         outputs = processor(
@@ -409,10 +413,10 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTupleEqual(outputs.pixel_values.shape, (4, 3, 224, 224))
         np.testing.assert_allclose(
-            outputs.pixel_values[:, :3, :3, :3].numpy(), [EXPECTED_PIXEL_VALUES_1] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, :3, :3].numpy(), [EXPECTED_PIXEL_VALUES_1] * len(batch_image), atol=1e-4
         )
         np.testing.assert_allclose(
-            outputs.pixel_values[:, :3, -3:, -3:].numpy(), [EXPECTED_PIXEL_VALUES_2] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, -3:, -3:].numpy(), [EXPECTED_PIXEL_VALUES_2] * len(batch_image), atol=1e-4
         )
         # padding on the right: the `[1:]` below is because the part for `BOS` is already added in the beginning of each (dynamically computed) expected value  # noqa
         # fmt: off

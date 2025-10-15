@@ -43,19 +43,19 @@ class BridgeTowerProcessor(ProcessorMixin):
     Constructs a BridgeTower processor which wraps a Roberta tokenizer and BridgeTower image processor into a single
     processor.
 
-    [`BridgeTowerProcessor`] offers all the functionalities of [`BridgeTowerImageProcessor`] and
+    [`BridgeTowerProcessor`] offers all the functionalities of [`AutoImageProcessor`] and
     [`RobertaTokenizerFast`]. See the docstring of [`~BridgeTowerProcessor.__call__`] and
     [`~BridgeTowerProcessor.decode`] for more information.
 
     Args:
-        image_processor (`BridgeTowerImageProcessor`):
-            An instance of [`BridgeTowerImageProcessor`]. The image processor is a required input.
+        image_processor (`AutoImageProcessor`):
+            An instance of [`AutoImageProcessor`]. The image processor is a required input.
         tokenizer (`RobertaTokenizerFast`):
             An instance of ['RobertaTokenizerFast`]. The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "BridgeTowerImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
     valid_processor_kwargs = BridgeTowerProcessorKwargs
 

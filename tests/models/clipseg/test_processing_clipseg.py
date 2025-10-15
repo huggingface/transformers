@@ -22,8 +22,8 @@ import pytest
 
 from transformers import CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.testing_utils import require_torchvision, require_vision
+from transformers.utils import IMAGE_PROCESSOR_NAME, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -31,8 +31,12 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from transformers import CLIPSegProcessor, ViTImageProcessor
 
+if is_torchvision_available():
+    from transformers import ViTImageProcessorFast
+
 
 @require_vision
+@require_torchvision
 class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = CLIPSegProcessor
 
@@ -73,6 +77,9 @@ class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return ViTImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
+    def get_image_processor_fast(self, **kwargs):
+        return ViTImageProcessorFast.from_pretrained(self.tmpdirname, **kwargs)
+
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
@@ -80,12 +87,13 @@ class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
+        image_processor_fast = self.get_image_processor_fast()
 
         processor_slow = CLIPSegProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
         processor_slow.save_pretrained(self.tmpdirname)
         processor_slow = CLIPSegProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = CLIPSegProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+        processor_fast = CLIPSegProcessor(tokenizer=tokenizer_fast, image_processor=image_processor_fast)
         processor_fast.save_pretrained(self.tmpdirname)
         processor_fast = CLIPSegProcessor.from_pretrained(self.tmpdirname)
 
@@ -96,16 +104,16 @@ class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor_fast.tokenizer, CLIPTokenizerFast)
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor_fast.to_json_string())
         self.assertIsInstance(processor_slow.image_processor, ViTImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, ViTImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, ViTImageProcessorFast)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CLIPSegProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = CLIPSegProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor_fast())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+        image_processor_add_kwargs = self.get_image_processor_fast(do_normalize=False, padding_value=1.0)
 
         processor = CLIPSegProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
@@ -115,7 +123,7 @@ class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, ViTImageProcessor)
+        self.assertIsInstance(processor.image_processor, ViTImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -125,8 +133,8 @@ class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, return_tensors="pt")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

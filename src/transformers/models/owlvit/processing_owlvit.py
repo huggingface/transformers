@@ -60,14 +60,14 @@ class OwlViTProcessor(ProcessorMixin):
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`OwlViTImageProcessor`], *optional*):
+        image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "OwlViTImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
@@ -83,7 +83,7 @@ class OwlViTProcessor(ProcessorMixin):
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
         the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
+        AutoImageProcessor's [`~AutoImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:

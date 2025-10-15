@@ -17,8 +17,8 @@ import unittest
 
 import pytest
 
-from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
+from transformers.testing_utils import require_torchvision, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -26,8 +26,12 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from transformers import AutoProcessor, BertTokenizer, CLIPImageProcessor, GitProcessor, PreTrainedTokenizerFast
 
+if is_torchvision_available():
+    from transformers import CLIPImageProcessorFast
+
 
 @require_vision
+@require_torchvision
 class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GitProcessor
 
@@ -50,6 +54,9 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
+    def get_image_processor_fast(self, **kwargs):
+        return CLIPImageProcessorFast.from_pretrained(self.tmpdirname, **kwargs)
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
@@ -60,7 +67,7 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor.save_pretrained(tmpdir)
 
             tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            image_processor_add_kwargs = self.get_image_processor_fast(do_normalize=False, padding_value=1.0)
 
             processor = GitProcessor.from_pretrained(
                 tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
@@ -70,7 +77,7 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
+        self.assertIsInstance(processor.image_processor, CLIPImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -80,8 +87,8 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, return_tensors="pt")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

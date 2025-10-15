@@ -50,11 +50,11 @@ class JanusProcessor(ProcessorMixin):
     r"""
     Constructs a Janus processor which wraps a Janus Image Processor and a Llama tokenizer into a single processor.
 
-    [`JanusProcessor`] offers all the functionalities of [`JanusImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`JanusProcessor`] offers all the functionalities of [`AutoImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~JanusProcessor.__call__`] and [`~JanusProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`JanusImageProcessor`]):
+        image_processor ([`AutoImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
@@ -65,7 +65,7 @@ class JanusProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "JanusImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):

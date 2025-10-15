@@ -17,17 +17,21 @@ import unittest
 
 import pytest
 
-from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
+from transformers.testing_utils import require_torchvision, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import AutoProcessor, Blip2Processor, BlipImageProcessor, GPT2Tokenizer, PreTrainedTokenizerFast
+    from transformers import AutoProcessor, Blip2Processor, GPT2Tokenizer, PreTrainedTokenizerFast
+
+if is_torchvision_available():
+    from transformers import BlipImageProcessorFast
 
 
 @require_vision
+@require_torchvision
 class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Blip2Processor
 
@@ -35,7 +39,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = BlipImageProcessor()
+        image_processor = BlipImageProcessorFast()
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
 
         processor = Blip2Processor(image_processor, tokenizer)
@@ -71,7 +75,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, BlipImageProcessor)
+        self.assertIsInstance(processor.image_processor, BlipImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -81,8 +85,8 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, return_tensors="pt")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

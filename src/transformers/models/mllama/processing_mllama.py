@@ -169,7 +169,7 @@ def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> st
 class MllamaProcessor(ProcessorMixin):
     r"""
     Constructs a Mllama processor which wraps [`MllamaImageProcessor`] and
-    [`PretrainedTokenizerFast`] into a single processor that inherits both the image processor and
+    [`AutoTokenizer`] into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~MllamaProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
     information.
     The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
@@ -189,7 +189,7 @@ class MllamaProcessor(ProcessorMixin):
         ```
 
     Args:
-        image_processor ([`MllamaImageProcessor`]):
+        image_processor ([`AutoImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
             The tokenizer is a required input.
@@ -199,7 +199,7 @@ class MllamaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "MllamaImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
     def __init__(self, image_processor, tokenizer, chat_template=None):

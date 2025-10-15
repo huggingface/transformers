@@ -25,9 +25,10 @@ import pytest
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
+    require_torchvision,
     require_vision,
 )
-from transformers.utils import is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -38,20 +39,23 @@ if is_vision_available():
     from transformers import (
         AutoProcessor,
         AutoTokenizer,
-        Kosmos2_5ImageProcessor,
         Kosmos2_5Processor,
         PreTrainedTokenizerFast,
     )
 
+if is_torchvision_available():
+    from transformers import Kosmos2_5ImageProcessorFast
+
 
 @require_vision
+@require_torchvision
 class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2_5Processor
     images_input_name = "flattened_patches"
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        image_processor = Kosmos2_5ImageProcessor()
+        image_processor = Kosmos2_5ImageProcessorFast()
         tokenizer = AutoTokenizer.from_pretrained("microsoft/kosmos-2.5")
         processor = Kosmos2_5Processor(image_processor, tokenizer)
         processor.save_pretrained(self.tmpdirname)
@@ -67,10 +71,10 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
-        image_processor = Kosmos2_5ImageProcessor.from_pretrained("microsoft/kosmos-2.5")
+        image_processor = Kosmos2_5ImageProcessorFast.from_pretrained("microsoft/kosmos-2.5")
         with TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
-            reloaded_image_processor = Kosmos2_5ImageProcessor.from_pretrained(tmp_dir)
+            reloaded_image_processor = Kosmos2_5ImageProcessorFast.from_pretrained(tmp_dir)
             assert image_processor.to_dict() == reloaded_image_processor.to_dict()
             assert image_processor.to_json_string() == reloaded_image_processor.to_json_string()
 
@@ -96,7 +100,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor.image_processor.to_json_string(),
             image_processor_add_kwargs.to_json_string(),
         )
-        self.assertIsInstance(processor.image_processor, Kosmos2_5ImageProcessor)
+        self.assertIsInstance(processor.image_processor, Kosmos2_5ImageProcessorFast)
 
     @unittest.skip(reason="kosmos-2.5 must have both image and text")
     def test_image_processor(self):
@@ -356,12 +360,12 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         np.testing.assert_allclose(
             outputs.flattened_patches[0][1][:10].numpy().tolist(),
             EXPECTED_FP_1,
-            atol=1e-9,
+            atol=1e-4,
         )
         np.testing.assert_allclose(
             outputs.flattened_patches[0][200][:10].numpy().tolist(),
             EXPECTED_FP_200,
-            atol=1e-9,
+            atol=1e-4,
         )
 
         # test a batch of images and texts, right padding

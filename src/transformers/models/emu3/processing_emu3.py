@@ -52,11 +52,11 @@ class Emu3Processor(ProcessorMixin):
     Constructs a Emu3 processor which wraps a Emu3 image processor and a GPT2 tokenizer into a single
     processor.
 
-    [`Emu3Processor`] offers all the functionalities of [`Emu3ImageProcessor`] and [`GPT2TokenizerFast`].
+    [`Emu3Processor`] offers all the functionalities of [`AutoImageProcessor`] and [`GPT2TokenizerFast`].
     See the [`~Emu3Processor.__call__`] and [`~Emu3Processor.decode`] for more information.
 
     Args:
-        image_processor ([`Emu3ImageProcessor`]):
+        image_processor ([`AutoImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`Emu3TokenizerFast`]):
             The tokenizer is a required input.
@@ -66,7 +66,7 @@ class Emu3Processor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
-    image_processor_class = "Emu3ImageProcessor"
+    image_processor_class = "AutoImageProcessor"
 
     def __init__(
         self,

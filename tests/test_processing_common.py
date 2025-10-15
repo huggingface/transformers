@@ -26,7 +26,11 @@ from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers.models.auto.processing_auto import processor_class_from_name
-from transformers.processing_utils import Unpack
+from transformers.processing_utils import (
+    MODALITY_TO_AUTOPROCESSOR_MAPPING,
+    SPECIAL_MODULE_TO_MODEL_NAME_MAPPING,
+    Unpack,
+)
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_av,
@@ -63,7 +67,6 @@ MODALITY_INPUT_DATA = {
         "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
     ],
 }
-
 
 for modality, urls in MODALITY_INPUT_DATA.items():
     MODALITY_INPUT_DATA[modality] = [url_to_local_path(url) for url in urls]
@@ -106,13 +109,30 @@ class ProcessorTesterMixin:
 
     def get_component(self, attribute, **kwargs):
         assert attribute in self.processor_class.attributes
-        component_class_name = getattr(self.processor_class, f"{attribute}_class")
+        # determine from current file name
+        if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
+            attribute = "tokenizer"
+        model_name_lowercase = self.__class__.__module__.split(".")[-1].replace("test_processing_", "").split(".")[0]
+        component_class_name = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute].get(model_name_lowercase, None)
+        if component_class_name is None:
+            component_class_name = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute].get(
+                model_name_lowercase.replace("_", "-"), None
+            )
+        if component_class_name is None:
+            component_class_name = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute].get(
+                SPECIAL_MODULE_TO_MODEL_NAME_MAPPING.get(model_name_lowercase, None), None
+            )
+        if component_class_name is None:
+            raise ValueError(f"Could not find component class name for {attribute} and {model_name_lowercase}")
         if isinstance(component_class_name, tuple):
             if attribute == "image_processor":
-                # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
-                component_class_name = component_class_name[0]
+                component_class_name = (
+                    component_class_name[-1] if component_class_name[-1] else component_class_name[0]
+                )
             else:
-                component_class_name = component_class_name[-1]
+                component_class_name = (
+                    component_class_name[-1] if isinstance(component_class_name, tuple) else component_class_name
+                )
 
         component_class = processor_class_from_name(component_class_name)
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa

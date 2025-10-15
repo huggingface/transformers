@@ -54,7 +54,7 @@ class BlipProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, image_processor, tokenizer, **kwargs):

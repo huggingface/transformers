@@ -22,8 +22,8 @@ import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_vision
-from transformers.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
+from transformers.testing_utils import require_torchvision, require_vision
+from transformers.utils import FEATURE_EXTRACTOR_NAME, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -31,8 +31,12 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from transformers import ChineseCLIPImageProcessor, ChineseCLIPProcessor
 
+if is_torchvision_available():
+    from transformers import ChineseCLIPImageProcessorFast
+
 
 @require_vision
+@require_torchvision
 class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ChineseCLIPProcessor
 
@@ -96,6 +100,10 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return ChineseCLIPImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
+    def get_image_processor_fast(cls, **kwargs):
+        return ChineseCLIPImageProcessorFast.from_pretrained(cls.tmpdirname, **kwargs)
+
+    @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
@@ -103,13 +111,14 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
+        image_processor_fast = self.get_image_processor_fast()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             processor_slow = ChineseCLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
             processor_slow.save_pretrained(tmpdir)
             processor_slow = ChineseCLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-            processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+            processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor_fast)
             processor_fast.save_pretrained(tmpdir)
             processor_fast = ChineseCLIPProcessor.from_pretrained(self.tmpdirname)
 
@@ -120,9 +129,9 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor_fast.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor_fast.to_json_string())
         self.assertIsInstance(processor_slow.image_processor, ChineseCLIPImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, ChineseCLIPImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, ChineseCLIPImageProcessorFast)
 
     def test_save_load_pretrained_additional_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -132,7 +141,7 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor.save_pretrained(tmpdir)
 
             tokenizer_add_kwargs = self.get_tokenizer(cls_token="(CLS)", sep_token="(SEP)")
-            image_processor_add_kwargs = self.get_image_processor(do_normalize=False)
+            image_processor_add_kwargs = self.get_image_processor_fast(do_normalize=False)
 
             processor = ChineseCLIPProcessor.from_pretrained(
                 tmpdir, cls_token="(CLS)", sep_token="(SEP)", do_normalize=False
@@ -142,7 +151,7 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, ChineseCLIPImageProcessor)
+        self.assertIsInstance(processor.image_processor, ChineseCLIPImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -152,8 +161,8 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, return_tensors="pt")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

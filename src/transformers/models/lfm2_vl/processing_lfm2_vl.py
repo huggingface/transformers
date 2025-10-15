@@ -51,12 +51,12 @@ class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
 
 class Lfm2VlProcessor(ProcessorMixin):
     r"""
-    Constructs a Lfm2Vl processor which wraps a Lfm2Tokenizer tokenizer and Lfm2VlImageProcessor into a single processor.
+    Constructs a Lfm2Vl processor which wraps a Lfm2Tokenizer tokenizer and AutoImageProcessor into a single processor.
 
     [`Lfm2VlProcessor`] offers all the functionalities of [`Lfm2ImageProcessor`] and [`Lfm2Tokenizer`].
 
     Args:
-        image_processor (`Lfm2VlImageProcessor`):
+        image_processor (`AutoImageProcessor`):
              An instance of [`Lfm2VlImageProcessor`]. The image processor is a required input.
         tokenizer (`PreTrainedTokenizerBase`):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
@@ -65,7 +65,7 @@ class Lfm2VlProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Lfm2VlImageProcessorFast"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
