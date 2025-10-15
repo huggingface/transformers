@@ -142,7 +142,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
 Sharded checkpoints can also be directly loaded with [`~transformers.trainer_utils.load_sharded_checkpoint`].
 
 ```py
-from transformers.modeling_utils import load_sharded_checkpoint
+from transformers.trainer_utils import load_sharded_checkpoint
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     model.save_pretrained(tmp_dir, max_shard_size="5GB")
