@@ -54,6 +54,11 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Wav2Vec2-BERT follows the same architecture as Wav2Vec2-Conformer but adds a causal depthwise convolutional layer. It uses mel-spectrogram representations instead of raw waveforms.
+- Configure position embeddings by setting `config.position_embeddings_type`. Options include no relative position embeddings, Shaw-like embeddings, Transformer-XL-like embeddings, or rotary position embeddings.
+
 ## Wav2Vec2BertConfig
 
 [[autodoc]] Wav2Vec2BertConfig

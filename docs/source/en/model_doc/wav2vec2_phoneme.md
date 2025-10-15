@@ -54,6 +54,14 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Wav2Vec2Phoneme uses the exact same architecture as Wav2Vec2.
+- Wav2Vec2Phoneme accepts raw speech waveforms as float arrays.
+- [`Wav2Vec2Phoneme`] models train using connectionist temporal classification (CTC). Decode model outputs with [`Wav2Vec2PhonemeCTCTokenizer`].
+- Fine-tune on multiple languages simultaneously and decode unseen languages in a single forward pass to phoneme sequences.
+- The model outputs phoneme sequences by default. Transform phonemes to word sequences using a dictionary and language model.
+
 ## Wav2Vec2PhonemeCTCTokenizer
 
 [[autodoc]] Wav2Vec2PhonemeCTCTokenizer

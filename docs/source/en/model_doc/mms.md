@@ -15,8 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2023-05-22 and added to Hugging Face Transformers on 2023-06-20.*
 
-
-
 # MMS
 
 [mms-1b-all](https://huggingface.co/papers/2305.13516) expands speech technology to over 1,000 languages by leveraging self-supervised learning and a new dataset of religious texts. It includes pre-trained wav2vec 2.0 models for 1,406 languages, a multilingual ASR model for 1,107 languages, speech synthesis models for the same number of languages, and a language identification model for 4,017 languages. The multilingual ASR model reduces Whisper's word error rate by more than half on 54 languages of the FLEURS benchmark using minimal labeled data. The project provides easy-to-use models and code in the `transformers` framework, supporting language-specific adapters for ASR and various language support for TTS and LID.

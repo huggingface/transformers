@@ -59,6 +59,10 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`WhisperProcessor`] to prepare audio and decode predicted IDs back into text.
+
 ## WhisperConfig
 
 [[autodoc]] WhisperConfig

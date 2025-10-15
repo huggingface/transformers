@@ -54,6 +54,11 @@ write_wav("bark_generation.wav", sample_rate, audio_array)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Suno provides voice presets in multiple languages. Find them in the [official library](https://github.com/suno-ai/bark/tree/main/notebooks) or on the [Hugging Face Hub](https://huggingface.co/suno/bark/tree/main/notebooks).
+- Bark generates highly realistic, multilingual speech plus other audio types. This includes music, background noise, and simple sound effects. The model also produces nonverbal communications like laughing, sighing, and crying.
+
 ## BarkConfig
 
 [[autodoc]] BarkConfig

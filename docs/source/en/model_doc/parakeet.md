@@ -55,11 +55,14 @@ inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sam
 inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs)
 print(f"Transcription: {processor.batch_decode(outputs)}")
-
 ```
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- Parakeet supports full-graph compilation with CUDA graphs. This optimization works best when you know the maximum audio length for transcription. Use static input shapes to avoid recompilation. For example, if your audio runs under 30 seconds, pad all inputs to 30 seconds using the processor. This creates consistent input features and attention masks.
 
 ## ParakeetTokenizerFast
 

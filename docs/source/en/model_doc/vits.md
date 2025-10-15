@@ -50,6 +50,12 @@ scipy.io.wavfile.write("outputwav", rate=model.config.sampling_rate, data=wavefo
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Set a seed for reproducibility because VITS synthesizes speech non-deterministically.
+- Install the `uroman` package for languages with non-Roman alphabets (Korean, Arabic, etc.) to preprocess text inputs to the Roman alphabet. Check if the tokenizer requires uroman as shown below.
+- The tokenizer automatically applies uroman to text inputs when your language requires it. Python >= 3.10 skips additional preprocessing steps.
+
 ## VitsConfig
 
 [[autodoc]] VitsConfig

@@ -50,6 +50,13 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`SeamlessM4Tv2Model`] is the top-level model for generating speech and text. Use dedicated models for specific tasks to reduce memory footprint.
+- Change the speaker for speech synthesis with the `speaker_id` argument. Some speaker IDs work better for specific languages.
+- Use different generation strategies for text generation. For example, `.generate(input_ids=input_ids, text_num_beams=4, text_do_sample=True)` performs multinomial beam-search decoding on the text model. Speech generation supports greedy (default) or multinomial sampling with `.generate(..., speech_do_sample=True, speech_temperature=0.6)`.
+- Set `return_intermediate_token_ids=True` with [`SeamlessM4Tv2Model`] to return both speech and text.
+
 ## SeamlessM4Tv2Model
 
 [[autodoc]] SeamlessM4Tv2Model

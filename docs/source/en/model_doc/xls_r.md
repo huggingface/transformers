@@ -54,3 +54,7 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- XLS-R accepts raw speech waveforms as float arrays.
+- [`XLS-R`] models train using connectionist temporal classification (CTC). Decode model outputs with [`Wav2Vec2CTCTokenizer`].

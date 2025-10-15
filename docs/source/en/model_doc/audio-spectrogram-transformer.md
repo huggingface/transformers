@@ -63,6 +63,11 @@ print(f"Predicted label: {model.config.id2label[predicted_class_ids]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- When fine-tuning the Audio Spectrogram Transformer (AST) on your own dataset, normalize your input data to have a mean of 0 and standard deviation of 0.5. [`ASTFeatureExtractor`] handles this automatically. It uses AudioSet's mean and standard deviation by default. Check `ast/src/get_norm_stats.py` to see how the AST authors compute normalization statistics for downstream datasets.
+- AST requires a low learning rate and converges quickly. The original authors used a learning rate 10 times smaller than their CNN model from the [PSLA](https://huggingface.co/papers/2102.01243) paper. Experiment with different learning rates and schedulers to find what works best for your specific task.
+
 ## ASTConfig
 
 [[autodoc]] ASTConfig

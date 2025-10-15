@@ -50,6 +50,11 @@ print(f"Transcription: {processor.batch_decode(generated_ids, skip_special_token
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Install required dependencies before running examples. The feature extractor needs `torchaudio` and the tokenizer needs `sentencepiece`. Install them with `pip install transformers"[speech, sentencepiece]"` or separately with `pip install torchaudio sentencepiece`. Install the development version of `libsndfile` via system package manager. On Ubuntu: `apt install libsndfile1-dev`.
+- Multilingual speech translation models use `eos_token_id` as `decoder_start_token_id` and force the target language ID as the first generated token. Pass the `forced_bos_token_id` parameter to `generate()` to force the target language ID. The example shows English speech to French text translation using the `facebook/s2t-medium-mustc-multilingual-st` checkpoint.
+
 ## Speech2TextConfig
 
 [[autodoc]] Speech2TextConfig
