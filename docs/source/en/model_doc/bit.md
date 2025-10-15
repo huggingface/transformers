@@ -57,6 +57,11 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- BiT models are equivalent to ResNetv2 in architecture with two key differences: all batch normalization layers are replaced by group normalization, and weight standardization is used for convolutional layers.
+- The combination of group normalization and weight standardization is useful for training with large batch sizes and has a significant impact on transfer learning.
+
 ## BitConfig
 
 [[autodoc]] BitConfig

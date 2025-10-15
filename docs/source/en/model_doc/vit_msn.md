@@ -64,6 +64,12 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- MSN (masked siamese networks) is a method for self-supervised pretraining of Vision Transformers (ViTs). The pretraining objective matches the prototypes assigned to unmasked views of images to those of masked views of the same images.
+- The authors released only pretrained weights of the backbone (ImageNet-1k pretraining). To use these on your own image classification dataset, use the [`ViTMSNForImageClassification`] class, which initializes from [`ViTMSNModel`]. Follow this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb) for a detailed fine-tuning tutorial.
+- MSN excels in low-shot and extreme low-shot regimes. It achieves 75.7% top-1 accuracy with only 1% of ImageNet-1K labels when fine-tuned.
+
 ## ViTMSNConfig
 
 [[autodoc]] ViTMSNConfig

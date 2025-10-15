@@ -53,6 +53,13 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- To reduce complexity in attention layers, PVTv2 performs spatial reduction on hidden states using either strided 2D convolution (SRA) or fixed-size average pooling (Linear SRA). Linear SRA provides impressive performance with linear complexity relative to image size, though it's inherently more lossy. Set `linear_attention=True` in [`PvtV2Config`] to use Linear SRA in self-attention layers.
+- [`PvtV2Model`] is the hierarchical transformer encoder (also called Mix Transformer or MiT in literature). [`PvtV2ForImageClassification`] adds a simple classifier head for image classification. [`PvtV2Backbone`] works with the [`AutoBackbone`] system in larger architectures like Deformable DETR.
+- Load a pretrained checkpoint with your chosen size using [`AutoModelForImageClassification`] to get started with PVTv2.
+- Use [`AutoBackbone`] to use PVTv2 as a backbone for more complex architectures like DeformableDETR. This model needs fine-tuning since you're replacing the backbone in the pretrained model.
+
 ## PvtV2Config
 
 [[autodoc]] PvtV2Config

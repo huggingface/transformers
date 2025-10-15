@@ -57,6 +57,13 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- MobileViTV2 is more like a CNN than a Transformer model. It doesn't work on sequence data but on batches of images. Unlike ViT, there are no embeddings. The backbone model outputs a feature map.
+- Use [`MobileViTImageProcessor`] to prepare images for the model. If doing custom preprocessing, the pretrained checkpoints expect images to be in BGR pixel order (not RGB).
+- The available image classification checkpoints are pretrained on ImageNet-1k (ILSVRC 2012, 1.3 million images and 1,000 classes).
+- The segmentation model uses a DeepLabV3 head. The available semantic segmentation checkpoints are pretrained on PASCAL VOC.
+
 ## MobileViTV2Config
 
 [[autodoc]] MobileViTV2Config

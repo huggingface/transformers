@@ -57,6 +57,16 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Fine-tune distilled models in two ways: (1) Classic fine-tuning places a prediction head only on the final hidden state without using the distillation head, or (2) Fine-tuning with distillation places both prediction head and distillation head on the final hidden state.
+- For fine-tuning with distillation, the prediction head trains using regular cross-entropy between the prediction and ground-truth label. The distillation prediction head trains using hard distillation (cross-entropy between the distillation head prediction and teacher's predicted label). At inference, take the average prediction between both heads as the final prediction.
+- Fine-tuning with distillation relies on a teacher already fine-tuned on the downstream dataset. Use [`LevitForImageClassification`] for classic fine-tuning and [`LevitForImageClassificationWithTeacher`] for fine-tuning with distillation.
+- All released checkpoints were pre-trained and fine-tuned on ImageNet-1k (ILSVRC 2012, 1.3 million images and 1,000 classes) only. No external data was used. This contrasts with the original ViT model, which used external data like JFT-300M dataset/ImageNet-21k for pre-training.
+- LeViT authors released 5 trained LeViT models that plug directly into [`LevitModel`] or [`LevitForImageClassification`]. Techniques like data augmentation, optimization, and regularization simulate training on a much larger dataset while only using ImageNet-1k for pre-training.
+- [`LevitForImageClassificationWithTeacher`] currently supports only inference, not training or fine-tuning.
+- Check out demo [notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) for inference and fine-tuning on custom data. Replace [`ViTImageProcessor`] with [`LevitImageProcessor`] and [`ViTForImageClassification`] with [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`].
+
 ## LevitConfig
 
 [[autodoc]] LevitConfig

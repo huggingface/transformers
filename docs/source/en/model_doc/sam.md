@@ -57,6 +57,14 @@ plt.show()
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The model predicts binary masks that indicate the presence or absence of objects of interest in an image.
+- The model predicts much better results when input 2D points and/or bounding boxes are provided.
+- Prompt multiple points for the same image to predict a single mask.
+- Fine-tuning the model isn't supported yet.
+- According to the paper, textual input should be supported. However, at the time of writing, this doesn't seem to be supported according to the official repository.
+
 ## SamConfig
 
 [[autodoc]] SamConfig

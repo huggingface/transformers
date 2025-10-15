@@ -62,6 +62,10 @@ Image.fromarray(depth.astype("uint8"))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- In the original implementation, ZoeDepth performs inference on both the original and flipped images and averages the results. The [`post_process_depth_estimation`] function handles this by passing the flipped outputs to the optional `outputs_flipped` argument.
+
 ## ZoeDepthConfig
 
 [[autodoc]] ZoeDepthConfig

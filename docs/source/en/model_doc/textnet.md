@@ -57,6 +57,12 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- TextNet is mainly used as a backbone network for architecture search in text detection. Each stage of the backbone network consists of a stride-2 convolution and searchable blocks.
+- The layer-level candidate set includes `{conv3×3, conv1×3, conv3×1, identity}`. The 1×3 and 3×1 convolutions have asymmetric kernels and oriented structure priors that help capture features of extreme aspect-ratio and rotated text lines.
+- TextNet serves as the backbone for FAST but also works as an efficient text/image classification model. [`TextNetForImageClassification`] allows training an image classifier on top of pretrained TextNet weights.
+
 ## TextNetConfig
 
 [[autodoc]] TextNetConfig

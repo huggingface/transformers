@@ -59,6 +59,13 @@ plt.show()
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`SegGptImageProcessor`] to prepare image input, prompt, and mask for the model.
+- Use segmentation maps or RGB images as prompt masks. If using RGB images, set `do_convert_rgb=False` in the preprocess method.
+- Pass `num_labels` when using segmentation maps (excluding background) during preprocessing and postprocessing with [`SegGptImageProcessor`] for your use case.
+- When doing inference with [`SegGptForImageSegmentation`], if your batch size is greater than 1, use feature ensemble across images by passing `feature_ensemble=True` in the forward method.
+
 ## SegGptConfig
 
 [[autodoc]] SegGptConfig

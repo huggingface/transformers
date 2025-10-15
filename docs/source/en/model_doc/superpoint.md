@@ -54,6 +54,12 @@ plt.scatter(
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- SuperPoint outputs a dynamic number of keypoints per image, making it suitable for tasks requiring variable-length feature representations.
+- The model provides both keypoint coordinates and their corresponding descriptors (256-dimensional vectors) in a single forward pass.
+- For batch processing with multiple images, use the mask attribute to retrieve the respective information for each image. Use [`post_process_keypoint_detection`] from [`SuperPointImageProcessor`] to retrieve each image's information. Print the keypoints on your chosen image to visualize the result.
+
 ## SuperPointConfig
 
 [[autodoc]] SuperPointConfig

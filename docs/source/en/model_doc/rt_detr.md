@@ -62,6 +62,13 @@ for score, label, box in zip(results["scores"], results["labels"], results["boxe
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- RT-DETR processes images using a pretrained ResNet-D variant backbone. This network extracts features from the final three layers of the architecture.
+- A hybrid encoder converts the multi-scale features into a sequential array of image features. A decoder with auxiliary prediction heads refines the object queries.
+- This process directly generates bounding boxes, eliminating the need for additional post-processing to acquire logits and coordinates.
+- Use images resized to 640x640 with the corresponding [`RTDetrImageProcessor`]. Reshaping to other sizes generally degrades performance.
+
 ## RTDetrConfig
 
 [[autodoc]] RTDetrConfig

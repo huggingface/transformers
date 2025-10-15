@@ -64,6 +64,12 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The best results come from supervised pretraining. During fine-tuning, use images with resolution higher than 224x224.
+- Use [`ViTImageProcessorFast`] to resize (or rescale) and normalize images to the expected size.
+- The patch and image resolution are reflected in the checkpoint name. For example, `google/vit-base-patch16-224` is the base-sized architecture with a patch resolution of 16x16 and fine-tuning resolution of 224x224.
+
 ## ViTConfig
 
 [[autodoc]] ViTConfig

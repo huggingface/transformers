@@ -23,21 +23,6 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-```py
-from transformers import AutoModelForMaskGeneration, AutoImageProcessor
-
-model = AutoModelForMaskGeneration.from_pretrained("facebook/sam2-hiera-tiny")
-imageprocessor = AutoImageProcessor.from_pretrained("facebook/sam2-hiera-tiny")
-
-from PIL import Image
-import requests
-
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-inputs = processor(images=image, return_tensors="pt")
-outputs = model(**inputs)
-```
-
 # SAM2
 
 [Segment Anything Model 2](https://huggingface.co/papers/2304.02643) presents a foundation model for promptable visual segmentation in images and videos. It incorporates a data engine that enhances both the model and data through user interaction, resulting in the largest video segmentation dataset available. SAM 2 features a simple transformer architecture with streaming memory for real-time video processing. The model demonstrates superior performance across various tasks, achieving better accuracy in video segmentation with 3x fewer interactions and improved speed and accuracy in image segmentation compared to the original SAM. SAM 2 supports batch and video processing natively, offers enhanced segmentation quality and robustness, and exhibits superior zero-shot generalization with mixed prompts.

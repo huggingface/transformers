@@ -57,6 +57,15 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- MobileViT doesn't operate on sequential data. It's purely designed for image tasks.
+- Feature maps are used directly instead of token embeddings.
+- Use [`MobileViTImageProcessor`] to preprocess images.
+- If using custom preprocessing, ensure that images are in BGR format (not RGB), as expected by the pretrained weights.
+- The classification models are pretrained on ImageNet-1k.
+- The segmentation models use a DeepLabV3 head and are pretrained on PASCAL VOC.
+
 ## MobileViTConfig
 
 [[autodoc]] MobileViTConfig

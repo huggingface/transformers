@@ -57,6 +57,11 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Swin pads inputs for any input height and width divisible by 32.
+- Swin works as a backbone. When `output_hidden_states = True`, it outputs both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
+
 ## SwinConfig
 
 [[autodoc]] SwinConfig

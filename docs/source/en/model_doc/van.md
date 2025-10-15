@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 *This model was released on 2022-02-20 and added to Hugging Face Transformers on 2023-06-20 and contributed by [Francesco](https://huggingface.co/Francesco).*
 
 > [!WARNING]
-> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0. You can do so by running the following command: pip install -U transformers==4.30.0.
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0. You can do so by running the following command: pip install -U transformers==4.30.0.
 
 # VAN
 
@@ -59,6 +61,10 @@ print(model.config.id2label[predicted_label])
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- VAN doesn't have an embedding layer. The `hidden_states` have a length equal to the number of stages.
 
 ## VanConfig
 

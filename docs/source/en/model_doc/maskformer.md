@@ -64,6 +64,14 @@ plt.show()
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- MaskFormer's Transformer decoder is identical to the decoder of DETR. During training, auxiliary losses in the decoder help the model output the correct number of objects of each class. Set the `use_auxiliary_loss` parameter of [`MaskFormerConfig`] to `True` to add prediction feedforward neural networks and Hungarian losses after each decoder layer (with FFNs sharing parameters).
+- For distributed training across multiple nodes, update the `get_num_masks` function inside the `MaskFormerLoss` class of `modeling_maskformer.py`. When training on multiple nodes, set this to the average number of target masks across all nodes.
+- Use [`MaskFormerImageProcessor`] to prepare images and optional targets for the model.
+- To get the final segmentation, call [`post_process_semantic_segmentation`] or [`post_process_panoptic_segmentation`] depending on the task. Both tasks work with [`MaskFormerForInstanceSegmentation`] output.
+- Panoptic segmentation accepts an optional `label_ids_to_fuse` argument to fuse instances of the target objects (like sky) together.
+
 ## MaskFormer specific outputs
 
 [[autodoc]] models.maskformer.modeling_maskformer.MaskFormerModelOutput
