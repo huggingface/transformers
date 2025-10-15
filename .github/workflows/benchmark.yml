@@ -1,10 +1,7 @@
 name: Self-hosted runner (benchmark)
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [ opened, labeled, reopened, synchronize ]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
