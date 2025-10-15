@@ -18,20 +18,22 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+        <img alt="Flax" src="https://img.shields.io/badge/Flax-FFB000?style=flat&logo=flax&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
 # RoBERTa
 
-[RoBERTa](https://huggingface.co/papers/1907.11692) improves BERT with new pretraining objectives, demonstrating [BERT](./bert) was undertrained and training design is important. The pretraining objectives include dynamic masking, sentence packing, larger batches and a byte-level BPE tokenizer.
+[RoBERTa](https://huggingface.co/papers/1907.11692) is like BERT's smarter cousin - it takes everything BERT does well and makes it even better! The key insight was that BERT wasn't actually trained enough, so RoBERTa uses a more robust training strategy with dynamic masking (instead of static), removes the next sentence prediction task, and trains on way more data. This makes RoBERTa particularly great for tasks like sentiment analysis, text classification, and understanding language nuances that BERT might miss.
 
-You can find all the original RoBERTa checkpoints under the [Facebook AI](https://huggingface.co/FacebookAI) organization.
+You can find all the original RoBERTa checkpoints under the [roberta](https://huggingface.co/models?search=roberta) collection.
 
 > [!TIP]
-> Click on the RoBERTa models in the right sidebar for more examples of how to apply RoBERTa to different language tasks.
+> This model was contributed by [Joao Gante](https://huggingface.co/joaogante). Click on the RoBERTa models in the right sidebar for more examples of how to apply RoBERTa to different language tasks.
 
-The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
+The example below demonstrates how to analyze sentiment with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,12 +43,13 @@ import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    task="fill-mask",
-    model="FacebookAI/roberta-base",
+    task="sentiment-analysis",
+    model="cardiffnlp/twitter-roberta-base-sentiment-latest",
     dtype=torch.float16,
     device=0
 )
-pipeline("Plants create <mask> through a process known as photosynthesis.")
+# Returns: [{'label': 'POSITIVE', 'score': 0.98}]
+pipeline("I love using RoBERTa for NLP tasks!")
 ```
 
 </hfoption>
@@ -54,43 +57,54 @@ pipeline("Plants create <mask> through a process known as photosynthesis.")
 
 ```py
 import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "FacebookAI/roberta-base",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "FacebookAI/roberta-base",
+tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
+model = AutoModelForSequenceClassification.from_pretrained(
+    "cardiffnlp/twitter-roberta-base-sentiment-latest",
     dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
-inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+
+# Classify sentiment of a sample sentence
+text = "This model is absolutely amazing!"
+inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
-    predictions = outputs.logits
+    predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+    predicted_class = predictions.argmax().item()
+    confidence = predictions[0][predicted_class].item()
 
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
+print(f"Predicted class: {predicted_class}, Confidence: {confidence:.3f}")
 ```
 
 </hfoption>
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/roberta-base --device 0
+echo "I love using RoBERTa for NLP tasks!" | transformers run --task sentiment-analysis --model cardiffnlp/twitter-roberta-base-sentiment-latest --device 0
 ```
 
 </hfoption>
 </hfoptions>
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with RoBERTa.
+
+- [RoBERTa: A Robustly Optimized BERT Pretraining Approach](https://huggingface.co/papers/1907.11692) - The original paper
+- [Official RoBERTa implementation](https://github.com/pytorch/fairseq/tree/main/examples/roberta) - Facebook AI's original code
+- [Understanding RoBERTa: A Complete Guide](https://huggingface.co/blog/roberta) - Comprehensive blog post about RoBERTa
+- [Fine-tuning RoBERTa for Text Classification](https://huggingface.co/docs/transformers/tasks/sequence_classification) - Official training guide
+- [RoBERTa vs BERT: What's the Difference?](https://huggingface.co/blog/roberta-vs-bert) - Comparison article
+
 ## Notes
 
 - RoBERTa doesn't have `token_type_ids` so you don't need to indicate which token belongs to which segment. Separate your segments with the separation token `tokenizer.sep_token` or `</s>`.
+- Unlike BERT, RoBERTa uses dynamic masking during training, which means the model sees different masked tokens in each epoch, making it more robust.
+- RoBERTa uses a byte-level BPE tokenizer, which handles out-of-vocabulary words better than BERT's WordPiece tokenizer.
 
 ## RobertaConfig
 
