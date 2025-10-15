@@ -155,6 +155,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("wavlm", "Wav2Vec2Processor"),
         ("whisper", "WhisperProcessor"),
         ("xclip", "XCLIPProcessor"),
+        ("nanogpt", ("NanoGPTTokenizer", None)),
     ]
 )
 
