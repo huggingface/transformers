@@ -61,6 +61,11 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Wav2Vec2 accepts raw speech waveforms as float arrays.
+- [`Wav2Vec2`] models train using connectionist temporal classification (CTC). Decode model outputs with [`Wav2Vec2CTCTokenizer`].
+
 ## Wav2Vec2Config
 
 [[autodoc]] Wav2Vec2Config

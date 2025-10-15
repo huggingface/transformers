@@ -57,6 +57,13 @@ processor.save_audio(audio, "example_with_context.wav")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- CSM generates speech from conversations while maintaining voice consistency and contextual awareness.
+- The model supports batched inference for processing multiple inputs simultaneously.
+- Full-graph compilation with CUDA graphs accelerates inference performance.
+- Training is supported through the Transformers integration.
+
 ## CsmConfig
 
 [[autodoc]] CsmConfig

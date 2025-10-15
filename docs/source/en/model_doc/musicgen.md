@@ -49,6 +49,19 @@ scipy.io.wavfile.write("generated_music.wav", rate=processor.sampling_rate, data
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- MusicGen supports two generation modes: greedy and sampling. Sampling produces significantly better results than greedy mode. Use sampling by default, which you can enable by setting `do_sample=True` in [`MusicgenForConditionalGeneration.generate`] or by overriding the model's generation config.
+- MusicGen generates audio up to 30 seconds (1503 tokens) due to sinusoidal positional embeddings. Input audio from Audio-Prompted Generation counts toward this limit. For example, with 20 seconds of input audio, MusicGen generates only 10 additional seconds.
+- Transformers supports both mono (1-channel) and stereo (2-channel) MusicGen variants. Mono versions generate one set of codebooks. Stereo versions generate two sets of codebooks (one per channel) that decode independently through the audio compression model. The audio streams combine to create the final stereo output.
+- Get inputs for unconditional generation using [`MusicgenForConditionalGeneration.get_unconditional_inputs`]. Audio outputs are three-dimensional Torch tensors with shape `(batch_size, num_channels, sequence_length)`.
+- Generate audio conditioned on text prompts using [`MusicgenProcessor`] to preprocess inputs. The `guidance_scale` controls classifier-free guidance (CFG) by weighting conditional logits (from text prompts) against unconditional logits (from null prompts). Higher guidance scales create samples more closely linked to input prompts but often reduce audio quality. Enable CFG by setting `guidance_scale > 1`. Use `guidance_scale=3` for best results (default).
+- Use [`MusicgenProcessor`] to preprocess audio prompts for audio continuation.
+- For batched audio-prompted generation, post-process generated `audio_values` to remove padding using the [`MusicgenProcessor`] class.
+- Arguments passed to the `generate()` method override those in the generation config. Setting `do_sample=False` in the generate call overrides `model.generation_config.do_sample`.
+- MusicGen trains on the 32kHz Encodec checkpoint. Use a compatible Encodec model version.
+- Sampling mode delivers better results than greedy mode. Toggle sampling with the `do_sample` variable in [`MusicgenForConditionalGeneration.generate`].
+
 ## MusicgenDecoderConfig
 
 [[autodoc]] MusicgenDecoderConfig

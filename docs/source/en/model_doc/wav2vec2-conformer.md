@@ -54,6 +54,13 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Wav2Vec2-Conformer follows the same architecture as Wav2Vec2 but replaces the Attention-block with a Conformer-block from "Conformer: Convolution-augmented Transformer for Speech Recognition."
+- For the same number of layers, Wav2Vec2-Conformer needs more parameters than Wav2Vec2 but delivers improved word error rates.
+- The model uses the same tokenizer and feature extractor as Wav2Vec2.
+- Configure position embeddings by setting `config.position_embeddings_type`. Options include no relative position embeddings, Transformer-XL-like embeddings, or rotary position embeddings.
+
 ## Wav2Vec2ConformerConfig
 
 [[autodoc]] Wav2Vec2ConformerConfig

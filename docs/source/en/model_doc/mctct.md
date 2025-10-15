@@ -57,6 +57,10 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+This model requires PyTorch 1.9 or higher. Upgrade your PyTorch installation if you're using an older version.
+
 ## MCTCTConfig
 
 [[autodoc]] MCTCTConfig

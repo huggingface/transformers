@@ -47,6 +47,12 @@ write("sample_audio.wav", feature_extractor.sampling_rate, audio)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The `noise_sequence` argument for [`UnivNetModel.forward`] requires standard Gaussian noise (like from `torch.randn`) with shape `([batch_size], noise_length, model.config.model_in_channels)`. The `noise_length` must match the length dimension (dimension 1) of the `input_features` argument. If not supplied, noise generates randomly. Supply a `torch.Generator` to the `generator` argument to reproduce the forward pass. [`UnivNetFeatureExtractor`] returns generated noise by default, so manual noise generation isn't necessary.
+- Remove padding added by [`UnivNetFeatureExtractor`] from [`UnivNetModel`] output using [`UnivNetFeatureExtractor.batch_decode`], as shown in the usage example.
+- Pad the end of each waveform with silence to reduce artifacts at the end of generated audio samples. Set `pad_end=True` in [`UnivNetFeatureExtractor.call`]. See this [issue](https://github.com/mindslab-ai/univnet/issues/8) for more details.
+
 ## UnivNetConfig
 
 [[autodoc]] UnivNetConfig

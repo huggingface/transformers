@@ -43,6 +43,10 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+This model includes a built-in LoRA adapter that loads automatically during inference. Install [PEFT](https://github.com/huggingface/peft) to ensure proper LoRA application.
+
 ## GraniteSpeechConfig
 
 [[autodoc]] GraniteSpeechConfig

@@ -36,6 +36,13 @@ tokenizer_output = processor.batch_decode(
 tokenizer_output.write("./Outputs/midi_output.mid")
 ```
 
+## Usage tips
+
+- Install the 🤗 Transformers library and these third-party modules: `pip install pretty-midi==0.2.9 essentia==2.1b6.dev1034 librosa scipy`. Restart your runtime after installation.
+- Pop2Piano uses an Encoder-Decoder architecture similar to T5. It generates MIDI files from audio sequences.
+- Different composers in [`Pop2PianoForConditionalGeneration.generate`] produce varied results. Load audio files at 44.1 kHz sampling rate for optimal performance.
+- While trained primarily on Korean Pop music, Pop2Piano performs well on Western Pop and Hip Hop songs.
+
 ## Pop2PianoConfig
 
 [[autodoc]] Pop2PianoConfig

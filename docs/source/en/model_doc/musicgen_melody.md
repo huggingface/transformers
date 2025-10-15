@@ -49,6 +49,21 @@ scipy.io.wavfile.write("generated_music.wav", rate=processor.sampling_rate, data
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- MusicGen Melody supports two generation modes: greedy and sampling. Sampling produces significantly better results than greedy mode. Use sampling by default, which you can enable by setting `do_sample=True` in [`MusicgenMelodyForConditionalGeneration.generate`] or by overriding the model's generation config.
+- Transformers supports both mono (1-channel) and stereo (2-channel) MusicGen Melody variants. Mono versions generate one set of codebooks. Stereo versions generate two sets of codebooks (one per channel) that decode independently through the audio compression model. The audio streams combine to create the final stereo output.
+- Generate audio conditioned on text and audio prompts using [`MusicgenMelodyProcessor`] to preprocess inputs.
+- Audio prompts work best without low-frequency signals from drums and bass. Use the Demucs model to separate vocals and other signals from drums and bass components.
+- Follow the [Demucs](https://github.com/facebookresearch/demucs) installation steps to use Demucs. Audio outputs are three-dimensional Torch tensors with shape `(batch_size, num_channels, sequence_length)`.
+- Use [`MusicgenMelodyProcessor`] to preprocess text-only prompts.
+- The `guidance_scale` controls classifier-free guidance (CFG) by weighting conditional logits (from text prompts) against unconditional logits (from null prompts). Higher guidance scales create samples more closely linked to input prompts but often reduce audio quality. Enable CFG by setting `guidance_scale > 1`. Use `guidance_scale=3` for best results (default).
+- Generate multiple samples in batch.
+- Get inputs for unconditional generation using [`MusicgenMelodyProcessor.get_unconditional_inputs`].
+- Arguments passed to the [`generate`] method override those in the generation config. Setting `do_sample=False` in the generate call overrides `model.generation_config.do_sample`.
+- MusicGen trains on the 32kHz Encodec checkpoint. Use a compatible Encodec model version.
+- Sampling mode delivers better results than greedy mode. Toggle sampling with the `do_sample` variable in [`MusicgenMelodyForConditionalGeneration.generate`].
+
 ## MusicgenMelodyDecoderConfig
 
 [[autodoc]] MusicgenMelodyDecoderConfig
