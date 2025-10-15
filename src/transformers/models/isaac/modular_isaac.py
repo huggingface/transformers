@@ -110,44 +110,34 @@ from genesis.public.tensorstream.tensor_stream_utils import (
     slice as ts_slice,
 )
 
-from transformers import (
-    AutoImageProcessor,
-    AutoModel,
-    AutoTokenizer,
-    BatchFeature,
-    Cache,
-    Qwen3Config,
-    Qwen3ForCausalLM,
-    Qwen3PreTrainedModel,
-)
-from transformers.cache_utils import SlidingWindowCache, StaticCache
-from transformers.generation.utils import GenerationMixin
-from transformers.image_processing_utils_fast import (
+from ...cache_utils import Cache, SlidingWindowCache, StaticCache
+from ...generation.utils import GenerationMixin
+from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    BatchFeature,
     DefaultFastImageProcessorKwargs,
     SizeDict,
     group_images_by_shape,
     reorder_images,
 )
-from transformers.image_utils import (
-    ChannelDimension,
-    PILImageResampling,
-)
-from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
-from transformers.models.qwen2.tokenization_qwen2 import Qwen2Tokenizer
-from transformers.models.siglip2.configuration_siglip2 import Siglip2VisionConfig
-from transformers.models.siglip2.modeling_siglip2 import Siglip2EncoderLayer as HFSiglip2EncoderLayer
-from transformers.processing_utils import ProcessorMixin, Unpack
-from transformers.tokenization_utils import TensorType
-from transformers.utils import auto_docstring
+from ...image_utils import ChannelDimension, PILImageResampling
+from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import ProcessorMixin, Unpack
+from ...utils import TensorType, auto_docstring
 
 # Vision preprocessing constants
-from transformers.utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
-from transformers.utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from transformers.utils.import_utils import is_torchdynamo_compiling
+from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
+from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
+from ...utils.import_utils import is_torchdynamo_compiling
+from ..auto import AutoImageProcessor, AutoModel, AutoTokenizer
+from ..qwen2.tokenization_qwen2 import Qwen2Tokenizer
+from ..qwen3.configuration_qwen3 import Qwen3Config
+from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3PreTrainedModel
+from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
+from ..siglip2.modeling_siglip2 import Siglip2EncoderLayer as HFSiglip2EncoderLayer
 
 
 _ORIGINAL_ATTENTION_FUNCTIONS: dict[str, Callable[..., tuple[torch.Tensor, Optional[torch.Tensor]]]] = {}
