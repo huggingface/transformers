@@ -190,14 +190,6 @@ class HfQuantizer(ABC):
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 
-    def check_quantized_param(self, *args, **kwargs) -> bool:
-        """DEPRECATED -> remove in v5"""
-        logger.warning_once(
-            "`check_quantized_param` is deprecated in favor of `param_needs_quantization`, which is a much "
-            "more self.explanatory name for what the method achieves. It will be removed in v5"
-        )
-        return self.param_needs_quantization(*args, **kwargs)
-
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         """
         Check whether a given param needs quantization as defined by `create_quantized_param`.
