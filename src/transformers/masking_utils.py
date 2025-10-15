@@ -405,6 +405,14 @@ def sdpa_mask_recent_torch(
     if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
         return None
 
+    # vmap can incur performance issues as reported in #41566 for bidirectional mask as we only need to expand the
+    # padding mask. Thus, we allow early exit here if we do not detect any modification to the base mask function
+    if mask_function is bidirectional_mask_function:
+        if padding_mask is not None:
+            return padding_mask[:, None, None, :].expand(-1, -1, q_length, -1)
+        else:
+            return torch.ones(batch_size, 1, q_length, kv_length, dtype=torch.bool, device=cache_position.device)
+
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
@@ -412,11 +420,8 @@ def sdpa_mask_recent_torch(
 
     # Potentially add the padding 2D mask
     if padding_mask is not None:
-        # vmap can incur performance issues as reported in #41566 for bidirectional mask as we only need to expand the padding
-        # mask. Thus, we allow early exit here if we do not detect any modification to the base mask function
-        if mask_function is bidirectional_mask_function:
-            return padding_mask[:, None, None, :].expand(-1, -1, q_length, -1)
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
+
     batch_arange = torch.arange(batch_size, device=cache_position.device)
     head_arange = torch.arange(1, device=cache_position.device)
     # This creates the 4D mask easily. Note that we need this context manager as vmap cannot handle slicing a tensor from
@@ -488,15 +493,18 @@ def sdpa_mask_older_torch(
     if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
         return None
 
+    # vmap can incur performance issues as reported in #41566 for bidirectional mask as we only need to expand the
+    # padding mask. Thus, we allow early exit here if we do not detect any modification to the base mask function
+    if mask_function is bidirectional_mask_function:
+        if padding_mask is not None:
+            return padding_mask[:, None, None, :].expand(-1, -1, q_length, -1)
+        else:
+            return torch.ones(batch_size, 1, q_length, kv_length, dtype=torch.bool, device=cache_position.device)
+
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
-    
-    # vmap can incur performance issues as reported in #41566 for bidirectional mask as we only need to expand the padding
-    # mask. Thus, we allow early exit here if we do not detect any modification to the base mask function
-    if mask_function is bidirectional_mask_function and padding_mask is not None:
-        return padding_mask[:, None, None, :].expand(-1, -1, q_length, -1)
 
     # This creates the 4D mask easily. Note that we do not include vmap over the batch_idx dimension as well,
     # as vmap cannot handle slicing a tensor from scalar tensor (it internally calls `.item()` which vmap does not allow
