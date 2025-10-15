@@ -2,6 +2,11 @@ name: Benchmark v2 Scheduled Runner - A10 Single-GPU
 
 on:
   workflow_dispatch:
+    inputs:
+      benchmark_tag:
+        description: "Optional tag or label for this benchmark run (e.g. nightly, regression-test)"
+        required: false
+        default: "manual-run"
 
 jobs:
   benchmark-v2-default:
@@ -14,4 +19,22 @@ jobs:
       commit_sha: ${{ github.sha }}
       run_id: ${{ github.run_id }}
       benchmark_repo_id: hf-internal-testing/transformers-daily-benchmarks
+      # Pass optional benchmark tag for better traceability
+      benchmark_tag: ${{ github.event.inputs.benchmark_tag }}
     secrets: inherit
+
+    # Add environment variables for clearer logging and reproducibility
+    env:
+      CUDA_VISIBLE_DEVICES: 0
+      HF_HOME: /cache/huggingface
+      TRANSFORMERS_VERBOSITY: info
+      BENCHMARK_START_TIME: ${{ github.event.head_commit.timestamp || github.event.workflow_run.created_at }}
+    
+    steps:
+      - name: Print Environment Info
+        run: |
+          echo "🧩 Benchmark Tag: ${{ github.event.inputs.benchmark_tag }}"
+          echo "📦 Commit SHA: ${{ github.sha }}"
+          echo "💻 Runner: ${{ runner.name }}"
+          echo "⏰ Start Time: $BENCHMARK_START_TIME"
+          nvidia-smi || echo "No GPU found"
