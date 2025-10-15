@@ -15,13 +15,13 @@ def test_model_card():
     model_card_path = Path("docs/source/en/model_doc/roberta.md")
     
     if not model_card_path.exists():
-        print("❌ Model card file not found!")
+        print("ERROR: Model card file not found!")
         return False
     
     with open(model_card_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    print("🧪 Testing RoBERTa model card...")
+    print("Testing RoBERTa model card...")
     
     # Test 1: Check for required sections
     required_sections = [
@@ -38,18 +38,18 @@ def test_model_card():
             missing_sections.append(section)
     
     if missing_sections:
-        print(f"❌ Missing sections: {missing_sections}")
+        print(f"ERROR: Missing sections: {missing_sections}")
         return False
     else:
-        print("✅ All required sections present")
+        print("PASS: All required sections present")
     
     # Test 2: Check badge structure
     badge_pattern = r'<div style="float: right;">\s*<div class="flex flex-wrap space-x-1">'
     if not re.search(badge_pattern, content):
-        print("❌ Badge structure not found")
+        print("ERROR: Badge structure not found")
         return False
     else:
-        print("✅ Badge structure correct")
+        print("PASS: Badge structure correct")
     
     # Test 3: Check for conversational tone
     conversational_phrases = [
@@ -60,9 +60,9 @@ def test_model_card():
     
     found_phrases = [phrase for phrase in conversational_phrases if phrase in content]
     if len(found_phrases) >= 2:
-        print("✅ Conversational tone detected")
+        print("PASS: Conversational tone detected")
     else:
-        print("❌ Missing conversational tone")
+        print("ERROR: Missing conversational tone")
         return False
     
     # Test 4: Check code examples syntax
@@ -77,30 +77,30 @@ def test_model_card():
             if clean_code.strip():
                 ast.parse(clean_code)
         except SyntaxError as e:
-            print(f"❌ Syntax error in code block {i+1}: {e}")
+            print(f"ERROR: Syntax error in code block {i+1}: {e}")
             return False
     
-    print("✅ All code examples have valid syntax")
+    print("PASS: All code examples have valid syntax")
     
     # Test 5: Check for "Fixes #36979" (should NOT be present)
     if "Fixes #36979" in content:
-        print("❌ Found 'Fixes #36979' - should not be included")
+        print("ERROR: Found 'Fixes #36979' - should not be included")
         return False
     else:
-        print("✅ No 'Fixes #36979' found (correct)")
+        print("PASS: No 'Fixes #36979' found (correct)")
     
     # Test 6: Check for contributor attribution
     if "Joao Gante" in content:
-        print("✅ Contributor attribution found")
+        print("PASS: Contributor attribution found")
     else:
-        print("❌ Contributor attribution missing")
+        print("ERROR: Contributor attribution missing")
         return False
     
     # Test 7: Check for sentiment analysis examples
     if "sentiment-analysis" in content:
-        print("✅ Sentiment analysis examples found")
+        print("PASS: Sentiment analysis examples found")
     else:
-        print("❌ Sentiment analysis examples missing")
+        print("ERROR: Sentiment analysis examples missing")
         return False
     
     # Test 8: Check for Resources section with links
@@ -108,15 +108,15 @@ def test_model_card():
     if resources_section:
         resources_text = resources_section.group(1)
         if "huggingface.co/papers/1907.11692" in resources_text:
-            print("✅ Resources section with paper link found")
+            print("PASS: Resources section with paper link found")
         else:
-            print("❌ Resources section missing paper link")
+            print("ERROR: Resources section missing paper link")
             return False
     else:
-        print("❌ Resources section not found")
+        print("ERROR: Resources section not found")
         return False
     
-    print("\n🎉 All tests passed! Model card is ready for submission.")
+    print("\nSUCCESS: All tests passed! Model card is ready for submission.")
     return True
 
 if __name__ == "__main__":
