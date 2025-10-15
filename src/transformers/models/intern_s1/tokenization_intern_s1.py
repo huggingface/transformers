@@ -444,7 +444,11 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         self.prepare_extra_tokenizers(vocab_file)
 
     def prepare_extra_tokenizers(self, vocab_file: str) -> None:
-        """Prepare extra tokenizers"""
+        """
+        Prepare domain-specific tokenizers
+        
+        We register variables/maps here to guide later tokenization
+        """
         # Load extra tokenizers with SentencePiece model
         dir_name = os.path.dirname(vocab_file)
 
@@ -473,7 +477,7 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         # Guiding tokens of domain-specific tokenization
         self.ex_begin_mapping = {f"<{key}>": value for key, value in base_mapping.items()}
         self.ex_end_mapping = {f"</{key}>": value for key, value in base_mapping.items()}
-        # Transient markers for auto-detection
+        # Transient markers for auto-detection, these tokens will not be assigned token ids
         self.ex_auto_begin_mapping = {f"<{key}_AUTO_DETECT>": value for key, value in auto_detect_mapping.items()}
         self.ex_auto_end_mapping = {f"</{key}_AUTO_DETECT>": value for key, value in auto_detect_mapping.items()}
         # Token markers to prevent unwanted auto-detection
@@ -505,7 +509,7 @@ class InternS1Tokenizer(Qwen2Tokenizer):
 
         # protect-tokens should keep complete temporarily to guide later tokenization
         # it will be segmented later
-        for token in self.ex_protect_begin_tokens + self.ex_protect_end_tokens:
+        for token in self.ex_protect_tokens:
             self.tokens_trie.add(token)
 
         self._unk_token = "<unk>"  # Fall-back
@@ -584,7 +588,9 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
 
-        # Code for Auto Detection
+        # Codes for automatically detecting domain-specific content
+        # All parts that have been marked by domain-specific or protection tokens will not be subject to auto detection
+        # See transformers/tests/models/intern_s1/test_tokenization_intern_s1.py::test_auto_detection() for more details
         new_tokens = []
         not_split_flag = 0
         for token in tokens:
@@ -606,20 +612,25 @@ class InternS1Tokenizer(Qwen2Tokenizer):
                     new_tokens.extend(token)
         tokens = new_tokens
 
-        extra_tokenizer_stack = []  # This should be a stack to handle nested extra tokenizer
+        # Use stack to maintain which tokenizer should be used, considering the possibility of nested extra tokenizer
+        extra_tokenizer_stack = []
         for token in tokens:
             # Need to skip eventual empty (fully stripped) tokens
             if not token:
                 continue
+            # protect-tokens are not assigned token ids, should be segmented here
             if token in self.ex_protect_tokens:
                 tokenized_text.extend(self._tokenize(token))
+            # push tokenizer to stack when encountering begin token
             elif token in self.ex_all_begin_mapping:
                 tokenized_text.append(token)
                 extra_tokenizer_stack.append(self.ex_all_begin_mapping[token])
+            # pop tokenizer from stack when encountering end token
             elif token in self.ex_all_end_mapping:
                 tokenized_text.append(token)
                 if extra_tokenizer_stack:
                     self._pop_logical_sp_token(extra_tokenizer_stack, token)
+            # other special tokens
             elif token in no_split_token:
                 tokenized_text.append(token)
             else:
