@@ -80,9 +80,6 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
     """
 
-    feature_extractor_class = "AutoFeatureExtractor"
-    tokenizer_class = "Wav2Vec2CTCTokenizer"
-
     def __init__(
         self,
         feature_extractor: "FeatureExtractionMixin",

@@ -34,9 +34,6 @@ class WhisperProcessor(ProcessorMixin):
             An instance of [`WhisperTokenizer`]. The tokenizer is a required input.
     """
 
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = ("WhisperTokenizer", "WhisperTokenizerFast")
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 

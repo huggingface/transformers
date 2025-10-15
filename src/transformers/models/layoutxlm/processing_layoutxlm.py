@@ -43,10 +43,6 @@ class LayoutXLMProcessor(ProcessorMixin):
             An instance of [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "LayoutLMv2ImageProcessor"
-    tokenizer_class = ("LayoutXLMTokenizer", "LayoutXLMTokenizerFast")
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 

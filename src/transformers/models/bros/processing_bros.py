@@ -47,7 +47,6 @@ class BrosProcessor(ProcessorMixin):
     """
 
     attributes = ["tokenizer"]
-    tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
     valid_processor_kwargs = BrosProcessorKwargs
 
     def __init__(self, tokenizer=None, **kwargs):

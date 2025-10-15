@@ -62,6 +62,8 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         tokenizer = cls.get_tokenizer()
         tokenizer.save_pretrained(cls.tmpdirname)
+        feature_extractor = cls.get_feature_extractor()
+        feature_extractor.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def get_tokenizer(cls, **kwargs_init):
@@ -69,8 +71,9 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         kwargs.update(kwargs_init)
         return Wav2Vec2CTCTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return SeamlessM4TFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_feature_extractor(cls, **kwargs):
+        return SeamlessM4TFeatureExtractor.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
     def tearDownClass(cls):

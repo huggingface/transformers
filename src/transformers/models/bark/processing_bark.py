@@ -49,7 +49,6 @@ class BarkProcessor(ProcessorMixin):
 
     """
 
-    tokenizer_class = "AutoTokenizer"
     attributes = ["tokenizer"]
 
     preset_shape = {

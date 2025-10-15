@@ -54,8 +54,6 @@ class SeamlessM4TProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    feature_extractor_class = "SeamlessM4TFeatureExtractor"
-    tokenizer_class = ("SeamlessM4TTokenizer", "SeamlessM4TTokenizerFast")
     valid_processor_kwargs = SeamlessM4TProcessorKwargs
 
     def __init__(self, feature_extractor, tokenizer):

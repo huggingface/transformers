@@ -75,14 +75,20 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         # load decoder from hub
         self.decoder_name = "hf-internal-testing/ngram-beam-search-decoder"
+        feature_extractor = self.get_feature_extractor()
+        feature_extractor.save_pretrained(self.tmpdirname)
+        decoder = self.get_decoder()
+        decoder.save_to_dir(self.tmpdirname)
 
-    def get_tokenizer(self, **kwargs_init):
-        kwargs = self.add_kwargs_tokens_map.copy()
+    @classmethod
+    def get_tokenizer(cls, **kwargs_init):
+        kwargs = cls.add_kwargs_tokens_map.copy()
         kwargs.update(kwargs_init)
-        return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return Wav2Vec2CTCTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return Wav2Vec2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_feature_extractor(cls, **kwargs):
+        return Wav2Vec2FeatureExtractor.from_pretrained(cls.tmpdirname, **kwargs)
 
     def get_decoder(self, **kwargs):
         return BeamSearchDecoderCTC.load_from_hf_hub(self.decoder_name, **kwargs)

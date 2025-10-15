@@ -57,10 +57,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
             The token to use for audio eos tokens.
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         feature_extractor=None,

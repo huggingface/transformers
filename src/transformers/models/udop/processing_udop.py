@@ -73,10 +73,6 @@ class UdopProcessor(ProcessorMixin):
             An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "LayoutLMv3ImageProcessor"
-    tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 

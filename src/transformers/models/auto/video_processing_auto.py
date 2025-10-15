@@ -64,6 +64,7 @@ else:
             ("video_llava", "VideoLlavaVideoProcessor"),
             ("videomae", "VideoMAEVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
+            ("video_llama_3", "VideoLlama3VideoProcessor"),  # PLACEHOLDER - needs proper video processor class
         ]
     )
 

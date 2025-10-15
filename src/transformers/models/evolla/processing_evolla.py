@@ -52,7 +52,6 @@ class EvollaProcessor(ProcessorMixin):
     # protein_tokenizer_class = "EsmTokenizer"
     # tokenizer_class = "LlamaTokenizerFast"
     protein_tokenizer_class = "AutoTokenizer"
-    tokenizer_class = "AutoTokenizer"
     protein_tokenizer_dir_name = "protein_tokenizer"
     # tokenizer_dir_name = "text_tokenizer"
 

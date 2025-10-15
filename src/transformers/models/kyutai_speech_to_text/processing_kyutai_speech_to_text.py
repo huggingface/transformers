@@ -34,8 +34,6 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
     information.
     """
 
-    feature_extractor_class = "KyutaiSpeechToTextFeatureExtractor"
-    tokenizer_class = "PreTrainedTokenizerFast"
     valid_processor_kwargs = KyutaiSpeechToTextProcessorKwargs
 
 
