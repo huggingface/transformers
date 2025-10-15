@@ -48,7 +48,7 @@ for param in model.model.backbone.parameters():
 image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
 ```
 
-We can now load the dataset and split it for training.
+Load the dataset and split it for training.
 
 ```py
 from datasets import load_dataset
