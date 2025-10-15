@@ -1418,15 +1418,15 @@ def gen_sine_position_embeddings(reference_points: torch.FloatTensor, d_model: i
     pos_y = y_embed[:, :, None] / dim_t
     pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
     pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
+
     if reference_points.size(-1) == 2:
         pos = torch.cat((pos_y, pos_x), dim=2)
     elif reference_points.size(-1) == 4:
         w_embed = reference_points[:, :, 2] * scale
-        pos_w = w_embed[:, :, None] / dim_t
-        pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
-
         h_embed = reference_points[:, :, 3] * scale
+        pos_w = w_embed[:, :, None] / dim_t
         pos_h = h_embed[:, :, None] / dim_t
+        pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
         pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
 
         pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
