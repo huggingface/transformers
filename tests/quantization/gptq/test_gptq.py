@@ -213,7 +213,7 @@ class GPTQTest(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def check_quantized_layers_type(self, model, value):
-        self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.QUANT_TYPE == value)
+        self.assertEqual(model.transformer.h[0].mlp.dense_4h_to_h.QUANT_TYPE, value)
 
     def test_generate_quality(self):
         """
@@ -317,7 +317,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028)
+        cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028, backend="exllama_v1")
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             dtype=torch.float16,
@@ -393,7 +393,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, exllama_config={"version": 2})
+        cls.quantization_config = GPTQConfig(bits=4, backend="exllama_v2")
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             dtype=torch.float16,
@@ -409,7 +409,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         # TODO: Remove this once GPTQModel exllama kernels supports packing
         self.assertEqual(
             self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
-            "tritonv2",
+            "exllamav2",
         )
 
     def check_inference_correctness(self, model):
