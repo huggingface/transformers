@@ -907,7 +907,6 @@ class ContinuousBatchingManager:
             if request_id is not None and result.request_id != request_id:
                 self.output_queue.put(result)
                 return None
-            logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
             return None
