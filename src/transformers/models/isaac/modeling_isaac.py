@@ -4,11 +4,90 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Perceptron, Inc. Non-Production License
+
+### 1. Scope and acceptance
+
+# **1.1. Scope of the Agreement.**
+# This Agreement applies to any use, modification, or Distribution of any Perceptron Model by You, regardless of the source You obtained a copy of such Perceptron Model.
+#
+# **1.2. Acceptance.** By accessing, using, modifying, Distributing a Perceptron Model, or by creating, using or distributing a Derivative of the Perceptron Model, You agree to be bound by this Agreement.
+#
+# **1.3. Acceptance on behalf of a third-party.** If You accept this Agreement on behalf of Your employer or another person or entity, You warrant and represent that You have the authority to act and accept this Agreement on their behalf. In such a case, the word “You” in this Agreement will refer to Your employer or such other person or entity.
+#
+# ## 2. License
+# **2.1. Grant of rights.** Subject to Section 3 below, Perceptron, Inc. hereby grants You a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable, limited license to use, copy, modify, and Distribute under the conditions provided in Section 2.2 below, the Perceptron Model and any Derivatives made by or for Perceptron, Inc. and to create Derivatives of the Perceptron Model.
+#
+# **2.2. Distribution of Perceptron Model and Derivatives made by or for Perceptron, Inc..** Subject to Section 3 below, You may Distribute copies of the Perceptron Model and/or Derivatives made by or for Perceptron, Inc., under the following conditions:
+# - You must make available a copy of this Agreement to third-party recipients of the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. you Distribute, it being specified that any rights to use the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. shall be directly granted by Perceptron, Inc. to said third-party recipients pursuant to the Perceptron, Inc. Non-Production License agreement executed between these parties;
+# - You must retain in all copies of the Perceptron Models the following attribution notice within a “Notice” text file distributed as part of such copies: “Licensed by Perceptron, Inc. under the Perceptron, Inc. Non-Production License”.
+#
+# **2.3. Distribution of Derivatives made by or for You.** Subject to Section 3 below, You may Distribute any Derivatives made by or for You under additional or different terms and conditions, provided that:
+# - In any event, the use and modification of Perceptron Model and/or Derivatives made by or for Perceptron, Inc. shall remain governed by the terms and conditions of this Agreement;
+# - You include in any such Derivatives made by or for You prominent notices stating that You modified the concerned Perceptron Model; and
+# - Any terms and conditions You impose on any third-party recipients relating to Derivatives made by or for You shall neither limit such third-party recipients’ use of the Perceptron Model or any Derivatives made by or for Perceptron, Inc. in accordance with the Perceptron, Inc. Non-Production License nor conflict with any of its terms and conditions.
+#
+# ## 3. Limitations
+# **3.1. Misrepresentation.** You must not misrepresent or imply, through any means, that the Derivatives made by or for You and/or any modified version of the Perceptron Model You Distribute under your name and responsibility is an official product of Perceptron, Inc. or has been endorsed, approved or validated by Perceptron, Inc., unless You are authorized by Us to do so in writing.
+#
+# **3.2. Usage Limitation**
+# - You shall only use the Perceptron Models and Derivatives (whether or not created by Perceptron, Inc.) for testing, research, Personal, or evaluation purposes in Non-Production Environments;
+# - Subject to the foregoing, You shall not supply the Perceptron Models or Derivatives in the course of a commercial activity, whether in return for payment or free of charge, in any medium or form, including but not limited to through a hosted or managed service (e.g. SaaS, cloud instances, etc.), or behind a software layer.
+#
+# **3.3. Usage not permitted under this Agreement.** If You want to use a Perceptron Model or a Derivative for any purpose that is not expressly authorized under this Agreement, You must request a license from Perceptron, Inc., which Perceptron, Inc. may grant to You in Perceptron, Inc.’s sole discretion. Please contact Perceptron, Inc. at the following e-mail address if You want to discuss such a license: sales@perceptron.inc
+#
+# ## 4. Intellectual Property
+# **4.1. Trademarks.** No trademark licenses are granted under this Agreement, and in connection with the Perceptron Models, You may not use any name or mark owned by or associated with Perceptron, Inc. or any of its affiliates, except (i) as required for reasonable and customary use in describing and Distributing the Perceptron Models and Derivatives made by or for Perceptron, Inc. and (ii) for attribution purposes as required by this Agreement.
+#
+# **4.2. Outputs.** We claim no ownership rights in and to the Outputs. You are solely responsible for the Outputs You generate and their subsequent uses in accordance with this Agreement.
+#
+# **4.3. Derivatives.** By entering into this Agreement, You accept that any Derivatives that You may create or that may be created for You shall be subject to the restrictions set out in Section 3 of this Agreement.
+#
+# # 5. Liability
+# **5.1. Limitation of liability.** In no event, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall Perceptron, Inc. be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this Agreement or out of the use or inability to use the Perceptron Models and Derivatives (including but not limited to damages for loss of data, loss of goodwill, loss of expected profit or savings, work stoppage, computer failure or malfunction, or any damage caused by malware or security breaches), even if  Perceptron, Inc. has been advised of the possibility of such damages.
+#
+# **5.2. Indemnification.** You agree to indemnify and hold harmless Perceptron, Inc. from and against any claims, damages, or losses arising out of or related to Your use or Distribution of the Perceptron Models and Derivatives.
+#
+# ## 6. Warranty
+# **6.1. Disclaimer.** Unless required by applicable law or agreed to in writing, Perceptron, Inc. provides the Perceptron Models and Derivatives on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. Perceptron, Inc. does not represent nor warrant that the Perceptron Models and Derivatives will be error-free, meet Your or any third party’s requirements, be secure or will allow You or any third party to achieve any kind of result or generate any kind of content. You are solely responsible for determining the appropriateness of using or Distributing the Perceptron Models and Derivatives and assume any risks associated with Your exercise of rights under this Agreement.
+#
+# # 7. Termination
+# **7.1. Term.** This Agreement is effective as of the date of your acceptance of this Agreement or access to the concerned Perceptron Models or Derivatives and will continue until terminated in accordance with the following terms.
+#
+# **7.2. Termination.** Perceptron, Inc. may terminate this Agreement at any time if You are in breach of this Agreement. Upon termination of this Agreement, You must cease to use all Perceptron Models and Derivatives and shall permanently delete any copy thereof. Sections 5, 6, 7 and 8 shall survive the termination of this Agreement.
+#
+# **7.3. Litigation.** If You initiate any legal action or proceedings against Us or any other entity (including a cross-claim or counterclaim in a lawsuit), alleging that the Model or a Derivative, or any part thereof, infringe upon intellectual property or other rights owned or licensable by You, then any licenses granted to You under this Agreement will immediately terminate as of the date such legal action or claim is filed or initiated.
+#
+# # 8. General provisions
+# 8.1. Governing Law. This Agreement will be governed by and construed in accordance with the laws of the State of Washington, without regard to its conflict of law principles.
+#
+# 8.2. Jurisdiction. The state and federal courts located in King County, Washington shall have exclusive jurisdiction over any dispute arising out of or relating to this Agreement, and You and We consent to personal jurisdiction and venue in such courts.
+#
+# **8.3. Severability.** If any provision of this Agreement is held to be invalid, illegal or unenforceable, the remaining provisions shall be unaffected thereby and remain valid as if such provision had not been set forth herein.
+#
+# # 9. Definitions
+# **“Agreement”**: means this Perceptron, Inc. Non-Production License agreement governing the access, use, and Distribution of the Perceptron Models and Derivatives.
+#
+# **“Derivative”**: means any (i) modified version of the Perceptron Model (including but not limited to any customized or fine-tuned version thereof), (ii) work based on the Perceptron Model, or (iii) any other derivative work thereof. For the avoidance of doubt, Outputs are not considered as Derivatives under this Agreement.
+#
+# **“Distribution”**, **“Distributing”**, **“Distribute”** or **“Distributed”**: means providing or making available, by any means, a copy of the Perceptron Models and/or the Derivatives as the case may be, subject to Section 3 of this Agreement.
+#
+# **“Perceptron, Inc.”**, **“We”** or **“Us”**: means Perceptron, Inc., a Delaware corporation with its principal place of business at 10900 NE 8th St Suite 613, Bellevue, WA 98004.
+#
+# **“Perceptron Model”**: means the foundational large language model(s), and its elements which include algorithms, software, instructed checkpoints, parameters, source code (inference code, evaluation code and, if applicable, fine-tuning code) and any other elements associated thereto made available by Perceptron, Inc. under this Agreement, including, if any, the technical documentation, manuals and instructions for the use and operation thereof.
+#
+# **“Non-Production Environment”**: means any setting, use case, or application of the Perceptron Models or Derivatives that expressly excludes live, real-world conditions, commercial operations, revenue-generating activities, or direct interactions with or impacts on end users (such as, for instance, Your employees or customers). Non-Production Environment may include, but is not limited to, any setting, use case, or application for research, development, testing, quality assurance, training, internal evaluation (other than any internal usage by employees in the context of the company’s business activities), and demonstration purposes.
+#
+# **“Outputs”**: means any content generated by the operation of the Perceptron Models or the Derivatives from a prompt (i.e., text instructions) provided by users. For the avoidance of doubt, Outputs do not include any components of a Perceptron Models, such as any fine-tuned versions of the Perceptron Models, the weights, or parameters.
+#
+# **“Personal”**: means any use of a Perceptron Model or a Derivative that is (i) solely for personal, non-profit and non-commercial purposes and (ii) not directly or indirectly connected to any commercial activities, business operations, or employment responsibilities. For illustration purposes, Personal use of a Model or a Derivative does not include any usage by individuals employed in companies in the context of their daily tasks, any activity that is intended to generate revenue, or that is performed on behalf of a commercial entity.
+#
+# **“You”**: means the individual or entity entering into this Agreement with Perceptron, Inc..
+
 
 import copy
 from collections import defaultdict
-from collections.abc import Callable
-from typing import Any, Optional, TypedDict
+from typing import Any, Callable, Optional, TypedDict
 
 import torch
 import torch.nn as nn
@@ -34,7 +113,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_torchdynamo_compiling
-from ..auto.modeling_auto import AutoModel
+from ..auto import AutoModel
 from .configuration_isaac import IsaacConfig, IsaacVisionConfig
 
 
@@ -100,100 +179,51 @@ class IsaacVisionEmbeddings(nn.Module):
         return embeddings
 
 
-def _max_from_cu(cu: torch.Tensor | None, fallback: int) -> int:
-    """Helper to compute max sequence length from cumulative sequence lengths."""
-    if cu is None or len(cu) < 2:
-        return fallback
-    return int((cu[1:] - cu[:-1]).max().item())
-
-
-def flash_attention_document_mask_forward(
-    module: torch.nn.Module,
-    q_lhd: torch.Tensor,  # (L, H, D)
-    k_lhd: torch.Tensor,  # (L, H, D)
-    v_lhd: torch.Tensor,  # (L, H, D)
-    attention_mask: torch.Tensor | None = None,  # unused for FA path
-    dropout: float = 0.0,
-    scaling: float | None = None,
-    cum_seq_q: torch.Tensor | None = None,
-    cum_seq_k: torch.Tensor | None = None,
-    max_seqlen: int | None = None,
-    is_causal: bool = False,
-    **kwargs,
-) -> tuple[torch.Tensor, None]:
-    """FlashAttention that consumes (L, H, D) directly to avoid layout churn."""
-    L, H, D = q_lhd.shape
-
-    # Compute max block length once (honor caller when provided)
-    if max_seqlen is not None:
-        max_q = max_k = int(max_seqlen)
-    else:
-        max_q = _max_from_cu(cum_seq_q, L)
-        max_k = _max_from_cu(cum_seq_k, L)
-
-    # Ensure contiguity only if needed
-    if not q_lhd.is_contiguous():
-        q_lhd = q_lhd.contiguous()
-    if not k_lhd.is_contiguous():
-        k_lhd = k_lhd.contiguous()
-    if not v_lhd.is_contiguous():
-        v_lhd = v_lhd.contiguous()
-
-    out_lhd, *_ = torch.ops.aten._flash_attention_forward(
-        query=q_lhd,  # (L, H, D)
-        key=k_lhd,  # (L, H, D)
-        value=v_lhd,  # (L, H, D)
-        cum_seq_q=cum_seq_q,
-        cum_seq_k=cum_seq_k,
-        max_q=max_q,
-        max_k=max_k,
-        dropout_p=dropout,
-        is_causal=is_causal,
-        return_debug_mask=False,
-        scale=scaling,
-        window_size_left=-1,
-        window_size_right=-1,
-        alibi_slopes=None,
-    )
-    return out_lhd, None  # (L, H, D)
-
-
-def sdpa_document_mask_forward(
-    q_lhd: torch.Tensor,  # (L, H, D)
-    k_lhd: torch.Tensor,  # (L, H, D)
-    v_lhd: torch.Tensor,  # (L, H, D)
-    dropout: float,
-    scaling: float | None,
+def build_document_attention_mask(
     cu_seqlens: torch.Tensor | None,
-) -> torch.Tensor:
-    """SDPA with block-diagonal masking for variable-length sequences."""
-    L, H, D = q_lhd.shape
+    total_tokens: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor | None:
+    """Creates an additive attention mask that blocks cross-document attention."""
 
-    # Transpose to (1, H, L, D) format for SDPA
-    Q = q_lhd.permute(1, 0, 2).unsqueeze(0)
-    K = k_lhd.permute(1, 0, 2).unsqueeze(0)
-    V = v_lhd.permute(1, 0, 2).unsqueeze(0)
+    if cu_seqlens is None:
+        return None
 
-    # Build block-diagonal mask for variable-length sequences
-    attn_mask = None
-    if cu_seqlens is not None:
-        seq_sizes = (cu_seqlens[1:] - cu_seqlens[:-1]).long()
-        seg_ids = torch.repeat_interleave(torch.arange(len(seq_sizes), device=q_lhd.device), seq_sizes)
-        block_mask = seg_ids[:, None] != seg_ids[None, :]  # Cross-document attention blocked
-        attn_mask = torch.where(block_mask, -torch.inf, 0.0).to(q_lhd.dtype).view(1, 1, L, L)
+    if cu_seqlens.numel() < 2:
+        return None
 
-    Y = F.scaled_dot_product_attention(Q, K, V, attn_mask=attn_mask, dropout_p=dropout, scale=scaling)
-    return Y.squeeze(0).permute(1, 0, 2)  # Back to (L, H, D)
+    seq_sizes = (cu_seqlens[1:] - cu_seqlens[:-1]).long()
+    if seq_sizes.numel() == 0:
+        return None
+
+    seg_ids = torch.repeat_interleave(torch.arange(seq_sizes.numel(), device=device), seq_sizes)
+    block_mask = seg_ids[:, None] != seg_ids[None, :]
+    additive_mask = torch.zeros((total_tokens, total_tokens), dtype=dtype, device=device)
+    additive_mask.masked_fill_(block_mask, float("-inf"))
+    return additive_mask.view(1, 1, total_tokens, total_tokens)
 
 
 class IsaacVisionAttention(nn.Module):
     """Custom attention that supports variable-length sequences with flash attention."""
 
-    def __init__(self, config):
+    ATTENTION_KEY_MAP: dict[str, str] = {
+        "flash_attention_2": "isaac_flash_attention_2",
+        "flash_attention_3": "isaac_flash_attention_3",
+        "isaac_flash_attention_2": "isaac_flash_attention_2",
+        "isaac_flash_attention_3": "isaac_flash_attention_3",
+        "sdpa": "isaac_sdpa",
+        "isaac_sdpa": "isaac_sdpa",
+        "eager": "isaac_eager",
+        "isaac_eager": "isaac_eager",
+    }
+
+    def __init__(self, vision_config):
         super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
+        self.vision_config = vision_config
+        self.config = vision_config
+        self.embed_dim = vision_config.hidden_size
+        self.num_heads = vision_config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
@@ -201,7 +231,9 @@ class IsaacVisionAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        self.dropout = vision_config.attention_dropout
+        self.is_causal = False
+        self.num_key_value_groups = 1
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
@@ -224,24 +256,46 @@ class IsaacVisionAttention(nn.Module):
         k = self.k_proj(x).view(L, H, D)
         v = self.v_proj(x).view(L, H, D)
 
-        attn_impl = getattr(self.config, "_attn_implementation", "flash_attention_3")
+        attn_impl = getattr(self.vision_config, "_attn_implementation", "flash_attention_3")
 
-        if attn_impl in ("flash_attention_2", "flash_attention_3"):
-            y_lhd, _ = flash_attention_document_mask_forward(
-                self,
-                q,
-                k,
-                v,
-                attention_mask=None,
-                dropout=p_drop,
-                scaling=self.scale,
-                cum_seq_q=cu_seqlens,
-                cum_seq_k=cu_seqlens,
-                max_seqlen=max_seqlen,
-                is_causal=False,
-            )
-        else:
-            y_lhd = sdpa_document_mask_forward(q, k, v, dropout=p_drop, scaling=self.scale, cu_seqlens=cu_seqlens)
+        attn_mask = build_document_attention_mask(
+            cu_seqlens=cu_seqlens,
+            total_tokens=L,
+            dtype=q.dtype,
+            device=q.device,
+        )
+
+        resolved_key = self.ATTENTION_KEY_MAP.get(attn_impl)
+        attention_fn = ALL_ATTENTION_FUNCTIONS.get(resolved_key) if resolved_key is not None else None
+        if attention_fn is None:
+            raise ValueError(f"Attention implementation {attn_impl} not found.")
+
+        query_states = q.transpose(0, 1).unsqueeze(0)
+        key_states = k.transpose(0, 1).unsqueeze(0)
+        value_states = v.transpose(0, 1).unsqueeze(0)
+
+        attention_kwargs: dict[str, Any] = {
+            "dropout": p_drop,
+            "scaling": self.scale,
+            "is_causal": False,
+        }
+        if cu_seqlens is not None:
+            attention_kwargs["cu_seq_lens_q"] = cu_seqlens
+            attention_kwargs["cu_seq_lens_k"] = cu_seqlens
+        if max_seqlen is not None:
+            attention_kwargs["max_length_q"] = max_seqlen
+            attention_kwargs["max_length_k"] = max_seqlen
+
+        attn_output, _ = attention_fn(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attn_mask,
+            **attention_kwargs,
+        )
+
+        y_lhd = attn_output.squeeze(0).permute(1, 0, 2).contiguous()
 
         # Merge heads and project
         y = self.out_proj(y_lhd.reshape(L, self.embed_dim))
@@ -251,21 +305,21 @@ class IsaacVisionAttention(nn.Module):
 class IsaacVisionEncoderLayer(HFSiglip2EncoderLayer):
     """Isaac vision encoder layer with variable-length attention."""
 
-    def __init__(self, config: IsaacVisionConfig):
-        super().__init__(config)
-        self.self_attn = IsaacVisionAttention(config)
+    def __init__(self, vision_config: IsaacVisionConfig):
+        super().__init__(vision_config)
+        self.self_attn = IsaacVisionAttention(vision_config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor = None,
         max_seqlen: int = None,
-    ) -> tuple[torch.FloatTensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
 
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
@@ -278,7 +332,7 @@ class IsaacVisionEncoderLayer(HFSiglip2EncoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        return (hidden_states,)
+        return hidden_states
 
 
 class IsaacVisionEncoder(nn.Module):
@@ -304,13 +358,11 @@ class IsaacVisionEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 cu_seqlens,
                 max_seqlen,
             )
-
-            hidden_states = layer_outputs[0]
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -558,7 +610,8 @@ class IsaacRotaryEmbedding(nn.Module):
         super().__init__()
 
         self.config = config
-        rope_scaling = getattr(config, "rope_scaling", None) or {}
+        rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
+        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
         rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", "default"))
         if rope_type not in ROPE_INIT_FUNCTIONS:
             raise ValueError(f"Unsupported rope_type '{rope_type}' for IsaacRotaryEmbedding")
@@ -568,10 +621,10 @@ class IsaacRotaryEmbedding(nn.Module):
 
         sanitized_scaling = {k: v for k, v in rope_scaling.items() if k not in self.EXTRA_ROPE_KEYS}
         if sanitized_scaling != rope_scaling:
-            config_for_rope = copy.copy(config)
+            config_for_rope = copy.copy(rope_source_cfg)
             config_for_rope.rope_scaling = sanitized_scaling
         else:
-            config_for_rope = config
+            config_for_rope = rope_source_cfg
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
         inv_freq, attention_scaling = rope_init_fn(config_for_rope, device=init_device)
@@ -697,16 +750,21 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
+def repeat_kv(hidden_states: torch.Tensor, num_key_value_groups: int) -> torch.Tensor:
+    """Repeat key/value heads for grouped-query attention."""
+
+    if num_key_value_groups == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+    batch, num_key_value_heads, seq_len, head_dim = hidden_states.shape
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch,
+        num_key_value_heads,
+        num_key_value_groups,
+        seq_len,
+        head_dim,
+    )
+    return hidden_states.reshape(batch, num_key_value_heads * num_key_value_groups, seq_len, head_dim)
 
 
 def eager_attention_forward(
@@ -910,19 +968,12 @@ class IsaacModel(PreTrainedModel):
 
         self.rotary_emb = IsaacRotaryEmbedding(config, device=self.device)
 
-        vision_cfg = config.vision_config
-        # Use vision_attn_implementation if specified, otherwise fall back to general attn_implementation
-        vision_cfg._attn_implementation = (
-            config.vision_attn_implementation
-            if config.vision_attn_implementation is not None
-            else config._attn_implementation
-        )
-        if vision_cfg is None:
+        if config.vision_config is None:
             raise ValueError("IsaacConfig should always have vision_config")
 
-        hidden_dim = vision_cfg.hidden_size * (vision_cfg.pixel_shuffle_scale_factor**2)
+        hidden_dim = config.vision_config.hidden_size * (config.vision_config.pixel_shuffle_scale_factor**2)
         self.vision_embedding = nn.Sequential(
-            IsaacVisionTransformer(vision_cfg),
+            IsaacVisionTransformer(config.vision_config),
             nn.Linear(
                 hidden_dim,
                 4 * hidden_dim,
@@ -1287,7 +1338,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
-
         self.model = IsaacModel(config)  # Use our custom model
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
