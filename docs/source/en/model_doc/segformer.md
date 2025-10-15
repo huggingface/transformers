@@ -64,6 +64,13 @@ plt.show()
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- SegFormer works with any input size. It pads inputs to be divisible by `config.patch_sizes`.
+- The most important preprocessing step is to randomly crop and pad all images to the same size (like 512x512 or 640x640) and normalize afterwards.
+- Some datasets (ADE20k) use the 0 index in annotated segmentation as the background but don't include the "background" class in their labels. The `do_reduce_labels` argument in [`SegformerImageProcessor`] reduces all labels by 1. To ensure no loss is computed for the background class, it replaces 0 in annotated maps with 255, which is the `ignore_index` of the loss function.
+- Other datasets include a background class and label. In this case, set `do_reduce_labels=False`.
+
 ## SegformerConfig
 
 [[autodoc]] SegformerConfig

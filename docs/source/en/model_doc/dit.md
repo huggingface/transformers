@@ -56,3 +56,7 @@ print(model.config.id2label[predicted_label])
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- Load pretrained DiT weights in a [`BEiT`] model with a modeling head to predict visual tokens.

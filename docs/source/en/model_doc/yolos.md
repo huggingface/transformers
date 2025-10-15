@@ -69,6 +69,10 @@ for score, label, box in zip(results["scores"], results["labels"], results["boxe
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Unlike DETR, YOLOS doesn't require a `pixel_mask`.
+
 ## YolosConfig
 
 [[autodoc]] YolosConfig

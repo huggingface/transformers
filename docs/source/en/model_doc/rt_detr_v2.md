@@ -64,6 +64,14 @@ for score, label, box in zip(results["scores"], results["labels"], results["boxe
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- RT-DETRv2 improves how the decoder finds objects in an image with three key enhancements:
+  - Better sampling: Adjusts offsets so the model looks at the right areas.
+  - Flexible attention: Uses smooth (bilinear) or fixed (discrete) sampling.
+  - Optimized processing: Improves how attention weights mix information.
+- Use images resized to 640x640 with the corresponding [`RTDetrV2ImageProcessor`]. Reshaping to other sizes generally degrades performance.
+
 ## RTDetrV2Config
 
 [[autodoc]] RTDetrV2Config

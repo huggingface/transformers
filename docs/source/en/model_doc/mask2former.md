@@ -64,6 +64,12 @@ plt.show()
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Mask2Former uses the same preprocessing and postprocessing steps as MaskFormer. Use [`Mask2FormerImageProcessor`] or [`AutoImageProcessor`] to prepare images and optional targets for the model.
+- To get the final segmentation, call [`post_process_semantic_segmentation`], [`post_process_instance_segmentation`], or [`post_process_panoptic_segmentation`] depending on the task. All three tasks work with [`Mask2FormerForUniversalSegmentation`] output.
+- Panoptic segmentation accepts an optional `label_ids_to_fuse` argument to fuse instances of the target objects (like sky) together.
+
 ## Mask2FormerConfig
 
 [[autodoc]] Mask2FormerConfig

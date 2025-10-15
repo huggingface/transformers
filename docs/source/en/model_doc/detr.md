@@ -62,6 +62,20 @@ for score, label, box in zip(results["scores"], results["labels"], results["boxe
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- DETR uses object queries to detect objects in an image. The number of queries determines the maximum number of objects that can be detected in a single image. This is set to 100 by default (see parameter `num_queries` of [`DetrConfig`]). It's good to have some slack. In COCO, the authors used 100 queries while the maximum number of objects in a COCO image is ~70.
+- The DETR decoder updates query embeddings in parallel. This differs from language models like GPT-2, which use autoregressive decoding instead of parallel. No causal attention mask is used.
+- DETR adds position embeddings to hidden states at each self-attention and cross-attention layer before projecting to queries and keys. For image position embeddings, choose between fixed sinusoidal or learned absolute position embeddings. By default, the `position_embedding_type` parameter of [`DetrConfig`] is set to "sine".
+- During training, auxiliary losses in the decoder help the model output the correct number of objects of each class. Set the `auxiliary_loss` parameter of [`DetrConfig`] to `True` to add prediction feedforward neural networks and Hungarian losses after each decoder layer (with FFNs sharing parameters).
+- For distributed training across multiple nodes, update the `num_boxes` variable in the `DetrLoss` class of `modeling_detr.py`. When training on multiple nodes, set this to the average number of target boxes across all nodes.
+- [`DetrForObjectDetection`] and [`DetrForSegmentation`] initialize with any convolutional backbone available in the timm library. Initialize with a MobileNet backbone by setting the `backbone` attribute of [`DetrConfig`] to "tf_mobilenetv3_small_075", then initialize the model with that config.
+- DETR resizes input images so the shortest side is at least a certain amount of pixels while the longest is at most 1333 pixels. At training time, scale augmentation randomly sets the shortest side to at least 480 and at most 800 pixels. At inference time, the shortest side is set to 800.
+- Use [`DetrImageProcessor`] to prepare images (and optional annotations in COCO format) for the model. Due to resizing, images in a batch can have different sizes. DETR solves this by padding images up to the largest size in a batch and creating a pixel mask that indicates which pixels are real and which are padding. Alternatively, define a custom `collate_fn` to batch images together using [`~transformers.DetrImageProcessor.pad_and_create_pixel_mask`].
+- Image size determines memory usage and batch size. Use a batch size of 2 per GPU.
+- Prepare data in COCO detection or COCO panoptic format, then use [`DetrImageProcessor`] to create `pixel_values`, `pixel_mask`, and optional labels for training or fine-tuning.
+- For evaluation, convert model outputs using one of the postprocessing methods of [`DetrImageProcessor`]. Provide these to either `CocoEvaluator` or `PanopticEvaluator` to calculate metrics like mean Average Precision (mAP) and Panoptic Quality (PQ). These evaluators are implemented in the original repository.
+
 ## DetrConfig
 
 [[autodoc]] DetrConfig

@@ -62,6 +62,10 @@ Image.fromarray(depth.astype("uint8"))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- DPT is compatible with the [`AutoBackbone`] class. Use the DPT framework with various computer vision backbones available in the library, such as [`VitDetBackbone`] or [`Dinov2Backbone`].
+
 ## DPTConfig
 
 [[autodoc]] DPTConfig

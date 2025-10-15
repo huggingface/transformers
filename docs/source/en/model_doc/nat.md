@@ -60,6 +60,13 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use the [`AutoImageProcessor`] API to prepare images for the model.
+- NAT works as a backbone. When `output_hidden_states = True`, it outputs both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, height, width, num_channels)`.
+- NAT depends on NATTEN's implementation of Neighborhood Attention. Install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten), or build on your system by running `pip install natten`. Building from source takes time to compile. NATTEN doesn't support Windows devices yet.
+- Patch size of 4 is the only supported size at the moment.
+
 ## NatConfig
 
 [[autodoc]] NatConfig

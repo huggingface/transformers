@@ -64,6 +64,24 @@ Image.fromarray(depth.astype("uint8"))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The DepthPro model processes input images by downsampling at multiple scales and splitting each scaled version into patches. These patches encode using a shared Vision Transformer (ViT)-based Dinov2 patch encoder. The full image processes through a separate image encoder.
+- Extracted patch features merge into feature maps, upsample, and fuse using a DPT-like decoder to generate the final depth estimation. If enabled, an additional Field of View (FOV) encoder processes the image for estimating the camera's field of view, aiding in depth accuracy.
+- [`DepthProForDepthEstimation`] uses a [`DepthProEncoder`] for encoding the input image and a [`FeatureFusionStage`] for fusing output features from the encoder.
+- The [`DepthProEncoder`] uses two encoders:
+
+    - patch_encoder: Input image scales with multiple ratios as specified in the `scaled_images_ratios` configuration. Each scaled image splits into smaller patches of size `patch_size` with overlapping areas determined by `scaled_images_overlap_ratios`. These patches process through the patch_encoder.
+    - image_encoder: Input image rescales to `patch_size` and processes through the image_encoder.
+
+- Both encoders configure via `patch_model_config` and `image_model_config` respectively. Both default to separate [`Dinov2Model`] instances.
+- Outputs from both encoders (`last_hidden_state`) and selected intermediate states (`hidden_states`) from patch_encoder fuse by a DPT-based [`FeatureFusionStage`] for depth estimation.
+- The network supplements with a focal length estimation head. A small convolutional head ingests frozen features from the depth estimation network and task-specific features from a separate ViT image encoder to predict the horizontal angular field-of-view.
+- The `use_fov_model` parameter in [`DepthProConfig`] controls whether FOV prediction is enabled. By default, it's set to `False` to conserve memory and computation.
+- When enabled, the FOV encoder instantiates based on the `fov_model_config` parameter, which defaults to a [`Dinov2Model`]. The `use_fov_model` parameter also passes when initializing the [`DepthProForDepthEstimation`] model.
+- The pretrained model at checkpoint `apple/DepthPro-hf` uses the FOV encoder. Set `use_fov_model=False` when loading the model to use the pretrained model without FOV encoder, which saves computation.
+- To instantiate a new model with FOV encoder, set `use_fov_model=True` in the config. Or set `use_fov_model=True` when initializing the model, which overrides the value in config.
+
 ## DepthProConfig
 
 [[autodoc]] DepthProConfig

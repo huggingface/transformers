@@ -70,6 +70,13 @@ visualized_images = processor.visualize_keypoint_matching(images, processed_outp
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- LightGlue is adaptive to task difficulty. Inference is much faster on image pairs that are intuitively easy to match, for example, because of larger visual overlap or limited appearance change.
+- The model outputs matching indices, keypoints, and confidence scores for each match, similar to SuperGlue but with improved efficiency.
+- Use the [`post_process_keypoint_matching`] method to get matches in a more readable format for better visualization and analysis.
+- Visualize matches between images using the built-in plotting functionality.
+
 ## LightGlueConfig
 
 [[autodoc]] LightGlueConfig

@@ -36,6 +36,10 @@ last_hidden_states = outputs.last_hidden_state
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Only the backbone is available.
+
 ## VitDetConfig
 
 [[autodoc]] VitDetConfig
