@@ -168,7 +168,6 @@ qwen3_schema = {
                                 "type": "object",
                                 "x-regex-key-value": r"<parameter=(?P<key>\w+)>\n(?P<value>.*?)\n</parameter>",
                                 "additionalProperties": {
-                                    "type": "any",
                                     "x-parser": "json",
                                     "x-parser-args": {"allow_non_json": True},
                                 },
