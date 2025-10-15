@@ -62,7 +62,7 @@ len(train_dataset)
 # 5867
 ```
 
-We now augment the dataset. You can apply any augmentation you wish, here we take rescale images to a maximum size, flip and apply affine transform. Lastly, we eliminate the invalid bounding boxes. We also make sure our annotations are in good condition with rebuild_objects.
+Augment the dataset. Rescale images to a maximum size, flip them, and apply affine transforms. Eliminate invalid bounding boxes and ensure annotations stay clean with `rebuild_objects`.
 
 ```py
 import albumentations as A
