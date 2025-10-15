@@ -2449,7 +2449,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 self._sdpa_can_dispatch(is_init_check)
             except (ValueError, ImportError) as e:
-                if "sdpa" in requested_attention:
+                if requested_attention is not None and "sdpa" in requested_attention:
                     raise e
                 applicable_attention = "eager"
 
