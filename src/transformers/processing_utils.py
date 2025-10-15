@@ -676,6 +676,17 @@ class ProcessorMixin(PushToHubMixin):
         if "chat_template" in output:
             del output["chat_template"]
 
+        def save_public_processor_class(dictionary):
+            # make sure private name "_processor_class" is correctly
+            # saved as "processor_class"
+            _processor_class = dictionary.pop("_processor_class", None)
+            if _processor_class is not None:
+                dictionary["processor_class"] = _processor_class
+            for value in dictionary.values():
+                if isinstance(value, dict):
+                    save_public_processor_class(value)
+            return dictionary
+
         def cast_array_to_list(dictionary):
             """
             Numpy arrays are not serialiazable but can be in pre-processing dicts.
@@ -706,6 +717,7 @@ class ProcessorMixin(PushToHubMixin):
             )
         }
         output = cast_array_to_list(output)
+        output = save_public_processor_class(output)
         output["processor_class"] = self.__class__.__name__
 
         return output
