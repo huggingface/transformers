@@ -503,8 +503,8 @@ class InternS1Tokenizer(Qwen2Tokenizer):
             }
         )
 
-        # These tokens should keep complete and serves as a non-split token(temporary for 'ex_protect_{begin/end}_tokens')
-        # to guide later tokenization
+        # protect-tokens should keep complete temporarily to guide later tokenization
+        # it will be segmented later
         for token in self.ex_protect_begin_tokens + self.ex_protect_end_tokens:
             self.tokens_trie.add(token)
 
