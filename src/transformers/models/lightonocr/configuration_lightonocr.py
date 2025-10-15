@@ -295,6 +295,39 @@ class LightOnOCRVisionConfig(PreTrainedConfig):
 
 
 class LightOnOCRConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`LightOnOCRForConditionalGeneration`]. It is used to instantiate a
+    LightOnOCR model according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            The size of spatial merging for image patches.
+        image_token_index (`int`, *optional*, defaults to 151655):
+            The token index used to represent image tokens.
+        vision_config (`dict` or `LightOnOCRVisionConfig`, *optional*):
+            Custom vision configuration or dictionary with vision configuration values.
+        text_config (`dict` or `LightOnOCRTextConfig`, *optional*):
+            Custom text configuration or dictionary with text configuration values.
+
+    Example:
+
+    ```python
+    >>> from transformers import LightOnOCRConfig, LightOnOCRForConditionalGeneration
+
+    >>> # Initializing a LightOnOCR configuration
+    >>> configuration = LightOnOCRConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = LightOnOCRForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
     model_type = "lightonocr"
 
     def __init__(
