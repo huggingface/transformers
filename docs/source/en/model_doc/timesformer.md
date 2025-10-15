@@ -92,6 +92,10 @@ print(model.config.id2label[predicted_label])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Choose your pretrained model based on the training dataset. The number of input frames per clip varies by model size, so factor this parameter into your model selection.
+
 ## TimesformerConfig
 
 [[autodoc]] TimesformerConfig
