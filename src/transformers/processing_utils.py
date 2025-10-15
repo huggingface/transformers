@@ -970,6 +970,7 @@ class ProcessorMixin(PushToHubMixin):
                         cache_dir=cache_dir,
                         token=token,
                     ):
+                        template = template.removesuffix(".jinja")
                         additional_chat_template_files[template] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
                 except EntryNotFoundError:
                     pass  # No template dir means no template files
