@@ -1187,20 +1187,20 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         reordered_past = ()
         for idx in range(len(past_key_values)):
             if isinstance(past_key_values, EncoderDecoderCache):
-                self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = map(
-                    fn=lambda x: _reorder_stacked(x, beam_idx.to(x.device)),
-                    iterable=(
+                self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = (
+                    _reorder_stacked(x, beam_idx.to(x.device))
+                    for x in (
                         past_key_values.self_attention_cache.layers[idx].keys,
                         past_key_values.self_attention_cache.layers[idx].values,
                         past_key_values.cross_attention_cache.layers[idx].keys,
                         past_key_values.cross_attention_cache.layers[idx].values,
-                    ),
+                    )
                 )
                 new_tuple = ((self_attention_k, self_attention_v), (cross_attention_k, cross_attention_v))
             else:
-                self_attention_k, self_attention_v = map(
-                    fn=lambda x: _reorder_stacked(x, beam_idx.to(x.device)),
-                    iterable=(past_key_values.layers[idx].keys, past_key_values.layers[idx].values),
+                self_attention_k, self_attention_v = (
+                    _reorder_stacked(x, beam_idx.to(x.device))
+                    for x in (past_key_values.layers[idx].keys, past_key_values.layers[idx].values)
                 )
                 new_tuple = (self_attention_k, self_attention_v)
             reordered_past += (new_tuple,)
