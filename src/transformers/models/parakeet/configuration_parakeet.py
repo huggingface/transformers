@@ -154,11 +154,12 @@ class ParakeetEncoderConfig(PreTrainedConfig):
 class ParakeetTDTDecoderConfig(PreTrainedConfig):
     model_type = "parakeet_tdt_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
+    output_hidden_states = False
 
     def __init__(
         self,
-        pred_hidden=640,
-        pred_n_layers=2,
+        hidden_size=640,
+        num_hidden_layers=1,
         dropout=0,
         vocab_size=1024,
         norm=None,
@@ -173,8 +174,8 @@ class ParakeetTDTDecoderConfig(PreTrainedConfig):
         super().__init__(
             **kwargs,
         )
-        self.pred_hidden = pred_hidden
-        self.pred_n_layers = pred_n_layers
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
         self.vocab_size = vocab_size
         self.norm = norm

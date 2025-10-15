@@ -1004,8 +1004,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("parakeet_encoder", "parakeet"),
-        ("parakeet_decoder", "parakeet"),
-        ("parakeet_joint", "parakeet"),
+        ("parakeet_tdt_decoder", "parakeet"),
+        ("parakeet_tdt_joint", "parakeet"),
         ("parakeet_ctc", "parakeet"),
         ("parakeet_tdt", "parakeet"),
     ]

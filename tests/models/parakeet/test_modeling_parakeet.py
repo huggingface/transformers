@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Parakeet model."""
 
 import json
+import copy
 import tempfile
 import unittest
 from pathlib import Path
@@ -195,8 +196,8 @@ class ParakeetTDTDecoderModelTester:
         parent,
         batch_size=13,
         vocab_size=128,
-        pred_hidden=64,
-        pred_n_layers=2,
+        hidden_size=64,
+        num_hidden_layers=2,
         seq_length=32,
         is_training=True,
         dropout=0,  # so gradient checkpointing doesn't fail
@@ -207,9 +208,10 @@ class ParakeetTDTDecoderModelTester:
         self.is_training = is_training
 
         # config parameters
-        self.pred_hidden = pred_hidden
-        self.pred_n_layers = pred_n_layers
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
         self.seq_length = seq_length
+        self.output_seq_length = seq_length
         self.vocab_size = vocab_size
 
     def prepare_config_and_inputs(self):
@@ -221,7 +223,8 @@ class ParakeetTDTDecoderModelTester:
     def get_config(self):
         return ParakeetTDTDecoderConfig(
             seq_length=self.seq_length,
-            pred_n_layers=self.pred_n_layers,
+            num_hidden_layers=self.num_hidden_layers,
+            hidden_size=self.hidden_size,
             vocab_size=self.vocab_size,
         )
 
@@ -234,13 +237,12 @@ class ParakeetTDTDecoderModelTester:
             result = model(input_token)
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, config.hidden_size)
+            result.last_hidden_state.shape, (self.batch_size, config.hidden_size, self.output_seq_length)
         )
 
     def prepare_config_and_inputs_for_common(self):
         config, input_token = self.prepare_config_and_inputs()
         inputs_dict = {
-#            "input_features": input_token,
             "input_token": input_token,
         }
         return config, inputs_dict
@@ -258,7 +260,7 @@ class ParakeetTDTDecoderModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ParakeetTDTDecoderModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ParakeetTDTDecoderConfig, has_text_modality=False, common_properties=['pred_hidden','pred_n_layers'])
+        self.config_tester = ConfigTester(self, config_class=ParakeetTDTDecoderConfig, has_text_modality=False, common_properties=['hidden_size','num_hidden_layers'])
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -267,9 +269,48 @@ class ParakeetTDTDecoderModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="ParakeetTDTDecoder does not use inputs_embeds")
-    def test_model_get_set_embeddings(self):
-        pass
+#    @unittest.skip(reason="ParakeetTDTDecoder does not use inputs_embeds")
+#    def test_model_get_set_embeddings(self):
+#        pass
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(copy.deepcopy(config))
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(hidden_states.shape[1], expected_num_layers)
+
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                    seq_length = seq_length * self.model_tester.chunk_length
+            else:
+                seq_length = self.model_tester.seq_length
+
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            for k in config.sub_configs:
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
 
 #class ParakeetForCTCModelTester:

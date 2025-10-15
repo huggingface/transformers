@@ -755,12 +755,14 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
 class ParakeetTDTPredictor(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTDecoderConfig):
         super().__init__(config)
+        self.gradient_checkpointing = False
         self.config = config
-        self.embed = torch.nn.Embedding(config.vocab_size + 1, config.pred_hidden)  # +1 for blank
+
+        self.embed = torch.nn.Embedding(config.vocab_size + 1, config.hidden_size)  # +1 for blank
         self.dec_rnn = self.rnn(
-            config.pred_hidden,
-            config.pred_hidden,
-            config.pred_n_layers,
+            config.hidden_size,
+            config.hidden_size,
+            config.num_hidden_layers + 1,
             config.norm,
             config.forget_gate_bias,
             config.pred_dropout,
@@ -842,6 +844,7 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
     ):
         y = input_token
         g, states = self.predict(y, state=states)  # , add_sos=add_sos)  # (B, U, D)
+
         g = g.transpose(1, 2)  # (B, D, U)
 
         return g, states
@@ -882,6 +885,7 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = False
     _can_record_outputs = {}
+    _no_split_modules = None
 
     def __init__(self, config: ParakeetTDTDecoderConfig):
         super().__init__(config)
@@ -903,6 +907,12 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
         for param in module.prediction.dec_rnn.lstm.parameters():
             param.data.normal_(mean=0.0, std=std)
 
+    def get_input_embeddings(self):
+        return self.prediction.embed
+
+    def set_input_embeddings(self, embed):
+        self.prediction.embed = embed
+
     @auto_docstring
     @check_model_inputs()
     @can_return_tuple
@@ -914,6 +924,7 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
     ) -> BaseModelOutputWithNoAttention:
         if hidden_state is not None:
             hidden_state = tuple(hidden_state.unbind(dim=0))  # tuple(hidden_state[0], hidden_state[1])
+        #            hidden_state = [h.contiguous() for h in hidden_state]
 
         h_out, h_state = self.prediction(input_token, hidden_state, **kwargs)
         return BaseModelOutputWithNoAttention(h_out, torch.stack(h_state, dim=0))
