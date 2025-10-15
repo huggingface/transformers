@@ -31,12 +31,8 @@ def test_cli_download(cli):
 
 
 @require_torch
-def test_cli_download_trust_remote(cli, caplog):
+def test_cli_download_trust_remote(cli):
     with tempfile.TemporaryDirectory() as tmpdir:
-        caplog.set_level(100000)
-        # ^ hack to avoid an issue happening only in CI. We don't check logs anyway so it's fine.
-        #   Source: https://github.com/pallets/click/issues/824#issuecomment-562581313
-
         output = cli(
             "download",
             "hf-internal-testing/test_dynamic_model_with_tokenizer",

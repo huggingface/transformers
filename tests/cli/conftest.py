@@ -18,7 +18,11 @@ import transformers.cli.transformers
 
 
 @pytest.fixture
-def cli():
+def cli(caplog):
+    caplog.set_level(100000)
+    # ^ hack to avoid an issue happening only in CI. We don't check logs anyway so it's fine.
+    #   Source: https://github.com/pallets/click/issues/824#issuecomment-562581313
+
     def _cli_invoke(*args):
         runner = CliRunner()
         return runner.invoke(transformers.cli.transformers.app, list(args), catch_exceptions=False)
