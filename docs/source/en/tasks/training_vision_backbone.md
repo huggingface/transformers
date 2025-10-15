@@ -246,5 +246,3 @@ def plot_results(image, results, threshold):
 image = Image.open(requests.get("https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/license-plates.jpg", stream=True).raw)
 plot_results(image, results, threshold=0.05)
 ```
-
-Despite not training for long, we can see that the model performs very well!
