@@ -1216,6 +1216,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
@@ -1255,7 +1256,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
         >>> prediction_logits = outputs.logits
         ```
         """
-        outputs = self.roc_bert(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.roc_bert(
             input_ids,
             input_shape_ids=input_shape_ids,
             input_pronunciation_ids=input_pronunciation_ids,
@@ -1272,21 +1273,18 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.cls(hidden_states[:, slice_indices, :])
 
-        lm_loss = None
+        loss = None
         if labels is not None:
-            lm_loss = self.loss_function(
-                prediction_scores,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

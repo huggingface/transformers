@@ -712,6 +712,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, CausalLMOutput]:
         r"""
@@ -753,7 +754,9 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         # Soft-cap the logits TODO remove if always done.
         # if self.config.logits_soft_cap is not None:
@@ -762,14 +765,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            loss = self.loss_function(
-                logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

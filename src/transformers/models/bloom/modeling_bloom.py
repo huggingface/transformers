@@ -823,6 +823,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **deprecated_arguments,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
@@ -867,29 +868,28 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             return_dict=return_dict,
             cache_position=cache_position,
         )
-        hidden_states = transformer_outputs[0]
 
-        lm_logits = self.lm_head(hidden_states)
+        hidden_states = transformer_outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # move labels to correct device
-            labels = labels.to(lm_logits.device)
-            # Flatten the tokens
             loss = self.loss_function(
-                lm_logits,
+                logits,
                 labels,
                 vocab_size=self.config.vocab_size,
                 num_items_in_batch=num_items_in_batch,
             )
 
         if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
+            output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
-            logits=lm_logits,
+            logits=logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
