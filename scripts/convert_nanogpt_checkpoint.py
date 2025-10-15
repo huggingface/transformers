@@ -41,6 +41,10 @@ def convert_checkpoint(source_dir: Path, dest_dir: Path) -> tuple[NanoGPTConfig,
     LOGGER.info("Loaded config hidden_size=%s num_layers=%s", config.hidden_size, config.num_hidden_layers)
 
     old_state = torch.load(source_dir / "pytorch_model.bin", map_location="cpu")
+    # Original nanochat weights are in bfloat16
+    for key in old_state:
+        if old_state[key].dtype == torch.float32:
+            old_state[key] = old_state[key].to(torch.bfloat16)
     inferred_kv = infer_kv_heads(config, old_state)
     config.num_key_value_heads = inferred_kv
     if config.num_attention_heads % config.num_key_value_heads != 0:
@@ -73,6 +77,8 @@ def convert_checkpoint(source_dir: Path, dest_dir: Path) -> tuple[NanoGPTConfig,
         LOGGER.info("Skipped %d legacy entries that have no equivalent in the shared implementation", len(missing))
 
     dest_dir.mkdir(parents=True, exist_ok=True)
+    config.dtype = torch.bfloat16
+    config.tie_word_embeddings = False
     config.save_pretrained(dest_dir)
     torch.save(new_state, dest_dir / "pytorch_model.bin")
 
@@ -86,9 +92,11 @@ def convert_checkpoint(source_dir: Path, dest_dir: Path) -> tuple[NanoGPTConfig,
 def run_test(dest_dir: Path, prompt: str, max_new_tokens: int) -> None:
     LOGGER.info("Running quick generation test with prompt: %s", prompt)
     tokenizer = AutoTokenizer.from_pretrained(dest_dir)
-    model = AutoModelForCausalLM.from_pretrained(dest_dir)
+    model = AutoModelForCausalLM.from_pretrained(dest_dir, torch_dtype=torch.bfloat16)
     model.eval()
-    inputs = tokenizer(prompt, return_tensors="pt")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
     with torch.no_grad():
         output = model.generate(**inputs, max_new_tokens=max_new_tokens)
     generated = tokenizer.decode(output[0, inputs.input_ids.shape[1]:], skip_special_tokens=True)
