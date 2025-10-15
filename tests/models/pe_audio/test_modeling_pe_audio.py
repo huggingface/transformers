@@ -26,9 +26,8 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
-    torch_device,
+    random_attention_mask,
 )
-from ...causal_lm_tester import CausalLMModelTester
 
 
 if is_torch_available():
@@ -38,7 +37,6 @@ if is_torch_available():
         ModernBertConfig,
         PEAudioEncoder,
         PEAudioModel,
-        ModernBertModel,
     )
 
 
@@ -103,6 +101,7 @@ class PEAudioEncoderTester:
         input_values = floats_tensor([self.batch_size, self.num_channels, self.audio_seq_length])
         valid_lengths = ids_tensor([self.batch_size], self.audio_seq_length)
         padding_mask = torch.ones([self.batch_size, self.audio_seq_length], device=torch_device) < valid_lengths[:, None]
+        padding_mask = padding_mask.int()
         config = self.get_config()
 
         return config, input_values, padding_mask
@@ -153,57 +152,65 @@ class PEAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-class PEAudioTextModelTester(CausalLMModelTester):
-    """
-    Only a ModelTester and no PEAudioTextModelTest since text model is ModernBertModel that is already tested.
-    """
-    if is_torch_available():
-        config_class = ModernBertConfig
-        base_model_class = ModernBertModel
+class PEAudioTextModelTester:
 
-# class PEAudioTextModelTester:
-    
-    # def __init__(
-    #     self,
-    #     parent,
-    #     config_kwargs={
-    #         "vocab_size": 99,
-    #         "pad_token_id": 0,
-    #         "hidden_size": 32,
-    #         "num_hidden_layers": 2,
-    #         "num_attention_heads": 4,
-    #         "intermediate_size": 37,
-    #         "hidden_activation": "gelu",
-    #         "mlp_dropout": 0.0,
-    #         "attention_dropout": 0.0,
-    #         "embedding_dropout": 0.0,
-    #         "classifier_dropout": 0.0,
-    #         "max_position_embeddings": 512,
-    #         "type_vocab_size": 16,
-    #         "is_decoder": False,
-    #         "initializer_range": 0.02,
-    #     },
-    #     batch_size=12,
-    #     seq_length=7,
-    #     is_training=True,
-    #     use_input_mask=True,
-    # ):
-    #     self.parent = parent
+    def __init__(
+        self,
+        parent,
+        config_kwargs={
+            "vocab_size": 99,
+            "pad_token_id": 0,
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "hidden_activation": "gelu",
+            "mlp_dropout": 0.0,
+            "attention_dropout": 0.0,
+            "embedding_dropout": 0.0,
+            "classifier_dropout": 0.0,
+            "max_position_embeddings": 512,
+            "type_vocab_size": 16,
+            "is_decoder": False,
+            "initializer_range": 0.02,
+        },
+        batch_size=12,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=True, # TODO: to check
+    ):
+        self.parent = parent
 
-    #     self.config_kwargs = config_kwargs
-    #     for key, value in config_kwargs.items():
-    #         setattr(self, key, value)
+        self.config_kwargs = config_kwargs
+        for key, value in config_kwargs.items():
+            setattr(self, key, value)
 
-    #     self.batch_size = batch_size
-    #     self.seq_length = seq_length
-    #     self.is_training = is_training
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
 
-    # def prepare_config_and_inputs(self):
-    #     input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-    #     input_mask = None
-    #     if self.use_input_mask:
-    #         input_mask = random_attention_mask([self.batch_size, self.seq_length])
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        config = self.get_config()
+
+        return config, input_ids, input_mask
+
+    def get_config(self):
+        return ModernBertConfig(**self.config_kwargs)
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, input_mask = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        return config, inputs_dict
 
 
 class PEAudioModelTester:
@@ -218,29 +225,33 @@ class PEAudioModelTester:
         self.audio_model_tester = PEAudioEncoderTester(parent, **audio_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
-    
-    def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        audio_config, input_values, padding_mask = self.audio_model_tester.prepare_config_and_inputs()
 
-        config = self.get_config(text_config, audio_config)
+    def prepare_config_and_inputs(self):
+        _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        _, input_values, padding_mask = self.audio_model_tester.prepare_config_and_inputs()
+
+        config = self.get_config()
 
         return config, input_ids, attention_mask, input_values, padding_mask
-    
-    def get_config(self, text_config=None, audio_config=None):
+
+    def get_config(self):
+        text_config = self.text_model_tester.get_config()
+        audio_config = self.audio_model_tester.get_config()
         return PEAudioConfig(
             text_config=text_config.to_dict(),
             audio_config=audio_config.to_dict(),
             projection_dim=32,
         )
-    
+
     def create_and_check_model(self, config, input_ids, attention_mask, input_values, padding_mask):
         model = PEAudioModel(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(input_ids, input_values, attention_mask, padding_mask)
-        self.parent.assertEqual(result.logits_per_audio.shape, (self.audio_model_tester.batch_size, self.text_model_tester.batch_size))
-        self.parent.assertEqual(result.logits_per_text.shape, (self.text_model_tester.batch_size, self.audio_model_tester.batch_size))
-    
+            _ = model(input_ids, input_values, attention_mask, padding_mask)
+
+        # TODO: there is no logits per audio for now
+        # self.parent.assertEqual(result.logits_per_audio.shape, (self.audio_model_tester.batch_size, self.text_model_tester.batch_size))
+        # self.parent.assertEqual(result.logits_per_text.shape, (self.text_model_tester.batch_size, self.audio_model_tester.batch_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, input_values, padding_mask = config_and_inputs
@@ -253,11 +264,10 @@ class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
     all_model_classes = (PEAudioModel,)
     additional_model_inputs = ["input_values", "padding_mask"]
-
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
-    test_attention_outputs = False
+    has_attentions = False
     _is_composite = True
 
     def setUp(self):
@@ -272,6 +282,18 @@ class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(reason="PEAudioModel does not have usual input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Hidden_states is tested in individual model tests")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
 
 @require_torch

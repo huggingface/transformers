@@ -22,7 +22,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
@@ -559,6 +559,10 @@ class PEAudioPretrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": PEAudioDecoderLayer,
+        "attentions": PEAudioAttention,
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -574,51 +578,59 @@ class PEAudioPretrainedModel(PreTrainedModel):
             nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
+# TODO: not sure about the typing for text_model_output
 @dataclass
 @auto_docstring
 class PEAudioOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for image-text similarity.
-    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+    logits_per_audio (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the image-text
         similarity scores.
     logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-image
         similarity scores.
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`PEAudioTextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
         The image embeddings obtained by applying the projection layer to the pooled output of [`PEAudioVisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`PEAudioTextModel`].
-    vision_model_output (`BaseModelOutputWithPooling`):
+    audio_model_output (`BaseModelOutputWithPooling`):
         The output of the [`PEAudioVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_image: Optional[torch.FloatTensor] = None
+    logits_per_audio: Optional[torch.FloatTensor] = None
     logits_per_text: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
-    image_embeds: Optional[torch.FloatTensor] = None
+    audio_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
-    vision_model_output: BaseModelOutputWithPooling = None
+    audio_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`PEAudioEncoder`].
+    """
+)
+class PEAudioEncoderOutput(BaseModelOutputWithPooling):
+    codec_features: Optional[torch.FloatTensor] = None
+    outputs_mask: Optional[tuple[torch.FloatTensor]] = None
+
+
 class PEAudioEncoder(PEAudioPretrainedModel):
     config_class = PEAudioEncoderConfig
-    base_model_prefix = "audio_encoder"
     main_input_name = "input_values"
-    _can_record_outputs = {
-        "hidden_states": PEAudioDecoderLayer,
-        "attentions": PEAudioAttention,
-    }
+    base_model_prefix = "audio_encoder"
 
     def __init__(self, config: PEAudioEncoderConfig):
         super().__init__(config)
@@ -630,6 +642,7 @@ class PEAudioEncoder(PEAudioPretrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @check_model_inputs
     def forward(
         self,
@@ -647,10 +660,11 @@ class PEAudioEncoder(PEAudioPretrainedModel):
             feature_padding_mask = padding_mask[:, :: self.config.dac_config.hop_length]
         outputs = self.transformer(self.data_proj(codec_features), attention_mask=feature_padding_mask, **kwargs)
 
-        # TODO: shoud we return codec features?
-        return BaseModelOutputWithPooling(
+        return PEAudioEncoderOutput(
             last_hidden_state=outputs.last_hidden_state,
             pooler_output=outputs.pooler_output,
+            codec_features=codec_features,
+            outputs_mask=feature_padding_mask,
         )
 
 
@@ -663,8 +677,10 @@ class PEAudioModel(PEAudioPretrainedModel):
         self.text_head_audio = PEAudioContrastiveHead(config.text_config.hidden_size, config.projection_dim)
         self.audio_head = PEAudioContrastiveHead(config.audio_config.hidden_size, config.projection_dim)
 
-        self.logit_scale = nn.Parameter(torch.tensor([config.logit_scale_init_value]).log())
-        self.logit_bias = nn.Parameter(torch.tensor([config.logit_bias_init_value]))
+        self.logit_scale = nn.Parameter(torch.zeros(1))
+        self.logit_bias = nn.Parameter(torch.zeros(1))
+
+        self.post_init()
 
     def get_text_features(self, input_ids, attention_mask=None):
         # TODO: should it be named feature or embeds
@@ -692,6 +708,7 @@ class PEAudioModel(PEAudioPretrainedModel):
         audio_features = self.audio_head(audio_outputs.pooler_output)
         return audio_features
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -699,35 +716,36 @@ class PEAudioModel(PEAudioPretrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
+        **kwargs,
     ) -> PEAudioOutput:
         audio_output: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values,
             padding_mask=padding_mask,
-            return_dict=True,
+            **{**kwargs, "return_dict": True},
         )
 
         text_output = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=self.config.nth_text_layer,
-            return_dict=True,
+            **{**kwargs, "return_dict": True},
         )
 
         audio_embeds = audio_output.pooler_output
-        if self.config.nth_audio_layer is not None:
-            text_embeds = text_output.hidden_states[self.config.nth_audio_layer]
+        if self.config.nth_text_layer is not None:
+            text_embeds = text_output.hidden_states[self.config.nth_text_layer]
         else:
             text_embeds = text_output.last_hidden_state
 
         audio_embeds = self.audio_head(audio_embeds)
-        text_embeds = self.text_head(text_embeds)
+        text_embeds = self.text_head_audio(text_embeds)
 
+        # TODO: something is wrong in the logic here, should be using pooler?
+        logits_per_text = text_embeds @ audio_embeds.t()
+        logits_per_text = logits_per_text * self.logit_scale + self.logit_bias
         # TODO: there is not logits per audio?
 
         loss = None
         if return_loss:
-            logits_per_text = text_embeds @ audio_embeds.t()
-            logits_per_text = logits_per_text * self.logit_scale + self.logit_bias
             labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
             loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
 

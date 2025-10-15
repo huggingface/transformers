@@ -67,10 +67,7 @@ class PEAudioConfig(PretrainedConfig):
         text_config=None,
         audio_config=None,
         projection_dim=1024,
-        logit_scale_init_value=10.0,
-        logit_bias_init_value=-10.0,
         nth_text_layer=None,
-        nth_audio_layer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -84,7 +81,7 @@ class PEAudioConfig(PretrainedConfig):
 
         if isinstance(audio_config, dict):
             audio_config = PEAudioEncoderConfig.from_dict(audio_config)
-        elif text_config is None:
+        elif audio_config is None:
             audio_config = PEAudioEncoderConfig()
             # TODO: add log
 
@@ -92,10 +89,7 @@ class PEAudioConfig(PretrainedConfig):
         self.audio_config = audio_config
 
         self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
-        self.logit_bias_init_value = logit_bias_init_value
         self.nth_text_layer = nth_text_layer
-        self.nth_audio_layer = nth_audio_layer
 
 
 __all__ = ["PEAudioEncoderConfig", "PEAudioConfig"]
