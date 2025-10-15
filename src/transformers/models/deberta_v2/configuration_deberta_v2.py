@@ -121,6 +121,8 @@ class DebertaV2Config(PreTrainedConfig):
         relative_attention=False,
         max_relative_positions=-1,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         position_biased_input=True,
         pos_att_type=None,
         pooler_dropout=0,
@@ -143,6 +145,8 @@ class DebertaV2Config(PreTrainedConfig):
         self.relative_attention = relative_attention
         self.max_relative_positions = max_relative_positions
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.position_biased_input = position_biased_input
 
         # Backwards compatibility

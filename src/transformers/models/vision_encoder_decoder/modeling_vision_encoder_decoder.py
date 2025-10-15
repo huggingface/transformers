@@ -246,7 +246,9 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     encoder_pretrained_model_name_or_path, **kwargs_encoder, return_unused_kwargs=True
                 )
 
-                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+                if getattr(encoder_config, "is_decoder", False) or getattr(
+                    encoder_config, "add_cross_attention", False
+                ):
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
                         "from a decoder model. Cross-attention and causal mask are disabled."

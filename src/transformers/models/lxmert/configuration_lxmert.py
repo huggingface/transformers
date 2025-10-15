@@ -130,6 +130,9 @@ class LxmertConfig(PreTrainedConfig):
         visual_obj_loss=True,
         visual_attr_loss=True,
         visual_feat_loss=True,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -158,6 +161,9 @@ class LxmertConfig(PreTrainedConfig):
         self.visual_obj_loss = visual_obj_loss
         self.visual_attr_loss = visual_attr_loss
         self.visual_feat_loss = visual_feat_loss
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
         super().__init__(**kwargs)
 

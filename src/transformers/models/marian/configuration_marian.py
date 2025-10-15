@@ -129,14 +129,17 @@ class MarianConfig(PreTrainedConfig):
         scale_embedding=False,
         pad_token_id=58100,
         eos_token_id=0,
+        bos_token_id=None,
         forced_eos_token_id=0,
         share_encoder_decoder_embeddings=True,
         is_decoder=False,
         add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.decoder_vocab_size = decoder_vocab_size or vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -160,6 +163,7 @@ class MarianConfig(PreTrainedConfig):
         self.share_encoder_decoder_embeddings = share_encoder_decoder_embeddings
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
