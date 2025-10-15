@@ -153,7 +153,7 @@ def format_annotations(image, objects, image_id):
     return {"image_id": int(image_id), "annotations": anns}
 ```
 
-Finally, put it all together and create batches in data collator. We format the annotations and pass our annotations with transformed images in batches to the image processor.
+Create batches in the data collator. Format annotations and pass them with transformed images to the image processor.
 
 ```py
 def collate_fn(examples):
