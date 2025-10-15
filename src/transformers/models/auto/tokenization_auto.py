@@ -1177,7 +1177,7 @@ class AutoTokenizer:
                         "The tokenizer for Voxtral or Mistral models requires `mistral-common` package.\n"
                         "Please install it with:\n\n    pip install mistral-common\n"
                     ) from e
-                # Otherwise, re-raise the original error
+                # Otherwise, re-raise original error
                 raise
 
         raise ValueError(
