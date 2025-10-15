@@ -276,7 +276,7 @@ class TestTensorParallelProperties(TestCasePlus):
             # Check that a warning was issued
             self.assertTrue(len(w) > 0)
             warning_message = str(w[0].message)
-            self.assertIn("Layer pattern 'nonexistent.*.layer' does not match any parameters", warning_message)
+            self.assertIn("Layer pattern 'nonexistent.*.layer' does not match any parameter", warning_message)
 
     def test_tp_plan_valid_layer_patterns(self):
         """Test that valid layer patterns are accepted without warnings."""
