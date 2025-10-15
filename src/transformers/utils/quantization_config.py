@@ -316,12 +316,6 @@ class HqqConfig(QuantizationConfigMixin):
                 "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
             )
 
-        for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
-            if deprecated_key in kwargs:
-                logger.info(
-                    deprecated_key + " is deprecated. This parameter will be ignored in quantization settings."
-                )
-
         if axis is None:
             axis = 1
             logger.info("Setting axis=1 as faster backends such as TorchAO or BitBlas are only compatible with it.")
@@ -773,11 +767,6 @@ class GPTQConfig(QuantizationConfigMixin):
             raise ValueError("damp_percent must between 0 and 1.")
         if self.dataset is not None:
             if isinstance(self.dataset, str):
-                if self.dataset in ["ptb", "ptb-new"]:
-                    raise ValueError(
-                        f"""{self.dataset} dataset was deprecated. You can only choose between
-                        ['wikitext2','c4','c4-new']"""
-                    )
                 if self.dataset not in ["wikitext2", "c4", "c4-new"]:
                     raise ValueError(
                         f"""You have entered a string value for dataset. You can only choose between

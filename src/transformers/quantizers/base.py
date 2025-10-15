@@ -79,19 +79,6 @@ class HfQuantizer(ABC):
                 f"pass `pre_quantized=True` while knowing what you are doing."
             )
 
-    def update_torch_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        """
-        Deprecared in favor of `update_dtype`!
-
-        Args:
-            dtype (`torch.dtype`):
-                The input dtype that is passed in `from_pretrained`
-        """
-        logger.warning_once(
-            "`update_torch_dtype` is deprecated in favor of `update_dtype`! It will be removed in version v4.57"
-        )
-        return self.update_dtype(dtype)
-
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         """
         Some quantization methods require to explicitly set the dtype of the model to a
