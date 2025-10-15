@@ -128,6 +128,22 @@ class HfQuantizer(ABC):
         """
         return dtype
 
+    def param_element_size(self, model: "PreTrainedModel", param_name: str) -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name):
+            from accelerate.utils import CustomDtype
+
+            mapping = {
+                torch.int8: 1,
+                CustomDtype.INT4: 0.5,
+                CustomDtype.FP8: 1,
+                CustomDtype.INT2: 0.25,
+            }
+            # The value passed is actually not used when the method is overriden
+            if (custom_dtype := self.adjust_target_dtype(torch.float16)) in mapping:
+                return mapping[custom_dtype]
+        return model.get_parameter_or_buffer(param_name).element_size()
+
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
         Override this method if you want to adjust the `missing_keys`.
