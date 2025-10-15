@@ -1196,7 +1196,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                         past_key_values.cross_attention_cache.layers[idx].values,
                     )
                 )
-                new_tuple = ((self_attention_k, self_attention_v), (cross_attention_k, cross_attention_v))
+                new_tuple = (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
             else:
                 self_attention_k, self_attention_v = (
                     _reorder_stacked(x, beam_idx.to(x.device))

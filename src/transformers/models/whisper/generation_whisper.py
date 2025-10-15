@@ -1180,13 +1180,12 @@ class WhisperGenerationMixin(GenerationMixin):
                     return None
                 all_past_key_values = []
                 for layer_idx in range(self.config.decoder_layers):
-                    layer_cache = [
-                        (
-                            cache_cls.layers[layer_idx].keys[batch_idx][None].cpu(),
-                            cache_cls.layers[layer_idx].values[batch_idx][None].cpu(),
-                        )
-                        for cache_cls in [values.self_attention_cache, values.cross_attention_cache]
-                    ]
+                    layer_cache = (
+                        values.self_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.self_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                    )
                     all_past_key_values.append(layer_cache)
                 return EncoderDecoderCache(all_past_key_values)
 
@@ -1240,7 +1239,7 @@ class WhisperGenerationMixin(GenerationMixin):
                             for sub_key in ["keys", "values"]
                         )
                         all_past_key_values.append(
-                            ((self_attention_k, self_attention_v), (cross_attention_k, cross_attention_v))
+                            (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
                         )
                     outputs[key] = EncoderDecoderCache(tuple(all_past_key_values))
                 else:
