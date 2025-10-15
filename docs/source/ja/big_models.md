@@ -110,7 +110,7 @@ dict_keys(['metadata', 'weight_map'])
 ```
 
 直接モデル内で[`~PreTrainedModel.from_pretrained`]を使用せずに、
-シャーディングされたチェックポイントをロードしたい場合（フルチェックポイントの場合に`model.load_state_dict()`を使用するように行う方法）、[`~modeling_utils.load_sharded_checkpoint`]を使用する必要があります：
+シャーディングされたチェックポイントをロードしたい場合（フルチェックポイントの場合に`model.load_state_dict()`を使用するように行う方法）、[`~trainer_utils.load_sharded_checkpoint`]を使用する必要があります：
 
 
 ```py

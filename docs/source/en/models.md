@@ -139,7 +139,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     new_model = AutoModel.from_pretrained(tmp_dir)
 ```
 
-Sharded checkpoints can also be directly loaded with [`~transformers.modeling_utils.load_sharded_checkpoint`].
+Sharded checkpoints can also be directly loaded with [`~transformers.trainer_utils.load_sharded_checkpoint`].
 
 ```py
 from transformers.modeling_utils import load_sharded_checkpoint
