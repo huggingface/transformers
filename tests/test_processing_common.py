@@ -226,7 +226,10 @@ class ProcessorTesterMixin:
 
             # Try to load each attribute separately from saved directory
             for attribute in processor_first.get_attributes():
-                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
+                if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
+                    auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+                else:
+                    auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
                 attribute_reloaded = auto_processor_class.from_pretrained(tmpdirname)
                 attribute_first = getattr(processor_first, attribute)
 

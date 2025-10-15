@@ -80,6 +80,11 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with open(self.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
+        image_processor = FlavaImageProcessor.from_pretrained(self.tmpdirname)
+        image_processor.save_pretrained(self.tmpdirname)
+        tokenizer = BertTokenizer.from_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(self.tmpdirname)
+
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 

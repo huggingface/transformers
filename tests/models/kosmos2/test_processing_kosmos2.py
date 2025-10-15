@@ -22,7 +22,6 @@ import numpy as np
 import pytest
 
 from transformers.image_utils import load_image
-from transformers.models.auto.processing_auto import processor_class_from_name
 from transformers.testing_utils import (
     get_tests_dir,
     require_sentencepiece,
@@ -69,23 +68,6 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Kosmos2Processor(image_processor, fast_tokenizer)
         processor.save_pretrained(cls.tmpdirname)
-
-    # We override this method to take the fast tokenizer by default
-    def get_component(self, attribute, **kwargs):
-        assert attribute in self.processor_class.get_attributes()
-        component_class_name = getattr(self.processor_class, f"{attribute}_class")
-        if isinstance(component_class_name, tuple):
-            if attribute == "image_processor":
-                component_class_name = component_class_name[0]
-            else:
-                component_class_name = component_class_name[-1]
-
-        component_class = processor_class_from_name(component_class_name)
-        component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
-        if attribute == "tokenizer" and not component.pad_token:
-            component.pad_token = "[TEST_PAD]"
-
-        return component
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
