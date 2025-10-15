@@ -8,7 +8,7 @@ logger = logging.get_logger(__name__)
 class NanoGPTConfig(PretrainedConfig):
     r"""Configuration for the NanoGPT model."""
 
-    model_type = "nanogpt"
+    model_type = "nanochat"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "n_embd",

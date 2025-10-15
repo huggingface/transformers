@@ -32,7 +32,7 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
 )
-from .configuration_nanogpt import NanoGPTConfig
+from .configuration_nanochat import NanoGPTConfig
 
 
 logger = logging.get_logger(__name__)

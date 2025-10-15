@@ -1,6 +1,6 @@
-from .configuration_nanogpt import NanoGPTConfig
-from .modeling_nanogpt import NanoGPTModel, NanoGPTForCausalLM
-from .tokenizer_nanogpt import NanoGPTTokenizer
+from .configuration_nanochat import NanoGPTConfig
+from .modeling_nanochat import NanoGPTModel, NanoGPTForCausalLM
+from .tokenizer_nanochat import NanoGPTTokenizer
 
 
 __all__ = [
