@@ -181,7 +181,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     greedy_sample_model_classes = (
         (MusicgenMelodyForCausalLM,) if is_torch_available() else ()
     )  # the model uses a custom generation method so we only run a specific subset of the generation tests
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -573,7 +573,7 @@ class MusicgenMelodyTester:
             tie_word_embeddings=False,
             audio_channels=self.audio_channels,
         )
-        config = MusicgenMelodyConfig.from_sub_models_config(
+        config = MusicgenMelodyConfig(
             text_encoder_config, audio_encoder_config, decoder_config, chroma_length=self.chroma_length
         )
         return config
@@ -593,7 +593,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     pipeline_model_mapping = {"text-to-audio": MusicgenMelodyForConditionalGeneration} if is_torch_available() else {}
     # Addition keys that are required for forward. MusicGen isn't encoder-decoder in config so we have to pass decoder ids as additional
     additional_model_inputs = ["decoder_input_ids"]
-    test_pruning = False  # training is not supported yet for MusicGen
+    # training is not supported yet for MusicGen
     test_resize_embeddings = False
     # not to test torchscript as the model tester doesn't prepare `input_features` and `padding_mask`
     # (and `torchscript` hates `None` values).

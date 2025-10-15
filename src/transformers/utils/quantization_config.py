@@ -316,12 +316,6 @@ class HqqConfig(QuantizationConfigMixin):
                 "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
             )
 
-        for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
-            if deprecated_key in kwargs:
-                logger.info(
-                    deprecated_key + " is deprecated. This parameter will be ignored in quantization settings."
-                )
-
         if axis is None:
             axis = 1
             logger.info("Setting axis=1 as faster backends such as TorchAO or BitBlas are only compatible with it.")
@@ -406,8 +400,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
-
-    This replaces `load_in_8bit` or `load_in_4bit`therefore both options are mutually exclusive.
 
     Currently only supports `LLM.int8()`, `FP4`, and `NF4` quantization. If more methods are added to `bitsandbytes`,
     then more arguments will be added to this class.
@@ -564,13 +556,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise TypeError("bnb_4bit_use_double_quant must be a boolean")
-
-        if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-            "0.39.0"
-        ):
-            raise ValueError(
-                "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
-            )
 
     def is_quantizable(self):
         r"""
@@ -782,11 +767,6 @@ class GPTQConfig(QuantizationConfigMixin):
             raise ValueError("damp_percent must between 0 and 1.")
         if self.dataset is not None:
             if isinstance(self.dataset, str):
-                if self.dataset in ["ptb", "ptb-new"]:
-                    raise ValueError(
-                        f"""{self.dataset} dataset was deprecated. You can only choose between
-                        ['wikitext2','c4','c4-new']"""
-                    )
                 if self.dataset not in ["wikitext2", "c4", "c4-new"]:
                     raise ValueError(
                         f"""You have entered a string value for dataset. You can only choose between
@@ -1137,11 +1117,11 @@ class VptqLayerConfig(QuantizationConfigMixin):
         in_features: int = -1,
         indices_as_float: bool = False,
         is_indice_packed: bool = True,
-        num_centroids: tuple = [-1, -1],
-        num_res_centroids: tuple = [-1, -1],
+        num_centroids: list = [-1, -1],
+        num_res_centroids: list = [-1, -1],
         out_features: int = -1,
         outlier_size: int = 0,
-        vector_lens: tuple = [-1, -1],
+        vector_lens: list = [-1, -1],
         **kwargs,
     ):
         self.enable_norm = enable_norm

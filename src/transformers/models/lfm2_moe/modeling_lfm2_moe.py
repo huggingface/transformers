@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -311,9 +312,6 @@ class Lfm2MoeHybridConvCache:
 
     def __len__(self) -> int:
         return len(self.key_cache)
-
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def reset(self):
         for layer_idx in range(len(self.conv_cache)):

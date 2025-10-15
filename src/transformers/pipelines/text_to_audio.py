@@ -80,9 +80,6 @@ class TextToAudioPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
 
-    # Introducing the processor at load time for new behaviour
-    _load_processor = True
-
     _pipeline_calls_generate = True
     _load_processor = False
     _load_image_processor = False

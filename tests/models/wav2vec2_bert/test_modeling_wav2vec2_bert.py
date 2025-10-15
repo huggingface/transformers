@@ -419,7 +419,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else {}
     )
 
-    test_pruning = False
     test_torchscript = False
 
     def setUp(self):

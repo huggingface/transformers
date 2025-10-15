@@ -24,7 +24,7 @@ from typing import Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy, has_length
+from .trainer_utils import IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -172,15 +172,14 @@ class TrainerState:
         Stores the initial training references needed in `self`
         """
         if trainer.hp_name is not None and trainer._trial is not None:
-            # use self._trial because the SigOpt/Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
+            # use self._trial because the Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
             # parameter to Train when using DDP.
             self.trial_name = trainer.hp_name(trainer._trial)
         self.trial_params = None
         if trial is not None:
             from transformers.integrations import hp_params
 
-            assignments = trial.assignments if trainer.hp_search_backend == HPSearchBackend.SIGOPT else trial
-            self.trial_params = hp_params(assignments)
+            self.trial_params = hp_params(trial)
 
         self.max_steps = max_steps
         self.num_train_epochs = num_train_epochs
@@ -309,8 +308,6 @@ class TrainerCallback:
             The object that is returned to the [`Trainer`] and can be used to make some decisions.
         model ([`PreTrainedModel`] or `torch.nn.Module`):
             The model being trained.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data. This is deprecated in favour of `processing_class`.
         processing_class ([`PreTrainedTokenizer` or `BaseImageProcessor` or `ProcessorMixin` or `FeatureExtractionMixin`]):
             The processing class used for encoding the data. Can be a tokenizer, a processor, an image processor or a feature extractor.
         optimizer (`torch.optim.Optimizer`):

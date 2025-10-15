@@ -15,7 +15,8 @@
 """PyTorch Whisper model."""
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -807,12 +808,11 @@ class WhisperDecoder(WhisperPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            if self.config.is_encoder_decoder:
-                past_key_values = EncoderDecoderCache(
-                    DynamicCache(config=self.config), DynamicCache(config=self.config)
-                )
-            else:
-                past_key_values = DynamicCache(config=self.config)
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if encoder_hidden_states is not None or self.config.is_encoder_decoder
+                else DynamicCache(config=self.config)
+            )
 
         past_key_values_length = 0
         if cache_position is not None:

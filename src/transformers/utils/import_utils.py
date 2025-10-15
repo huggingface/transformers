@@ -26,11 +26,12 @@ import shutil
 import subprocess
 import sys
 from collections import OrderedDict
+from collections.abc import Callable
 from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -72,6 +73,7 @@ ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
 
 ACCELERATE_MIN_VERSION = "1.1.0"
+BITSANDBYTES_MIN_VERSION = "0.46.1"
 SCHEDULEFREE_MIN_VERSION = "1.2.6"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
@@ -722,7 +724,15 @@ def is_datasets_available() -> bool:
 
 @lru_cache
 def is_detectron2_available() -> bool:
-    return _is_package_available("detectron2")
+    # We need this try/except block because otherwise after uninstalling the library, it stays available for some reason
+    # i.e. `import detectron2` and `import detectron2.modeling` still work, even though the library is uninstalled
+    # (the package exists but the objects are not reachable) - so here we explicitly try to import an object from it
+    try:
+        from detectron2.modeling import META_ARCH_REGISTRY  # noqa
+
+        return True
+    except Exception:
+        return False
 
 
 @lru_cache
@@ -814,27 +824,9 @@ def is_ipex_available(min_version: str = "") -> bool:
 
 
 @lru_cache
-def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
+def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bool:
     is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
-    if check_library_only or not is_available:
-        return is_available
-
-    # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
-    # so those versions of the library are practically only available when CUDA is too.
-    if version.parse(bitsandbytes_version) < version.parse("0.43.1"):
-        return is_torch_cuda_available() and is_available
-    # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
-    return is_torch_available() and is_available
-
-
-@lru_cache
-def is_bitsandbytes_multi_backend_available() -> bool:
-    if not is_bitsandbytes_available():
-        return False
-
-    import bitsandbytes as bnb
-
-    return "multi_backend" in getattr(bnb, "features", set())
+    return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -1526,12 +1518,6 @@ SACREMOSES_IMPORT_ERROR = """
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
 `pip install scipy`. Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
-KERAS_NLP_IMPORT_ERROR = """
-{0} requires the keras_nlp library but it was not found in your environment. You can install it with pip.
-Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore

@@ -56,7 +56,6 @@ X-CLIP을 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티
 ## XCLIPConfig[[xclipconfig]]
 
 [[autodoc]] XCLIPConfig
-    - from_text_vision_configs
 
 ## XCLIPTextConfig[[xcliptextconfig]]
 

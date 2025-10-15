@@ -107,17 +107,6 @@ if is_sagemaker_mp_enabled():
     smp.init()
 
 
-def default_logdir() -> str:
-    """
-    Same default as PyTorch
-    """
-    import socket
-    from datetime import datetime
-
-    current_time = datetime.now().strftime("%b%d_%H-%M-%S")
-    return os.path.join("runs", current_time + "_" + socket.gethostname())
-
-
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
     for e in env_keys:
@@ -219,9 +208,6 @@ class TrainingArguments:
     Parameters:
         output_dir (`str`, *optional*, defaults to `"trainer_output"`):
             The output directory where the model predictions and checkpoints will be written.
-        overwrite_output_dir (`bool`, *optional*, defaults to `False`):
-            If `True`, overwrite the content of the output directory. Use this to continue training if `output_dir`
-            points to a checkpoint directory.
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
             by your training/evaluation scripts instead. See the [example
@@ -312,9 +298,6 @@ class TrainingArguments:
         log_on_each_node (`bool`, *optional*, defaults to `True`):
             In multinode distributed training, whether to log using `log_level` once per node, or only on the main
             node.
-        logging_dir (`str`, *optional*):
-            [TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to
-            *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***.
         logging_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
             The logging strategy to adopt during training. Possible values are:
 
@@ -384,8 +367,6 @@ class TrainingArguments:
             Random seed to be used with data samplers. If not set, random generators for data sampling will use the
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
-        jit_mode_eval (`bool`, *optional*, defaults to `False`):
-            Whether or not to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU.
@@ -402,12 +383,8 @@ class TrainingArguments:
             on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
             the [TF32](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32) documentation. This is an
             experimental API and it may change.
-        local_rank (`int`, *optional*, defaults to -1):
-            Rank of the process during distributed training.
         ddp_backend (`str`, *optional*):
             The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"ccl"`, `"gloo"`, `"hccl"`.
-        tpu_num_cores (`int`, *optional*):
-            When training on TPU, the number of TPU cores (automatically passed by launcher script).
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
@@ -418,11 +395,6 @@ class TrainingArguments:
         dataloader_num_workers (`int`, *optional*, defaults to 0):
             Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
             main process.
-        past_index (`int`, *optional*, defaults to -1):
-            Some models like [TransformerXL](../model_doc/transformerxl) or [XLNet](../model_doc/xlnet) can make use of
-            the past hidden states for their predictions. If this argument is set to a positive int, the `Trainer` will
-            use the corresponding output (usually index 2) as the past state and feed it to the model at the next
-            training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [trackio](https://github.com/gradio-app/trackio),
             [wandb](https://www.wandb.com/), [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and
@@ -473,7 +445,7 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `[]`):
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `None`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
             A list of options along the following:
@@ -610,7 +582,7 @@ class TrainingArguments:
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
             than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
             instance of `Dataset`.
-        report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
+        report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
@@ -712,12 +684,6 @@ class TrainingArguments:
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
             distributed training. Important: this will negatively impact the performance, so only use it for debugging.
-        ray_scope (`str`, *optional*, defaults to `"last"`):
-            The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
-            then use the last checkpoint of all trials, compare those, and select the best one. However, other options
-            are also available. See the [Ray documentation](
-            https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
-            more options.
         ddp_timeout (`int`, *optional*, defaults to 1800):
             The timeout for `torch.distributed.init_process_group` calls, used to avoid GPU socket timeouts when
             performing slow operations in distributed runnings. Please refer the [PyTorch documentation]
@@ -804,15 +770,6 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."
-        },
-    )
-    overwrite_output_dir: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Overwrite the content of the output directory. "
-                "Use this to continue training if output_dir points to a checkpoint directory."
-            )
         },
     )
 
@@ -919,7 +876,6 @@ class TrainingArguments:
             )
         },
     )
-    logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
     logging_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
@@ -1002,9 +958,6 @@ class TrainingArguments:
     )
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
-    jit_mode_eval: bool = field(
-        default=False, metadata={"help": "Whether or not to use PyTorch jit trace for inference"}
-    )
     bf16: bool = field(
         default=False,
         metadata={
@@ -1018,12 +971,7 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
     )
-    half_precision_backend: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The backend to be used for half precision. This argument is deprecated. We will always use CPU/CUDA AMP from torch",
-        },
-    )
+
     bf16_full_eval: bool = field(
         default=False,
         metadata={
@@ -1046,16 +994,18 @@ class TrainingArguments:
             )
         },
     )
-    local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
+    local_rank: int = field(
+        default=-1,
+        metadata={
+            "help": "When using torch.distributed.launch (Deprecated), it will pass `local_rank` in the script, so we need this for the parser. To get the local rank, prefer using the property `local_process_index`"
+        },
+    )
     ddp_backend: Optional[str] = field(
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
             "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl", "mccl"],
         },
-    )
-    tpu_num_cores: Optional[int] = field(
-        default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
     )
     debug: Union[str, list[DebugOption]] = field(
         default="",
@@ -1097,10 +1047,6 @@ class TrainingArguments:
                 "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
             )
         },
-    )
-    past_index: int = field(
-        default=-1,
-        metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
     )
 
     run_name: Optional[str] = field(
@@ -1146,8 +1092,8 @@ class TrainingArguments:
             )
         },
     )
-    fsdp: Union[list[FSDPOption], str, bool] = field(
-        default_factory=list,
+    fsdp: Optional[Union[list[FSDPOption], str]] = field(
+        default=None,
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
@@ -1213,7 +1159,7 @@ class TrainingArguments:
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
     report_to: Union[None, str, list[str]] = field(
-        default=None, metadata={"help": "The list of integrations to report the results and logs to."}
+        default="none", metadata={"help": "The list of integrations to report the results and logs to."}
     )
     project: str = field(
         default="huggingface",
@@ -1327,12 +1273,6 @@ class TrainingArguments:
             "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
         },
     )
-    _n_gpu: int = field(init=False, repr=False, default=-1)
-    mp_parameters: str = field(
-        default="",
-        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
-    )
-
     auto_find_batch_size: bool = field(
         default=False,
         metadata={
@@ -1348,19 +1288,6 @@ class TrainingArguments:
             "help": (
                 "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed"
                 " training. Important: this will negatively impact the performance, so only use it for debugging."
-            )
-        },
-    )
-    ray_scope: str = field(
-        default="last",
-        metadata={
-            "help": (
-                'The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray'
-                " will then use the last checkpoint of all trials, compare those, and select the best one. However,"
-                " other options are also available. See the Ray documentation"
-                " (https://docs.ray.io/en/latest/tune/api_docs/analysis.html"
-                "#ray.tune.ExperimentAnalysis.get_best_trial)"
-                " for more options."
             )
         },
     )
@@ -1385,14 +1312,6 @@ class TrainingArguments:
             "help": "Which mode to use with `torch.compile`, passing one will trigger a model compilation.",
         },
     )
-
-    include_tokens_per_second: Optional[bool] = field(
-        default=None,
-        metadata={
-            "help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."
-        },
-    )
-
     include_num_input_tokens_seen: Union[str, bool] = field(
         default="no",
         metadata={
@@ -1488,10 +1407,6 @@ class TrainingArguments:
         # see https://github.com/huggingface/transformers/issues/10628
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
-        if self.logging_dir is None and self.output_dir is not None:
-            self.logging_dir = os.path.join(self.output_dir, default_logdir())
-        if self.logging_dir is not None:
-            self.logging_dir = os.path.expanduser(self.logging_dir)
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
@@ -1594,11 +1509,6 @@ class TrainingArguments:
                         # gpu
                         raise ValueError(error_message)
 
-        if self.half_precision_backend is not None:
-            raise ValueError(
-                "half_precision_backend is deprecated. For mixed precision, we will always use CPU/CUDA AMP from torch"
-            )
-
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
 
@@ -1699,13 +1609,6 @@ class TrainingArguments:
             mixed_precision_dtype = "bf16"
         os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
-        if self.report_to is None:
-            logger.info(
-                "The default value for the training argument `--report_to` will change in v5 (from all installed "
-                "integrations to none). In v5, you will need to use `--report_to all` to get the same behavior as "
-                "now. You should start updating your code and make this info disappear :-)."
-            )
-            self.report_to = "all"
         if self.report_to == "all" or self.report_to == ["all"]:
             # Import at runtime to avoid a circular import.
             from .integrations import get_available_reporting_integrations
@@ -1734,10 +1637,13 @@ class TrainingArguments:
         if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
             raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
 
-        if isinstance(self.fsdp, bool):
-            self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
-        if isinstance(self.fsdp, str):
+        if self.fsdp is None:
+            self.fsdp = []
+        elif self.fsdp is True:
+            self.fsdp = [FSDPOption.FULL_SHARD]
+        elif isinstance(self.fsdp, str):
             self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
+
         if self.fsdp == [FSDPOption.OFFLOAD]:
             raise ValueError(
                 "`--fsdp offload` can't work on its own. It needs to be added to `--fsdp full_shard` or "
@@ -1893,12 +1799,6 @@ class TrainingArguments:
                 " when --dataloader_num_workers > 1."
             )
 
-        if self.include_tokens_per_second is not None:
-            logger.warning(
-                "include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead. "
-            )
-            self.include_num_input_tokens_seen = self.include_tokens_per_second
-
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
 
@@ -1978,8 +1878,7 @@ class TrainingArguments:
             self._n_gpu = 0
         elif is_sagemaker_mp_enabled():
             accelerator_state_kwargs["enabled"] = False
-            local_rank = smp.local_rank()
-            device = torch.device("cuda", local_rank)
+            device = torch.device("cuda", smp.local_rank())
             torch.cuda.set_device(device)
         elif is_sagemaker_dp_enabled():
             accelerator_state_kwargs["_use_sagemaker_dp"] = True
@@ -2003,7 +1902,6 @@ class TrainingArguments:
                 del os.environ["ACCELERATE_USE_DEEPSPEED"]
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
-            self.local_rank = self.distributed_state.local_process_index
         if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
@@ -2093,9 +1991,7 @@ class TrainingArguments:
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DATA_PARALLEL
-        elif (
-            self.distributed_state is not None and self.distributed_state.distributed_type != DistributedType.NO
-        ) or (self.distributed_state is None and self.local_rank != -1):
+        elif self.distributed_state is not None and self.distributed_state.distributed_type != DistributedType.NO:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED
@@ -2408,7 +2304,6 @@ class TrainingArguments:
         accumulation_steps: Optional[int] = None,
         delay: Optional[float] = None,
         loss_only: bool = False,
-        jit_mode: bool = False,
     ):
         """
         A method that regroups all arguments linked to evaluation.
@@ -2435,8 +2330,6 @@ class TrainingArguments:
                 eval_strategy.
             loss_only (`bool`, *optional*, defaults to `False`):
                 Ignores all outputs except the loss.
-            jit_mode (`bool`, *optional*):
-                Whether or not to use PyTorch jit trace for inference.
 
         Example:
 
@@ -2458,14 +2351,12 @@ class TrainingArguments:
         self.eval_accumulation_steps = accumulation_steps
         self.eval_delay = delay
         self.prediction_loss_only = loss_only
-        self.jit_mode_eval = jit_mode
         return self
 
     def set_testing(
         self,
         batch_size: int = 8,
         loss_only: bool = False,
-        jit_mode: bool = False,
     ):
         """
         A method that regroups all basic arguments linked to testing on a held-out dataset.
@@ -2481,8 +2372,6 @@ class TrainingArguments:
                 The batch size per device (GPU/TPU core/CPU...) used for testing.
             loss_only (`bool`, *optional*, defaults to `False`):
                 Ignores all outputs except the loss.
-            jit_mode (`bool`, *optional*):
-                Whether or not to use PyTorch jit trace for inference.
 
         Example:
 
@@ -2498,7 +2387,6 @@ class TrainingArguments:
         self.do_predict = True
         self.per_device_eval_batch_size = batch_size
         self.prediction_loss_only = loss_only
-        self.jit_mode_eval = jit_mode
         return self
 
     def set_save(
@@ -2578,7 +2466,7 @@ class TrainingArguments:
                 Logger log level to use on the main process. Possible choices are the log levels as strings: `"debug"`,
                 `"info"`, `"warning"`, `"error"` and `"critical"`, plus a `"passive"` level which doesn't set anything
                 and lets the application set the level.
-            report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
+            report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
                 `"neptune"`, `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all

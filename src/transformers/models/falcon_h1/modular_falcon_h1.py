@@ -19,7 +19,8 @@
 # limitations under the License.
 """PyTorch FalconH1 model."""
 
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F

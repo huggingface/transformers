@@ -15,8 +15,9 @@
 """PyTorch KOSMOS-2.5 model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import nn
@@ -321,7 +322,7 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     width: Optional[torch.FloatTensor] = None
@@ -783,7 +784,7 @@ class Kosmos2_5TextAttention(nn.Module):
         hidden_states: torch.Tensor,  # text part
         encoder_hidden_states: Optional[torch.Tensor] = None,  # image part
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -804,10 +805,10 @@ class Kosmos2_5TextAttention(nn.Module):
         # Apply `self.scaling`
         query_states = self.scaling * query_states
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -859,7 +860,7 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         cache_position: Optional[torch.LongTensor] = None,
@@ -873,7 +874,7 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -1147,7 +1148,7 @@ class Kosmos2_5TextTransformer(nn.Module):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -1202,7 +1203,7 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
         hidden_states, attn_weights = self.x_attn(
             hidden_states=latent_query,
             encoder_hidden_states=key_value_states,
-            past_key_value=None,
+            past_key_values=None,
             attention_mask=None,
             output_attentions=None,
             is_causal=False,
@@ -1270,15 +1271,6 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_projection
 
-    # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel._prune_heads
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     # Similar to transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.forward without docstring
     def forward(
         self,
@@ -1343,7 +1335,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         image_embeds: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1408,7 +1400,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         height: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         image_embeds: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1539,12 +1531,13 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         image_embeds: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithCrossAttentions:
         r"""
@@ -1561,7 +1554,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
 
-        outputs = self.model(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             image_embeds=image_embeds,
@@ -1574,22 +1567,19 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             **kwargs,
         )
-        lm_logits = self.lm_head(outputs.last_hidden_state)
 
-        lm_loss = None
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
         if labels is not None:
-            # move labels to correct device
-            labels = labels.to(lm_logits.device)
-            lm_loss = self.loss_function(
-                lm_logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=lm_logits,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -1702,7 +1692,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         height: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         image_embeds: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1710,6 +1700,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Kosmos2_5ForConditionalGenerationModelOutput:
         r"""
@@ -1769,7 +1760,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
                 image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
                 image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
-        lm_outputs = self.text_model(
+        lm_outputs: CausalLMOutputWithCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             image_embeds=image_embeds,
@@ -1781,6 +1772,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
