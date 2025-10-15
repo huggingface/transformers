@@ -206,7 +206,7 @@ trainer.push_to_hub()
 image_processor.push_to_hub("merve/license-plate-detr-dinov3")
 ```
 
-Let's put it to test. You can easily use the model in the repository with the object detection pipeline.
+Test the model with an object detection pipeline.
 
 ```py
 from transformers import pipeline
