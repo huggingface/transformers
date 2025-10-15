@@ -106,7 +106,6 @@ class ProcessorTesterMixin:
         return {}
 
     def get_component(self, attribute, **kwargs):
-        # determine from current file name
         if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
             attribute = "tokenizer"
         auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]

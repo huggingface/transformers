@@ -601,8 +601,6 @@ class ProcessorMixin(PushToHubMixin):
 
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for attribute_name, arg in kwargs.items():
-            print("attribute_name", attribute_name)
-
             self.check_argument_for_proper_class(attribute_name, arg)
             setattr(self, attribute_name, arg)
 
@@ -1563,7 +1561,6 @@ class ProcessorMixin(PushToHubMixin):
                 sub_processor_type = "tokenizer"
             if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
-                print("auto_processor_class", auto_processor_class)
                 args.append(auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
 
         return args
