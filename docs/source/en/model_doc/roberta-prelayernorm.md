@@ -54,7 +54,7 @@ print(f"Predicted word: {predicted_word}")
 ## Usage tips
 
 - The implementation is the same as RoBERTa except it uses Norm and Add instead of Add and Norm.
-- Add and Norm refers to Addition and LayerNormalization as described in ["Attention Is All You Need"](https://arxiv.org/abs/1706.03762).
+- Add and Norm refers to Addition and LayerNormalization as described in [Attention Is All You Need](https://huggingface.co/papers/1706.03762).
 - This is identical to using the `--encoder-normalize-before` flag in fairseq.
 
 ## RobertaPreLayerNormConfig

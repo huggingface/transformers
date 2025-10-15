@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2025-03-26 and added to Hugging Face Transformers on 2025-10-07.*
+*This model was released on 2025-03-26 and added to Hugging Face Transformers on 2025-09-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
