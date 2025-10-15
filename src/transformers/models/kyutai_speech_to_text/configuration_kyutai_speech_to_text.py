@@ -139,6 +139,7 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         tie_word_embeddings=False,
         pad_token_id=3,
         bos_token_id=48000,
+        eos_token_id=None,
         codec_config=None,
         **kwargs,
     ):
@@ -182,6 +183,7 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
 
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 

@@ -147,7 +147,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         # encoder outputs might need to be projected to different dimension for decoder
         if (
             self.encoder.config.hidden_size != self.decoder.config.hidden_size
-            and self.decoder.config.cross_attention_hidden_size is None
+            and getattr(self.decoder.config, "cross_attention_hidden_size", None) is None
         ):
             self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
 
@@ -441,7 +441,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         # optionally project encoder_hidden_states
         if (
             self.encoder.config.hidden_size != self.decoder.config.hidden_size
-            and self.decoder.config.cross_attention_hidden_size is None
+            and getattr(self.decoder.config, "cross_attention_hidden_size", None) is None
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 

@@ -523,7 +523,9 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             model.eval()
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+            pad_token_id = (
+                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 1
+            )
 
             wte = model.get_input_embeddings()
 

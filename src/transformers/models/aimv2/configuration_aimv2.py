@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -188,8 +187,6 @@ class Aimv2TextConfig(PreTrainedConfig):
         qkv_bias: bool = False,
         mlp_bias: bool = False,
         hidden_act: str = "silu",
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
         initializer_range: bool = 0.02,

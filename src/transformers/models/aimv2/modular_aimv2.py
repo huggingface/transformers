@@ -198,8 +198,6 @@ class Aimv2TextConfig(SiglipTextConfig):
         qkv_bias: bool = False,
         mlp_bias: bool = False,
         hidden_act: str = "silu",
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
         initializer_range: bool = 0.02,
@@ -213,8 +211,6 @@ class Aimv2TextConfig(SiglipTextConfig):
             num_attention_heads=num_attention_heads,
             hidden_act=hidden_act,
             max_position_embeddings=max_position_embeddings,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             **kwargs,
         )

@@ -2100,11 +2100,11 @@ class ModelTesterMixin:
             self.skipTest(reason="test_resize_embeddings is set to `False`")
 
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        original_config.get_text_config(decoder=True).tie_word_embeddings = False
+        original_config.tie_word_embeddings = False
         inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
-        if getattr(original_config.get_text_config(decoder=True), "tie_word_embeddings", False):
+        if getattr(original_config, "tie_word_embeddings", False):
             self.skipTest(reason="Model cannot untied embeddings")
 
         for model_class in self.all_model_classes:

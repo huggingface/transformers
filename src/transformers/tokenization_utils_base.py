@@ -2225,7 +2225,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     trust_remote_code=trust_remote_code,
                     _commit_hash=_commit_hash,
                 )
-                config_tokenizer_class = config.tokenizer_class
+                config_tokenizer_class = getattr(config, "tokenizer_class", None)
             except (OSError, ValueError, KeyError):
                 # skip if an error occurred.
                 config = None

@@ -355,9 +355,9 @@ class DiaConfig(PreTrainedConfig):
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
         self.initializer_range = initializer_range
         self.use_cache = use_cache
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
+        self.decoder_config.pad_token_id = pad_token_id
+        self.decoder_config.eos_token_id = eos_token_id
+        self.decoder_config.bos_token_id = bos_token_id
 
         assert self.decoder_config.num_channels == len(self.delay_pattern), (
             "Number of channels must match delay pattern length."
