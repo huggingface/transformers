@@ -211,6 +211,9 @@ class HfQuantizer(ABC):
         "updates the tp plan for the scales"
         return config
 
+    def _process_model_before_weight_loading(self, model, **kwargs):
+        return model
+
     def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point
@@ -344,12 +347,6 @@ class HfQuantizer(ABC):
     def update_state_dict_with_metadata(self, state_dict, metadata):
         """Update state dict with metadata. Default behaviour returns state_dict"""
         return state_dict
-
-    @abstractmethod
-    def _process_model_before_weight_loading(self, model, **kwargs): ...
-
-    @abstractmethod
-    def _process_model_after_weight_loading(self, model, **kwargs): ...
 
     @abstractmethod
     def is_serializable(self, safe_serialization=None): ...
