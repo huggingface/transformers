@@ -741,10 +741,7 @@ class Trainer:
 
         # Set use_cache for the model
         if getattr(self.model, "config", None) is not None:
-            if self.args.use_model_cache is None:
-                self.model.config.use_cache = _is_peft_model(self.model)
-            else:
-                self.model.config.use_cache = self.args.use_model_cache
+            self.model.config.use_cache = self.args.use_cache
 
         # very last
         self._memory_tracker.stop_and_update_metrics()

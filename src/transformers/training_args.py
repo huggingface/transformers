@@ -753,9 +753,8 @@ class TrainingArguments:
             num_tokens_in_batch for precise loss calculation. Reference:
             https://github.com/huggingface/transformers/issues/34242
 
-        use_model_cache (`Optional[bool]`, *optional*, defaults to `None`):
-            Whether or not to enable cache for the model (`use_cache`). For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`.
-            Defaults to `None`. If `None`, we will disable the cache unless we have a peft model."
+        use_cache (`bool`, *optional*, defaults to `False`):
+            Whether or not to enable cache for the model. For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`.
 
     """
 
@@ -1401,11 +1400,10 @@ class TrainingArguments:
         },
     )
 
-    use_model_cache: Optional[bool] = field(
-        default=None,
+    use_cache: bool = field(
+        default=False,
         metadata={
-            "help": "Whether or not to use cache for the model (`use_cache`). For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`."
-            "Defaults to `None`. If `None`, we will disable the cache unless we have a peft model. "
+            "help": "Whether or not to use cache for the model For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`."
         },
     )
 
