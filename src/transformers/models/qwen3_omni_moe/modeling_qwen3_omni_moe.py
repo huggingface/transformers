@@ -1099,6 +1099,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
     def fast_pos_embed_interpolate(self, grid_thw):
         grid_ts, grid_hs, grid_ws = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
+        device = grid_thw.device
 
         idx_list = [[] for _ in range(4)]
         weight_list = [[] for _ in range(4)]
@@ -1136,11 +1137,9 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
                 idx_list[i].extend(indices[i].tolist())
                 weight_list[i].extend(weights[i].tolist())
 
-        idx_tensor = torch.tensor(idx_list, dtype=torch.long, device=self.pos_embed.weight.device)
-        weight_tensor = torch.tensor(
-            weight_list, dtype=self.pos_embed.weight.dtype, device=self.pos_embed.weight.device
-        )
-        pos_embeds = self.pos_embed(idx_tensor) * weight_tensor[:, :, None]
+        idx_tensor = torch.tensor(idx_list, dtype=torch.long, device=device)
+        weight_tensor = torch.tensor(weight_list, dtype=self.pos_embed.weight.dtype, device=device)
+        pos_embeds = self.pos_embed(idx_tensor).to(device) * weight_tensor[:, :, None]
         patch_pos_embeds = pos_embeds[0] + pos_embeds[1] + pos_embeds[2] + pos_embeds[3]
 
         patch_pos_embeds = patch_pos_embeds.split([h * w for h, w in zip(grid_hs, grid_ws)])
@@ -1337,7 +1336,7 @@ class Qwen3OmniMoeThinkerTextSparseMoeBlock(nn.Module):
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_experts_per_tok, dim=-1)
         if self.norm_topk_prob:
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        routing_weights = routing_weights.to(router_logits.dtype)
         return selected_experts, routing_weights
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -1694,7 +1693,8 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
         visual_pos_masks = visual_pos_masks[..., 0]
         visual_pos_masks = visual_pos_masks.to(hidden_states.device)
         visual_embeds = visual_embeds.to(hidden_states.device, hidden_states.dtype)
-        local_this = hidden_states[visual_pos_masks, :].clone() + visual_embeds
+        hidden_states = hidden_states.clone()
+        local_this = hidden_states[visual_pos_masks, :] + visual_embeds
         hidden_states[visual_pos_masks, :] = local_this
         return hidden_states
 
@@ -2690,7 +2690,7 @@ class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_experts_per_tok, dim=-1)
         if self.norm_topk_prob:
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        routing_weights = routing_weights.to(router_logits.dtype)
         return selected_experts, routing_weights
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -2888,7 +2888,8 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
     ):
         visual_pos_masks = visual_pos_masks.to(hidden_states.device)
         visual_embeds = visual_embeds.to(hidden_states.device, hidden_states.dtype)
-        local_this = hidden_states[visual_pos_masks, :].clone() + visual_embeds
+        hidden_states = hidden_states.clone()
+        local_this = hidden_states[visual_pos_masks, :] + visual_embeds
         hidden_states[visual_pos_masks, :] = local_this
         return hidden_states
 
