@@ -1883,8 +1883,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             f" {self.__class__.__name__}"
                         )
 
-        # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
+        # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
