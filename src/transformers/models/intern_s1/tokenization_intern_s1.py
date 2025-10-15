@@ -17,8 +17,6 @@
 import json
 import os
 from abc import ABC, abstractmethod
-from collections import OrderedDict
-from functools import lru_cache
 from typing import Optional, Union
 
 import regex as re
@@ -369,6 +367,22 @@ class InternS1Tokenizer(Qwen2Tokenizer):
     This is expected.
 
     Include custom extension to support better domain-specific text tokenization, leveraging a separately trained tokenizer model.
+
+    ```python
+    >>> from transformers import AutoTokenizer
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("InternS1Tokenizer", trust_remote_code=True)
+    >>> tokenizer.tokenize("Describe <SMILES>C1=CC=C(C=C1)C=O</SMILES> and CC1=CC=CC=C1C=O")
+    ["Describe ", "<SMILES>", "C1=CC=C(C=C1)C=O", "</SMILES>", " and ", "<SMILES_AUTO_DETECT>",
+        "CC1=CC=CC=C1C=O", "</SMILES_AUTO_DETECT>"]
+    >>> token_ids = tokenizer("Describe <SMILES>C1=CC=C(C=C1)C=O</SMILES> and CC1=CC=CC=C1C=O")["input_ids"]
+    >>> token_ids
+    [74785, 220, 151925, 151854, 151860, 151698, 151707, 151860, 151690, 151726, 151926, 323, 220, 151672, 151860, 151701, 151860, 151854, 151726]
+
+    >>> tokenizer.convert_ids_to_tokens(token_ids)
+    ['Describe', 'Ġ', '<SMILES>', 'C', '1', '=CC=C(', 'C=C', '1', ')C', '=O', '</SMILES>', 'Ġand', 'Ġ', 'CC', '1', '=CC=CC=C', '1', 'C', '=O']
+    ```
+
     Users should refer to this superclass [`PreTrainedTokenizer`] for more information regarding those overloaded methods
 
     Args:
@@ -414,48 +428,6 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         split_special_tokens=False,
         **kwargs,
     ):
-        self.extra_tokenizer_start_mapping = {}
-        self.extra_tokenizer_end_mapping = {}
-        self._extra_special_tokens = []
-
-        self._extra_tokenizer_list = [
-            {
-                "tokenizer_name": "tokenizer_SMILES",
-                "tokenizer_path": os.path.join(os.path.dirname(vocab_file), "tokenizer_SMILES.model"),
-                "begin_sp_tokens": ["<SMILES>", "<SELFIES>"],
-                "end_sp_tokens": ["</SMILES>", "</SELFIES>"],
-                "auto_begin_sp_tokens": ["<SMILES_AUTO_DETECT>"],
-                "auto_end_sp_tokens": ["</SMILES_AUTO_DETECT>"],
-            },
-            {
-                "tokenizer_name": "tokenizer_IUPAC",
-                "tokenizer_path": os.path.join(os.path.dirname(vocab_file), "tokenizer_IUPAC.model"),
-                "begin_sp_tokens": ["<IUPAC>"],
-                "end_sp_tokens": ["</IUPAC>"],
-                "auto_begin_sp_tokens": [],
-                "auto_end_sp_tokens": [],
-            },
-            {
-                "tokenizer_name": "tokenizer_FASTA",
-                "tokenizer_path": os.path.join(os.path.dirname(vocab_file), "tokenizer_FASTA.model"),
-                "begin_sp_tokens": ["<FASTA>"],
-                "end_sp_tokens": ["</FASTA>"],
-                "auto_begin_sp_tokens": ["<FASTA_AUTO_DETECT>"],
-                "auto_end_sp_tokens": ["</FASTA_AUTO_DETECT>"],
-            },
-        ]
-        # Content wrapped in these sp tokens won't be tokenized
-        self.protect_begin_sp_tokens = ["<MOLFORMULA>"]
-        self.protect_end_sp_tokens = ["</MOLFORMULA>"]
-
-        self.auto_begin_sp_tokens = []
-        self.auto_end_sp_tokens = []
-
-        self._unk_token = "<unk>"  # Fall-back
-
-        self.new_sp_token_offset = [26]  # The length of sp token before the start of extra vocab
-        self.tokenizer_mapping = OrderedDict()
-
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
@@ -469,161 +441,82 @@ class InternS1Tokenizer(Qwen2Tokenizer):
             **kwargs,
         )
 
-        # keep order for python < 3.7
-        self.tokenizer_mapping = OrderedDict([("tokenizer_original", self.encoder)])
+        self.prepare_extra_tokenizers(vocab_file)
 
-        for tokenizer_config in self._extra_tokenizer_list:
-            self._build_extra_tokenizer(tokenizer_config)
-            self._update_special_tokens(tokenizer_config)
-            self._update_logical_special_tokens(tokenizer_config)
-            self.decoder.update(self._build_extra_decoder(tokenizer_config))
+    def prepare_extra_tokenizers(self, vocab_file: str) -> None:
+        """Prepare extra tokenizers"""
+        # Load extra tokenizers with SentencePiece model
+        dir_name = os.path.dirname(vocab_file)
 
-        for token in self.protect_begin_sp_tokens:
-            self.tokens_trie.add(token)
+        self.sp_model_SMILES = spm.SentencePieceProcessor()
+        self.sp_model_SMILES.Load(os.path.join(dir_name, "tokenizer_SMILES.model"))
+        self.sp_model_SMILES.offset = 151669
 
-        for token in self.protect_end_sp_tokens:
-            self.tokens_trie.add(token)
+        self.sp_model_IUPAC = spm.SentencePieceProcessor()
+        self.sp_model_IUPAC.Load(os.path.join(dir_name, "tokenizer_IUPAC.model"))
+        self.sp_model_IUPAC.offset = 151929
 
-        self.new_sp_token_offset.append(
-            len(self._added_tokens_decoder) - sum(self.new_sp_token_offset) + len(self._extra_special_tokens)
+        self.sp_model_FASTA = spm.SentencePieceProcessor()
+        self.sp_model_FASTA.Load(os.path.join(dir_name, "tokenizer_FASTA.model"))
+        self.sp_model_FASTA.offset = 152443
+
+        base_mapping = {
+            "SMILES": self.sp_model_SMILES,
+            "SELFIES": self.sp_model_SMILES,
+            "IUPAC": self.sp_model_IUPAC,
+            "FASTA": self.sp_model_FASTA,
+        }
+        auto_detect_mapping = {
+            "SMILES": self.sp_model_SMILES,
+            "FASTA": self.sp_model_FASTA,
+        }
+        # Guiding tokens of domain-specific tokenization
+        self.ex_begin_mapping = {f"<{key}>": value for key, value in base_mapping.items()}
+        self.ex_end_mapping = {f"</{key}>": value for key, value in base_mapping.items()}
+        # Transient markers for auto-detection
+        self.ex_auto_begin_mapping = {f"<{key}_AUTO_DETECT>": value for key, value in auto_detect_mapping.items()}
+        self.ex_auto_end_mapping = {f"</{key}_AUTO_DETECT>": value for key, value in auto_detect_mapping.items()}
+        # Token markers to prevent unwanted auto-detection
+        self.ex_protect_begin_tokens = ["<MOLFORMULA>"]
+        self.ex_protect_end_tokens = ["</MOLFORMULA>"]
+        # For simplicity
+        self.ex_protect_tokens = self.ex_protect_begin_tokens + self.ex_protect_end_tokens
+        self.ex_all_begin_mapping = self.ex_begin_mapping | self.ex_auto_begin_mapping
+        self.ex_all_end_mapping = self.ex_end_mapping | self.ex_auto_end_mapping
+
+        self.decoder.update(
+            {
+                i + self.sp_model_SMILES.offset: self.sp_model_SMILES.id_to_piece(i)
+                for i in range(self.sp_model_SMILES.get_piece_size())
+            }
         )
+        self.decoder.update(
+            {
+                i + self.sp_model_IUPAC.offset: self.sp_model_IUPAC.id_to_piece(i)
+                for i in range(self.sp_model_IUPAC.get_piece_size())
+            }
+        )
+        self.decoder.update(
+            {
+                i + self.sp_model_FASTA.offset: self.sp_model_FASTA.id_to_piece(i)
+                for i in range(self.sp_model_FASTA.get_piece_size())
+            }
+        )
+
+        # These tokens should keep complete and serves as a non-split token(temporary for 'ex_protect_{begin/end}_tokens')
+        # to guide later tokenization
+        for token in self.ex_protect_begin_tokens + self.ex_protect_end_tokens:
+            self.tokens_trie.add(token)
+
+        self._unk_token = "<unk>"  # Fall-back
         self.check_module_list = [SmilesCheckModule(), FastaCheckModule()]
-
-    @property
-    def vocab_size(self) -> int:
-        """Returns vocab size including extra tokenizer"""
-        total_vocab_size = len(self.encoder)
-        for tokenizer in self.tokenizer_mapping.values():
-            if isinstance(tokenizer, dict):
-                continue
-            else:
-                total_vocab_size += tokenizer.get_piece_size()
-        return total_vocab_size + sum(self.new_sp_token_offset)
-
-    def __len__(self) -> int:
-        """Overload method"""
-        return self.vocab_size
-
-    @property
-    def logical_auto_tokens(self):
-        """Tokens that won't be decoded and only for switching tokenizer"""
-        return self.auto_begin_sp_tokens + self.auto_end_sp_tokens
-
-    @property
-    def extra_tokenizer_bos_keys(self):
-        return self.extra_tokenizer_start_mapping.keys()
-
-    @property
-    def extra_tokenizer_eos_keys(self):
-        return self.extra_tokenizer_end_mapping.keys()
-
-    @property
-    def protect_sp_tokens(self):
-        """Content wrapped by these sp tokens won't apply extra tokenizer"""
-        return self.protect_begin_sp_tokens + self.protect_end_sp_tokens
-
-    def _build_extra_tokenizer(self, tokenizer_config: dict) -> None:
-        """
-        Build domain-specific tokenizers
-        and register them in tokenizer_mapping
-        """
-        _sp_model = spm.SentencePieceProcessor()
-        _sp_model.Load(tokenizer_config["tokenizer_path"])
-        self.tokenizer_mapping.update({tokenizer_config["tokenizer_name"]: _sp_model})
-
-        for begin_sp_token, end_sp_token in zip(
-            tokenizer_config["begin_sp_tokens"], tokenizer_config["end_sp_tokens"]
-        ):
-            self.extra_tokenizer_start_mapping.update({begin_sp_token: tokenizer_config["tokenizer_name"]})
-            self.extra_tokenizer_end_mapping.update({end_sp_token: tokenizer_config["tokenizer_name"]})
-
-        for begin_sp_token, end_sp_token in zip(
-            tokenizer_config["auto_begin_sp_tokens"], tokenizer_config["auto_end_sp_tokens"]
-        ):
-            self.extra_tokenizer_start_mapping.update({begin_sp_token: tokenizer_config["tokenizer_name"]})
-            self.extra_tokenizer_end_mapping.update({end_sp_token: tokenizer_config["tokenizer_name"]})
-
-    def _build_extra_decoder(self, tokenizer_config: dict) -> dict[int, str]:
-        """Build domain-specific tokenizers' decoder"""
-        extra_decoder = {}
-        sp_model = self.tokenizer_mapping[tokenizer_config["tokenizer_name"]]
-        start_pos = self.vocab_size - sp_model.get_piece_size() - self.new_sp_token_offset[-1]
-        extra_decoder.update(
-            {i: sp_model.id_to_piece(i - start_pos) for i in range(start_pos, start_pos + sp_model.get_piece_size())}
-        )
-        return extra_decoder
-
-    def _update_logical_special_tokens(self, tokenizer_config: dict) -> None:
-        """Update logical special tokens which serve as special token and won't be mapped to a specific token id"""
-        for begin_sp_token, end_sp_token in zip(
-            tokenizer_config["auto_begin_sp_tokens"], tokenizer_config["auto_end_sp_tokens"]
-        ):
-            self.auto_begin_sp_tokens.append(begin_sp_token)
-            self.auto_end_sp_tokens.append(end_sp_token)
-
-            self.tokens_trie.add(begin_sp_token)
-            self.tokens_trie.add(end_sp_token)
-
-    def _update_special_tokens(self, tokenizer_config: dict):
-        """Update special tokens for each modality"""
-        offset = sum(self.new_sp_token_offset[1:]) + len(self.logical_auto_tokens)
-        new_offset = 0
-        for start_key, end_key in zip(
-            list(self.extra_tokenizer_bos_keys)[offset // 2 :], list(self.extra_tokenizer_eos_keys)[offset // 2 :]
-        ):
-            self.tokens_trie.add(start_key)
-
-            if start_key not in tokenizer_config["auto_begin_sp_tokens"]:
-                self._added_tokens_encoder.update({start_key: self.vocab_size + new_offset})
-                self._added_tokens_decoder.update(
-                    {
-                        self.vocab_size + new_offset: AddedToken(
-                            content=start_key,
-                            lstrip=False,
-                            normalized=False,
-                            rstrip=False,
-                            single_word=False,
-                            special=True,
-                        )
-                    }
-                )
-                self.tokens_trie.add(start_key)
-                new_offset += 1
-
-            if end_key not in tokenizer_config["auto_end_sp_tokens"]:
-                self._added_tokens_encoder.update({end_key: self.vocab_size + new_offset})
-                self._added_tokens_decoder.update(
-                    {
-                        self.vocab_size + new_offset: AddedToken(
-                            content=end_key,
-                            lstrip=False,
-                            normalized=False,
-                            rstrip=False,
-                            single_word=False,
-                            special=True,
-                        )
-                    }
-                )
-                self.tokens_trie.add(end_key)
-                new_offset += 1
-        self.new_sp_token_offset.append(new_offset)
-
-    @lru_cache(maxsize=None)  # May cause memory leak
-    def _extra_tokenizer_offset(self, tokenizer_key) -> int:
-        offset = 0
-        for index, (tokenizer_name, tokenizer) in enumerate(self.tokenizer_mapping.items()):
-            if tokenizer_name == tokenizer_key:
-                break
-            else:
-                offset += len(tokenizer) + self.new_sp_token_offset[index]
-        return offset
 
     def _pop_logical_sp_token(self, extra_tokenizer_stack: list, mapping_name: str) -> None:
         """Switch tokenizer when it comes to an end sp token"""
-        extra_tokenizer_end_mapping = extra_tokenizer_stack.pop()
-        if extra_tokenizer_end_mapping != self.extra_tokenizer_end_mapping[mapping_name]:
+        extra_tokenizer = extra_tokenizer_stack.pop()
+        if extra_tokenizer != self.ex_all_end_mapping[mapping_name]:
             logger.warning_once(
-                f"Encounter incorrect nesting of extra tokenizer: {self.extra_tokenizer_end_mapping[mapping_name]} and {extra_tokenizer_end_mapping}"
+                f"Encounter incorrect nesting of extra tokenizer: {self.ex_all_end_mapping[mapping_name]} and {extra_tokenizer}"
             )
             logger.warning_once("This may lead to unexpected behaviour of the tokenizer, please check your input.")
 
@@ -691,114 +584,49 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
 
-        # Code for Auto Detect
-        if self._extra_tokenizer_list is not None:
-            new_tokens = []
-            not_split_flag = 0
-            for token in tokens:
-                if not token:
-                    continue
-                if token in no_split_token or token in self.protect_sp_tokens:
+        # Code for Auto Detection
+        new_tokens = []
+        not_split_flag = 0
+        for token in tokens:
+            if not token:
+                continue
+            if token in no_split_token or token in self.ex_protect_tokens:
+                new_tokens.append(token)
+                if token in self.ex_begin_mapping or token in self.ex_protect_begin_tokens:
+                    not_split_flag += 1  # In case nested sp tokens
+                elif token in self.ex_end_mapping or token in self.ex_protect_end_tokens:
+                    not_split_flag = max(0, not_split_flag - 1)
+            else:
+                if not_split_flag:
                     new_tokens.append(token)
-                    if token in self.extra_tokenizer_bos_keys or token in self.protect_begin_sp_tokens:
-                        not_split_flag += 1  # In case nested sp tokens
-                    elif token in self.extra_tokenizer_eos_keys or token in self.protect_end_sp_tokens:
-                        not_split_flag = max(0, not_split_flag - 1)
                 else:
-                    if not_split_flag:
-                        new_tokens.append(token)
-                    else:
-                        for check_module in self.check_module_list:
-                            token = check_module.re_split(token)
+                    for check_module in self.check_module_list:
+                        token = check_module.re_split(token)
 
-                        new_tokens.extend(token)
-            tokens = new_tokens
+                    new_tokens.extend(token)
+        tokens = new_tokens
 
         extra_tokenizer_stack = []  # This should be a stack to handle nested extra tokenizer
-
         for token in tokens:
             # Need to skip eventual empty (fully stripped) tokens
             if not token:
                 continue
-            if token in self.protect_sp_tokens:
+            if token in self.ex_protect_tokens:
                 tokenized_text.extend(self._tokenize(token))
-            elif token in no_split_token:
+            elif token in self.ex_all_begin_mapping:
                 tokenized_text.append(token)
-                if token in self.extra_tokenizer_bos_keys:
-                    extra_tokenizer_stack.append(self.extra_tokenizer_start_mapping[token])
-                elif token in self.extra_tokenizer_eos_keys:
-                    if extra_tokenizer_stack:
-                        self._pop_logical_sp_token(extra_tokenizer_stack, token)
-            elif token in self.auto_begin_sp_tokens:
-                tokenized_text.append(token)
-                extra_tokenizer_stack.append(self.extra_tokenizer_start_mapping[token])
-            elif token in self.auto_end_sp_tokens:
+                extra_tokenizer_stack.append(self.ex_all_begin_mapping[token])
+            elif token in self.ex_all_end_mapping:
                 tokenized_text.append(token)
                 if extra_tokenizer_stack:
                     self._pop_logical_sp_token(extra_tokenizer_stack, token)
+            elif token in no_split_token:
+                tokenized_text.append(token)
             else:
                 tokenized_text.extend(self._tokenize(token, extra_tokenizer_stack=extra_tokenizer_stack))
 
         # ["This", " is", " something", "<special_token_1>", "else"]
         return tokenized_text
-
-    def _add_tokens(self, new_tokens: Union[list[str], list[AddedToken]], special_tokens: bool = False) -> int:
-        """
-        Modified from `transformers.tokenization_utils._add_tokens`.
-
-        This adaptation supports dynamic tokenizer length due to supplementary tokenizers (e.g., domain-specific or scientific text tokenizers).
-        """
-        added_tokens = 0
-        if new_tokens is None:
-            return added_tokens
-        # TODO this is fairly slow to improve!
-        current_vocab = self.get_vocab().copy()
-        new_idx = max(current_vocab.values()) + 1
-
-        for token in new_tokens:
-            if not isinstance(token, (str, AddedToken)):
-                raise TypeError(f"Token {token} is not a string but a {type(token)}.")
-            if str(token) == "":
-                continue
-            if isinstance(token, str):
-                if token in self._added_tokens_encoder:
-                    continue
-                else:
-                    # very important for fast and slow equivalence!
-                    is_special = token in self.all_special_tokens or special_tokens
-                    token = AddedToken(
-                        token, rstrip=False, lstrip=False, normalized=not is_special, special=is_special
-                    )
-            elif special_tokens:
-                # doing token.special=True changes the normalization! will fix in rust
-                # this is important and the only reason why the AddedTokens in each class are normalized by default
-                token.__setstate__({"special": True, "normalized": token.normalized})
-            if token in self._added_tokens_decoder:
-                continue
-            if not token.special and token.normalized and getattr(self, "do_lower_case", False):
-                # Normalize if requested
-                token.content = token.content.lower()
-            if token.content not in current_vocab:
-                token_index = new_idx + added_tokens
-                current_vocab[token.content] = token_index
-                added_tokens += 1
-                self._extra_special_tokens.append(token)
-            else:
-                token_index = current_vocab[token.content]
-            if token.special and str(token) not in self.all_special_tokens:
-                self._special_tokens_map["additional_special_tokens"].append(token)
-            # the setter automatically updates the reverse map
-            self._added_tokens_decoder[token_index] = token
-            self._added_tokens_encoder[token.content] = token_index
-            if self.verbose:
-                logger.info(f"Adding {token} to the vocabulary")
-        self._update_trie()
-        self._update_total_vocab_size()
-
-        if added_tokens and self.tokenizer_mapping:
-            self.new_sp_token_offset.append(added_tokens)
-
-        return added_tokens
 
     def _tokenize(self, text, **kwargs):
         """
@@ -808,8 +636,8 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         """
         extra_tokenizer_stack = kwargs.pop("extra_tokenizer_stack", False)
         if extra_tokenizer_stack:
-            tokenized_text = self.tokenizer_mapping[extra_tokenizer_stack[-1]].encode(text, out_type=str)
-            tokenized_id = self.tokenizer_mapping[extra_tokenizer_stack[-1]].encode(text, out_type=int)
+            tokenized_text = extra_tokenizer_stack[-1].encode(text, out_type=str)
+            tokenized_id = extra_tokenizer_stack[-1].encode(text, out_type=int)
             final_tokenized_text = []
             for text_piece, id_piece in zip(tokenized_text, tokenized_id):
                 if id_piece == 0:
@@ -855,15 +683,14 @@ class InternS1Tokenizer(Qwen2Tokenizer):
 
         ids = []
         extra_tokenizer_stack = []
-
         for token in tokens:
-            if token not in self.logical_auto_tokens:
+            if token not in self.ex_auto_begin_mapping and token not in self.ex_auto_end_mapping:
                 ids.append(
                     self._convert_token_to_id_with_added_voc(token, extra_tokenizer_stack=extra_tokenizer_stack)
                 )
-            if token in self.extra_tokenizer_bos_keys:
-                extra_tokenizer_stack.append(self.extra_tokenizer_start_mapping[token])
-            elif token in self.extra_tokenizer_eos_keys:
+            if token in self.ex_all_begin_mapping:
+                extra_tokenizer_stack.append(self.ex_all_begin_mapping[token])
+            elif token in self.ex_all_end_mapping:
                 if extra_tokenizer_stack:
                     self._pop_logical_sp_token(extra_tokenizer_stack, token)
         return ids
@@ -891,11 +718,11 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         """
         extra_tokenizer_stack = kwargs.pop("extra_tokenizer_stack", False)
         if extra_tokenizer_stack:
-            token_id = self.tokenizer_mapping[extra_tokenizer_stack[-1]].piece_to_id(token)
-            if token_id == self.tokenizer_mapping[extra_tokenizer_stack[-1]].unk_id():
+            token_id = extra_tokenizer_stack[-1].piece_to_id(token)
+            if token_id == extra_tokenizer_stack[-1].unk_id():
                 return self.encoder.get(token, self.encoder.get(self._unk_token))
             else:
-                return token_id + self._extra_tokenizer_offset(extra_tokenizer_stack[-1])
+                return token_id + extra_tokenizer_stack[-1].offset
         else:
             return self.encoder.get(token, self.encoder.get(self._unk_token))
 
@@ -967,13 +794,13 @@ class InternS1Tokenizer(Qwen2Tokenizer):
                 index += 1
 
         with open(sp_model_smiles, "wb") as f:
-            f.write(self.tokenizer_mapping["tokenizer_SMILES"].serialized_model_proto())
+            f.write(self.sp_model_SMILES.serialized_model_proto())
 
         with open(sp_model_iupac, "wb") as f:
-            f.write(self.tokenizer_mapping["tokenizer_IUPAC"].serialized_model_proto())
+            f.write(self.sp_model_IUPAC.serialized_model_proto())
 
         with open(sp_model_fasta, "wb") as f:
-            f.write(self.tokenizer_mapping["tokenizer_FASTA"].serialized_model_proto())
+            f.write(self.sp_model_FASTA.serialized_model_proto())
 
         return vocab_file, merge_file
 

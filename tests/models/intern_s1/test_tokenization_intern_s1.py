@@ -78,7 +78,7 @@ class InternS1TokenizationTest(Qwen2TokenizationTest):
         # tokenizer has a special token: `"<|endfotext|>"` as eos, but it is not `legacy_added_tokens`
         # special tokens in `spaces_between_special_tokens` means spaces between `legacy_added_tokens`
         # that would be `"<|im_start|>"` and `"<|im_end|>"` in InternS1 Models
-        token_ids = [259, 260, 270, 3304, 26]
+        token_ids = [259, 260, 270, 271, 26]
         sequence = " lower<|endoftext|><|im_start|>;"
         sequence_with_space = " lower<|endoftext|> <|im_start|> ;"
 
@@ -104,10 +104,6 @@ class InternS1TokenizationTest(Qwen2TokenizationTest):
         )
 
     def test_add_tokens_tokenizer(self):
-        # InternS1Tokenizer uses an interleaved vocabulary structure for better scalability and compatibility:
-        # [base_vocab, sp_tokens, domain_vocab_1, domain_sp_1, domain_vocab_2, ...]
-        # The traditional `self.vocab_size` interface (excluding special tokens) becomes meaningless in non-contiguous structure.
-        # Therefore, we treat `vocab_size()` and `__len__()` as equivalent methods.
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -129,7 +125,7 @@ class InternS1TokenizationTest(Qwen2TokenizationTest):
                 all_size_2 = len(tokenizer)
 
                 self.assertNotEqual(vocab_size_2, 0)
-                self.assertEqual(vocab_size_2, vocab_size + len(new_toks))  # Modified here
+                self.assertEqual(vocab_size_2, vocab_size)
                 self.assertEqual(added_toks, len(new_toks))
                 self.assertEqual(all_size_2, all_size + len(new_toks))
 
@@ -148,7 +144,7 @@ class InternS1TokenizationTest(Qwen2TokenizationTest):
                 all_size_3 = len(tokenizer)
 
                 self.assertNotEqual(vocab_size_3, 0)
-                self.assertEqual(vocab_size_3, vocab_size_2 + len(new_toks_2))  # Modified here
+                self.assertEqual(vocab_size_3, vocab_size_2)
                 self.assertEqual(added_toks_2, len(new_toks_2))
                 self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
@@ -204,4 +200,88 @@ Then we have `OC(=O)` which is the carbonyl part of the ester. The `N` is the ni
         self.assertEqual(
             tokenizer.encode(text),
             tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text)),
+        )
+
+    @slow
+    def test_tokens_trie(self):
+        """
+        Test the `tokens_trie.split()` method, a component of the `tokenize()` process.
+
+        This method performs an initial segmentation by splitting text based on special
+        tokens. This test verifies that domain-specific trigger tokens (e.g., `<SMILES>`)
+        are correctly isolated, as this pre-segmentation guides the subsequent tokenization steps.
+
+        Notably, while certain protected tokens (`extra_tokenizer_protect_{begin/end}_tokens`)
+        are separated here to act as markers, they are not assigned final token IDs and will be
+        further segmented in a later stage.
+
+        # TODO: slow
+        """
+        tokenizer = self.tokenizer_class.from_pretrained("internlm/Intern-S1")
+
+        self.assertEqual(
+            ["Describe ", "<SMILES>", "C1=CC=C(C=C1)C=O", "</SMILES>", " and CC1=CC=CC=C1C=O"],
+            tokenizer.tokens_trie.split("Describe <SMILES>C1=CC=C(C=C1)C=O</SMILES> and CC1=CC=CC=C1C=O"),
+        )
+        self.assertEqual(
+            ["<think>", "<MOLFORMULA>", "C6H15O6", "<MOLFORMULA>", "</think>"],
+            tokenizer.tokens_trie.split("<think><MOLFORMULA>C6H15O6<MOLFORMULA></think>"),
+        )
+
+    @slow
+    def test_auto_detection(self):
+        """
+        Part of the process of `tokenize()`, which processes a list of tokens to automatically detect and wrap specific
+        content patterns such as SMILES chemical strings. The core logic ensures that this auto-detection
+        does not interfere with content that is already enclosed in special tags.
+
+        Example 1: Basic auto-detection
+          Input:  ["Describe C1=CC=C(C=C1)C=O"]
+          Output: ["Describe ", "<SMILES_AUTO_DETECT>", "C1=CC=C(C=C1)C=O", "</SMILES_AUTO_DETECT>"]
+
+        Example 2: Avoid processing content in existing tags
+          Input:  ["Describe ", "<SMILES>", "C1=CC=C(C=C1)C=O", "</SMILES>", " and CC1=CC=CC=C1C=O"]
+          Output: ["Describe ", "<SMILES>", "C1=CC=C(C=C1)C=O", "</SMILES>", " and ",
+                   "<SMILES_AUTO_DETECT>", "CC1=CC=CC=C1C=O", "</SMILES_AUTO_DETECT>"]
+
+        Example 3: Protect content in protected tags to avoid unexpected specific tokenization
+          Input:  ["<MOLFORMULA>C6H15O6<MOLFORMULA>"]
+          Output: ["<MOLFORMULA>", "C6H15O6", "<MOLFORMULA>"]
+        """
+        tokenizer = self.tokenizer_class.from_pretrained("internlm/Intern-S1")
+        # fmt: off
+        self.assertEqual(
+            ["Describe", "Ġ", "<SMILES_AUTO_DETECT>", "C", "1", "=CC=C(", "C=C", "1", ")C", "=O", "</SMILES_AUTO_DETECT>"],
+            tokenizer.tokenize("Describe C1=CC=C(C=C1)C=O"),
+        )
+        self.assertEqual(["Describe", "Ġ", "<SMILES>", "C", "1", "=CC=C(", "C=C", "1", ")C", "=O", "</SMILES>", "Ġand", "Ġ",
+                "<SMILES_AUTO_DETECT>", "CC", "1", "=CC=CC=C", "1", "C", "=O", "</SMILES_AUTO_DETECT>",],
+            tokenizer.tokenize("Describe <SMILES>C1=CC=C(C=C1)C=O</SMILES> and CC1=CC=CC=C1C=O"),
+        )
+        # fmt: on
+        self.assertEqual(
+            ["<M", "OL", "FORM", "ULA", ">", "C", "6", "H", "1", "5", "O", "6", "<M", "OL", "FORM", "ULA", ">"],
+            tokenizer.tokenize("<MOLFORMULA>C6H15O6<MOLFORMULA>"),
+        )
+
+    @slow
+    def test_convert_tokens_to_ids_offset(self):
+        """
+        Tests the domain-specific encoding mechanism.
+
+        When a special token is used to switch to a domain-specific context
+        (e.g., SMILES representations), a corresponding vocabulary offset must be applied to
+        the subsequent token IDs. This test verifies that behavior.
+        """
+        tokenizer = self.tokenizer_class.from_pretrained("internlm/Intern-S1")
+        # fmt: off
+        self.assertEqual(
+            [74785, 220, 151925, 151854, 151860, 151698, 151707, 151860, 151690, 151726, 151926, 323, 220, 151672, 151860, 151701, 151860, 151854, 151726],
+            tokenizer.convert_tokens_to_ids(["Describe", "Ġ", "<SMILES>", "C", "1", "=CC=C(", "C=C","1", ")C", "=O", "</SMILES>",
+               "Ġand", "Ġ", "<SMILES_AUTO_DETECT>", "CC", "1", "=CC=CC=C", "1", "C", "=O", "</SMILES_AUTO_DETECT>",]),
+        )
+        # fmt: on
+        self.assertEqual(
+            [id - tokenizer.sp_model_SMILES.offset for id in [151672, 151860, 151701, 151860, 151854, 151726]],
+            tokenizer.sp_model_SMILES.piece_to_id(["CC", "1", "=CC=CC=C", "1", "C", "=O"]),
         )
