@@ -521,4 +521,4 @@ def get_username() -> str:
 
 
 if __name__ == "__main__":
-    chat(model_name_or_path_or_address="meta-llama/Llama-3.2-3b-Instruct")
+    Chat(model_id="meta-llama/Llama-3.2-3b-Instruct")

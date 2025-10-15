@@ -34,6 +34,7 @@ from typing import Annotated, Optional, TypedDict, Union
 import typer
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
+from openai.types.chat.chat_completion import Choice
 from tokenizers.decoders import DecodeStream
 
 import transformers
@@ -91,7 +92,6 @@ if serve_dependencies_available:
     from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageParam
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
-        Choice,
         ChoiceDelta,
         ChoiceDeltaToolCall,
         ChoiceDeltaToolCallFunction,
@@ -409,6 +409,9 @@ class Serve:
                 help="Name of the model to be forced on all requests. This is useful for testing Apps that don't allow changing models in the request."
             ),
         ] = None,
+        non_blocking: Annotated[
+            bool, typer.Option(hidden=True, help="Whether to run the server in a separate thread.")
+        ] = False,
     ) -> None:
         if not serve_dependencies_available:
             raise ImportError(
@@ -433,6 +436,7 @@ class Serve:
         self.enable_cors = enable_cors
         self.input_validation = input_validation
         self.force_model = force_model
+        self.non_blocking = non_blocking
 
         # Seed
         if default_seed is not None:
@@ -546,7 +550,34 @@ class Serve:
             response.headers[X_REQUEST_ID] = request_id
             return response
 
-        uvicorn.run(app, host=self.host, port=self.port, log_level=self.log_level)
+        config = uvicorn.Config(app, host=self.host, port=self.port, log_level=self.log_level)
+        self.server = uvicorn.Server(config)
+
+        if self.non_blocking:
+            self.start_server()
+        else:
+            self.server.run()
+
+    def start_server(self):
+        def _run():
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+            # serve() is a coroutine; it exits when server.should_exit becomes True
+            self._loop.run_until_complete(self.server.serve())
+
+        self._thread = threading.Thread(target=_run, name="uvicorn-thread", daemon=False)
+        self._thread.start()
+
+    def kill_server(self):
+        if not self._thread:
+            raise ValueError("The server cannot be killed as it was not launched in a separate thread.")
+
+        if not self._thread.is_alive():
+            raise ValueError("The server is already killed.")
+
+        self.server.should_exit = True
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2)
 
     def _validate_request(
         self,

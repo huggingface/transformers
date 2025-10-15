@@ -15,10 +15,9 @@ import os
 import time
 import unittest
 from threading import Thread
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import httpx
-import uvicorn
 from huggingface_hub import ChatCompletionStreamOutput, InferenceClient
 from parameterized import parameterized
 
@@ -54,16 +53,49 @@ def test_help(cli):
 
 
 @require_openai
-def test_host_port(cli):
-    """Minimal test: we can set arguments through the CLI."""
-    with patch.object(uvicorn, "run", return_value=None) as run_mock:
-        output = cli("serve", "--host", "0.0.0.0", "--port", "9000")
-    assert output.exit_code == 0
+def test_host_port_blocking(cli):
+    """Minimal test: we can set arguments through the CLI - blocking"""
+    with (
+        patch("transformers.cli.serve.uvicorn.Config") as ConfigMock,
+        patch("transformers.cli.serve.uvicorn.Server") as ServerMock,
+    ):
+        server_instance = Mock()
+        ServerMock.return_value = server_instance
 
-    run_mock.assert_called_once()
-    kwargs = run_mock.call_args.kwargs
-    assert kwargs["host"] == "0.0.0.0"
-    assert kwargs["port"] == 9000
+        # Call the serve CLI with host/port
+        out = cli("serve", "--host", "0.0.0.0", "--port", "9000")
+        _, kwargs = ConfigMock.call_args
+
+        assert out.exit_code == 0
+        assert kwargs["host"] == "0.0.0.0"
+        assert kwargs["port"] == 9000
+
+        ServerMock.assert_called_once_with(ConfigMock.return_value)
+        server_instance.run.assert_called_once()
+
+
+@require_openai
+def test_host_port_non_blocking(cli):
+    """Minimal test: we can set arguments through the CLI - non-blocking"""
+    with (
+        patch("transformers.cli.serve.uvicorn.Config") as ConfigMock,
+        patch("transformers.cli.serve.uvicorn.Server") as ServerMock,
+        patch("transformers.cli.serve.Serve.start_server") as start_mock,
+    ):
+        server_instance = Mock()
+        ServerMock.return_value = server_instance
+
+        out = cli("serve", "--host", "0.5.0.0", "--port", "9002", "--non-blocking")
+        assert out.exit_code == 0
+
+        # Config got the CLI args
+        _, kwargs = ConfigMock.call_args
+        assert kwargs["host"] == "0.5.0.0"
+        assert kwargs["port"] == 9002
+
+        # Non-blocking path uses start_server(), not server.run()
+        start_mock.assert_called_once()
+        server_instance.run.assert_not_called()
 
 
 @require_openai
@@ -276,7 +308,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
             {"role": "user", "content": "Can you help me write tests?"},
         ]
-        outputs = Serve.processor_inputs_from_inbound_messages(messages, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages, modality)
         self.assertListEqual(expected_outputs, outputs)
 
         messages_with_type = [
@@ -406,9 +438,11 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8001
-        thread = Thread(target=Serve, kwargs={"port": cls.port})
-        thread.daemon = True
-        thread.start()
+        cls.server = Serve(port=cls.port, non_blocking=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.kill_server()
 
     @slow
     def test_tool_call(self):
@@ -542,17 +576,13 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8002
-        thread = Thread(
-            target=Serve,
-            kwargs={
-                "port": cls.port,
-                "continuous_batching": True,
-                "attn_implementation": "sdpa_paged",
-                "default_seed": 42,
-            },
+        cls.server = Serve(
+            port=cls.port, continuous_batching=True, attn_implementation="sdpa", default_seed=42, non_blocking=True
         )
-        thread.daemon = True
-        thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.kill_server()
 
     def test_full_request(self):
         """Tests that an inference using the Responses API and Continuous Batching works"""
@@ -618,7 +648,7 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
 
         _open_stream_and_cancel(base_url, request_id)
 
-        scheduler = _get_scheduler(self.serve_command)
+        scheduler = _get_scheduler(self.server)
 
         # Because cancellation is non-blocking, poll for a short, bounded time.
         deadline = time.time() + 8.0  # generous but still CI-friendly
@@ -699,9 +729,11 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8003
-        thread = Thread(target=Serve, kwargs={"port": cls.port, "default_seed": 42})
-        thread.daemon = True
-        thread.start()
+        cls.server = Serve(port=cls.port, default_seed=42, non_blocking=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.kill_server()
 
     @slow
     def test_full_request(self):
