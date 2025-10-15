@@ -40,8 +40,6 @@ def use_gqa_in_sdpa(attention_mask: Optional[torch.Tensor], key: torch.Tensor) -
     #   - npu is not supported gqa currently
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8 and not isinstance(key, torch.fx.Proxy)
-    if _is_torch_npu_available:
-        return False
     return _is_torch_greater_or_equal_than_2_5 and attention_mask is None and not isinstance(key, torch.fx.Proxy)
 
 
