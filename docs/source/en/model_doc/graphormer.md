@@ -20,6 +20,11 @@ rendered properly in your Markdown viewer.
 
 [Graphormer](https://huggingface.co/papers/2106.05234) addresses the underperformance of Transformers in graph representation learning by introducing structural encoding methods. This enables Graphormer to achieve excellent results on graph-level prediction tasks, including the OGB Large-Scale Challenge. The model effectively encodes graph structure into the Transformer architecture, demonstrating that many GNN variants can be seen as special cases of Graphormer.
 
+## Usage tips
+
+- Graphormer works best on graphs with 100 or fewer nodes/edges. Large graphs cause memory issues. Reduce batch size, increase RAM, or decrease the `UNREACHABLE_NODE_DISTANCE` parameter in `algos_graphormer.pyx` to handle larger graphs. Expect difficulty scaling beyond 700 nodes/edges.
+- Graphormer uses a special collator during training instead of a tokenizer.
+
 ## GraphormerConfig
 
 [[autodoc]] GraphormerConfig

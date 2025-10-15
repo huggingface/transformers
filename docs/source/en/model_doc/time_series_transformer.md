@@ -49,6 +49,20 @@ mean_prediction = outputs.sequences.mean(dim=1)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`TimeSeriesTransformerModel`] is the raw Transformer without any head. [`TimeSeriesTransformerForPrediction`] adds a distribution head for time-series forecasting. This is a probabilistic forecasting model, not a point forecasting model. The model learns a distribution from which you sample rather than outputting values directly.
+- [`TimeSeriesTransformerForPrediction`] has two blocks: an encoder that takes `context_length` time series values as input (`past_values`) and a decoder that predicts `prediction_length` time series values into the future (`future_values`). During training, provide pairs of `past_values` and `future_values` to the model.
+- Provide additional features alongside the raw `past_values` and `future_values`:
+
+  - `past_time_features`: Temporal features added to `past_values`. These serve as positional encodings for the Transformer encoder. Examples include "day of the month" and "month of the year" as scalar values stacked into a vector. For example, if a time-series value was obtained on August 11th, you'd have `[11, 8]` as the time feature vector (11 for day of month, 8 for month of year).
+  - `future_time_features`: Temporal features added to `future_values`. These serve as positional encodings for the Transformer decoder. Examples include "day of the month" and "month of the year" as scalar values stacked into a vector. For example, if a time-series value was obtained on August 11th, you'd have `[11, 8]` as the time feature vector (11 for day of month, 8 for month of year).
+  - `static_categorical_features`: Categorical features that remain constant over time (same value for all `past_values` and `future_values`). Examples include store ID or region ID that identifies a given time-series. These features must be known for ALL data points, including future ones.
+  - `static_real_features`: Real-valued features that remain constant over time (same value for all `past_values` and `future_values`). Examples include image representations of products (like ResNet embeddings of product pictures). These features must be known for ALL data points, including future ones.
+
+- The model trains using teacher-forcing, similar to how Transformers train for machine translation. During training, shift `future_values` one position to the right as input to the decoder, prepended by the last value of `past_values`. At each time step, the model predicts the next target. The training setup resembles a GPT model for language, except there's no `decoder_start_token_id` (use the last value of the context as initial input for the decoder).
+- At inference time, give the final value of `past_values` as input to the decoder. Sample from the model to make a prediction at the next time step, then feed that prediction back to the decoder to make the next prediction (autoregressive generation).
+
 ## TimeSeriesTransformerConfig
 
 [[autodoc]] TimeSeriesTransformerConfig

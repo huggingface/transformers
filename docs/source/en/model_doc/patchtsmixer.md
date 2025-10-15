@@ -41,6 +41,10 @@ prediction_outputs = outputs.prediction_outputs
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use the model for time series classification and regression. See [`PatchTSMixerForTimeSeriesClassification`] and [`PatchTSMixerForRegression`] classes.
+
 ## PatchTSMixerConfig
 
 [[autodoc]] PatchTSMixerConfig
