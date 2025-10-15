@@ -837,18 +837,6 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -952,18 +940,6 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1066,18 +1042,6 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.init_weights()
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1234,18 +1198,6 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
         self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels)
 
         self.init_weights()
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

@@ -15,7 +15,6 @@
 """PyTorch UniSpeech model."""
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -316,18 +315,6 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
         self.quantizer.temperature = temperature
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
