@@ -9,7 +9,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Quick NanoGPT chat inference test")
     parser.add_argument(
         "--model",
-        default="chat-d20",
+        default="nanochat-students/d20-chat-transformers",
         help="Model path or repo id to load (default: local chat-d20 directory)",
     )
     parser.add_argument(
@@ -45,30 +45,22 @@ def main():
         {"role": "user", "content": args.prompt},
     ]
 
-    rendered = tokenizer.apply_chat_template(
+    inputs = tokenizer.apply_chat_template(
         conversation,
-        tokenize=False,
         add_generation_prompt=True,
-    )
-
-    print(rendered)
-
-    model_inputs = tokenizer([rendered], return_tensors="pt").to(device)
-    if "attention_mask" not in model_inputs:
-        model_inputs["attention_mask"] = torch.ones_like(model_inputs["input_ids"]).to(device)
+        tokenize=True,
+        return_tensors="pt"
+    ).to(device)
 
     with torch.no_grad():
-        generated = model.generate(
-            **model_inputs,
+        outputs = model.generate(
+            inputs,
             max_new_tokens=args.max_new_tokens,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.eos_token_id,
         )
 
-    output_ids = generated[0, model_inputs.input_ids.shape[1] :]
-    print(tokenizer.decode(output_ids, skip_special_tokens=True))
+    print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     print("--------------------------------")
-    print(tokenizer.decode(output_ids, skip_special_tokens=False))
+    print(tokenizer.decode(outputs[0], skip_special_tokens=False))
 
 
 if __name__ == "__main__":

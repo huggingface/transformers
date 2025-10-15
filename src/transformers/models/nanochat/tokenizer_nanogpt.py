@@ -11,7 +11,7 @@ class NanoGPTTokenizer(PreTrainedTokenizerFast):
     """Transformers-compatible tokenizer backed by a tokenizer.json produced from the tiktoken encoding."""
 
     vocab_files_names = {"tokenizer_file": "tokenizer.json"}
-    model_input_names = ["input_ids"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     _SPECIAL_TOKENS = {
         "bos": "<|bos|>",
