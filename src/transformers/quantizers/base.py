@@ -218,7 +218,7 @@ class HfQuantizer(ABC):
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         return model
-    
+
     def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point
@@ -244,7 +244,7 @@ class HfQuantizer(ABC):
         original_dtype = dtype if dtype is not None else torch.get_default_dtype()
         config._pre_quantization_dtype = original_dtype
         _assign_original_dtype(model, original_dtype)
-    
+
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
 
