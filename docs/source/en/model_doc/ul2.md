@@ -47,3 +47,7 @@ print(tokenizer.decode(outputs[0]))
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- UL2 has the same architecture as T5v1.1 but uses Gated-SiLU activation instead of Gated-GELU.

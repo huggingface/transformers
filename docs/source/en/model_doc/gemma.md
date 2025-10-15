@@ -48,6 +48,9 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Gemma models support standard kv-caching used in transformer-based language models. Use the default [`DynamicCache`] instance or a tuple of tensors for past key values during generation. This works with typical autoregressive generation workflows.
 
 ## GemmaConfig
 

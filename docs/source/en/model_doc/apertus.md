@@ -15,8 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2025-09-02 and added to Hugging Face Transformers on 2025-10-07.*
 
-# Apertus
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
@@ -25,22 +23,9 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-```py
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(task="text-generation", model="swiss-ai/apertus-7b", dtype="auto")
-pipeline("The future of artificial intelligence is")
-```
-
-## Overview
+# Apertus
 
 [Apertus](https://www.swiss-ai.org) is a family of large language models from the Swiss AI Initiative.
-
-> [!TIP]
-> Coming soon
-
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -49,13 +34,8 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="text-generation",
-    model="swiss-ai/Apertus-8B",
-    dtype=torch.bfloat16,
-    device=0
-)
-pipeline("Plants create energy through a process known as")
+pipeline = pipeline(task="text-generation", model="swiss-ai/Apertus-8B", dtype="auto")
+pipeline("Plants generate energy through a process known as  ")
 ```
 
 </hfoption>
@@ -63,28 +43,15 @@ pipeline("Plants create energy through a process known as")
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "swiss-ai/Apertus-8B",
-)
-model = AutoModelForCausalLM.from_pretrained(
-    "swiss-ai/Apertus-8B",
-    dtype=torch.bfloat16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+tokenizer = AutoTokenizer.from_pretrained("swiss-ai/Apertus-8B")
+model = ArceeForCausalLM.from_pretrained("swiss-ai/Apertus-8B", dtype="auto")
 
-output = model.generate(**input_ids)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model swiss-ai/Apertus-8B --device 0
+inputs = tokenizer("Plants generate energy through a process known as  ", return_tensors="pt")
+with torch.no_grad():
+    outputs = model.generate(**inputs, max_new_tokens=50)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 </hfoption>

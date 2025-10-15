@@ -50,6 +50,11 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- BARTpho uses BART's large architecture plus an extra layer-normalization layer on the encoder and decoder. Replace BART-specific classes with mBART-specific classes.
+- This implementation handles tokenization through the `monolingual_vocab_file`. This contains Vietnamese-specific token types from the multilingual vocabulary. For other languages, replace `monolingual_vocab_file` with one specialized for your target language.
+
 ## BartphoTokenizer
 
 [[autodoc]] BartphoTokenizer

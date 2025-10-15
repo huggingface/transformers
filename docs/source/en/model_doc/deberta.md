@@ -50,6 +50,12 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- DeBERTa uses relative position embeddings. It doesn't require right-padding like BERT.
+- Use DeBERTa on sentence-level or sentence-pair classification tasks like MNLI, RTE, or SST-2 for best results.
+- For token-level tasks like masked language modeling, load a checkpoint specifically pretrained or fine-tuned for token-level tasks.
+
 ## DebertaConfig
 
 [[autodoc]] DebertaConfig

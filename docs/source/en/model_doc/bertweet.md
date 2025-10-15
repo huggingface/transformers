@@ -51,6 +51,11 @@ print(f"Predicted label: {label}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`AutoTokenizer`] or [`BertweetTokenizer`]. They come preloaded with custom vocabulary for tweet-specific tokens like hashtags (#), mentions (@), emojis, and common abbreviations. Install the [emoji](https://pypi.org/project/emoji/) library too.
+- Pad inputs on the right (`padding="max_length"`). BERT uses absolute position embeddings.
+
 ## BertweetTokenizer
 
 [[autodoc]] BertweetTokenizer

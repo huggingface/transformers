@@ -48,6 +48,14 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Infilling works only in 7B and 13B base models. It doesn't work in Python, Instruct, 34B, or 70B models.
+- Use the `<FILL_ME>` token where you want input filled. The tokenizer splits this token to create a formatted input string that follows the original training pattern. This beats preparing the pattern yourself.
+- Use `bfloat16` for training or fine-tuning and `float16` for inference.
+- The `BOS` character isn't used for infilling when encoding the prefix or suffix. It only appears at the beginning of each prompt.
+- The tokenizer is a byte-pair encoding model based on SentencePiece. During decoding, if the first token starts a word (like "Banana"), the tokenizer doesn't prepend the prefix space.
+
 ## CodeLlamaTokenizer
 
 [[autodoc]] CodeLlamaTokenizer

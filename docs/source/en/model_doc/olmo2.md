@@ -55,6 +55,12 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- OLMo2 uses RMSNorm instead of standard layer norm. RMSNorm is applied to attention queries and keys. It's applied after the attention and feedforward layers rather than before.
+- OLMo2 requires Transformers v4.48 or higher.
+- Load specific intermediate checkpoints by adding the `revision` parameter to [`~AutoModel.from_pretrained`].
+
 ## Olmo2Config
 
 [[autodoc]] Olmo2Config

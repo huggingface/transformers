@@ -15,6 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2022-09-21 and added to Hugging Face Transformers on 2023-06-20 and contributed by [mnaylor](https://huggingface.co/mnaylor).*
 
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
+
 
 # MEGA
 
@@ -48,6 +53,13 @@ print(f"Next predicted token: {tokenizer.decode([outputs.logits[0, -1, :].argmax
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- MEGA performs well with relatively few parameters. See Appendix D in the MEGA paper for examples of architectural specs that perform well in various settings. If using MEGA as a decoder, set `bidirectional=False` to avoid errors with default bidirectional.
+- Mega-chunk is a variant of MEGA that reduces time and space complexity from quadratic to linear. Use chunking with [`MegaConfig.use_chunking`] and control chunk size with [`MegaConfig.chunk_size`].
+- The original MEGA implementation had inconsistent expectations of attention masks for padding and causal self-attention between the softmax attention and Laplace/squared ReLU method. This implementation addresses that inconsistency.
+- The original implementation didn't include token type embeddings. This implementation adds support for these, controlled by [`MegaConfig.add_token_type_embeddings`].
 
 ## MegaConfig
 

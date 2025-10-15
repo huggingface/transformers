@@ -56,6 +56,11 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- For Transformers < 4.37.0.dev, set `trust_remote_code=True` in [`~AutoModel.from_pretrained`].
+- Otherwise, update Transformers to the latest stable version.
+
 ## PhiConfig
 
 [[autodoc]] PhiConfig

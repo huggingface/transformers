@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 *This model was released on 2020-06-12 and added to Hugging Face Transformers on 2023-06-20 and contributed by [yjernite](https://huggingface.co/yjernite).*
 
 > [!WARNING]
-> This model is in maintenance mode only, so we won't accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0. You can do so by running the following command: `pip install -U transformers==4.30.0`.
+> This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0. You can do so by running the following command: `pip install -U transformers==4.30.0`.
 
 # RetriBERT
 

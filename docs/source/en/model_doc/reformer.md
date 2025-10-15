@@ -48,6 +48,15 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Reformer doesn't work with `torch.nn.DataParallel` due to a bug in PyTorch. See [issue #36035](https://github.com/pytorch/pytorch/issues/36035).
+- Use Axial position encoding to avoid huge positional encoding matrices. It factorizes them into smaller matrices for long sequences.
+- Replace traditional attention with LSH (locality-sensitive hashing) attention. This avoids computing the full query-key product in attention layers.
+- Use reversible transformer layers to avoid storing intermediate results. Get them during the backward pass by subtracting residuals from the next layer's input, or recompute them (less efficient but saves memory).
+- Compute feedforward operations by chunks, not on the whole batch.
+- During training, set sequence length to a value divisible by the least common multiple of `config.lsh_chunk_length` and `config.local_chunk_length`. Set Axial Positional Encoding parameters correctly. Reformer is memory-efficient and can train on sequences up to 64,000 tokens.
+
 ## ReformerConfig
 
 [[autodoc]] ReformerConfig

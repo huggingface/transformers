@@ -55,6 +55,15 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`LEDForConditionalGeneration`] extends [`BartForConditionalGeneration`] by replacing the traditional self-attention layer with Longformer's chunked self-attention layer. [`LEDTokenizer`] is an alias of [`BartTokenizer`].
+- LED pads `input_ids` to be a multiple of `config.attention_window` when required. Use [`LEDTokenizer`] with the `pad_to_multiple_of` argument for a small speedup.
+- LED works best on long-range sequence-to-sequence tasks where `input_ids` are significantly longer than 1024 tokens.
+- LED uses global attention through the `global_attention_mask` (see [`LongformerModel`]). For summarization, put global attention only on the first `<s>` token. For question answering, put global attention on all question tokens.
+- Fine-tune LED on all 16384 parameters by enabling gradient checkpointing to avoid out-of-memory errors. Add `model.gradient_checkpointing_enable()` and set `use_cache=False` to disable caching and save memory.
+- Pad inputs on the right. LED uses absolute position embeddings.
+
 ## LEDConfig
 
 [[autodoc]] LEDConfig

@@ -41,6 +41,14 @@ print(f"Generated text: {generated_text}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- X-MOD is similar to XLM-R but requires specifying the input language to activate the correct language adapter.
+- The main models (base and large) have adapters for 81 languages.
+- Specify the input language in two ways: set a default language before using the model, or explicitly pass the language adapter index for each sample.
+- Freeze the embedding layer and language adapters during fine-tuning (recommended by the paper).
+- After fine-tuning, test zero-shot cross-lingual transfer by activating the target language adapter.
+
 ## XmodConfig
 
 [[autodoc]] XmodConfig

@@ -27,59 +27,34 @@ rendered properly in your Markdown viewer.
 
 [Byte Latent Transformer](https://huggingface.co/papers/2412.09871) is a byte-level LLM architecture that matches tokenization-based LLM performance at scale. It encodes bytes into dynamically sized patches based on entropy, optimizing compute and model capacity where data complexity is higher. This approach improves inference efficiency and robustness, with the first flop-controlled scaling study up to 8B parameters and 4T training bytes. BLT demonstrates better scaling than tokenization-based models by dynamically selecting long patches for predictable data, enhancing reasoning and long-tail generalization.
 
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
 ```py
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="microsoft/BLT-1B", dtype="auto")
-pipeline("The future of artificial intelligence is")
-```
-
-## Usage Tips
-
-- **Dual Model Architecture**: BLT consists of two separate trained models:
-  - **Patcher (Entropy Model)**: A smaller transformer model that predicts byte-level entropy to determine patch boundaries and segment input.
-  - **Main Transformer Model**: The primary model that processes the patches through a Local Encoder, Global Transformer, and Local Decoder.
-
-- **Dynamic Patching**: The model uses entropy-based dynamic patching where:
-  - High-entropy regions (complex data) get shorter patches with more computational attention
-  - Low-entropy regions (predictable data) get longer patches for efficiency
-  - This allows the model to allocate compute resources where they're most needed
-
-- **Local Encoder**: Processes byte sequences with cross-attention to patch embeddings
-- **Global Transformer**: Processes patch-level representations with full attention across patches
-- **Local Decoder**: Generates output with cross-attention back to the original byte sequence
-
-- **Byte-Level Tokenizer**: Unlike traditional tokenizers that use learned vocabularies, BLT's tokenizer simply converts text to UTF-8 bytes and maps each byte to a token ID. There is no need for a vocabulary.
-
-The model can be loaded via:
-
-<hfoption id="AutoModel">
-
-```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-
-tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
-model = AutoModelForCausalLM.from_pretrained(
-    "itazap/blt-1b-hf",
-    device_map="auto",
-)
-
-inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-prompt = "my name is"
-generated_ids = model.generate(
-    **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, use_cache=False
-)
-
-print(tokenizer.decode(generated_ids[0]))
+pipeline = pipeline(task="text-generation", model="itazap/blt-1b-hf", dtype="auto")
+pipeline("Plants generate energy through a process known as  ")
 ```
 
 </hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [itazap](https://huggingface.co/<itazap>).
-The original code can be found [here](<https://github.com/facebookresearch/blt>).
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("itazap/blt-1b-hf", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
+
+inputs = tokenizer("Plants generate energy through a process known as  ", return_tensors='pt', return_token_type_ids=False)
+outputs = model.generate(**inputs, max_new_tokens=64)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+```
+
+</hfoption>
+</hfoptions>
 
 ## BltConfig
 

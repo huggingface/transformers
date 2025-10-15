@@ -58,6 +58,15 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. BERT uses absolute position embeddings.
+- The facebook/bart-large-cnn checkpoint lacks `mask_token_id`. It can't perform mask-filling tasks.
+- BART ignores `token_type_ids` for sequence classification. Use [`BartTokenizer`] or `encode()` for proper splitting.
+- [`BartModel`] creates `decoder_input_ids` automatically if you don't pass them. This differs from other model APIs but helps with mask-filling tasks.
+- Model predictions match the original implementation when `forced_bos_token_id=0.` This works only if your text starts with a space.
+- Use [`generate`] for conditional generation tasks like summarization.
+
 ## BartConfig
 
 [[autodoc]] BartConfig

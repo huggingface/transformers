@@ -55,6 +55,10 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- OPT adds an EOS token `</s>` to the beginning of every prompt.
+
 ## OPTConfig
 
 [[autodoc]] OPTConfig

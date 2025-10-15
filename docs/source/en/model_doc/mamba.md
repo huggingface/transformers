@@ -48,6 +48,11 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The current implementation uses the original CUDA kernels. The FlashAttention equivalent implementation is hosted in the `mamba-ssm` and `causal_conv1d` repositories. Install them if your hardware supports it.
+- Mamba stacks mixer layers which are equivalent to attention layers. Find the main logic of Mamba in the [`MambaMixer`] class.
+
 ## MambaConfig
 
 [[autodoc]] MambaConfig

@@ -15,7 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2023-05-05 and added to Hugging Face Transformers on 2023-07-25.*
 
-
 # MPT
 
 [MPT](https://www.databricks.com/blog/mpt-7b) is a 6.7-billion-parameter decoder-style transformer developed by MosaicML, trained from scratch on 1 trillion tokens of text and code over 9.5 days with zero human intervention. It is fully open-source and commercially usable, featuring FlashAttention for fast training and inference, and ALiBi to handle extremely long context lengths up to 84k tokens. MosaicML also released finetuned variants—Instruct, Chat, and StoryWriter-65k+—to demonstrate specialized capabilities. The model was rigorously benchmarked and matches the quality of LLaMA-7B while offering easier deployment, licensing for commercial use, and highly efficient training code.
@@ -48,6 +47,10 @@ print(tokenizer.decode(outputs[0]))
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- Use the advanced version of the model (triton kernels, direct flash attention integration) by adding `trust_remote_code=True` when calling [`~AutoModel.from_pretrained`].
 
 ## MptConfig
 

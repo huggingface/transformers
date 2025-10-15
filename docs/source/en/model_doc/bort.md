@@ -17,6 +17,7 @@ rendered properly in your Markdown viewer.
 
 > [!WARNING]
 > This model is in maintenance mode only, we do not accept any new PRs changing its code.
+>
 > If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0. You can do so by running the following command: pip install -U transformers==4.30.0.
 
 # BORT
@@ -54,3 +55,7 @@ print(f"Predicted word: {predicted_word}")
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- BORT uses the RoBERTa tokenizer instead of the BERT tokenizer. Check RoBERTa's documentation for API reference and usage examples.

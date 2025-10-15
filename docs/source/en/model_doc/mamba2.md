@@ -48,6 +48,16 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Codestral Mamba has `groups=8` which are similar to the number of kv heads in an attention-based model.
+- Codestral Mamba has two different forward passes: `torch_forward` or `cuda_kernels_forward`. Their results are expected to be slightly different.
+- `torch_forward` without compilation is 3-4x faster than `cuda_kernels_forward`.
+- `cuda_kernels_forward` uses the original CUDA kernels if they're available in your environment. It's slower during prefill because it requires a "warmup run" due to higher CPU overhead.
+- This model has no positional embeddings, but it has an `attention_mask` and specific logic to mask out hidden states in two places during batched generation. This (and the reimplemented Mamba 2 kernels) results in a slight discrepancy between batched and cached generation.
+- The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different. This makes the difference greater at smaller precisions.
+- Hidden states corresponding to padding tokens are shutdown in 2 places and are mostly tested with left-padding. Right-padding propagates noise down the line and doesn't guarantee satisfactory results. Set `tokenizer.padding_side = "left"` to ensure you're using the correct padding side.
+
 ## Mamba2Config
 
 [[autodoc]] Mamba2Config

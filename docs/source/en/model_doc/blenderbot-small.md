@@ -48,6 +48,10 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pad inputs on the right. Blenderbot Small uses absolute position embeddings.
+
 ## BlenderbotSmallConfig
 
 [[autodoc]] BlenderbotSmallConfig

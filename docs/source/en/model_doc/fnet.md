@@ -51,6 +51,10 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- FNet doesn't use attention masks since it's based on Fourier Transform. The model trained with maximum sequence length 512 (including pad tokens). Use the same maximum sequence length for fine-tuning and inference.
+
 ## FNetConfig
 
 [[autodoc]] FNetConfig

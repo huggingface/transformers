@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 *This model was released on {release_date} and added to Hugging Face Transformers on 2023-06-20 and contributed by [s-JoL](https://huggingface.co/s-JoL).*
 
 > [!WARNING]
-> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.31.0. You can do so by running the following command: pip install -U transformers==4.31.0.
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.31.0. You can do so by running the following command: pip install -U transformers==4.31.0.
 
 # Open-Llama
 

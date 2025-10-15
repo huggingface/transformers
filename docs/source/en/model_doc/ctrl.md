@@ -49,6 +49,12 @@ print(f"Predicted label: {label}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- CTRL uses control codes to generate text. Start generations with specific words, sentences, or links to generate coherent text. Check the original implementation for details.
+- Pad inputs on the right. CTRL uses absolute position embeddings.
+- PyTorch models accept `past_key_values` as input. These are previously computed key/value attention pairs. Using `past_key_values` prevents re-computing pre-computed values during text generation. See the [`~CTRLModel.forward`] method for usage details.
+
 ## CTRLConfig
 
 [[autodoc]] CTRLConfig

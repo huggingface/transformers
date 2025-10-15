@@ -55,6 +55,10 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- When upgrading from older custom code checkpoints, convert them to the official Transformers format for better stability and performance. Use the conversion script in the Falcon model directory.
+
 ## FalconConfig
 
 [[autodoc]] FalconConfig

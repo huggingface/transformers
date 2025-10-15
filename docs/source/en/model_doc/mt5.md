@@ -58,6 +58,10 @@ print(tokenizer.decode(outputs[0]))
 </hfopton>
 </hfoptions>
 
+## Usage tips
+
+- Fine-tune mT5 for downstream tasks. The model was only pretrained on the [mc4 dataset](https://huggingface.co/datasets/mc4), which doesn't include task-specific training.
+
 ## MT5Config
 
 [[autodoc]] MT5Config

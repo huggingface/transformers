@@ -48,6 +48,15 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Persimmon models were trained using `bfloat16`, but original inference uses `float16`. Hub checkpoints use `dtype='float16'`. The [`AutoModel`] API casts checkpoints from `torch.float32` to `torch.float16`.
+- Online weight dtype matters only when using `dtype="auto"`. The model downloads first (using checkpoint dtype), then casts to torch's default dtype (`torch.float32`). Specify your desired dtype or it defaults to `torch.float32`.
+- Don't fine-tune in `float16`. It produces NaN values. Fine-tune in `bfloat16` instead.
+- Clone the original repository to convert the model: `git clone https://github.com/persimmon-ai-labs/adept-inference`.
+- Persimmon uses a sentencepiece-based tokenizer with a Unigram model. It supports bytefallback (available in `tokenizers==0.14.0` for the fast tokenizer). [`LlamaTokenizer`] wraps sentencepiece as a standard wrapper.
+- Use this prompt format for chat mode: `f"human: {prompt}\n\nadept:"`.
+
 ## PersimmonConfig
 
 [[autodoc]] PersimmonConfig

@@ -51,6 +51,13 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- ELECTRA has two transformer models: a generator (G) and a discriminator (D). Use the discriminator model (indicated by `*-discriminator` in the name) for most downstream tasks.
+- ELECTRA can use a smaller embedding size than the hidden size for efficiency. When `embedding_size` is smaller than `hidden_size`, a projection layer connects them.
+- Use attention masks with batched inputs that have padding. This prevents the model from attending to padding tokens.
+- Load the discriminator into any ELECTRA model class (`ElectraForSequenceClassification`, `ElectraForTokenClassification`, etc.) for downstream tasks.
+
 ## ElectraConfig
 
 [[autodoc]] ElectraConfig

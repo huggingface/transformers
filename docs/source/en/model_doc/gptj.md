@@ -54,6 +54,13 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Loading GPT-J in float32 requires at least 2x model size RAM: 1x for initial weights and another 1x to load the checkpoint. GPT-J needs at least 48GB RAM to load the model.
+- Reduce RAM usage with the `dtype` argument to initialize the model in half-precision on CUDA devices only. Use the fp16 branch which stores fp16 weights to minimize RAM usage further.
+- The model fits on 16GB GPU for inference. Training/fine-tuning requires much more GPU RAM. Adam optimizer makes four copies of the model: model, gradients, average and squared average of the gradients. It needs at least 4x model size GPU memory, even with mixed precision since gradient updates are in fp32. This excludes activations and data batches, which require additional GPU RAM.
+- Explore solutions like DeepSpeed to train/fine-tune the model. Another option is to use the original codebase to train/fine-tune on TPU, then convert to Transformers format for inference.
+- The embedding matrix has 50400 entries, but only 50257 are used by the GPT-2 tokenizer. Extra tokens are added for TPU efficiency. The GPT-J tokenizer contains 143 extra tokens `<|extratoken_1|>`... `<|extratoken_143|>` to match the vocab_size of 50400.
 
 ## GPTJConfig
 

@@ -50,3 +50,8 @@ print(f"Predicted word: {predicted_word}")
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- XLM-V is compatible with the XLM-RoBERTa model architecture. Only model weights from the fairseq library needed conversion.
+- The [`XLMTokenizer`] implementation loads the vocabulary and performs tokenization.

@@ -51,6 +51,13 @@ print(f"Predicted word: {predicted_word}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Funnel Transformer uses pooling, so sequence length changes after each block. Length divides by 2, speeding up computation. The base model has a final sequence length that's a quarter of the original.
+- Use the base model directly for tasks requiring sentence summaries (sequence classification or multiple choice). Use the full model for other tasks. The full model has a decoder that upsamples final hidden states to match input sequence length.
+- For classification tasks, this works fine. For masked language modeling or token classification, you need hidden states with the same sequence length as the original input. Final hidden states get upsampled to input sequence length and go through two additional layers.
+- Two checkpoint versions exist. The `-base` version contains only three blocks. The version without that suffix contains three blocks plus the upsampling head with additional layers.
+
 ## FunnelConfig
 
 [[autodoc]] FunnelConfig
