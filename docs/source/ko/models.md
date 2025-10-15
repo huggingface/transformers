@@ -178,10 +178,10 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     new_model = AutoModel.from_pretrained(tmp_dir)
 ```
 
-분할된 체크포인트는 [`~transformers.modeling_utils.load_sharded_checkpoint`]로도 직접 불러올 수 있습니다.
+분할된 체크포인트는 [`~transformers.trainer_utils.load_sharded_checkpoint`]로도 직접 불러올 수 있습니다.
 
 ```py
-from transformers.modeling_utils import load_sharded_checkpoint
+from transformers.trainer_utils import load_sharded_checkpoint
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     model.save_pretrained(tmp_dir, max_shard_size="5GB")
