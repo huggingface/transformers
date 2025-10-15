@@ -1942,7 +1942,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     break
             if not pattern_matched:
                 warnings.warn(
-                    f"Layer pattern '{layer_pattern}' does not match any parameter in the model. This rule may not "
+                    f"Layer pattern '{layer_pattern}' does not match any parameters in the model. This rule may not "
                     "be applied during tensor parallelization, or may lead to dimension mismatches"
                 )
 
