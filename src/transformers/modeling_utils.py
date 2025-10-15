@@ -273,30 +273,6 @@ def restore_default_dtype(func):
     return _wrapper
 
 
-def get_keep_in_fp32_regex(
-    model: "PreTrainedModel", hf_quantizer: HfQuantizer | None, dtype: torch.dtype
-) -> re.Pattern | None:
-    # Find fp32 modules if needed
-    keep_in_fp32_modules = []
-    # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
-    # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
-    # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
-    if model._keep_in_fp32_modules is not None and (
-        dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
-    ):
-        keep_in_fp32_modules.extend(model._keep_in_fp32_modules)
-
-    if model._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
-        keep_in_fp32_modules.extend(model._keep_in_fp32_modules_strict)
-
-    keep_in_fp32_regex = None
-    if len(keep_in_fp32_modules) > 0:
-        # We need to match exact layers, so we add either `.` on each side, or start/end of string
-        keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
-
-    return keep_in_fp32_regex
-
-
 def get_torch_context_manager_or_global_device():
     """
     Test if a device context manager is currently in use, or if it is not the case, check if the default device
@@ -4494,20 +4470,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+        # Potentially upcast some modules to avoid loosing precision
+        model.upcast_modules_in_fp32(hf_quantizer, dtype)
         # Make sure to tie the weights correctly
         model.tie_weights()
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
-
-        # Regex to keep a fixed fp32 dtype
-        keep_in_fp32_regex = get_keep_in_fp32_regex(model, hf_quantizer, dtype)
-        # Set some modules to fp32 if needed
-        if keep_in_fp32_regex is not None and dtype != torch.float32:
-            for name, param in model.named_parameters():
-                if keep_in_fp32_regex.search(name):
-                    # param = param.to(torch.float32) does not work here as only in the local scope.
-                    param.data = param.data.to(torch.float32)
 
         if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
             hf_quantizer.preprocess_model(
@@ -5265,6 +5234,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def eval(self):
         return self.train(False)
+
+    def upcast_modules_in_fp32(self, hf_quantizer: HfQuantizer | None, dtype: torch.dtype) -> None:
+        """
+        Upcast modules defined in `_keep_in_fp32_modules` and `_keep_in_fp32_modules_strict` in fp32, if
+        `dtype` is different than fp32.
+        """
+        # If the dtype is already fp32, we can skip
+        if dtype == torch.float32:
+            return
+
+        keep_in_fp32_modules = []
+        # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
+        # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
+        # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
+        if self._keep_in_fp32_modules is not None and (
+            dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
+        ):
+            keep_in_fp32_modules.extend(self._keep_in_fp32_modules)
+
+        if self._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
+            keep_in_fp32_modules.extend(self._keep_in_fp32_modules_strict)
+
+        if len(keep_in_fp32_modules) > 0:
+            # We need to match exact layers, so we add either `.` on each side, or start/end of string
+            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
+            for name, param in self.named_parameters():
+                if keep_in_fp32_regex.search(name):
+                    # param = param.to(torch.float32) does not work here as only in the local scope.
+                    param.data = param.data.to(torch.float32)
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
