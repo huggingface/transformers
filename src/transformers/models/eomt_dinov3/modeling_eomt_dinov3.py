@@ -699,9 +699,7 @@ def eager_attention_forward(
     # Apply the attention mask before the softmax so that we mimic PyTorch's SDPA semantics.
     if attention_mask is not None:
         if attention_mask.dtype == torch.bool:
-            attn_weights = attn_weights.masked_fill(
-                ~attention_mask, torch.finfo(attn_weights.dtype).min
-            )
+            attn_weights = attn_weights.masked_fill(~attention_mask, torch.finfo(attn_weights.dtype).min)
         elif torch.is_floating_point(attention_mask) and torch.any(attention_mask < 0):
             attn_weights = attn_weights.to(torch.float32) + attention_mask.to(torch.float32)
         else:

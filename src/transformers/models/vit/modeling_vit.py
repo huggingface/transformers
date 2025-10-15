@@ -180,16 +180,21 @@ def eager_attention_forward(
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
 
+    # Apply the attention mask before the softmax so that we mimic PyTorch's SDPA semantics.
+    if attention_mask is not None:
+        if attention_mask.dtype == torch.bool:
+            attn_weights = attn_weights.masked_fill(~attention_mask, torch.finfo(attn_weights.dtype).min)
+        elif torch.is_floating_point(attention_mask) and torch.any(attention_mask < 0):
+            attn_weights = attn_weights.to(torch.float32) + attention_mask.to(torch.float32)
+        else:
+            attn_weights = attn_weights * attention_mask.to(attn_weights.dtype)
+
     # Normalize the attention scores to probabilities.
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
 
     # This is actually dropping out entire tokens to attend to, which might
     # seem a bit unusual, but is taken from the original Transformer paper.
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
-    if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
