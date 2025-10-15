@@ -34,7 +34,10 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     BertTokenizer,
+    LlamaTokenizer,
+    LlavaProcessor,
     ProcessorMixin,
+    SiglipImageProcessor,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
@@ -57,6 +60,7 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
 
 SAMPLE_PROCESSOR_CONFIG = get_tests_dir("fixtures/dummy_feature_extractor_config.json")
+SAMPLE_VOCAB_LLAMA = get_tests_dir("fixtures/test_sentencepiece.model")
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
 SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
 
@@ -503,3 +507,43 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 new_processor = AutoProcessor.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
                 # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
                 self.assertEqual(new_processor.__class__.__name__, "CustomProcessor")
+
+    def test_push_to_hub_with_chat_templates(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer = LlamaTokenizer(SAMPLE_VOCAB_LLAMA, keep_accents=True)
+            image_processor = SiglipImageProcessor()
+            chat_template = "default dummy template for testing purposes only"
+            processor = LlavaProcessor(
+                tokenizer=tokenizer, image_processor=image_processor, chat_template=chat_template
+            )
+            self.assertEqual(processor.chat_template, chat_template)
+
+            existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                processor.save_pretrained(
+                    tmp_dir, repo_id=tmp_repo.repo_id, token=self._token, push_to_hub=True, save_jinja_files=False
+                )
+                reloaded_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+                # When we don't use single-file chat template saving, processor and tokenizer chat templates
+                # should remain separate
+                self.assertEqual(
+                    getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template
+                )
+
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, token=self._token, push_to_hub=True)
+                reloaded_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+                # When we save as single files, tokenizers and processors share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
+
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                processor.chat_template = {"default": "a", "secondary": "b"}
+                processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, token=self._token, push_to_hub=True)
+                reloaded_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+                # When we save as single files, tokenizers and processors share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
