@@ -16,10 +16,8 @@ rendered properly in your Markdown viewer.
 
 # ExecuTorch
 
-[ExecuTorch](https://pytorch.org/executorch/stable/index.html) is a platform that enables PyTorch training and inference programs to be run on mobile and edge devices. You can use ExecuTorch to directly run models from Transformers with [Optimum ExecuTorch](https://github.com/huggingface/optimum-executorch).
+[ExecuTorch](https://pytorch.org/executorch/stable/index.html) runs PyTorch models on mobile and edge devices. Export your Transformers models to the ExecuTorch format with [Optimum ExecuTorch](https://github.com/huggingface/optimum-executorch) with the command below.
 
-## Example export
-Use the CLI tool to convert the Transformers model to ExecuTorch format:
 ```
 optimum-cli export executorch \
     --model "HuggingFaceTB/SmolLM2-135M-Instruct" \
@@ -31,5 +29,4 @@ optimum-cli export executorch \
     --qembedding 8w \
     --output_dir="hf_smollm2"
 ```
-Explore the various export options by running the command: `optimum-cli export executorch --help`.
-To read more about how to export different types of models on Optimum ExecuTorch, please refer to the export [README](optimum/exporters/executorch/README.md).
+Run `optimum-cli export executorch --help` to see all export options. For detailed export instructions, check the [README](optimum/exporters/executorch/README.md).
