@@ -22,7 +22,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Optional, Union
 
 # Build the list of all video processors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, VIDEO_PROCESSOR_NAME, cached_file, is_torchvision_available, logging
 from ...utils.import_utils import requires
@@ -62,6 +62,7 @@ else:
             ("sam2_video", "Sam2VideoVideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
+            ("videomae", "VideoMAEVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
         ]
     )
@@ -321,7 +322,7 @@ class AutoVideoProcessor:
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
         if video_processor_class is None and video_processor_auto_map is None:
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
@@ -374,7 +375,7 @@ class AutoVideoProcessor:
         Register a new video processor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             video_processor_class ([`BaseVideoProcessor`]):
                 The video processor to register.

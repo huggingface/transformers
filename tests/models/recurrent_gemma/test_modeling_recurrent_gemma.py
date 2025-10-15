@@ -18,7 +18,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -33,7 +33,7 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import RecurrentGemmaForCausalLM, RecurrentGemmaModel
+    from transformers import RecurrentGemmaModel
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -45,14 +45,6 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": RecurrentGemmaModel,
-            "text-generation": RecurrentGemmaForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     has_attentions = False
     model_tester_class = RecurrentGemmaModelTester
 
@@ -204,7 +196,10 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
-            "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_8bit=True, dtype=torch.bfloat16
+            "gg-hf/recurrent-gemma-2b-hf",
+            device_map={"": torch_device},
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            dtype=torch.bfloat16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, padding_side="left")

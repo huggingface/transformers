@@ -18,7 +18,7 @@ from inspect import signature
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, PretrainedConfig, set_seed
+from transformers import AutoModelForCausalLM, PreTrainedConfig, set_seed
 from transformers.models.auto.auto_factory import getattribute_from_module
 from transformers.testing_utils import (
     _COMMON_MODEL_NAMES_MAP,
@@ -87,7 +87,7 @@ class CausalLMModelTester:
                     pass
             else:
                 if tester_attribute_name == "config_class":
-                    if "PretrainedConfig" not in str(getattr(cls, tester_attribute_name).__mro__):
+                    if "PreTrainedConfig" not in str(getattr(cls, tester_attribute_name).__mro__):
                         raise ValueError(
                             f"You have inherited from `CausalLMModelTester` but did not set the "
                             f"`{tester_attribute_name}` attribute to a valid config class. (It's set to "
@@ -143,6 +143,23 @@ class CausalLMModelTester:
             )
             if model_class is not None
         ]
+
+    @property
+    def pipeline_model_mapping(self):
+        # This is the default pipeline mapping.
+        mapping = {
+            "feature-extraction": self.base_model_class,
+            "text-generation": self.causal_lm_class,
+        }
+        if self.question_answering_class is not None:
+            mapping["question-answering"] = self.question_answering_class
+        if self.sequence_classification_class is not None:
+            mapping["text-classification"] = self.sequence_classification_class
+        if self.token_classification_class is not None:
+            mapping["token-classification"] = self.token_classification_class
+        if self.sequence_classification_class is not None:
+            mapping["zero-shot"] = self.sequence_classification_class
+        return mapping
 
     def __init__(
         self,
@@ -287,7 +304,6 @@ class CausalLMModelTester:
 
 @require_torch
 class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
-    test_pruning = False
     model_tester_class = None
     all_model_classes = None
     pipeline_model_mapping = None
@@ -299,12 +315,20 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             )
         self.model_tester = self.model_tester_class(self)
         self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class)
+
+        if self.pipeline_model_mapping is None:
+            # If `all_model_classes` is not the default, maybe there are more pipeline mappings to be set.
+            if self.all_model_classes is not None:
+                raise ValueError(
+                    "Testes that inherit from `CausalLMModelTest` and set `all_model_classes` must manually set "
+                    "`pipeline_model_mapping`."
+                )
+            # Otherwise, we know the pipeline mapping is the default.
+            else:
+                self.pipeline_model_mapping = self.model_tester.pipeline_model_mapping
+
         if self.all_model_classes is None:
             self.all_model_classes = self.model_tester.all_model_classes
-        if self.pipeline_model_mapping is None:
-            raise ValueError(
-                "You have inherited from CausalLMModelTest but did not set the pipeline_model_mapping attribute."
-            )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -448,6 +472,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # named location of the RoPE layer class.
         base_model = self.model_tester.base_model_class(config)
         possible_rope_attributes = [
+            "pos_emb",
             "rotary_emb",  # most common case
             "global_rotary_emb",
             "local_rotary_emb",
@@ -572,7 +597,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             _ = model(**inputs_dict, return_dict=False)
 
 
-def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
+def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
     """Returns whether a certain model config supports RoPE scaling parameterization."""
     # Has rope_scaling -> model was designed with rope scaling in mind
     # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well

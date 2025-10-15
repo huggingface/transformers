@@ -23,7 +23,7 @@ from typing import Any, Optional, Union
 
 from transformers.utils.import_utils import is_mistral_common_available
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils import PreTrainedTokenizer
@@ -170,6 +170,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("cpmant", ("CpmAntTokenizer", None)),
         ("csm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("ctrl", ("CTRLTokenizer", None)),
+        (
+            "cwm",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
         ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("dbrx", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -502,7 +509,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("owlv2", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("paligemma", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
-        ("parakeet", ("ParakeetCTCTokenizer", None)),
+        ("parakeet", (None, "ParakeetTokenizerFast" if is_tokenizers_available() else None)),
         (
             "pegasus",
             (
@@ -940,7 +947,9 @@ class AutoTokenizer:
 
     @classmethod
     @replace_list_option_in_docstrings(TOKENIZER_MAPPING_NAMES)
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
+    def from_pretrained(
+        cls, pretrained_model_name_or_path, *inputs, **kwargs
+    ) -> Union[PreTrainedTokenizer, PreTrainedTokenizerFast]:
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
 
@@ -962,7 +971,7 @@ class AutoTokenizer:
                       applicable to all derived classes)
             inputs (additional positional arguments, *optional*):
                 Will be passed along to the Tokenizer `__init__()` method.
-            config ([`PretrainedConfig`], *optional*)
+            config ([`PreTrainedConfig`], *optional*)
                 The configuration object used to determine the tokenizer class to instantiate.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
@@ -1076,7 +1085,7 @@ class AutoTokenizer:
 
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 if gguf_file:
                     gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
                     config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
@@ -1170,7 +1179,7 @@ class AutoTokenizer:
 
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             slow_tokenizer_class ([`PretrainedTokenizer`], *optional*):
                 The slow tokenizer to register.

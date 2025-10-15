@@ -490,7 +490,7 @@ class BarkModelTester:
         self.is_training = is_training
 
     def get_config(self):
-        return BarkConfig.from_sub_model_configs(
+        return BarkConfig(
             self.semantic_model_tester.get_config(),
             self.coarse_acoustics_model_tester.get_config(),
             self.fine_acoustics_model_tester.get_config(),
@@ -522,7 +522,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
 
     test_resize_embeddings = True
 
@@ -610,7 +609,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     test_resize_embeddings = True
 
     def setUp(self):
@@ -694,7 +693,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     # torchscript disabled for now because forward with an int
     test_torchscript = False
 

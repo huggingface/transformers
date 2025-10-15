@@ -119,9 +119,6 @@ class Mamba2ModelTester:
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
 
-    def get_large_model_config(self):
-        return Mamba2Config.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -244,7 +241,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     fx_compatible = False  # FIXME let's try to support this @molbap
     test_torchscript = False  # FIXME I think this should be doable @molbap @ArthurZucker
     test_missing_keys = False
-    test_pruning = False
 
     pipeline_model_mapping = (
         {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
@@ -255,6 +251,21 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.config_tester = Mamba2ConfigTester(
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Mamba2Cache)
+
+        intermediate_size = config.expand * config.hidden_size
+        conv_shape = (
+            config.num_hidden_layers,
+            batch_size,
+            intermediate_size + 2 * config.n_groups * config.state_size,
+            config.conv_kernel,
+        )
+        ssm_shape = (config.num_hidden_layers, batch_size, config.num_heads, config.head_dim, config.state_size)
+
+        self.assertEqual(past_key_values.conv_states.shape, conv_shape)
+        self.assertEqual(past_key_values.ssm_states.shape, ssm_shape)
 
     def test_mamba2_caching(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -46,11 +46,11 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-# type hinting: specifying the type of config class that inherits from PretrainedConfig
-SpecificPretrainedConfigType = TypeVar("SpecificPretrainedConfigType", bound="PretrainedConfig")
+# type hinting: specifying the type of config class that inherits from PreTrainedConfig
+SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="PreTrainedConfig")
 
 
-class PretrainedConfig(PushToHubMixin):
+class PreTrainedConfig(PushToHubMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -70,7 +70,7 @@ class PretrainedConfig(PushToHubMixin):
     - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
       Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
       (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
-      two or more configs of type [`~transformers.PretrainedConfig`].
+      two or more configs of type [`~transformers.PreTrainedConfig`].
     - **keys_to_ignore_at_inference** (`list[str]`) -- A list of keys to ignore by default when looking at dictionary
       outputs of the model during inference.
     - **attribute_map** (`dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
@@ -123,11 +123,6 @@ class PretrainedConfig(PushToHubMixin):
         tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
-        prune_heads (`dict[int, list[int]]`, *optional*, defaults to `{}`):
-            Pruned heads of the model. The keys are the selected layer indices and the associated values, the list of
-            heads to prune in said layer.
-
-            For instance `{1: [0, 2], 2: [2, 3]}` will prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
         chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
@@ -186,7 +181,7 @@ class PretrainedConfig(PushToHubMixin):
 
     model_type: str = ""
     base_config_key: str = ""
-    sub_configs: dict[str, type["PretrainedConfig"]] = {}
+    sub_configs: dict[str, type["PreTrainedConfig"]] = {}
     has_no_defaults_at_init: bool = False
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
@@ -214,7 +209,6 @@ class PretrainedConfig(PushToHubMixin):
         torchscript: bool = False,
         dtype: Optional[Union[str, "torch.dtype"]] = None,
         # Common arguments
-        pruned_heads: Optional[dict[int, list[int]]] = None,
         tie_word_embeddings: bool = True,
         chunk_size_feed_forward: int = 0,
         is_encoder_decoder: bool = False,
@@ -279,7 +273,6 @@ class PretrainedConfig(PushToHubMixin):
         self._output_attentions = output_attentions  # has public property
 
         # Less common kwargs, only used by some models
-        self.pruned_heads = pruned_heads if pruned_heads is not None else {}
         self.tie_word_embeddings = tie_word_embeddings
         self.chunk_size_feed_forward = chunk_size_feed_forward
 
@@ -432,7 +425,7 @@ class PretrainedConfig(PushToHubMixin):
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
-        [`~PretrainedConfig.from_pretrained`] class method.
+        [`~PreTrainedConfig.from_pretrained`] class method.
 
         Args:
             save_directory (`str` or `os.PathLike`):
@@ -522,7 +515,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls: type[SpecificPretrainedConfigType],
+        cls: type[SpecificPreTrainedConfigType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -530,9 +523,9 @@ class PretrainedConfig(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ) -> SpecificPretrainedConfigType:
+    ) -> SpecificPreTrainedConfigType:
         r"""
-        Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
+        Instantiate a [`PreTrainedConfig`] (or a derived class) from a pretrained model configuration.
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -541,7 +534,7 @@ class PretrainedConfig(PushToHubMixin):
                 - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
                   huggingface.co.
                 - a path to a *directory* containing a configuration file saved using the
-                  [`~PretrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
+                  [`~PreTrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
@@ -581,12 +574,12 @@ class PretrainedConfig(PushToHubMixin):
                 by the `return_unused_kwargs` keyword parameter.
 
         Returns:
-            [`PretrainedConfig`]: The configuration object instantiated from this pretrained model.
+            [`PreTrainedConfig`]: The configuration object instantiated from this pretrained model.
 
         Examples:
 
         ```python
-        # We can't instantiate directly the base class *PretrainedConfig* so let's show the examples on a
+        # We can't instantiate directly the base class *PreTrainedConfig* so let's show the examples on a
         # derived class: BertConfig
         config = BertConfig.from_pretrained(
             "google-bert/bert-base-uncased"
@@ -636,7 +629,7 @@ class PretrainedConfig(PushToHubMixin):
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
-        [`PretrainedConfig`] using `from_dict`.
+        [`PreTrainedConfig`] using `from_dict`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -761,20 +754,20 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_dict(
-        cls: type[SpecificPretrainedConfigType], config_dict: dict[str, Any], **kwargs
-    ) -> SpecificPretrainedConfigType:
+        cls: type[SpecificPreTrainedConfigType], config_dict: dict[str, Any], **kwargs
+    ) -> SpecificPreTrainedConfigType:
         """
-        Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
+        Instantiates a [`PreTrainedConfig`] from a Python dictionary of parameters.
 
         Args:
             config_dict (`dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
-                retrieved from a pretrained checkpoint by leveraging the [`~PretrainedConfig.get_config_dict`] method.
+                retrieved from a pretrained checkpoint by leveraging the [`~PreTrainedConfig.get_config_dict`] method.
             kwargs (`dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
-            [`PretrainedConfig`]: The configuration object instantiated from those parameters.
+            [`PreTrainedConfig`]: The configuration object instantiated from those parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
         # Those arguments may be passed along for our internal telemetry.
@@ -796,9 +789,6 @@ class PretrainedConfig(PushToHubMixin):
 
         config = cls(**config_dict)
 
-        if hasattr(config, "pruned_heads"):
-            config.pruned_heads = {int(key): value for key, value in config.pruned_heads.items()}
-
         # Update config with kwargs if needed
         if "num_labels" in kwargs and "id2label" in kwargs:
             num_labels = kwargs["num_labels"]
@@ -815,7 +805,7 @@ class PretrainedConfig(PushToHubMixin):
                 current_attr = getattr(config, key)
                 # To authorize passing a custom subconfig as kwarg in models that have nested configs.
                 # We need to update only custom kwarg values instead and keep other attributes in subconfig.
-                if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
+                if isinstance(current_attr, PreTrainedConfig) and isinstance(value, dict):
                     current_attr_updated = current_attr.to_dict()
                     current_attr_updated.update(value)
                     value = current_attr.__class__(**current_attr_updated)
@@ -833,17 +823,17 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_json_file(
-        cls: type[SpecificPretrainedConfigType], json_file: Union[str, os.PathLike]
-    ) -> SpecificPretrainedConfigType:
+        cls: type[SpecificPreTrainedConfigType], json_file: Union[str, os.PathLike]
+    ) -> SpecificPreTrainedConfigType:
         """
-        Instantiates a [`PretrainedConfig`] from the path to a JSON file of parameters.
+        Instantiates a [`PreTrainedConfig`] from the path to a JSON file of parameters.
 
         Args:
             json_file (`str` or `os.PathLike`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            [`PretrainedConfig`]: The configuration object instantiated from that JSON file.
+            [`PreTrainedConfig`]: The configuration object instantiated from that JSON file.
 
         """
         config_dict = cls._dict_from_json_file(json_file)
@@ -856,7 +846,7 @@ class PretrainedConfig(PushToHubMixin):
         return json.loads(text)
 
     def __eq__(self, other):
-        return isinstance(other, PretrainedConfig) and (self.__dict__ == other.__dict__)
+        return isinstance(other, PreTrainedConfig) and (self.__dict__ == other.__dict__)
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
@@ -876,7 +866,7 @@ class PretrainedConfig(PushToHubMixin):
         config_dict = self.to_dict()
 
         # Get the default config dict (from a fresh PreTrainedConfig instance)
-        default_config_dict = PretrainedConfig().to_dict()
+        default_config_dict = PreTrainedConfig().to_dict()
 
         # get class specific config dict
         class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
@@ -887,10 +877,9 @@ class PretrainedConfig(PushToHubMixin):
         # except always keep the 'config' attribute.
         for key, value in config_dict.items():
             if (
-                isinstance(getattr(self, key, None), PretrainedConfig)
+                isinstance(getattr(self, key, None), PreTrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
-                or key in self.sub_configs
             ):
                 # For nested configs we need to clean the diff recursively
                 diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
@@ -940,7 +929,7 @@ class PretrainedConfig(PushToHubMixin):
 
         for key, value in output.items():
             # Deal with nested configs like CLIP
-            if isinstance(value, PretrainedConfig):
+            if isinstance(value, PreTrainedConfig):
                 value = value.to_dict()
                 del value["transformers_version"]
 
@@ -964,7 +953,7 @@ class PretrainedConfig(PushToHubMixin):
 
         Args:
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                If set to `True`, only the difference between the config instance and the default `PreTrainedConfig()`
                 is serialized to JSON string.
 
         Returns:
@@ -984,7 +973,7 @@ class PretrainedConfig(PushToHubMixin):
             json_file_path (`str` or `os.PathLike`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                If set to `True`, only the difference between the config instance and the default `PreTrainedConfig()`
                 is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
@@ -1137,16 +1126,16 @@ class PretrainedConfig(PushToHubMixin):
 
     def _get_non_default_generation_parameters(self) -> dict[str, Any]:
         """
-        Gets the non-default generation parameters on the PretrainedConfig instance
+        Gets the non-default generation parameters on the PreTrainedConfig instance
         """
         non_default_generation_parameters = {}
         decoder_attribute_name = None
 
-        # Composite models don't have a default config, use their decoder config as a fallback for default values
+        # Some composite models don't have a default config, use their decoder config as a fallback for default values
         # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
-        try:
+        if not self.has_no_defaults_at_init:
             default_config = self.__class__()
-        except ValueError:
+        else:
             decoder_config = self.get_text_config(decoder=True)
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
@@ -1179,7 +1168,7 @@ class PretrainedConfig(PushToHubMixin):
 
         return non_default_generation_parameters
 
-    def get_text_config(self, decoder=None, encoder=None) -> "PretrainedConfig":
+    def get_text_config(self, decoder=None, encoder=None) -> "PreTrainedConfig":
         """
         Returns the text config related to the text input (encoder) or text output (decoder) of the model. The
         `decoder` and `encoder` input arguments can be used to specify which end of the model we are interested in,
@@ -1257,42 +1246,6 @@ class PretrainedConfig(PushToHubMixin):
 
         return config_to_return
 
-    @classmethod
-    def from_text_vision_configs(cls, text_config, vision_config, **kwargs):
-        r"""
-        Instantiate a model config (or a derived class) from text model configuration and vision model
-        configuration.
-
-        Returns:
-            [`PreTrainedConfig`]: An instance of a configuration object
-        """
-
-        warnings.warn(
-            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
-            FutureWarning,
-        )
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    @classmethod
-    def from_text_audio_configs(cls, text_config, audio_config, **kwargs):
-        r"""
-        Instantiate a model config (or a derived class) from text model configuration and audio model
-        configuration.
-
-        Returns:
-            [`PreTrainedConfig`]: An instance of a configuration object
-        """
-
-        warnings.warn(
-            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
-            FutureWarning,
-        )
-
-        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
-
 
 def get_configuration_file(configuration_files: list[str]) -> str:
     """
@@ -1335,7 +1288,7 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
         obj_value = getattr(config_obj, str(key), None)
-        if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
+        if isinstance(obj_value, PreTrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
             diff[key] = diff_value
         elif key not in dict_b or (value != default[key]):
@@ -1343,11 +1296,15 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     return diff
 
 
-PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)
-if PretrainedConfig.push_to_hub.__doc__ is not None:
-    PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
+PreTrainedConfig.push_to_hub = copy_func(PreTrainedConfig.push_to_hub)
+if PreTrainedConfig.push_to_hub.__doc__ is not None:
+    PreTrainedConfig.push_to_hub.__doc__ = PreTrainedConfig.push_to_hub.__doc__.format(
         object="config", object_class="AutoConfig", object_files="configuration file"
     )
+
+
+# The alias is only here for BC - we did not have the correct CamelCasing before
+PretrainedConfig = PreTrainedConfig
 
 
 ALLOWED_LAYER_TYPES = (

@@ -32,10 +32,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MambaCache,
         MambaForCausalLM,
         MambaModel,
     )
+    from transformers.models.mamba.modeling_mamba import MambaCache
 
 
 class MambaModelTester:
@@ -81,9 +81,6 @@ class MambaModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
-
-    def get_large_model_config(self):
-        return MambaConfig.from_pretrained("hf-internal-testing/mamba-2.8b")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -241,7 +238,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
-    test_pruning = False
+
     pipeline_model_mapping = (
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )
@@ -251,6 +248,18 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.config_tester = ConfigTester(
             self, config_class=MambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, MambaCache)
+
+        conv_shape = (batch_size, config.intermediate_size, config.conv_kernel)
+        ssm_shape = (batch_size, config.intermediate_size, config.state_size)
+
+        self.assertTrue(config.num_hidden_layers, len(past_key_values.conv_states))
+
+        for idx in range(len(past_key_values.conv_states)):
+            self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
+            self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
 
     def assertInterval(self, member, container, msg=None):
         r"""

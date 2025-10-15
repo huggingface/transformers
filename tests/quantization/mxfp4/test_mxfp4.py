@@ -265,7 +265,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 
         self.assertEqual(set(updated_keys), set(expected_updated))
 
-    def test_update_param_name_dequantize(self):
+    def test_get_param_name_dequantize(self):
         """Test parameter name updating when dequantizing"""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -274,20 +274,20 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 
         # Should remove _blocks suffix
         param_name = "model.layers.0.mlp.experts.gate_up_proj_blocks"
-        updated_name = quantizer.update_param_name(param_name)
+        updated_name = quantizer.get_param_name(param_name)
         self.assertEqual(updated_name, "model.layers.0.mlp.experts.gate_up_proj")
 
         # Should remove _scales suffix
         param_name = "model.layers.0.mlp.experts.down_proj_scales"
-        updated_name = quantizer.update_param_name(param_name)
+        updated_name = quantizer.get_param_name(param_name)
         self.assertEqual(updated_name, "model.layers.0.mlp.experts.down_proj")
 
         # Should not change other names
         param_name = "model.embed_tokens.weight"
-        updated_name = quantizer.update_param_name(param_name)
+        updated_name = quantizer.get_param_name(param_name)
         self.assertEqual(updated_name, "model.embed_tokens.weight")
 
-    def test_update_param_name_no_dequantize(self):
+    def test_get_param_name_no_dequantize(self):
         """Test parameter name updating when not dequantizing"""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -295,7 +295,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         quantizer = Mxfp4HfQuantizer(config)
 
         param_name = "model.layers.0.mlp.experts.gate_up_proj_blocks"
-        updated_name = quantizer.update_param_name(param_name)
+        updated_name = quantizer.get_param_name(param_name)
         self.assertEqual(updated_name, param_name)
 
     def test_is_trainable(self):

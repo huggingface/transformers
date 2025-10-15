@@ -22,7 +22,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 
@@ -94,6 +94,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("csm", "CsmConfig"),
         ("ctrl", "CTRLConfig"),
         ("cvt", "CvtConfig"),
+        ("cwm", "CwmConfig"),
         ("d_fine", "DFineConfig"),
         ("dab-detr", "DabDetrConfig"),
         ("dac", "DacConfig"),
@@ -226,6 +227,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
         ("lfm2", "Lfm2Config"),
+        ("lfm2_moe", "Lfm2MoeConfig"),
         ("lfm2_vl", "Lfm2VlConfig"),
         ("lightglue", "LightGlueConfig"),
         ("lilt", "LiltConfig"),
@@ -306,7 +308,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
         ("perceiver", "PerceiverConfig"),
-        ("perception_encoder", "TimmWrapperConfig"),
         ("perception_lm", "PerceptionLMConfig"),
         ("persimmon", "PersimmonConfig"),
         ("phi", "PhiConfig"),
@@ -417,6 +418,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
+        ("video_llama_3", "VideoLlama3Config"),
+        ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
@@ -529,6 +532,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("csm", "CSM"),
         ("ctrl", "CTRL"),
         ("cvt", "CvT"),
+        ("cwm", "Code World Model (CWM)"),
         ("d_fine", "D-FINE"),
         ("dab-detr", "DAB-DETR"),
         ("dac", "DAC"),
@@ -670,6 +674,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("led", "LED"),
         ("levit", "LeViT"),
         ("lfm2", "Lfm2"),
+        ("lfm2_moe", "Lfm2Moe"),
         ("lfm2_vl", "Lfm2Vl"),
         ("lightglue", "LightGlue"),
         ("lilt", "LiLT"),
@@ -761,7 +766,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("pegasus", "Pegasus"),
         ("pegasus_x", "PEGASUS-X"),
         ("perceiver", "Perceiver"),
-        ("perception_encoder", "PerceptionEncoder"),
         ("perception_lm", "PerceptionLM"),
         ("persimmon", "Persimmon"),
         ("phi", "Phi"),
@@ -876,6 +880,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("upernet", "UPerNet"),
         ("van", "VAN"),
         ("vaultgemma", "VaultGemma"),
+        ("video_llama_3", "VideoLlama3"),
+        ("video_llama_3_vision", "VideoLlama3Vision"),
         ("video_llava", "VideoLlava"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
@@ -995,7 +1001,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
-        ("perception_encoder", "perception_lm"),
+        ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
     ]
@@ -1031,7 +1037,7 @@ def config_class_to_model_type(config) -> Union[str, None]:
     return None
 
 
-class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
+class _LazyConfigMapping(OrderedDict[str, type[PreTrainedConfig]]):
     """
     A dictionary that lazily load its values when they are requested.
     """
@@ -1041,7 +1047,7 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
         self._extra_content = {}
         self._modules = {}
 
-    def __getitem__(self, key: str) -> type[PretrainedConfig]:
+    def __getitem__(self, key: str) -> type[PreTrainedConfig]:
         if key in self._extra_content:
             return self._extra_content[key]
         if key not in self._mapping:
@@ -1061,10 +1067,10 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
     def keys(self) -> list[str]:
         return list(self._mapping.keys()) + list(self._extra_content.keys())
 
-    def values(self) -> list[type[PretrainedConfig]]:
+    def values(self) -> list[type[PreTrainedConfig]]:
         return [self[k] for k in self._mapping] + list(self._extra_content.values())
 
-    def items(self) -> list[tuple[str, type[PretrainedConfig]]]:
+    def items(self) -> list[tuple[str, type[PreTrainedConfig]]]:
         return [(k, self[k]) for k in self._mapping] + list(self._extra_content.items())
 
     def __iter__(self) -> Iterator[str]:
@@ -1073,7 +1079,7 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
     def __contains__(self, item: object) -> bool:
         return item in self._mapping or item in self._extra_content
 
-    def register(self, key: str, value: type[PretrainedConfig], exist_ok=False) -> None:
+    def register(self, key: str, value: type[PreTrainedConfig], exist_ok=False) -> None:
         """
         Register a new configuration in this mapping.
         """
@@ -1219,7 +1225,7 @@ class AutoConfig:
         )
 
     @classmethod
-    def for_model(cls, model_type: str, *args, **kwargs) -> PretrainedConfig:
+    def for_model(cls, model_type: str, *args, **kwargs) -> PreTrainedConfig:
         if model_type in CONFIG_MAPPING:
             config_class = CONFIG_MAPPING[model_type]
             return config_class(*args, **kwargs)
@@ -1245,7 +1251,7 @@ class AutoConfig:
                     - A string, the *model id* of a pretrained model configuration hosted inside a model repo on
                       huggingface.co.
                     - A path to a *directory* containing a configuration file saved using the
-                      [`~PretrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
+                      [`~PreTrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
                       e.g., `./my_model_directory/`.
                     - A path or url to a saved configuration JSON *file*, e.g.,
                       `./my_model_directory/configuration.json`.
@@ -1326,7 +1332,7 @@ class AutoConfig:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         code_revision = kwargs.pop("code_revision", None)
 
-        config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         if has_remote_code:
@@ -1387,9 +1393,9 @@ class AutoConfig:
 
         Args:
             model_type (`str`): The model type like "bert" or "gpt".
-            config ([`PretrainedConfig`]): The config to register.
+            config ([`PreTrainedConfig`]): The config to register.
         """
-        if issubclass(config, PretrainedConfig) and config.model_type != model_type:
+        if issubclass(config, PreTrainedConfig) and config.model_type != model_type:
             raise ValueError(
                 "The config you are passing has a `model_type` attribute that is not consistent with the model type "
                 f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "
