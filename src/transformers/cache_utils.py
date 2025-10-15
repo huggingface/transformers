@@ -1166,17 +1166,11 @@ class EncoderDecoderCache(Cache):
     """
 
     def __init__(self, *caches) -> None:
-        # For dp and ddp support, if only one argument is passed, it should be an iterable of tuples of tensors
+        # For dp and ddp support, if only one argument is passed, it should be an iterable of DynamicCache ddp data
         if len(caches) == 1:
-            self.self_attention_cache = DynamicCache()
-            self.cross_attention_cache = DynamicCache()
-            # Populate cache from the iterable
-            for layer_idx, key_value_states in enumerate(caches[0]):
-                key_states, value_states = key_value_states[:2]
-                self.self_attention_cache.update(key_states, value_states, layer_idx)
-                if len(key_value_states) > 2:
-                    key_states, value_states = key_value_states[2:]
-                    self.cross_attention_cache.update(key_states, value_states, layer_idx)
+            self_attention_cache_data, cross_attention_cache_data = zip(*caches[0])
+            self.self_attention_cache = DynamicCache(self_attention_cache_data)
+            self.cross_attention_cache = DynamicCache(cross_attention_cache_data)
         # Otherwise, we should get two arguments, a self-attention cache and a cross-attention cache
         elif len(caches) == 2:
             if not isinstance(caches[0], Cache) or not isinstance(caches[1], Cache):
@@ -1190,6 +1184,10 @@ class EncoderDecoderCache(Cache):
         self.is_updated = {}
         for layer_idx in range(len(self.cross_attention_cache)):
             self.is_updated[layer_idx] = bool(self.cross_attention_cache.get_seq_length(layer_idx) > 0)
+
+    def __iter__(self):
+        for self_attention_layer, cross_attention_layer in zip(self.self_attention_cache, self.cross_attention_cache):
+            yield self_attention_layer, cross_attention_layer
 
     def __repr__(self) -> str:
         return (
