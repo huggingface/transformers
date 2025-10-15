@@ -146,7 +146,7 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             self,
             config_class=EfficientNetConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["num_channels", "image_size", "hidden_dim"],
         )
 

@@ -17,7 +17,6 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -133,7 +132,7 @@ class DiaEncoderConfig(PreTrainedConfig):
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
@@ -273,7 +272,7 @@ class DiaDecoderConfig(PreTrainedConfig):
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

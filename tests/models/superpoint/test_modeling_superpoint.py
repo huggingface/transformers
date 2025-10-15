@@ -126,7 +126,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             config_class=SuperPointConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["encoder_hidden_sizes", "decoder_hidden_size"],
         )
 

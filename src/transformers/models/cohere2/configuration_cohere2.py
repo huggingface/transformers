@@ -19,8 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
 
 
 class Cohere2Config(PreTrainedConfig):
@@ -206,7 +205,15 @@ class Cohere2Config(PreTrainedConfig):
         self.head_dim = hidden_size // num_attention_heads
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_config_validation(self)
+
+        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+        self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 4)
+
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -215,18 +222,6 @@ class Cohere2Config(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-        self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 4)
-
-        if self.layer_types is None:
-            # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-            self._sliding_window_pattern = getattr(self, "sliding_window_pattern", 4)
-            self.layer_types = [
-                "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 __all__ = ["Cohere2Config"]

@@ -20,7 +20,6 @@
 """Cohere model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -203,7 +202,6 @@ class CohereConfig(PreTrainedConfig):
         self.use_qk_norm = use_qk_norm
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

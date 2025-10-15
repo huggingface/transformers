@@ -161,7 +161,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def setUp(self):
         self.model_tester = EncodecModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self, config_class=EncodecConfig, hidden_size=32, common_properties=[], has_text_modality=False
         )
 
     def test_config(self):

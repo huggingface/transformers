@@ -168,7 +168,7 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlavaImageModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -436,7 +436,7 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlavaTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -575,7 +575,7 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FlavaMultimodalModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=37
+            self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -789,7 +789,7 @@ class FlavaModelTester:
         self.multimodal_model_tester = FlavaMultimodalModelTester(parent, **multimodal_kwargs)
         self.image_codebook_tester = FlavaImageCodebookTester(parent, **image_codebook_kwargs)
         self.is_training = is_training
-        self.config_tester = ConfigTester(self, config_class=FlavaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FlavaConfig, hidden_size=32)
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
         self.initializer_range = initializer_range

@@ -210,7 +210,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = ChameleonModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -294,7 +294,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
 
     def setUp(self):
         self.model_tester = ChameleonVision2SeqModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

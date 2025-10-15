@@ -207,9 +207,6 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
 
         mamba_intermediate = mamba_expand * hidden_size
 
-        if layer_types is not None and any(layer_type not in ["mamba", "attention"] for layer_type in layer_types):
-            raise ValueError("layer_types must be a list strings in  [`mamba` `attention`]")
-
         if mamba_intermediate % mamba_n_heads != 0:
             raise ValueError("mamba_n_heads must divide mamba_expand * hidden_size")
 
@@ -229,7 +226,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
         self.mamba_expand = mamba_expand
-        self.layer_types = layer_types
+        self.layer_types = layer_types if layer_types else ["mamba"] * num_hidden_layers
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -242,7 +239,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     # overwrite the function to use in `HybridMambaAttentionDynamicCache`
     @property
     def layers_block_type(self):
-        return self.layer_types if self.layer_types else ["mamba"] * self.num_hidden_layers
+        return self.layer_types
 
 
 __all__ = ["GraniteMoeHybridConfig"]

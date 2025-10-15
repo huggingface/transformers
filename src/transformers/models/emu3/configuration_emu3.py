@@ -17,7 +17,6 @@
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
 class Emu3VQVAEConfig(PreTrainedConfig):
@@ -263,7 +262,6 @@ class Emu3TextConfig(PreTrainedConfig):
         self.mlp_bias = mlp_bias
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
-        rope_config_validation(self)
 
         self.attention_dropout = attention_dropout
 

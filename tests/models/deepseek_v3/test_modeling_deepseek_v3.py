@@ -247,7 +247,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def setUp(self):
         self.model_tester = DeepseekV3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=32)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""

@@ -132,7 +132,7 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = VitPoseBackboneModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=VitPoseBackboneConfig, has_text_modality=False, hidden_size=37
+            self, config_class=VitPoseBackboneConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
