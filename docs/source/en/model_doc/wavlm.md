@@ -54,6 +54,11 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- WavLM accepts raw speech waveforms as float arrays. Use [`Wav2Vec2Processor`] for feature extraction.
+- [`WavLM`] models fine-tune using connectionist temporal classification (CTC). Decode model outputs with [`Wav2Vec2CTCTokenizer`].
+
 ## WavLMConfig
 
 [[autodoc]] WavLMConfig

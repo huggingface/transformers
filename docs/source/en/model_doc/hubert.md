@@ -61,6 +61,10 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+HuBERT models require raw audio as a 1D float array sampled at 16kHz. This format preserves the original audio signal without preprocessing.
+
 ## HubertConfig
 
 [[autodoc]] HubertConfig

@@ -54,6 +54,11 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- SEW accepts raw speech waveforms as float arrays.
+- [`SEWForCTC`] uses connectionist temporal classification (CTC) for fine-tuning. Decode model outputs with [`Wav2Vec2CTCTokenizer`].
+
 ## SEWDConfig
 
 [[autodoc]] SEWDConfig
