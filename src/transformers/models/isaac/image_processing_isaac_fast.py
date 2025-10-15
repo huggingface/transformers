@@ -4,50 +4,108 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Perceptron, Inc. Non-Production License
+
+### 1. Scope and acceptance
+
+# **1.1. Scope of the Agreement.**
+# This Agreement applies to any use, modification, or Distribution of any Perceptron Model by You, regardless of the source You obtained a copy of such Perceptron Model.
+#
+# **1.2. Acceptance.** By accessing, using, modifying, Distributing a Perceptron Model, or by creating, using or distributing a Derivative of the Perceptron Model, You agree to be bound by this Agreement.
+#
+# **1.3. Acceptance on behalf of a third-party.** If You accept this Agreement on behalf of Your employer or another person or entity, You warrant and represent that You have the authority to act and accept this Agreement on their behalf. In such a case, the word “You” in this Agreement will refer to Your employer or such other person or entity.
+#
+# ## 2. License
+# **2.1. Grant of rights.** Subject to Section 3 below, Perceptron, Inc. hereby grants You a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable, limited license to use, copy, modify, and Distribute under the conditions provided in Section 2.2 below, the Perceptron Model and any Derivatives made by or for Perceptron, Inc. and to create Derivatives of the Perceptron Model.
+#
+# **2.2. Distribution of Perceptron Model and Derivatives made by or for Perceptron, Inc..** Subject to Section 3 below, You may Distribute copies of the Perceptron Model and/or Derivatives made by or for Perceptron, Inc., under the following conditions:
+# - You must make available a copy of this Agreement to third-party recipients of the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. you Distribute, it being specified that any rights to use the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. shall be directly granted by Perceptron, Inc. to said third-party recipients pursuant to the Perceptron, Inc. Non-Production License agreement executed between these parties;
+# - You must retain in all copies of the Perceptron Models the following attribution notice within a “Notice” text file distributed as part of such copies: “Licensed by Perceptron, Inc. under the Perceptron, Inc. Non-Production License”.
+#
+# **2.3. Distribution of Derivatives made by or for You.** Subject to Section 3 below, You may Distribute any Derivatives made by or for You under additional or different terms and conditions, provided that:
+# - In any event, the use and modification of Perceptron Model and/or Derivatives made by or for Perceptron, Inc. shall remain governed by the terms and conditions of this Agreement;
+# - You include in any such Derivatives made by or for You prominent notices stating that You modified the concerned Perceptron Model; and
+# - Any terms and conditions You impose on any third-party recipients relating to Derivatives made by or for You shall neither limit such third-party recipients’ use of the Perceptron Model or any Derivatives made by or for Perceptron, Inc. in accordance with the Perceptron, Inc. Non-Production License nor conflict with any of its terms and conditions.
+#
+# ## 3. Limitations
+# **3.1. Misrepresentation.** You must not misrepresent or imply, through any means, that the Derivatives made by or for You and/or any modified version of the Perceptron Model You Distribute under your name and responsibility is an official product of Perceptron, Inc. or has been endorsed, approved or validated by Perceptron, Inc., unless You are authorized by Us to do so in writing.
+#
+# **3.2. Usage Limitation**
+# - You shall only use the Perceptron Models and Derivatives (whether or not created by Perceptron, Inc.) for testing, research, Personal, or evaluation purposes in Non-Production Environments;
+# - Subject to the foregoing, You shall not supply the Perceptron Models or Derivatives in the course of a commercial activity, whether in return for payment or free of charge, in any medium or form, including but not limited to through a hosted or managed service (e.g. SaaS, cloud instances, etc.), or behind a software layer.
+#
+# **3.3. Usage not permitted under this Agreement.** If You want to use a Perceptron Model or a Derivative for any purpose that is not expressly authorized under this Agreement, You must request a license from Perceptron, Inc., which Perceptron, Inc. may grant to You in Perceptron, Inc.’s sole discretion. Please contact Perceptron, Inc. at the following e-mail address if You want to discuss such a license: sales@perceptron.inc
+#
+# ## 4. Intellectual Property
+# **4.1. Trademarks.** No trademark licenses are granted under this Agreement, and in connection with the Perceptron Models, You may not use any name or mark owned by or associated with Perceptron, Inc. or any of its affiliates, except (i) as required for reasonable and customary use in describing and Distributing the Perceptron Models and Derivatives made by or for Perceptron, Inc. and (ii) for attribution purposes as required by this Agreement.
+#
+# **4.2. Outputs.** We claim no ownership rights in and to the Outputs. You are solely responsible for the Outputs You generate and their subsequent uses in accordance with this Agreement.
+#
+# **4.3. Derivatives.** By entering into this Agreement, You accept that any Derivatives that You may create or that may be created for You shall be subject to the restrictions set out in Section 3 of this Agreement.
+#
+# # 5. Liability
+# **5.1. Limitation of liability.** In no event, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall Perceptron, Inc. be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this Agreement or out of the use or inability to use the Perceptron Models and Derivatives (including but not limited to damages for loss of data, loss of goodwill, loss of expected profit or savings, work stoppage, computer failure or malfunction, or any damage caused by malware or security breaches), even if  Perceptron, Inc. has been advised of the possibility of such damages.
+#
+# **5.2. Indemnification.** You agree to indemnify and hold harmless Perceptron, Inc. from and against any claims, damages, or losses arising out of or related to Your use or Distribution of the Perceptron Models and Derivatives.
+#
+# ## 6. Warranty
+# **6.1. Disclaimer.** Unless required by applicable law or agreed to in writing, Perceptron, Inc. provides the Perceptron Models and Derivatives on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. Perceptron, Inc. does not represent nor warrant that the Perceptron Models and Derivatives will be error-free, meet Your or any third party’s requirements, be secure or will allow You or any third party to achieve any kind of result or generate any kind of content. You are solely responsible for determining the appropriateness of using or Distributing the Perceptron Models and Derivatives and assume any risks associated with Your exercise of rights under this Agreement.
+#
+# # 7. Termination
+# **7.1. Term.** This Agreement is effective as of the date of your acceptance of this Agreement or access to the concerned Perceptron Models or Derivatives and will continue until terminated in accordance with the following terms.
+#
+# **7.2. Termination.** Perceptron, Inc. may terminate this Agreement at any time if You are in breach of this Agreement. Upon termination of this Agreement, You must cease to use all Perceptron Models and Derivatives and shall permanently delete any copy thereof. Sections 5, 6, 7 and 8 shall survive the termination of this Agreement.
+#
+# **7.3. Litigation.** If You initiate any legal action or proceedings against Us or any other entity (including a cross-claim or counterclaim in a lawsuit), alleging that the Model or a Derivative, or any part thereof, infringe upon intellectual property or other rights owned or licensable by You, then any licenses granted to You under this Agreement will immediately terminate as of the date such legal action or claim is filed or initiated.
+#
+# # 8. General provisions
+# 8.1. Governing Law. This Agreement will be governed by and construed in accordance with the laws of the State of Washington, without regard to its conflict of law principles.
+#
+# 8.2. Jurisdiction. The state and federal courts located in King County, Washington shall have exclusive jurisdiction over any dispute arising out of or relating to this Agreement, and You and We consent to personal jurisdiction and venue in such courts.
+#
+# **8.3. Severability.** If any provision of this Agreement is held to be invalid, illegal or unenforceable, the remaining provisions shall be unaffected thereby and remain valid as if such provision had not been set forth herein.
+#
+# # 9. Definitions
+# **“Agreement”**: means this Perceptron, Inc. Non-Production License agreement governing the access, use, and Distribution of the Perceptron Models and Derivatives.
+#
+# **“Derivative”**: means any (i) modified version of the Perceptron Model (including but not limited to any customized or fine-tuned version thereof), (ii) work based on the Perceptron Model, or (iii) any other derivative work thereof. For the avoidance of doubt, Outputs are not considered as Derivatives under this Agreement.
+#
+# **“Distribution”**, **“Distributing”**, **“Distribute”** or **“Distributed”**: means providing or making available, by any means, a copy of the Perceptron Models and/or the Derivatives as the case may be, subject to Section 3 of this Agreement.
+#
+# **“Perceptron, Inc.”**, **“We”** or **“Us”**: means Perceptron, Inc., a Delaware corporation with its principal place of business at 10900 NE 8th St Suite 613, Bellevue, WA 98004.
+#
+# **“Perceptron Model”**: means the foundational large language model(s), and its elements which include algorithms, software, instructed checkpoints, parameters, source code (inference code, evaluation code and, if applicable, fine-tuning code) and any other elements associated thereto made available by Perceptron, Inc. under this Agreement, including, if any, the technical documentation, manuals and instructions for the use and operation thereof.
+#
+# **“Non-Production Environment”**: means any setting, use case, or application of the Perceptron Models or Derivatives that expressly excludes live, real-world conditions, commercial operations, revenue-generating activities, or direct interactions with or impacts on end users (such as, for instance, Your employees or customers). Non-Production Environment may include, but is not limited to, any setting, use case, or application for research, development, testing, quality assurance, training, internal evaluation (other than any internal usage by employees in the context of the company’s business activities), and demonstration purposes.
+#
+# **“Outputs”**: means any content generated by the operation of the Perceptron Models or the Derivatives from a prompt (i.e., text instructions) provided by users. For the avoidance of doubt, Outputs do not include any components of a Perceptron Models, such as any fine-tuned versions of the Perceptron Models, the weights, or parameters.
+#
+# **“Personal”**: means any use of a Perceptron Model or a Derivative that is (i) solely for personal, non-profit and non-commercial purposes and (ii) not directly or indirectly connected to any commercial activities, business operations, or employment responsibilities. For illustration purposes, Personal use of a Model or a Derivative does not include any usage by individuals employed in companies in the context of their daily tasks, any activity that is intended to generate revenue, or that is performed on behalf of a commercial entity.
+#
+# **“You”**: means the individual or entity entering into this Agreement with Perceptron, Inc..
+
 import math
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Optional, Union
 
 import torch
+import torch.nn.functional as F
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
-from ...image_utils import PILImageResampling
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    BatchFeature,
+    SizeDict,
+    group_images_by_shape,
+    reorder_images,
+)
+from ...image_utils import ChannelDimension, PILImageResampling
 from ...processing_utils import Unpack
-from ...tokenization_utils import TensorType
-from ...utils import auto_docstring
-from .image_processing_isaac import IsaacImageProcessorKwargs
-
+from ...utils import TensorType, auto_docstring
 
 # Vision preprocessing constants
-VISION_MEAN = (0.5, 0.5, 0.5)
-VISION_STD = (0.5, 0.5, 0.5)
-VISION_SCALE = 1 / 255
-
-
-def _normalize_rgb_values(
-    values: float | Sequence[float] | tuple[float, ...],
-    *,
-    name: str,
-) -> tuple[float, float, float]:
-    """Coerce RGB normalization parameters into a 3-tuple of floats."""
-    if isinstance(values, (list, tuple)):
-        if len(values) == 3:
-            return tuple(float(v) for v in values)
-        if len(values) == 1:
-            value = float(values[0])
-            return (value, value, value)
-        raise ValueError(f"`{name}` must have length 1 or 3 when provided as a sequence. Got length {len(values)}.")
-
-    value = float(values)
-    return (value, value, value)
-
-
-# ============================================================================
-# Configuration
-# ============================================================================
-
-MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
+from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
+from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
+from .processing_isaac import IsaacImageProcessorKwargs
 
 
 def get_scaled_image_size(
@@ -182,104 +240,140 @@ def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> 
 
 @auto_docstring
 class IsaacImageProcessorFast(BaseImageProcessorFast):
+    MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
     r"""Fast torch-based image processor for Isaac vision inputs."""
-
-    slow_image_processor_class = "IsaacImageProcessor"
 
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
     valid_kwargs = IsaacImageProcessorKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
+    do_resize = True
+    size: SizeDict | None = None
+    default_to_square: bool | None = None
+    do_center_crop = False
+    crop_size: SizeDict | None = None
+    patch_size: int | None = 16
+    max_num_patches: int | None = 256
+    min_num_patches: int | None = None
+    pixel_shuffle_scale: int | None = 1
+    do_pad = False
+    pad_size: SizeDict | None = None
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = list(VISION_MEAN)
+    image_std = list(VISION_STD)
+    do_convert_rgb = True
+    return_tensors = None
+    data_format = ChannelDimension.FIRST
+    input_data_format = None
+    device = None
+    disable_grouping = False
+    size_divisor: int | None = None
+
     def __init__(
         self,
-        *,
-        patch_size: int = 16,
-        max_num_patches: int = 256,
-        min_num_patches: int | None = None,
-        pixel_shuffle_scale: int = 1,
-        do_rescale: bool = True,
-        rescale_factor: float | None = None,
-        do_normalize: bool = True,
-        image_mean: float | Sequence[float] | None = None,
-        image_std: float | Sequence[float] | None = None,
-        do_convert_rgb: bool = True,
         **kwargs: Unpack[IsaacImageProcessorKwargs],
     ) -> None:
         super().__init__(**kwargs)
 
+        pixel_shuffle_scale = 1 if self.pixel_shuffle_scale is None else int(self.pixel_shuffle_scale)
         if pixel_shuffle_scale < 1:
             raise ValueError("`pixel_shuffle_scale` must be >= 1")
-
-        mean_values = _normalize_rgb_values(image_mean if image_mean is not None else VISION_MEAN, name="image_mean")
-        std_values = _normalize_rgb_values(image_std if image_std is not None else VISION_STD, name="image_std")
-
-        self.patch_size = patch_size
-        self.max_num_patches = max_num_patches
-        self.min_num_patches = min_num_patches
         self.pixel_shuffle_scale = pixel_shuffle_scale
-        self.do_rescale = do_rescale
-        self.rescale_factor = VISION_SCALE if rescale_factor is None else float(rescale_factor)
-        self.do_normalize = do_normalize
-        self.image_mean = list(mean_values)
-        self.image_std = list(std_values)
-        self.do_convert_rgb = do_convert_rgb
 
     def _validate_preprocess_kwargs(self, **kwargs):
         # Allow callers to omit resize-related placeholders that BaseImageProcessorFast checks for.
         kwargs.pop("do_resize", None)
+        kwargs.pop("size", None)
+        kwargs.pop("do_center_crop", None)
+        kwargs.pop("crop_size", None)
+        kwargs.pop("disable_grouping", None)
         return super()._validate_preprocess_kwargs(**kwargs)
+
+    def resize(
+        self,
+        image: torch.Tensor,
+        size: SizeDict,
+        interpolation: Optional[Any] = None,
+        antialias: bool = True,
+        **kwargs,
+    ) -> torch.Tensor:
+        if size.height is None or size.width is None:
+            raise ValueError("IsaacImageProcessorFast requires explicit `height` and `width` when resizing.")
+
+        resize_mode: Any = interpolation
+        if hasattr(resize_mode, "value"):
+            resize_mode = resize_mode.value
+        elif hasattr(resize_mode, "name"):
+            resize_mode = resize_mode.name.lower()
+        elif resize_mode is None:
+            resize_mode = "bilinear"
+
+        if isinstance(resize_mode, str):
+            mode_key = resize_mode.lower()
+        else:
+            mode_key = resize_mode
+
+        resize_kwargs: dict[str, Any] = {}
+        if mode_key in {"linear", "bilinear", "bicubic", "trilinear"}:
+            resize_kwargs["align_corners"] = False
+
+        return F.interpolate(
+            image,
+            size=(size.height, size.width),
+            mode=resize_mode,
+            **resize_kwargs,
+        )
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[torch.Tensor],
         do_resize: bool,
-        patch_size: int,
-        max_num_patches: int,
-        interpolation: Any | None,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | Sequence[float] | None,
-        image_std: float | Sequence[float] | None,
-        return_tensors: str | TensorType | None,
+        size: Optional[SizeDict],
+        interpolation: Optional[Any],
+        do_center_crop: bool,
+        crop_size: Optional[SizeDict],
+        do_rescale: Optional[bool],
+        rescale_factor: Optional[float],
+        do_normalize: Optional[bool],
+        image_mean: Optional[Union[float, Sequence[float]]],
+        image_std: Optional[Union[float, Sequence[float]]],
+        disable_grouping: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_pad: Optional[bool] = None,
+        pad_size: Optional[SizeDict] = None,
         *,
+        patch_size: int | None = None,
+        max_num_patches: int | None = None,
         min_num_patches: int | None = None,
         pixel_shuffle_scale: int | None = None,
-        do_convert_rgb: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
-        if TVF is None:
-            raise ImportError("torchvision is required for IsaacImageProcessorFast but is not installed.")
+        if do_center_crop:
+            raise ValueError("`do_center_crop` is not supported by IsaacImageProcessorFast.")
+        if do_pad:
+            raise ValueError("`do_pad` is not supported by IsaacImageProcessorFast.")
 
-        min_num_patches = min_num_patches if min_num_patches is not None else self.min_num_patches
-        pixel_shuffle_scale = pixel_shuffle_scale if pixel_shuffle_scale is not None else self.pixel_shuffle_scale
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_patches_grouped: dict[tuple[int, ...], torch.Tensor] = {}
+        token_grids_grouped: dict[tuple[int, ...], torch.Tensor] = {}
+        virtual_dims_grouped: dict[tuple[int, ...], torch.Tensor] = {}
+        real_dims_grouped: dict[tuple[int, ...], torch.Tensor] = {}
 
-        mean_values = _normalize_rgb_values(
-            image_mean if image_mean is not None else self.image_mean, name="image_mean"
-        )
-        std_values = _normalize_rgb_values(image_std if image_std is not None else self.image_std, name="image_std")
+        for shape, stacked_images in grouped_images.items():
+            if stacked_images.ndim != 4:
+                raise ValueError("Expected batched channel-first image tensors.")
 
-        patches_list: list[torch.Tensor] = []
-        token_grids: list[torch.Tensor] = []
-        virtual_dims: list[list[int]] = []
-        real_dims: list[list[int]] = []
+            batch_size, channels, original_height, original_width = stacked_images.shape
 
-        for image in images:
-            if image.ndim != 3:
-                raise ValueError("Expected channel-first image tensor with shape (C, H, W).")
-
-            channels, original_height, original_width = image.shape
-            if do_convert_rgb and channels == 1:
-                image = image.repeat(3, 1, 1)
+            if bool(self.do_convert_rgb) and channels == 1:
+                stacked_images = stacked_images.repeat(1, 3, 1, 1)
                 channels = 3
 
-            if original_height * original_width > MAX_PIXELS:
-                raise ValueError(f"Image (w={original_width}, h={original_height}) > MAX=`{MAX_PIXELS}`")
+            if original_height * original_width > self.MAX_PIXELS:
+                raise ValueError(f"Image (w={original_width}, h={original_height}) > MAX=`{self.MAX_PIXELS}`")
 
             target_height, target_width = get_image_size_for_max_num_patches(
                 original_height,
@@ -291,48 +385,91 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             )
 
             if do_resize:
-                size_dict = SizeDict(height=target_height, width=target_width)
-                image = self.resize(image=image, size=size_dict, interpolation=interpolation)
+                resize_size = SizeDict(height=target_height, width=target_width)
+                image_batch = self.resize(
+                    image=stacked_images,
+                    size=resize_size,
+                    interpolation=interpolation,
+                )
             else:
                 if ((original_height % patch_size) != 0) or ((original_width % patch_size) != 0):
                     raise ValueError("Image dimensions must be divisible by patch_size when resize is disabled.")
+                image_batch = stacked_images
+                target_height, target_width = original_height, original_width
 
-            # Apply rescaling and normalization as needed
-            image = self.rescale_and_normalize(
-                image,
-                do_rescale,
-                rescale_factor,
-                do_normalize,
-                list(mean_values),
-                list(std_values),
+            if do_rescale:
+                image_batch = self.rescale_and_normalize(
+                    image_batch,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                )
+
+            nhwc_images = image_batch.permute(0, 2, 3, 1)
+            nhwc_images = _compute_residual_p_frames(nhwc_images, is_p_frame=[False] * batch_size)
+
+            patches = patchify_vision(nhwc_images, patch_size=patch_size)
+            _, height_tokens, width_tokens, _ = patches.shape
+
+            token_grid = (
+                torch.tensor(
+                    [height_tokens, width_tokens],
+                    dtype=torch.long,
+                    device=patches.device,
+                )
+                .unsqueeze(0)
+                .repeat(batch_size, 1)
             )
 
-            # Convert to NHWC for residual P-frame adjustment and patch extraction
-            nhwc_image = image.permute(1, 2, 0).unsqueeze(0)
-            nhwc_image = _compute_residual_p_frames(nhwc_image, is_p_frame=[False])
+            real_dim = (
+                torch.tensor(
+                    [1, height_tokens, width_tokens],
+                    dtype=torch.long,
+                    device=patches.device,
+                )
+                .unsqueeze(0)
+                .repeat(batch_size, 1)
+            )
 
-            patches = patchify_vision(nhwc_image, patch_size=patch_size).squeeze(0)
-            height_tokens, width_tokens, _ = patches.shape
-
-            patches_list.append(patches.unsqueeze(0))
-            token_grids.append(torch.tensor([height_tokens, width_tokens], dtype=torch.long, device=patches.device))
-
-            real_dims.append([1, height_tokens, width_tokens])
             if pixel_shuffle_scale > 1:
                 if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
                     raise ValueError(
                         "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
                     )
-                virtual_dims.append([1, height_tokens // pixel_shuffle_scale, width_tokens // pixel_shuffle_scale])
+                virtual_height = height_tokens // pixel_shuffle_scale
+                virtual_width = width_tokens // pixel_shuffle_scale
             else:
-                virtual_dims.append([1, height_tokens, width_tokens])
+                virtual_height = height_tokens
+                virtual_width = width_tokens
 
-        patches_tensor = torch.cat(patches_list, dim=0)
-        token_grids_tensor = torch.stack(token_grids, dim=0)
-        virtual_dims_tensor = torch.tensor(virtual_dims, dtype=torch.long, device=patches_tensor.device)
-        real_dims_tensor = torch.tensor(real_dims, dtype=torch.long, device=patches_tensor.device)
+            virtual_dim = (
+                torch.tensor(
+                    [1, virtual_height, virtual_width],
+                    dtype=torch.long,
+                    device=patches.device,
+                )
+                .unsqueeze(0)
+                .repeat(batch_size, 1)
+            )
 
-        batch_feature = BatchFeature(
+            processed_patches_grouped[shape] = patches
+            token_grids_grouped[shape] = token_grid
+            virtual_dims_grouped[shape] = virtual_dim
+            real_dims_grouped[shape] = real_dim
+
+        patches_slices = reorder_images(processed_patches_grouped, grouped_images_index)
+        token_grid_slices = reorder_images(token_grids_grouped, grouped_images_index)
+        virtual_dim_slices = reorder_images(virtual_dims_grouped, grouped_images_index)
+        real_dim_slices = reorder_images(real_dims_grouped, grouped_images_index)
+
+        patches_tensor = torch.stack(patches_slices, dim=0)
+        token_grids_tensor = torch.stack(token_grid_slices, dim=0)
+        virtual_dims_tensor = torch.stack(virtual_dim_slices, dim=0)
+        real_dims_tensor = torch.stack(real_dim_slices, dim=0)
+
+        return BatchFeature(
             data={
                 "patches": patches_tensor,
                 "token_grids": token_grids_tensor,
@@ -341,7 +478,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             },
             tensor_type=return_tensors,
         )
-        return batch_feature
 
 
 __all__ = ["IsaacImageProcessorFast"]
