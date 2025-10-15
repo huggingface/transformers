@@ -327,7 +327,6 @@ class Trainer:
             Processing class used to process the data. If provided, will be used to automatically process the inputs
             for the model, and it will be saved along the model to make it easier to rerun an interrupted training or
             reuse the fine-tuned model.
-            This supersedes the `tokenizer` argument, which is now deprecated.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
