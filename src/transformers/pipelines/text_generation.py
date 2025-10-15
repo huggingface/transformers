@@ -517,7 +517,6 @@ class TextGenerationPipeline(Pipeline):
                             continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
                         if continue_final_message:
                             # With assistant prefill, concat onto the end of the last message
-                            # TODO Chat decoding when continue_final_message is set
                             all_text = list(prompt_text.messages)[:-1] + [
                                 {
                                     "role": prompt_text.messages[-1]["role"],
