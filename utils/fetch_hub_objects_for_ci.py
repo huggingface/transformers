@@ -29,7 +29,7 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg",
     "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
     "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
-    "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png",
+    "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png",
     "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg",
     "https://llava-vl.github.io/static/images/view.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
