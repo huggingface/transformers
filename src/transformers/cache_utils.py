@@ -998,7 +998,7 @@ class DynamicCache(Cache):
 
     def __iter__(self):
         for layer in self.layers:
-            yield getattr(layer, "_sliding_window_tensor", None), layer.keys, layer.values
+            yield layer.keys, layer.values, getattr(layer, "_sliding_window_tensor", None)
 
 
 class StaticCache(Cache):
