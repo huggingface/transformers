@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 
 # Training Vision Models using Backbone API
 
-Many model computer vision workflows use a pre-trained backbone for feature extraction (e.g. [ViT](../model_doc/vit.md), [DINOv3](../model_doc/dinov3.md)), a "neck" for feature enhancement and a task-specific head (e.g. [DETR](../model_doc/detr.md) for object detection or [MaskFormer](../model_doc/maskformer.md) for segmentation). Many of these models are implemented in transformers, enabling easy implementation of modern computer vision training workflows. Transformers also includes Backbone API: with few lines of code, you can load different backbones to different heads.
+Computer vision workflows follow a common pattern. Use a pre-trained backbone for feature extraction ([ViT](../model_doc/vit), [DINOv3](../model_doc/dinov3)). Add a "neck" for feature enhancement. Attach a task-specific head ([DETR](../model_doc/detr) for object detection, [MaskFormer](../model_doc/maskformer) for segmentation).
+
+The Transformers library implements these models and the [backbone API](../backbones) lets you swap different backbones and heads with minimal code.
 
 ![Backbone Explanation](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Backbone.png)
 
