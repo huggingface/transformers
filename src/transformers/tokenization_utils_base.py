@@ -3390,7 +3390,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         tokens = self.apply_chat_template(conversation, add_generation_prompt=False, tokenize=True, **kwargs)
 
         prefix_tokens = self.apply_chat_template(
-            conversation_history, add_generation_prompt=False, tokenize=True, **kwargs
+            conversation_history, add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
         )
         # It's possible that the prefix tokens are not a prefix of the full list of tokens.
         # For example, if the prefix is `<s>User: Hi` and the full conversation is `<s>User: Hi</s><s>Assistant: Hello`.
