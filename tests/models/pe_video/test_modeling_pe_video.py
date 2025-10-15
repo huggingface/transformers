@@ -13,7 +13,7 @@
 # limitations under the License.
 import unittest
 
-from transformers import PEAudioConfig, PEAudioEncoderConfig
+from transformers import PEVideoConfig, PEVideoEncoderConfig
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -35,26 +35,24 @@ if is_torch_available():
 
     from transformers import (
         ModernBertConfig,
-        PEAudioEncoder,
-        PEAudioModel,
+        PEVideoEncoder,
+        PEVideoModel,
     )
 
 
-class PEAudioEncoderTester:
+class PEVideoEncoderTester:
     def __init__(
         self,
         parent,
         config_kwargs={
-            "dac_config": {
-                "encoder_hidden_size": 16,
-                "downsampling_ratios": [2, 4, 4],
-                "decoder_hidden_size": 16,
-                "n_codebooks": 6,
-                "codebook_size": 512,
-                "codebook_dim": 32,
-                "quantizer_dropout": 0.0,
-                "commitment_loss_weight": 0.25,
-                "codebook_loss_weight": 1.0,
+            "vision_encoder_config": {
+                "architecture": "vit_pe_core_large_patch14_336",
+                "model_args": {
+                    "embed_dim": 64,
+                    "img_size": (14, 14),
+                    "depth": 2,
+                },
+                "num_classes": 4,
             },
             "hidden_size": 32,
             "intermediate_size": 37,
@@ -74,8 +72,8 @@ class PEAudioEncoderTester:
             "attention_dropout": 0.0,
         },
         batch_size=12,
-        num_channels=1,
-        audio_seq_length=160,
+        num_frames=8,
+        num_channels=3,
         is_training=True,
     ):
         self.parent = parent
@@ -85,59 +83,63 @@ class PEAudioEncoderTester:
             setattr(self, key, value)
 
         self.batch_size = batch_size
+        self.num_frames = num_frames
         self.num_channels = num_channels
-        self.audio_seq_length = audio_seq_length
         self.is_training = is_training
 
     @property
     def seq_length(self):
-        config = self.get_config()
-        # seq_length is what gets feeded to the transformer
-        # we first have to divide by hop_length to get the number of frames
-        # then we add 1 because we add the class token
-        return self.audio_seq_length // config.dac_config.hop_length + 1
+        # seq_length is what gets fed to the transformer
+        # we add 1 because we add the class token
+        return self.num_frames + 1
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.audio_seq_length])
-        valid_lengths = ids_tensor([self.batch_size], self.audio_seq_length)
-        padding_mask = torch.ones([self.batch_size, self.audio_seq_length], device=torch_device) < valid_lengths[:, None]
-        padding_mask = padding_mask.int()
+        pixel_values_videos = floats_tensor(
+            [
+                self.batch_size,
+                self.num_frames,
+                self.num_channels,
+                self.config_kwargs["vision_encoder_config"]["model_args"]["img_size"][0],
+                self.config_kwargs["vision_encoder_config"]["model_args"]["img_size"][1],
+            ]
+        )
+        valid_lengths = ids_tensor([self.batch_size], self.num_frames)
+        padding_mask_videos = torch.ones([self.batch_size, self.num_frames], device=torch_device) < valid_lengths[:, None]
+        padding_mask_videos = padding_mask_videos.int()
         config = self.get_config()
 
-        return config, input_values, padding_mask
+        return config, pixel_values_videos, padding_mask_videos
 
     def get_config(self):
-        if not hasattr(self, '_config'):
-            self._config = PEAudioEncoderConfig(**self.config_kwargs)
-        return self._config
+        return PEVideoEncoderConfig(**self.config_kwargs)
 
-    def create_and_check_model(self, config, input_values, padding_mask):
-        model = PEAudioEncoder(config=config)
+    def create_and_check_model(self, config, pixel_values_videos, padding_mask_videos):
+        model = PEVideoEncoder(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_values, padding_mask=padding_mask)
+            result = model(pixel_values_videos, padding_mask_videos=padding_mask_videos)
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_values, padding_mask = config_and_inputs
-        inputs_dict = {"input_values": input_values, "padding_mask": padding_mask}
+        config, pixel_values_videos, padding_mask_videos = config_and_inputs
+        inputs_dict = {"pixel_values_videos": pixel_values_videos, "padding_mask_videos": padding_mask_videos}
         return config, inputs_dict
 
 
 @require_torch
-class PEAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (PEAudioEncoder,)
+class PEVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (PEVideoEncoder,)
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = PEAudioEncoderTester(self)
+        self.model_tester = PEVideoEncoderTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=PEAudioEncoderConfig, has_text_modality=False, hidden_size=37
+            self, config_class=PEVideoEncoderConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -147,14 +149,38 @@ class PEAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="PEAudioEncoder does not have usual input embeddings")
+    @unittest.skip(reason="PEVideoEncoder does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    def test_attention_outputs(self):
+        pass
 
-class PEAudioTextModelTester:
+    @unittest.skip("TimmWrapperModel cannot be tested with meta device")
+    def test_can_be_initialized_on_meta(self):
+        pass
+
+    @unittest.skip("TimmWrapperModel cannot be tested with meta device")
+    def test_can_load_with_meta_device_context_manager(self):
+        pass
+
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
+    def test_initialization(self):
+        pass
+
+    @unittest.skip(reason="PEVideoEncoder does not support feedforward chunking yet")
+    def test_feed_forward_chunking(self):
+        pass
+
+
+class PEVideoTextModelTester:
     """
-    Only a ModelTester and no PEAudioTextModelTest since text model is ModernBertModel that is already tested.
+    Only a ModelTester and no PEVideoTextModelTest since text model is ModernBertModel that is already tested.
     """
     def __init__(
         self,
@@ -180,7 +206,7 @@ class PEAudioTextModelTester:
         seq_length=7,
         is_training=True,
         use_input_mask=True,
-        use_labels=True, # TODO: to check
+        use_labels=True,
     ):
         self.parent = parent
 
@@ -215,57 +241,57 @@ class PEAudioTextModelTester:
         return config, inputs_dict
 
 
-class PEAudioModelTester:
-    def __init__(self, parent, text_kwargs=None, audio_kwargs=None, is_training=True):
+class PEVideoModelTester:
+    def __init__(self, parent, text_kwargs=None, video_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
-        if audio_kwargs is None:
-            audio_kwargs = {}
+        if video_kwargs is None:
+            video_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = PEAudioTextModelTester(parent, **text_kwargs)
-        self.audio_model_tester = PEAudioEncoderTester(parent, **audio_kwargs)
+        self.text_model_tester = PEVideoTextModelTester(parent, **text_kwargs)
+        self.video_model_tester = PEVideoEncoderTester(parent, **video_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        _, input_values, padding_mask = self.audio_model_tester.prepare_config_and_inputs()
+        _, pixel_values_videos, padding_mask_videos = self.video_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, input_values, padding_mask
+        return config, input_ids, attention_mask, pixel_values_videos, padding_mask_videos
 
     def get_config(self):
         text_config = self.text_model_tester.get_config()
-        audio_config = self.audio_model_tester.get_config()
-        return PEAudioConfig(
+        video_config = self.video_model_tester.get_config()
+        return PEVideoConfig(
             text_config=text_config.to_dict(),
-            audio_config=audio_config.to_dict(),
+            video_config=video_config.to_dict(),
             projection_dim=32,
         )
 
-    def create_and_check_model(self, config, input_ids, attention_mask, input_values, padding_mask):
-        model = PEAudioModel(config).to(torch_device).eval()
+    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values_videos, padding_mask_videos):
+        model = PEVideoModel(config).to(torch_device).eval()
         with torch.no_grad():
-            _ = model(input_ids, input_values, attention_mask, padding_mask)
+            _ = model(input_ids, pixel_values_videos, attention_mask, padding_mask_videos)
 
-        # TODO: there is no logits per audio for now
-        # self.parent.assertEqual(result.logits_per_audio.shape, (self.audio_model_tester.batch_size, self.text_model_tester.batch_size))
-        # self.parent.assertEqual(result.logits_per_text.shape, (self.text_model_tester.batch_size, self.audio_model_tester.batch_size))
+        # TODO: there is no logits per video for now
+        # self.parent.assertEqual(result.logits_per_video.shape, (self.video_model_tester.batch_size, self.text_model_tester.batch_size))
+        # self.parent.assertEqual(result.logits_per_text.shape, (self.text_model_tester.batch_size, self.video_model_tester.batch_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, input_values, padding_mask = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "input_values": input_values, "padding_mask": padding_mask}
+        config, input_ids, attention_mask, pixel_values_videos, padding_mask_videos = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values_videos": pixel_values_videos, "padding_mask_videos": padding_mask_videos}
         return config, inputs_dict
 
 
 @require_torch
-class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
+class PEVideoModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
-    all_model_classes = (PEAudioModel,)
-    additional_model_inputs = ["input_values", "padding_mask"]
+    all_model_classes = (PEVideoModel,)
+    additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
@@ -273,9 +299,9 @@ class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = PEAudioModelTester(self)
+        self.model_tester = PEVideoModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=PEAudioConfig, has_text_modality=False, common_properties=[], hidden_size=37
+            self, config_class=PEVideoConfig, has_text_modality=False, common_properties=[], hidden_size=37
         )
 
     def test_config(self):
@@ -285,7 +311,7 @@ class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="PEAudioModel does not have usual input embeddings")
+    @unittest.skip(reason="PEVideoModel does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -299,7 +325,7 @@ class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class PEAudioIntegrationTest(unittest.TestCase):
+class PEVideoIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         # TODO: Add integration test when pretrained model is available

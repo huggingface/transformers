@@ -67,10 +67,7 @@ class PEVideoConfig(PretrainedConfig):
         text_config=None,
         video_config=None,
         projection_dim=1024,
-        logit_scale_init_value=10.0,
-        logit_bias_init_value=-10.0,
         nth_text_layer=None,
-        nth_video_layer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -92,10 +89,7 @@ class PEVideoConfig(PretrainedConfig):
         self.video_config = video_config
 
         self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
-        self.logit_bias_init_value = logit_bias_init_value
         self.nth_text_layer = nth_text_layer
-        self.nth_video_layer = nth_video_layer
 
 
 __all__ = ["PEVideoEncoderConfig", "PEVideoConfig"]

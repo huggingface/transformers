@@ -21,7 +21,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForImageClassification
@@ -53,7 +53,7 @@ class PEVideoMaskedGroupNorm(nn.GroupNorm):
 
 
 class PEVideoConvBlock1d(nn.Module):
-    def __init__(self, config: PEVideoEncoderConfig):
+    def __init__(self, config):
         super().__init__()
         self.groupnorm = PEVideoMaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
         self.activation = nn.SiLU()
@@ -71,7 +71,7 @@ class PEVideoConvBlock1d(nn.Module):
 
 
 class PEVideoResnetBlock1d(nn.Module):
-    def __init__(self, config: PEVideoEncoderConfig):
+    def __init__(self, config):
         super().__init__()
         self.block1 = PEVideoConvBlock1d(config)
         self.block2 = PEVideoConvBlock1d(config)
@@ -100,13 +100,13 @@ class PEVideoResnetBlock1d(nn.Module):
 
 
 class PEVideoEmbeddings(nn.Module):
-    def __init__(self, config: PEVideoEncoderConfig):
+    def __init__(self, config):
         super().__init__()
         self.resnet_block = PEVideoResnetBlock1d(config)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.class_embedding = nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
     def forward(self, inputs_embeds, padding_mask=None):
-        hidden_states = torch.cat([self.cls_token.expand(inputs_embeds.size(0), -1, -1), inputs_embeds], dim=1)
+        hidden_states = torch.cat([self.class_embedding.expand(inputs_embeds.size(0), -1, -1), inputs_embeds], dim=1)
 
         if padding_mask is not None:
             # TODO: any reason why we take padding_mask[0] and not just 1?
@@ -383,12 +383,7 @@ class PEVideoDecoderLayer(GradientCheckpointingLayer):
 
 
 class PEVideoTransformer(nn.Module):
-    _can_record_outputs = {
-        "attentions": PEVideoAttention,
-        "hidden_states": PEVideoDecoderLayer,
-    }
-
-    def __init__(self, config: PEVideoEncoderConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embeddings = PEVideoEmbeddings(config)
@@ -399,7 +394,6 @@ class PEVideoTransformer(nn.Module):
         self.rope_embeddings = PEVideoRotaryEmbedding(config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
-    @check_model_inputs
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
@@ -448,53 +442,82 @@ class PEVideoContrastiveHead(nn.Module):
 
 class PEVideoPretrainedModel(PreTrainedModel):
     config: PEVideoConfig
-    base_model_prefix = "pe_video"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": PEVideoDecoderLayer,
+        "attentions": PEVideoAttention,
+    }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, PEVideoEmbeddings):
+            embed_dim = module.class_embedding.shape[-1]
+            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
+# TODO: not sure about the typing for text_model_output
 @dataclass
 @auto_docstring
 class PEVideoOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for image-text similarity.
-    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+        Contrastive loss for video-text similarity.
+    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+        The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
         similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
         similarity scores.
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`PEVideoTextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The image embeddings obtained by applying the projection layer to the pooled output of [`PEVideoVisionModel`].
+    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The video embeddings obtained by applying the projection layer to the pooled output of [`PEVideoEncoder`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`PEVideoTextModel`].
-    vision_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`PEVideoVisionModel`].
+    video_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`PEVideoEncoder`].
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_image: Optional[torch.FloatTensor] = None
+    logits_per_video: Optional[torch.FloatTensor] = None
     logits_per_text: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
-    image_embeds: Optional[torch.FloatTensor] = None
+    video_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
-    vision_model_output: BaseModelOutputWithPooling = None
+    video_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            self[k] if k not in ["text_model_output", "video_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`PEVideoEncoder`].
+    """
+)
+class PEVideoEncoderOutput(BaseModelOutputWithPooling):
+    vision_features: Optional[torch.FloatTensor] = None
+    outputs_mask: Optional[tuple[torch.FloatTensor]] = None
+
+
 class PEVideoEncoder(PEVideoPretrainedModel):
     config_class = PEVideoEncoderConfig
+    main_input_name = "pixel_values_videos"
     base_model_prefix = "video_encoder"
 
     def __init__(self, config: PEVideoEncoderConfig):
@@ -503,28 +526,39 @@ class PEVideoEncoder(PEVideoPretrainedModel):
         # because `TimmWrapperModel` forces `num_classes=0` (https://github.com/huggingface/transformers/blob/53838edde77cb10f3a360150aa85a457637e9ac3/src/transformers/models/timm_wrapper/modeling_timm_wrapper.py#L163)
         # which drops the final linear projection
         self.vision_encoder = AutoModelForImageClassification.from_config(config.vision_encoder_config)
-        self.proj = nn.Linear(config.vision_encoder_config.num_classes, config.hidden_size, bias=False)
+        self.proj = nn.Linear(config.vision_encoder_config.num_labels, config.hidden_size, bias=False)
         self.data_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.transformer = PEVideoTransformer(config)
 
+        self.post_init()
+
+    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
         padding_mask_videos: Optional[torch.Tensor] = None,
-    ) -> BaseModelOutputWithPooling:
-        pixel_values_videos = pixel_values_videos.view(-1, *pixel_values_videos.shape[2:])
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> PEVideoEncoderOutput:
+        input_shape = pixel_values_videos.shape
 
+        pixel_values_videos = pixel_values_videos.view(-1, *input_shape[2:])
         vision_encoder_outputs = self.vision_encoder(pixel_values_videos)
-        logits = vision_encoder_outputs.logits.view(*pixel_values_videos.shape[:2], -1)
-        logits = F.normalize(logits, dim=-1)
-        projected = self.proj(logits)
-        outputs = self.transformer(self.data_proj(projected), attention_mask=padding_mask_videos)
 
-        return BaseModelOutputWithPooling(
+        logits = vision_encoder_outputs.logits.view(*input_shape[:2], -1)
+        logits = F.normalize(logits, dim=-1)
+
+        vision_features = self.proj(logits)
+        projected = self.data_proj(vision_features)
+        outputs = self.transformer(projected, attention_mask=padding_mask_videos, **kwargs)
+
+        return PEVideoEncoderOutput(
             last_hidden_state=outputs.last_hidden_state,
             pooler_output=outputs.pooler_output,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            vision_features=vision_features,
+            outputs_mask=padding_mask_videos,
         )
 
 
@@ -537,8 +571,10 @@ class PEVideoModel(PEVideoPretrainedModel):
         self.text_head_video = PEVideoContrastiveHead(config.text_config.hidden_size, config.projection_dim)
         self.video_head = PEVideoContrastiveHead(config.video_config.hidden_size, config.projection_dim)
 
-        self.logit_scale = nn.Parameter(torch.tensor([config.logit_scale_init_value]).log())
-        self.logit_bias = nn.Parameter(torch.tensor([config.logit_bias_init_value]))
+        self.logit_scale = nn.Parameter(torch.zeros(1))
+        self.logit_bias = nn.Parameter(torch.zeros(1))
+
+        self.post_init()
 
     def get_text_features(self, input_ids, attention_mask=None):
         # TODO: should it be named feature or embeds
@@ -553,7 +589,7 @@ class PEVideoModel(PEVideoPretrainedModel):
         else:
             text_features = text_outputs.last_hidden_state
 
-        text_features = self.text_head(text_features)
+        text_features = self.text_head_video(text_features)
         return text_features
 
     def get_video_features(self, pixel_values_videos, padding_mask_videos=None):
@@ -566,6 +602,7 @@ class PEVideoModel(PEVideoPretrainedModel):
         video_features = self.video_head(video_outputs.pooler_output)
         return video_features
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -573,35 +610,36 @@ class PEVideoModel(PEVideoPretrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         padding_mask_videos: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
+        **kwargs,
     ) -> PEVideoOutput:
         video_output: BaseModelOutputWithPooling = self.video_encoder(
             pixel_values_videos=pixel_values_videos,
             padding_mask_videos=padding_mask_videos,
-            return_dict=True,
+            **{**kwargs, "return_dict": True},
         )
 
         text_output = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=self.config.nth_text_layer,
-            return_dict=True,
+            **{**kwargs, "return_dict": True},
         )
 
         video_embeds = video_output.pooler_output
-        if self.config.nth_video_layer is not None:
-            text_embeds = text_output.hidden_states[self.config.nth_video_layer]
+        if self.config.nth_text_layer is not None:
+            text_embeds = text_output.hidden_states[self.config.nth_text_layer]
         else:
             text_embeds = text_output.last_hidden_state
 
         video_embeds = self.video_head(video_embeds)
-        text_embeds = self.text_head(text_embeds)
+        text_embeds = self.text_head_video(text_embeds)
 
+        # TODO: something is wrong in the logic here, should be using pooler?
+        logits_per_text = text_embeds @ video_embeds.t()
+        logits_per_text = logits_per_text * self.logit_scale.exp() + self.logit_bias
         # TODO: there is not logits per video?
 
         loss = None
         if return_loss:
-            logits_per_text = text_embeds @ video_embeds.t()
-            logits_per_text = logits_per_text * self.logit_scale + self.logit_bias
             labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
             loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
 
