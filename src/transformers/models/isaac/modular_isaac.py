@@ -1,26 +1,96 @@
+# Perceptron, Inc. Non-Production License
+
+### 1. Scope and acceptance
+
+# **1.1. Scope of the Agreement.**
+# This Agreement applies to any use, modification, or Distribution of any Perceptron Model by You, regardless of the source You obtained a copy of such Perceptron Model.
+#
+# **1.2. Acceptance.** By accessing, using, modifying, Distributing a Perceptron Model, or by creating, using or distributing a Derivative of the Perceptron Model, You agree to be bound by this Agreement.
+#
+# **1.3. Acceptance on behalf of a third-party.** If You accept this Agreement on behalf of Your employer or another person or entity, You warrant and represent that You have the authority to act and accept this Agreement on their behalf. In such a case, the word “You” in this Agreement will refer to Your employer or such other person or entity.
+#
+# ## 2. License
+# **2.1. Grant of rights.** Subject to Section 3 below, Perceptron, Inc. hereby grants You a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable, limited license to use, copy, modify, and Distribute under the conditions provided in Section 2.2 below, the Perceptron Model and any Derivatives made by or for Perceptron, Inc. and to create Derivatives of the Perceptron Model.
+#
+# **2.2. Distribution of Perceptron Model and Derivatives made by or for Perceptron, Inc..** Subject to Section 3 below, You may Distribute copies of the Perceptron Model and/or Derivatives made by or for Perceptron, Inc., under the following conditions:
+# - You must make available a copy of this Agreement to third-party recipients of the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. you Distribute, it being specified that any rights to use the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. shall be directly granted by Perceptron, Inc. to said third-party recipients pursuant to the Perceptron, Inc. Non-Production License agreement executed between these parties;
+# - You must retain in all copies of the Perceptron Models the following attribution notice within a “Notice” text file distributed as part of such copies: “Licensed by Perceptron, Inc. under the Perceptron, Inc. Non-Production License”.
+#
+# **2.3. Distribution of Derivatives made by or for You.** Subject to Section 3 below, You may Distribute any Derivatives made by or for You under additional or different terms and conditions, provided that:
+# - In any event, the use and modification of Perceptron Model and/or Derivatives made by or for Perceptron, Inc. shall remain governed by the terms and conditions of this Agreement;
+# - You include in any such Derivatives made by or for You prominent notices stating that You modified the concerned Perceptron Model; and
+# - Any terms and conditions You impose on any third-party recipients relating to Derivatives made by or for You shall neither limit such third-party recipients’ use of the Perceptron Model or any Derivatives made by or for Perceptron, Inc. in accordance with the Perceptron, Inc. Non-Production License nor conflict with any of its terms and conditions.
+#
+# ## 3. Limitations
+# **3.1. Misrepresentation.** You must not misrepresent or imply, through any means, that the Derivatives made by or for You and/or any modified version of the Perceptron Model You Distribute under your name and responsibility is an official product of Perceptron, Inc. or has been endorsed, approved or validated by Perceptron, Inc., unless You are authorized by Us to do so in writing.
+#
+# **3.2. Usage Limitation**
+# - You shall only use the Perceptron Models and Derivatives (whether or not created by Perceptron, Inc.) for testing, research, Personal, or evaluation purposes in Non-Production Environments;
+# - Subject to the foregoing, You shall not supply the Perceptron Models or Derivatives in the course of a commercial activity, whether in return for payment or free of charge, in any medium or form, including but not limited to through a hosted or managed service (e.g. SaaS, cloud instances, etc.), or behind a software layer.
+#
+# **3.3. Usage not permitted under this Agreement.** If You want to use a Perceptron Model or a Derivative for any purpose that is not expressly authorized under this Agreement, You must request a license from Perceptron, Inc., which Perceptron, Inc. may grant to You in Perceptron, Inc.’s sole discretion. Please contact Perceptron, Inc. at the following e-mail address if You want to discuss such a license: sales@perceptron.inc
+#
+# ## 4. Intellectual Property
+# **4.1. Trademarks.** No trademark licenses are granted under this Agreement, and in connection with the Perceptron Models, You may not use any name or mark owned by or associated with Perceptron, Inc. or any of its affiliates, except (i) as required for reasonable and customary use in describing and Distributing the Perceptron Models and Derivatives made by or for Perceptron, Inc. and (ii) for attribution purposes as required by this Agreement.
+#
+# **4.2. Outputs.** We claim no ownership rights in and to the Outputs. You are solely responsible for the Outputs You generate and their subsequent uses in accordance with this Agreement.
+#
+# **4.3. Derivatives.** By entering into this Agreement, You accept that any Derivatives that You may create or that may be created for You shall be subject to the restrictions set out in Section 3 of this Agreement.
+#
+# # 5. Liability
+# **5.1. Limitation of liability.** In no event, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall Perceptron, Inc. be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this Agreement or out of the use or inability to use the Perceptron Models and Derivatives (including but not limited to damages for loss of data, loss of goodwill, loss of expected profit or savings, work stoppage, computer failure or malfunction, or any damage caused by malware or security breaches), even if  Perceptron, Inc. has been advised of the possibility of such damages.
+#
+# **5.2. Indemnification.** You agree to indemnify and hold harmless Perceptron, Inc. from and against any claims, damages, or losses arising out of or related to Your use or Distribution of the Perceptron Models and Derivatives.
+#
+# ## 6. Warranty
+# **6.1. Disclaimer.** Unless required by applicable law or agreed to in writing, Perceptron, Inc. provides the Perceptron Models and Derivatives on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. Perceptron, Inc. does not represent nor warrant that the Perceptron Models and Derivatives will be error-free, meet Your or any third party’s requirements, be secure or will allow You or any third party to achieve any kind of result or generate any kind of content. You are solely responsible for determining the appropriateness of using or Distributing the Perceptron Models and Derivatives and assume any risks associated with Your exercise of rights under this Agreement.
+#
+# # 7. Termination
+# **7.1. Term.** This Agreement is effective as of the date of your acceptance of this Agreement or access to the concerned Perceptron Models or Derivatives and will continue until terminated in accordance with the following terms.
+#
+# **7.2. Termination.** Perceptron, Inc. may terminate this Agreement at any time if You are in breach of this Agreement. Upon termination of this Agreement, You must cease to use all Perceptron Models and Derivatives and shall permanently delete any copy thereof. Sections 5, 6, 7 and 8 shall survive the termination of this Agreement.
+#
+# **7.3. Litigation.** If You initiate any legal action or proceedings against Us or any other entity (including a cross-claim or counterclaim in a lawsuit), alleging that the Model or a Derivative, or any part thereof, infringe upon intellectual property or other rights owned or licensable by You, then any licenses granted to You under this Agreement will immediately terminate as of the date such legal action or claim is filed or initiated.
+#
+# # 8. General provisions
+# 8.1. Governing Law. This Agreement will be governed by and construed in accordance with the laws of the State of Washington, without regard to its conflict of law principles.
+#
+# 8.2. Jurisdiction. The state and federal courts located in King County, Washington shall have exclusive jurisdiction over any dispute arising out of or relating to this Agreement, and You and We consent to personal jurisdiction and venue in such courts.
+#
+# **8.3. Severability.** If any provision of this Agreement is held to be invalid, illegal or unenforceable, the remaining provisions shall be unaffected thereby and remain valid as if such provision had not been set forth herein.
+#
+# # 9. Definitions
+# **“Agreement”**: means this Perceptron, Inc. Non-Production License agreement governing the access, use, and Distribution of the Perceptron Models and Derivatives.
+#
+# **“Derivative”**: means any (i) modified version of the Perceptron Model (including but not limited to any customized or fine-tuned version thereof), (ii) work based on the Perceptron Model, or (iii) any other derivative work thereof. For the avoidance of doubt, Outputs are not considered as Derivatives under this Agreement.
+#
+# **“Distribution”**, **“Distributing”**, **“Distribute”** or **“Distributed”**: means providing or making available, by any means, a copy of the Perceptron Models and/or the Derivatives as the case may be, subject to Section 3 of this Agreement.
+#
+# **“Perceptron, Inc.”**, **“We”** or **“Us”**: means Perceptron, Inc., a Delaware corporation with its principal place of business at 10900 NE 8th St Suite 613, Bellevue, WA 98004.
+#
+# **“Perceptron Model”**: means the foundational large language model(s), and its elements which include algorithms, software, instructed checkpoints, parameters, source code (inference code, evaluation code and, if applicable, fine-tuning code) and any other elements associated thereto made available by Perceptron, Inc. under this Agreement, including, if any, the technical documentation, manuals and instructions for the use and operation thereof.
+#
+# **“Non-Production Environment”**: means any setting, use case, or application of the Perceptron Models or Derivatives that expressly excludes live, real-world conditions, commercial operations, revenue-generating activities, or direct interactions with or impacts on end users (such as, for instance, Your employees or customers). Non-Production Environment may include, but is not limited to, any setting, use case, or application for research, development, testing, quality assurance, training, internal evaluation (other than any internal usage by employees in the context of the company’s business activities), and demonstration purposes.
+#
+# **“Outputs”**: means any content generated by the operation of the Perceptron Models or the Derivatives from a prompt (i.e., text instructions) provided by users. For the avoidance of doubt, Outputs do not include any components of a Perceptron Models, such as any fine-tuned versions of the Perceptron Models, the weights, or parameters.
+#
+# **“Personal”**: means any use of a Perceptron Model or a Derivative that is (i) solely for personal, non-profit and non-commercial purposes and (ii) not directly or indirectly connected to any commercial activities, business operations, or employment responsibilities. For illustration purposes, Personal use of a Model or a Derivative does not include any usage by individuals employed in companies in the context of their daily tasks, any activity that is intended to generate revenue, or that is performed on behalf of a commercial entity.
+#
+# **“You”**: means the individual or entity entering into this Agreement with Perceptron, Inc..
+
 from __future__ import annotations
 
 import copy
 import math
+import re
 from collections import defaultdict
 from collections.abc import Sequence
-from typing import Any, TypedDict
+from typing import Any, Callable, Optional, TypedDict, Union
 
-import numpy as np
 import PIL.Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-
-try:
-    from torchvision.transforms.v2 import functional as TVF
-except ImportError:
-    TVF = None
-
-
-import re
-
 from genesis.public.tensorstream.tensor_stream import (
     Event,
     Stream,
@@ -40,72 +110,50 @@ from genesis.public.tensorstream.tensor_stream_utils import (
     slice as ts_slice,
 )
 
-from ...cache_utils import Cache, SlidingWindowCache, StaticCache
-from ...feature_extraction_utils import BatchFeature
-from ...generation.utils import GenerationMixin
-from ...image_processing_utils import BaseImageProcessor
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
-from ...image_transforms import convert_to_rgb
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
+from transformers import (
+    AutoImageProcessor,
+    AutoModel,
+    AutoTokenizer,
+    BatchFeature,
+    Cache,
+    Qwen3Config,
+    Qwen3ForCausalLM,
+    Qwen3PreTrainedModel,
 )
-from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils import TensorType
-from ...utils import auto_docstring, filter_out_non_signature_kwargs
-from ...utils.import_utils import is_torchdynamo_compiling
-from ..auto.image_processing_auto import AutoImageProcessor
-from ..auto.modeling_auto import AutoModel
-from ..auto.tokenization_auto import AutoTokenizer
-from ..qwen2.tokenization_qwen2 import Qwen2Tokenizer
-from ..qwen3.configuration_qwen3 import Qwen3Config
-from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3PreTrainedModel
-from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
-from ..siglip2.modeling_siglip2 import Siglip2EncoderLayer as HFSiglip2EncoderLayer
-
+from transformers.cache_utils import SlidingWindowCache, StaticCache
+from transformers.generation.utils import GenerationMixin
+from transformers.image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    SizeDict,
+    group_images_by_shape,
+    reorder_images,
+)
+from transformers.image_utils import (
+    ChannelDimension,
+    PILImageResampling,
+)
+from transformers.modeling_attn_mask_utils import AttentionMaskConverter
+from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+from transformers.models.qwen2.tokenization_qwen2 import Qwen2Tokenizer
+from transformers.models.siglip2.configuration_siglip2 import Siglip2VisionConfig
+from transformers.models.siglip2.modeling_siglip2 import Siglip2EncoderLayer as HFSiglip2EncoderLayer
+from transformers.processing_utils import ProcessorMixin, Unpack
+from transformers.tokenization_utils import TensorType
+from transformers.utils import auto_docstring
 
 # Vision preprocessing constants
-VISION_MEAN = (0.5, 0.5, 0.5)
-VISION_STD = (0.5, 0.5, 0.5)
-VISION_SCALE = 1 / 255
+from transformers.utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
+from transformers.utils.constants import IMAGENET_STANDARD_STD as VISION_STD
+from transformers.utils.import_utils import is_torchdynamo_compiling
 
 
-
-
-def _normalize_rgb_values(
-    values: float | Sequence[float] | tuple[float, ...],
-    *,
-    name: str,
-) -> tuple[float, float, float]:
-    """Coerce RGB normalization parameters into a 3-tuple of floats."""
-    if isinstance(values, (list, tuple)):
-        if len(values) == 3:
-            return tuple(float(v) for v in values)
-        if len(values) == 1:
-            value = float(values[0])
-            return (value, value, value)
-        raise ValueError(f"`{name}` must have length 1 or 3 when provided as a sequence. Got length {len(values)}.")
-
-    value = float(values)
-    return (value, value, value)
-
-
-def _make_writeable(arr: np.ndarray) -> np.ndarray:
-    if arr.flags.writeable:
-        return arr
-    try:
-        arr.setflags(write=True)
-        return arr
-    except ValueError:
-        return arr.copy()
-
+_ORIGINAL_ATTENTION_FUNCTIONS: dict[str, Callable[..., tuple[torch.Tensor, Optional[torch.Tensor]]]] = {}
+for _attn_name in ("flash_attention_2", "sdpa", "eager"):
+    if _attn_name in ALL_ATTENTION_FUNCTIONS:
+        _ORIGINAL_ATTENTION_FUNCTIONS[_attn_name] = ALL_ATTENTION_FUNCTIONS[_attn_name]
 
 
 class IsaacVisionConfig(Siglip2VisionConfig):
@@ -122,6 +170,7 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
     model_type = "isaac_vision"
     base_config_key = "vision_config"
+    _attn_implementation: str | None = None
 
     def __init__(
         self,
@@ -135,126 +184,164 @@ class IsaacVisionConfig(Siglip2VisionConfig):
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
         self.num_patches = num_patches
 
+        if self._attn_implementation is None:
+            self._attn_implementation = "flash_attention_2"
 
-class IsaacImageProcessorKwargs(ImagesKwargs):
+    @property
+    def attn_implementation(self) -> str | None:
+        return self._attn_implementation
+
+    @attn_implementation.setter
+    def attn_implementation(self, value: str | None) -> None:
+        self._attn_implementation = value
+
+
+class IsaacImageProcessorKwargs(DefaultFastImageProcessorKwargs, total=False):
     patch_size: int | None
     max_num_patches: int | None
     min_num_patches: int | None
     pixel_shuffle_scale: int | None
-    do_rescale: bool | None
-    rescale_factor: float | None
-    do_normalize: bool | None
-    image_mean: float | Sequence[float] | None
-    image_std: float | Sequence[float] | None
-    do_convert_rgb: bool | None
 
 
 @auto_docstring
 class IsaacImageProcessorFast(BaseImageProcessorFast):
+    MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
     r"""Fast torch-based image processor for Isaac vision inputs."""
-    slow_image_processor_class = "IsaacImageProcessor"
 
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
     valid_kwargs = IsaacImageProcessorKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
+    do_resize = True
+    size: SizeDict | None = None
+    default_to_square: bool | None = None
+    do_center_crop = False
+    crop_size: SizeDict | None = None
+    patch_size: int | None = 16
+    max_num_patches: int | None = 256
+    min_num_patches: int | None = None
+    pixel_shuffle_scale: int | None = 1
+    do_pad = False
+    pad_size: SizeDict | None = None
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = list(VISION_MEAN)
+    image_std = list(VISION_STD)
+    do_convert_rgb = True
+    return_tensors = None
+    data_format = ChannelDimension.FIRST
+    input_data_format = None
+    device = None
+    disable_grouping = False
+    size_divisor: int | None = None
+
     def __init__(
         self,
-        *,
-        patch_size: int = 16,
-        max_num_patches: int = 256,
-        min_num_patches: int | None = None,
-        pixel_shuffle_scale: int = 1,
-        do_rescale: bool = True,
-        rescale_factor: float | None = None,
-        do_normalize: bool = True,
-        image_mean: float | Sequence[float] | None = None,
-        image_std: float | Sequence[float] | None = None,
-        do_convert_rgb: bool = True,
         **kwargs: Unpack[IsaacImageProcessorKwargs],
     ) -> None:
         super().__init__(**kwargs)
 
+        pixel_shuffle_scale = 1 if self.pixel_shuffle_scale is None else int(self.pixel_shuffle_scale)
         if pixel_shuffle_scale < 1:
             raise ValueError("`pixel_shuffle_scale` must be >= 1")
-
-        mean_values = _normalize_rgb_values(
-            image_mean if image_mean is not None else VISION_MEAN, name="image_mean"
-        )
-        std_values = _normalize_rgb_values(
-            image_std if image_std is not None else VISION_STD, name="image_std"
-        )
-
-        self.patch_size = patch_size
-        self.max_num_patches = max_num_patches
-        self.min_num_patches = min_num_patches
         self.pixel_shuffle_scale = pixel_shuffle_scale
-        self.do_rescale = do_rescale
-        self.rescale_factor = VISION_SCALE if rescale_factor is None else float(rescale_factor)
-        self.do_normalize = do_normalize
-        self.image_mean = list(mean_values)
-        self.image_std = list(std_values)
-        self.do_convert_rgb = do_convert_rgb
+
 
     def _validate_preprocess_kwargs(self, **kwargs):
         # Allow callers to omit resize-related placeholders that BaseImageProcessorFast checks for.
         kwargs.pop("do_resize", None)
+        kwargs.pop("size", None)
+        kwargs.pop("do_center_crop", None)
+        kwargs.pop("crop_size", None)
+        kwargs.pop("disable_grouping", None)
         return super()._validate_preprocess_kwargs(**kwargs)
+
+    def resize(
+        self,
+        image: torch.Tensor,
+        size: SizeDict,
+        interpolation: Optional[Any] = None,
+        antialias: bool = True,
+        **kwargs,
+    ) -> torch.Tensor:
+        if size.height is None or size.width is None:
+            raise ValueError("IsaacImageProcessorFast requires explicit `height` and `width` when resizing.")
+
+        resize_mode: Any = interpolation
+        if hasattr(resize_mode, "value"):
+            resize_mode = resize_mode.value
+        elif hasattr(resize_mode, "name"):
+            resize_mode = resize_mode.name.lower()
+        elif resize_mode is None:
+            resize_mode = "bilinear"
+
+        if isinstance(resize_mode, str):
+            mode_key = resize_mode.lower()
+        else:
+            mode_key = resize_mode
+
+        resize_kwargs: dict[str, Any] = {}
+        if mode_key in {"linear", "bilinear", "bicubic", "trilinear"}:
+            resize_kwargs["align_corners"] = False
+
+        return F.interpolate(
+            image,
+            size=(size.height, size.width),
+            mode=resize_mode,
+            **resize_kwargs,
+        )
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[torch.Tensor],
         do_resize: bool,
-        patch_size: int,
-        max_num_patches: int,
-        interpolation: Any | None,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | Sequence[float] | None,
-        image_std: float | Sequence[float] | None,
-        return_tensors: str | TensorType | None,
+        size: Optional[SizeDict],
+        interpolation: Optional[Any],
+        do_center_crop: bool,
+        crop_size: Optional[SizeDict],
+        do_rescale: Optional[bool],
+        rescale_factor: Optional[float],
+        do_normalize: Optional[bool],
+        image_mean: Optional[Union[float, Sequence[float]]],
+        image_std: Optional[Union[float, Sequence[float]]],
+        disable_grouping: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_pad: Optional[bool] = None,
+        pad_size: Optional[SizeDict] = None,
         *,
+        patch_size: int | None = None,
+        max_num_patches: int | None = None,
         min_num_patches: int | None = None,
         pixel_shuffle_scale: int | None = None,
-        do_convert_rgb: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
-        if TVF is None:
-            raise ImportError("torchvision is required for IsaacImageProcessorFast but is not installed.")
+        if do_center_crop:
+            raise ValueError("`do_center_crop` is not supported by IsaacImageProcessorFast.")
+        if do_pad:
+            raise ValueError("`do_pad` is not supported by IsaacImageProcessorFast.")
 
-        min_num_patches = min_num_patches if min_num_patches is not None else self.min_num_patches
-        pixel_shuffle_scale = pixel_shuffle_scale if pixel_shuffle_scale is not None else self.pixel_shuffle_scale
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
 
-        mean_values = _normalize_rgb_values(
-            image_mean if image_mean is not None else self.image_mean, name="image_mean"
-        )
-        std_values = _normalize_rgb_values(
-            image_std if image_std is not None else self.image_std, name="image_std"
-        )
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_patches_grouped: dict[tuple[int, ...], torch.Tensor] = {}
+        token_grids_grouped: dict[tuple[int, ...], torch.Tensor] = {}
+        virtual_dims_grouped: dict[tuple[int, ...], torch.Tensor] = {}
+        real_dims_grouped: dict[tuple[int, ...], torch.Tensor] = {}
 
-        patches_list: list[torch.Tensor] = []
-        token_grids: list[torch.Tensor] = []
-        virtual_dims: list[list[int]] = []
-        real_dims: list[list[int]] = []
+        for shape, stacked_images in grouped_images.items():
+            if stacked_images.ndim != 4:
+                raise ValueError("Expected batched channel-first image tensors.")
 
-        for image in images:
-            if image.ndim != 3:
-                raise ValueError("Expected channel-first image tensor with shape (C, H, W).")
+            batch_size, channels, original_height, original_width = stacked_images.shape
 
-            channels, original_height, original_width = image.shape
-            if do_convert_rgb and channels == 1:
-                image = image.repeat(3, 1, 1)
+            if bool(self.do_convert_rgb) and channels == 1:
+                stacked_images = stacked_images.repeat(1, 3, 1, 1)
                 channels = 3
 
-            if original_height * original_width > MAX_PIXELS:
+            if original_height * original_width > self.MAX_PIXELS:
                 raise ValueError(
-                    f"Image (w={original_width}, h={original_height}) > MAX=`{MAX_PIXELS}`"
+                    f"Image (w={original_width}, h={original_height}) > MAX=`{self.MAX_PIXELS}`"
                 )
 
             target_height, target_width = get_image_size_for_max_num_patches(
@@ -267,54 +354,81 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             )
 
             if do_resize:
-                size_dict = SizeDict(height=target_height, width=target_width)
-                image = self.resize(image=image, size=size_dict, interpolation=interpolation)
+                resize_size = SizeDict(height=target_height, width=target_width)
+                image_batch = self.resize(
+                    image=stacked_images,
+                    size=resize_size,
+                    interpolation=interpolation,
+                )
             else:
                 if ((original_height % patch_size) != 0) or ((original_width % patch_size) != 0):
                     raise ValueError(
                         "Image dimensions must be divisible by patch_size when resize is disabled."
                     )
+                image_batch = stacked_images
+                target_height, target_width = original_height, original_width
 
-            # Apply rescaling and normalization as needed
-            image = self.rescale_and_normalize(
-                image,
-                do_rescale,
-                rescale_factor,
-                do_normalize,
-                list(mean_values),
-                list(std_values),
-            )
+            if do_rescale:
+                image_batch = self.rescale_and_normalize(
+                    image_batch,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                )
 
-            # Convert to NHWC for residual P-frame adjustment and patch extraction
-            nhwc_image = image.permute(1, 2, 0).unsqueeze(0)
-            nhwc_image = _compute_residual_p_frames(nhwc_image, is_p_frame=[False])
+            nhwc_images = image_batch.permute(0, 2, 3, 1)
+            nhwc_images = _compute_residual_p_frames(nhwc_images, is_p_frame=[False] * batch_size)
 
-            patches = patchify_vision(nhwc_image, patch_size=patch_size).squeeze(0)
-            height_tokens, width_tokens, _ = patches.shape
+            patches = patchify_vision(nhwc_images, patch_size=patch_size)
+            _, height_tokens, width_tokens, _ = patches.shape
 
-            patches_list.append(patches.unsqueeze(0))
-            token_grids.append(
-                torch.tensor([height_tokens, width_tokens], dtype=torch.long, device=patches.device)
-            )
+            token_grid = torch.tensor(
+                [height_tokens, width_tokens],
+                dtype=torch.long,
+                device=patches.device,
+            ).unsqueeze(0).repeat(batch_size, 1)
 
-            real_dims.append([1, height_tokens, width_tokens])
+            real_dim = torch.tensor(
+                [1, height_tokens, width_tokens],
+                dtype=torch.long,
+                device=patches.device,
+            ).unsqueeze(0).repeat(batch_size, 1)
+
             if pixel_shuffle_scale > 1:
                 if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
                     raise ValueError(
                         "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
                     )
-                virtual_dims.append(
-                    [1, height_tokens // pixel_shuffle_scale, width_tokens // pixel_shuffle_scale]
-                )
+                virtual_height = height_tokens // pixel_shuffle_scale
+                virtual_width = width_tokens // pixel_shuffle_scale
             else:
-                virtual_dims.append([1, height_tokens, width_tokens])
+                virtual_height = height_tokens
+                virtual_width = width_tokens
 
-        patches_tensor = torch.cat(patches_list, dim=0)
-        token_grids_tensor = torch.stack(token_grids, dim=0)
-        virtual_dims_tensor = torch.tensor(virtual_dims, dtype=torch.long, device=patches_tensor.device)
-        real_dims_tensor = torch.tensor(real_dims, dtype=torch.long, device=patches_tensor.device)
+            virtual_dim = torch.tensor(
+                [1, virtual_height, virtual_width],
+                dtype=torch.long,
+                device=patches.device,
+            ).unsqueeze(0).repeat(batch_size, 1)
 
-        batch_feature = BatchFeature(
+            processed_patches_grouped[shape] = patches
+            token_grids_grouped[shape] = token_grid
+            virtual_dims_grouped[shape] = virtual_dim
+            real_dims_grouped[shape] = real_dim
+
+        patches_slices = reorder_images(processed_patches_grouped, grouped_images_index)
+        token_grid_slices = reorder_images(token_grids_grouped, grouped_images_index)
+        virtual_dim_slices = reorder_images(virtual_dims_grouped, grouped_images_index)
+        real_dim_slices = reorder_images(real_dims_grouped, grouped_images_index)
+
+        patches_tensor = torch.stack(patches_slices, dim=0)
+        token_grids_tensor = torch.stack(token_grid_slices, dim=0)
+        virtual_dims_tensor = torch.stack(virtual_dim_slices, dim=0)
+        real_dims_tensor = torch.stack(real_dim_slices, dim=0)
+
+        return BatchFeature(
             data={
                 "patches": patches_tensor,
                 "token_grids": token_grids_tensor,
@@ -323,216 +437,8 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             },
             tensor_type=return_tensors,
         )
-        return batch_feature
 
 
-
-
-class IsaacImageProcessor(BaseImageProcessor):
-    """Image processor that prepares RGB frames for the Isaac vision encoder."""
-
-    model_input_names = ["patches", "token_grids"]
-
-    def __init__(
-        self,
-        patch_size: int = 16,
-        max_num_patches: int = 256,
-        min_num_patches: int | None = None,
-        pixel_shuffle_scale: int = 1,
-        do_rescale: bool = True,
-        rescale_factor: float | None = None,
-        do_normalize: bool = True,
-        image_mean: float | Sequence[float] | None = None,
-        image_std: float | Sequence[float] | None = None,
-        do_convert_rgb: bool = True,
-        resize_mode: str = "bilinear",
-        align_corners: bool = False,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-
-        if pixel_shuffle_scale < 1:
-            raise ValueError("`pixel_shuffle_scale` must be >= 1")
-
-        rescale_value = VISION_SCALE if rescale_factor is None else float(rescale_factor)
-        mean_value = VISION_MEAN if image_mean is None else image_mean
-        std_value = VISION_STD if image_std is None else image_std
-
-        self.patch_size = patch_size
-        self.max_num_patches = max_num_patches
-        self.min_num_patches = min_num_patches
-        self.pixel_shuffle_scale = pixel_shuffle_scale
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_value
-        self.do_normalize = do_normalize
-        self.image_mean = _normalize_rgb_values(mean_value, name="image_mean")
-        self.image_std = _normalize_rgb_values(std_value, name="image_std")
-        self.do_convert_rgb = do_convert_rgb
-        self.resize_mode = resize_mode
-        self.align_corners = align_corners
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        patch_size: int | None = None,
-        max_num_patches: int | None = None,
-        min_num_patches: int | None = None,
-        pixel_shuffle_scale: int | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | Sequence[float] | None = None,
-        image_std: float | Sequence[float] | None = None,
-        do_convert_rgb: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-    ) -> BatchFeature:
-        patch_size = patch_size if patch_size is not None else self.patch_size
-        max_num_patches = max_num_patches if max_num_patches is not None else self.max_num_patches
-        min_num_patches = min_num_patches if min_num_patches is not None else self.min_num_patches
-        pixel_shuffle_scale = (
-            pixel_shuffle_scale if pixel_shuffle_scale is not None else self.pixel_shuffle_scale
-        )
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        image_mean = self.image_mean if image_mean is None else _normalize_rgb_values(image_mean, name="image_mean")
-        image_std = self.image_std if image_std is None else _normalize_rgb_values(image_std, name="image_std")
-        do_convert_rgb = self.do_convert_rgb if do_convert_rgb is None else do_convert_rgb
-
-        images = self.fetch_images(images)
-        images = make_flat_list_of_images(images)
-
-        if not images:
-            raise ValueError("Received an empty list of images for preprocessing.")
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Expected PIL images, numpy arrays, or tensors convertible to numpy arrays."
-            )
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-        )
-
-        patches_list = []
-        token_grids = []
-        virtual_dims = []
-        real_dims = []
-
-        for image in images:
-            np_image = to_numpy_array(image)
-
-            if np_image.ndim == 2:
-                np_image = np.repeat(np_image[..., None], 3, axis=-1)
-
-            height, width = np_image.shape[:2]
-            if height * width > MAX_PIXELS:
-                raise ValueError(f"Image (w={width}, h={height}) > MAX=`{MAX_PIXELS}`")
-
-            torch_image = torch.from_numpy(_make_writeable(np_image))
-            patches, vidims, rdims = self._process_single_image(
-                torch_image,
-                patch_size=patch_size,
-                max_num_patches=max_num_patches,
-                min_num_patches=min_num_patches,
-                pixel_shuffle_scale=pixel_shuffle_scale,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-            )
-
-            patches_list.append(patches)
-            token_grids.append(torch.tensor([patches.size(1), patches.size(2)], dtype=torch.long))
-            virtual_dims.append(vidims)
-            real_dims.append(rdims)
-
-        patches_tensor = torch.cat(patches_list, dim=0)
-        token_grid_tensor = torch.stack(token_grids, dim=0)
-        virtual_dims_tensor = torch.tensor(virtual_dims, dtype=torch.long)
-        real_dims_tensor = torch.tensor(real_dims, dtype=torch.long)
-
-        data = {
-            "patches": patches_tensor,
-            "token_grids": token_grid_tensor,
-            "virtual_pixel_size": virtual_dims_tensor,
-            "real_pixel_size": real_dims_tensor,
-        }
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-    def _process_single_image(
-        self,
-        image: torch.Tensor,
-        *,
-        patch_size: int,
-        max_num_patches: int,
-        min_num_patches: int | None,
-        pixel_shuffle_scale: int,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: tuple[float, ...],
-        image_std: tuple[float, ...],
-    ) -> tuple[torch.Tensor, list[int], list[int]]:
-        image_uint8 = image.unsqueeze(0)  # (1, H, W, C)
-        image_chw = image_uint8.permute(0, 3, 1, 2)  # (1, C, H, W)
-
-        _, _, orig_height, orig_width = image_chw.shape
-        target_height, target_width = get_image_size_for_max_num_patches(
-            orig_height,
-            orig_width,
-            patch_size,
-            max_num_patches,
-            min_num_patches=min_num_patches,
-            pixel_shuffle_scale=pixel_shuffle_scale,
-        )
-
-        if self.resize_mode in {"linear", "bilinear", "bicubic", "trilinear"}:
-            resized = F.interpolate(
-                image_chw,
-                size=(target_height, target_width),
-                mode=self.resize_mode,
-                align_corners=self.align_corners,
-            )
-        else:
-            resized = F.interpolate(
-                image_chw,
-                size=(target_height, target_width),
-                mode=self.resize_mode,
-            )
-
-        resized = resized.permute(0, 2, 3, 1)  # (1, H, W, C)
-
-        scale = rescale_factor if do_rescale else 1.0
-        mean = image_mean if do_normalize else (0.0, 0.0, 0.0)
-        std = image_std if do_normalize else (1.0, 1.0, 1.0)
-        resized = _prepare_image_tensor(resized, scale=scale, mean=mean, std=std)
-
-        resized = _compute_residual_p_frames(resized, is_p_frame=[False])
-
-        patches = patchify_vision(resized, patch_size=patch_size)
-        _, h_patches, w_patches, _ = patches.shape
-
-        real_dims = [1, h_patches, w_patches]
-        if pixel_shuffle_scale > 1:
-            if (h_patches % pixel_shuffle_scale) or (w_patches % pixel_shuffle_scale):
-                raise ValueError(
-                    "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
-                )
-            virtual_dims = [1, h_patches // pixel_shuffle_scale, w_patches // pixel_shuffle_scale]
-        else:
-            virtual_dims = real_dims.copy()
-
-        return patches, virtual_dims, real_dims
 
 
 def _max_from_cu(cu: torch.Tensor | None, fallback: int) -> int:
@@ -540,6 +446,48 @@ def _max_from_cu(cu: torch.Tensor | None, fallback: int) -> int:
     if cu is None or len(cu) < 2:
         return fallback
     return int((cu[1:] - cu[:-1]).max().item())
+
+
+def build_document_attention_mask(
+    cu_seqlens: torch.Tensor | None,
+    total_tokens: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor | None:
+    """Creates an additive attention mask that blocks cross-document attention."""
+
+    if cu_seqlens is None:
+        return None
+
+    if cu_seqlens.numel() < 2:
+        return None
+
+    seq_sizes = (cu_seqlens[1:] - cu_seqlens[:-1]).long()
+    if seq_sizes.numel() == 0:
+        return None
+
+    seg_ids = torch.repeat_interleave(torch.arange(seq_sizes.numel(), device=device), seq_sizes)
+    block_mask = seg_ids[:, None] != seg_ids[None, :]
+    additive_mask = torch.zeros((total_tokens, total_tokens), dtype=dtype, device=device)
+    additive_mask.masked_fill_(block_mask, float("-inf"))
+    return additive_mask.view(1, 1, total_tokens, total_tokens)
+
+
+def repeat_kv(hidden_states: torch.Tensor, num_key_value_groups: int) -> torch.Tensor:
+    """Repeat key/value heads for grouped-query attention."""
+
+    if num_key_value_groups == 1:
+        return hidden_states
+
+    batch, num_key_value_heads, seq_len, head_dim = hidden_states.shape
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch,
+        num_key_value_heads,
+        num_key_value_groups,
+        seq_len,
+        head_dim,
+    )
+    return hidden_states.reshape(batch, num_key_value_heads * num_key_value_groups, seq_len, head_dim)
 
 
 def flash_attention_document_mask_forward(
@@ -599,7 +547,8 @@ def sdpa_document_mask_forward(
     v_lhd: torch.Tensor,  # (L, H, D)
     dropout: float,
     scaling: float | None,
-    cu_seqlens: torch.Tensor | None,
+    attention_mask: torch.Tensor | None = None,
+    cu_seqlens: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """SDPA with block-diagonal masking for variable-length sequences."""
     L, H, D = q_lhd.shape
@@ -610,12 +559,17 @@ def sdpa_document_mask_forward(
     V = v_lhd.permute(1, 0, 2).unsqueeze(0)
 
     # Build block-diagonal mask for variable-length sequences
-    attn_mask = None
-    if cu_seqlens is not None:
-        seq_sizes = (cu_seqlens[1:] - cu_seqlens[:-1]).long()
-        seg_ids = torch.repeat_interleave(torch.arange(len(seq_sizes), device=q_lhd.device), seq_sizes)
-        block_mask = seg_ids[:, None] != seg_ids[None, :]  # Cross-document attention blocked
-        attn_mask = torch.where(block_mask, -torch.inf, 0.0).to(q_lhd.dtype).view(1, 1, L, L)
+    attn_mask = attention_mask
+    if attn_mask is None:
+        attn_mask = build_document_attention_mask(
+            cu_seqlens=cu_seqlens,
+            total_tokens=L,
+            dtype=q_lhd.dtype,
+            device=q_lhd.device,
+        )
+
+    if attn_mask is not None and attn_mask.dtype != Q.dtype:
+        attn_mask = attn_mask.to(Q.dtype)
 
     Y = F.scaled_dot_product_attention(Q, K, V, attn_mask=attn_mask, dropout_p=dropout, scale=scaling)
     return Y.squeeze(0).permute(1, 0, 2)  # Back to (L, H, D)
@@ -686,11 +640,23 @@ class IsaacVisionEmbeddings(nn.Module):
 class IsaacVisionAttention(nn.Module):
     """Custom attention that supports variable-length sequences with flash attention."""
 
-    def __init__(self, config):
+    ATTENTION_KEY_MAP: dict[str, str] = {
+        "flash_attention_2": "isaac_flash_attention_2",
+        "flash_attention_3": "isaac_flash_attention_3",
+        "isaac_flash_attention_2": "isaac_flash_attention_2",
+        "isaac_flash_attention_3": "isaac_flash_attention_3",
+        "sdpa": "isaac_sdpa",
+        "isaac_sdpa": "isaac_sdpa",
+        "eager": "isaac_eager",
+        "isaac_eager": "isaac_eager",
+    }
+
+    def __init__(self, vision_config):
         super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
+        self.vision_config = vision_config
+        self.config = vision_config
+        self.embed_dim = vision_config.hidden_size
+        self.num_heads = vision_config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
@@ -698,7 +664,9 @@ class IsaacVisionAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        self.dropout = vision_config.attention_dropout
+        self.is_causal = False
+        self.num_key_value_groups = 1
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
@@ -721,24 +689,46 @@ class IsaacVisionAttention(nn.Module):
         k = self.k_proj(x).view(L, H, D)
         v = self.v_proj(x).view(L, H, D)
 
-        attn_impl = getattr(self.config, "_attn_implementation", "flash_attention_3")
+        attn_impl = getattr(self.vision_config, "_attn_implementation", "flash_attention_3")
 
-        if attn_impl in ("flash_attention_2", "flash_attention_3"):
-            y_lhd, _ = flash_attention_document_mask_forward(
-                self,
-                q,
-                k,
-                v,
-                attention_mask=None,
-                dropout=p_drop,
-                scaling=self.scale,
-                cum_seq_q=cu_seqlens,
-                cum_seq_k=cu_seqlens,
-                max_seqlen=max_seqlen,
-                is_causal=False,
-            )
-        else:
-            y_lhd = sdpa_document_mask_forward(q, k, v, dropout=p_drop, scaling=self.scale, cu_seqlens=cu_seqlens)
+        attn_mask = build_document_attention_mask(
+            cu_seqlens=cu_seqlens,
+            total_tokens=L,
+            dtype=q.dtype,
+            device=q.device,
+        )
+
+        resolved_key = self.ATTENTION_KEY_MAP.get(attn_impl)
+        attention_fn = ALL_ATTENTION_FUNCTIONS.get(resolved_key) if resolved_key is not None else None
+        if attention_fn is None:
+            raise ValueError(f"Attention implementation {attn_impl} not found.")
+
+        query_states = q.transpose(0, 1).unsqueeze(0)
+        key_states = k.transpose(0, 1).unsqueeze(0)
+        value_states = v.transpose(0, 1).unsqueeze(0)
+
+        attention_kwargs: dict[str, Any] = {
+            "dropout": p_drop,
+            "scaling": self.scale,
+            "is_causal": False,
+        }
+        if cu_seqlens is not None:
+            attention_kwargs["cu_seq_lens_q"] = cu_seqlens
+            attention_kwargs["cu_seq_lens_k"] = cu_seqlens
+        if max_seqlen is not None:
+            attention_kwargs["max_length_q"] = max_seqlen
+            attention_kwargs["max_length_k"] = max_seqlen
+
+        attn_output, _ = attention_fn(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attn_mask,
+            **attention_kwargs,
+        )
+
+        y_lhd = attn_output.squeeze(0).permute(1, 0, 2).contiguous()
 
         # Merge heads and project
         y = self.out_proj(y_lhd.reshape(L, self.embed_dim))
@@ -748,21 +738,21 @@ class IsaacVisionAttention(nn.Module):
 class IsaacVisionEncoderLayer(HFSiglip2EncoderLayer):
     """Isaac vision encoder layer with variable-length attention."""
 
-    def __init__(self, config: IsaacVisionConfig):
-        super().__init__(config)
-        self.self_attn = IsaacVisionAttention(config)
+    def __init__(self, vision_config: IsaacVisionConfig):
+        super().__init__(vision_config)
+        self.self_attn = IsaacVisionAttention(vision_config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor = None,
         max_seqlen: int = None,
-    ) -> tuple[torch.FloatTensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
 
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
@@ -775,7 +765,7 @@ class IsaacVisionEncoderLayer(HFSiglip2EncoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        return (hidden_states,)
+        return hidden_states
 
 
 class IsaacVisionEncoder(nn.Module):
@@ -801,18 +791,206 @@ class IsaacVisionEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 cu_seqlens,
                 max_seqlen,
             )
 
-            hidden_states = layer_outputs[0]
-
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         return hidden_states, all_hidden_states, None
+
+
+def _isaac_flash_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    is_causal: bool = False,
+    **kwargs,
+) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    base_fn = _ORIGINAL_ATTENTION_FUNCTIONS.get("flash_attention_2")
+    if not isinstance(module, IsaacVisionAttention) or base_fn is None:
+        if base_fn is None:
+            raise ValueError("Base flash attention function unavailable for fallback.")
+        return base_fn(
+            module,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=dropout,
+            scaling=scaling,
+            is_causal=is_causal,
+            **kwargs,
+        )
+
+    if query.dim() != 4 or query.size(0) != 1:
+        raise ValueError("IsaacVisionAttention expects packed sequences with batch size 1 when using packed attention.")
+
+    _, num_heads, seq_len, head_dim = query.shape
+    q_lhd = query.transpose(1, 2).reshape(seq_len, num_heads, head_dim)
+    k_lhd = key.transpose(1, 2).reshape(seq_len, num_heads, head_dim)
+    v_lhd = value.transpose(1, 2).reshape(seq_len, num_heads, head_dim)
+
+    cum_seq_q = kwargs.get("cu_seq_lens_q")
+    cum_seq_k = kwargs.get("cu_seq_lens_k", cum_seq_q)
+    max_seqlen = kwargs.get("max_length_q")
+
+    effective_dropout = dropout if dropout is not None else (module.dropout if module.training else 0.0)
+    effective_scaling = module.scale if scaling is None else scaling
+
+    attn_mask = attention_mask
+    if attn_mask is None:
+        attn_mask = build_document_attention_mask(
+            cu_seqlens=cum_seq_q,
+            total_tokens=seq_len,
+            dtype=q_lhd.dtype,
+            device=q_lhd.device,
+        )
+
+    attn_output_lhd, attn_weights = flash_attention_document_mask_forward(
+        module,
+        q_lhd,
+        k_lhd,
+        v_lhd,
+        attention_mask=attn_mask,
+        dropout=effective_dropout,
+        scaling=effective_scaling,
+        cum_seq_q=cum_seq_q,
+        cum_seq_k=cum_seq_k,
+        max_seqlen=max_seqlen,
+        is_causal=is_causal,
+    )
+
+    attn_output = attn_output_lhd.permute(1, 0, 2).unsqueeze(0)
+    return attn_output, attn_weights
+
+
+def _isaac_sdpa_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    is_causal: bool = False,
+    **kwargs,
+) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    base_fn = _ORIGINAL_ATTENTION_FUNCTIONS.get("sdpa")
+    if not isinstance(module, IsaacVisionAttention) or base_fn is None:
+        if base_fn is None:
+            raise ValueError("Base SDPA function unavailable for fallback.")
+        return base_fn(
+            module,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=dropout,
+            scaling=scaling,
+            is_causal=is_causal,
+            **kwargs,
+        )
+
+    if query.dim() != 4 or query.size(0) != 1:
+        raise ValueError("IsaacVisionAttention expects packed sequences with batch size 1 when using packed attention.")
+
+    _, num_heads, seq_len, head_dim = query.shape
+    q_lhd = query.transpose(1, 2).reshape(seq_len, num_heads, head_dim)
+    k_lhd = key.transpose(1, 2).reshape(seq_len, num_heads, head_dim)
+    v_lhd = value.transpose(1, 2).reshape(seq_len, num_heads, head_dim)
+
+    cum_seq = kwargs.get("cu_seq_lens_q")
+    effective_dropout = dropout if dropout is not None else (module.dropout if module.training else 0.0)
+    effective_scaling = module.scale if scaling is None else scaling
+
+    attn_mask = attention_mask
+    if attn_mask is None:
+        attn_mask = build_document_attention_mask(
+            cu_seqlens=cum_seq,
+            total_tokens=seq_len,
+            dtype=q_lhd.dtype,
+            device=q_lhd.device,
+        )
+
+    attn_output_lhd = sdpa_document_mask_forward(
+        q_lhd,
+        k_lhd,
+        v_lhd,
+        dropout=effective_dropout,
+        scaling=effective_scaling,
+        attention_mask=attn_mask,
+        cu_seqlens=cum_seq,
+    )
+
+    attn_output = attn_output_lhd.permute(1, 0, 2).unsqueeze(0)
+    return attn_output, None
+
+
+def _isaac_eager_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    is_causal: bool = False,
+    **kwargs,
+) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    base_fn = _ORIGINAL_ATTENTION_FUNCTIONS.get("eager")
+    if not isinstance(module, IsaacVisionAttention) or base_fn is None:
+        if base_fn is None:
+            raise ValueError("Base eager attention function unavailable for fallback.")
+        return base_fn(
+            module,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=dropout,
+            scaling=scaling,
+            is_causal=is_causal,
+            **kwargs,
+        )
+
+    if query.dim() != 4 or query.size(0) != 1:
+        raise ValueError("IsaacVisionAttention expects packed sequences with batch size 1 when using packed attention.")
+
+    _, num_heads, seq_len, head_dim = query.shape
+    q_lhd = query.transpose(1, 2).reshape(seq_len, num_heads, head_dim)
+    k_lhd = key.transpose(1, 2).reshape(seq_len, num_heads, head_dim)
+    v_lhd = value.transpose(1, 2).reshape(seq_len, num_heads, head_dim)
+
+    effective_scaling = module.scale if scaling is None else scaling
+    attn_weights = torch.matmul(q_lhd, k_lhd.transpose(1, 2)) * effective_scaling
+
+    if attention_mask is not None:
+        mask = attention_mask
+        if mask.dim() == 4:
+            mask = mask.squeeze(0).squeeze(0)
+        attn_weights = attn_weights + mask
+
+    attn_weights = torch.softmax(attn_weights, dim=-1)
+    if dropout and module.training:
+        attn_weights = F.dropout(attn_weights, p=dropout, training=True)
+
+    attn_output_lhd = torch.matmul(attn_weights, v_lhd)
+    attn_output = attn_output_lhd.permute(1, 0, 2).unsqueeze(0)
+    return attn_output, attn_weights
+
+
+ALL_ATTENTION_FUNCTIONS.register("isaac_flash_attention_2", _isaac_flash_attention_forward)
+ALL_ATTENTION_FUNCTIONS.register("isaac_flash_attention_3", _isaac_flash_attention_forward)
+ALL_ATTENTION_FUNCTIONS.register("isaac_sdpa", _isaac_sdpa_forward)
+ALL_ATTENTION_FUNCTIONS.register("isaac_eager", _isaac_eager_forward)
 
 
 def create_pixel_shuffle_index_map(
@@ -990,12 +1168,6 @@ class IsaacVisionTransformer(nn.Module):
         # Return the full sequence of embeddings
         return hidden_states
 
-
-# ============================================================================
-# Configuration
-# ============================================================================
-
-MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
 
 def get_scaled_image_size(
     scale: float,
@@ -1180,20 +1352,14 @@ class IsaacConfig(Qwen3Config):
 
     def __init__(
         self,
-        vision_config=None,
+        vision_config: IsaacVisionConfig | None = None,
         text_config: Qwen3Config | dict | None = None,
-        vision_patch_size: int = 16,
-        vision_max_num_patches: int = 256,
-        vision_min_num_patches: int | None = None,
-        pixel_shuffle_scale: int = 1,
-        vision_rescale_factor: float = VISION_SCALE,
-        vision_mean: float | Sequence[float] = VISION_MEAN,
-        vision_std: float | Sequence[float] = VISION_STD,
+        vision_rescale_factor: float = 1/255,
         max_sequence_length: int = 16384,
         vision_token: str = "<image>",
-        vision_attn_implementation: str | None = None,
         **kwargs,
     ):
+        self._rope_scaling: dict[str, Any] | None = None
         resolved_text_config = kwargs.pop("text_config", text_config)
         if isinstance(resolved_text_config, Qwen3Config):
             text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
@@ -1208,36 +1374,59 @@ class IsaacConfig(Qwen3Config):
 
         super().__init__(**text_config_kwargs)
         self.text_config = Qwen3Config(**text_config_kwargs)
+        if self._rope_scaling is None:
+            self._rope_scaling = getattr(self.text_config, "rope_scaling", None)
+        else:
+            self.text_config.rope_scaling = self._rope_scaling
 
         # Handle vision config - either dict or IsaacVisionConfig instance
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
+        elif isinstance(vision_config, IsaacVisionConfig):
+            self.vision_config = vision_config
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
-        else:
-            self.vision_config = vision_config
-
-        # EventStreamProcessor parameters (for backward compatibility)
-        self.video_patch_size = vision_patch_size
-        self.vision_max_num_patches = vision_max_num_patches
-        self.vision_min_num_patches = vision_min_num_patches
-        self.pixel_shuffle_scale = pixel_shuffle_scale
 
         # Vision normalization parameters
         self.vision_rescale_factor = float(vision_rescale_factor)
-        self.vision_mean = _normalize_rgb_values(vision_mean, name="vision_mean")
-        self.vision_std = _normalize_rgb_values(vision_std, name="vision_std")
 
         # Processing parameters
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
-        self.vision_attn_implementation = vision_attn_implementation
 
     def get_text_config(self, *_, **kwargs) -> Qwen3Config:
         # Accept optional decoder/encoder flags to align with HF composite configs
         kwargs.pop("decoder", None)
         kwargs.pop("encoder", None)
         return self.text_config
+
+    @property
+    def rope_scaling(self):
+        if hasattr(self, "text_config") and self.text_config is not None:
+            return getattr(self.text_config, "rope_scaling", None)
+        return self._rope_scaling
+
+    @rope_scaling.setter
+    def rope_scaling(self, value):
+        self._rope_scaling = value
+        if hasattr(self, "text_config") and self.text_config is not None:
+            self.text_config.rope_scaling = value
+
+    @property
+    def vision_attn_implementation(self) -> str | None:
+
+        value = getattr(self.vision_config, "_attn_implementation", None)
+        if value is None:
+            value = getattr(self.vision_config, "attn_implementation", None)
+        return value
+
+    @vision_attn_implementation.setter
+    def vision_attn_implementation(self, value: str | None) -> None:
+        self.vision_config._attn_implementation = value
+        if value is not None:
+            self.vision_config.attn_implementation = value
+        elif hasattr(self.vision_config, "attn_implementation"):
+            delattr(self.vision_config, "attn_implementation")
 
 
 # ============================================================================
@@ -1287,28 +1476,21 @@ def create_text_event(tokenizer: AutoTokenizer, text: str, time: float = 0.0) ->
 # Processor
 # ============================================================================
 
+
 class IsaacProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("IsaacImageProcessor", "IsaacImageProcessorFast")
+    image_processor_class = ("IsaacImageProcessorFast",)
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
         self,
-        image_processor: IsaacImageProcessor | BaseImageProcessorFast | None = None,
+        image_processor: IsaacImageProcessorFast | None = None,
         tokenizer: Qwen2Tokenizer | None = None,
         *,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
-        vision_patch_size: int = 16,
-        vision_max_num_patches: int = 256,
-        vision_min_num_patches: int | None = None,
-        pixel_shuffle_scale: int = 1,
         rescale_factor: float | None = None,
-        image_mean: float | Sequence[float] | None = None,
-        image_std: float | Sequence[float] | None = None,
-        vision_attn_implementation: str | None = None,
         config: IsaacConfig | dict | None = None,
-        **kwargs,
     ) -> None:
         if tokenizer is None:
             raise ValueError("`tokenizer` must be provided to initialize IsaacProcessor.")
@@ -1317,58 +1499,18 @@ class IsaacProcessor(ProcessorMixin):
             config = IsaacConfig(**config)
 
         if config is not None:
-            vision_patch_size = config.video_patch_size
-            vision_max_num_patches = config.vision_max_num_patches
-            vision_min_num_patches = config.vision_min_num_patches
-            pixel_shuffle_scale = config.pixel_shuffle_scale
             max_sequence_length = config.max_sequence_length
             vision_token = config.vision_token
-            vision_attn_implementation = config.vision_attn_implementation
             rescale_factor = config.vision_rescale_factor
-            image_mean = tuple(config.vision_mean)
-            image_std = tuple(config.vision_std)
 
         resolved_rescale_factor = (
-            float(rescale_factor) if rescale_factor is not None else float(VISION_SCALE)
+            float(rescale_factor) if rescale_factor is not None else float(1/255)
         )
-        resolved_image_mean = _normalize_rgb_values(
-            image_mean if image_mean is not None else VISION_MEAN,
-            name="image_mean",
-        )
-        resolved_image_std = _normalize_rgb_values(
-            image_std if image_std is not None else VISION_STD,
-            name="image_std",
-        )
-
-        if image_processor is None:
-            image_processor = IsaacImageProcessor(
-                patch_size=vision_patch_size,
-                max_num_patches=vision_max_num_patches,
-                min_num_patches=vision_min_num_patches,
-                pixel_shuffle_scale=pixel_shuffle_scale,
-                rescale_factor=resolved_rescale_factor,
-                image_mean=resolved_image_mean,
-                image_std=resolved_image_std,
-            )
-        else:
-            vision_patch_size = getattr(image_processor, "patch_size", vision_patch_size)
-            vision_max_num_patches = getattr(image_processor, "max_num_patches", vision_max_num_patches)
-            vision_min_num_patches = getattr(image_processor, "min_num_patches", vision_min_num_patches)
-            pixel_shuffle_scale = getattr(image_processor, "pixel_shuffle_scale", pixel_shuffle_scale)
-            resolved_rescale_factor = getattr(image_processor, "rescale_factor", resolved_rescale_factor)
-            resolved_image_mean = _normalize_rgb_values(
-                getattr(image_processor, "image_mean", resolved_image_mean),
-                name="image_mean",
-            )
-            resolved_image_std = _normalize_rgb_values(
-                getattr(image_processor, "image_std", resolved_image_std),
-                name="image_std",
-            )
 
         if config is not None:
             config.vision_rescale_factor = resolved_rescale_factor
-            config.vision_mean = resolved_image_mean
-            config.vision_std = resolved_image_std
+
+        self.image_processor = image_processor
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
@@ -1379,15 +1521,6 @@ class IsaacProcessor(ProcessorMixin):
 
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
-        self.vision_attn_implementation = vision_attn_implementation
-
-        self.patch_size = getattr(self.image_processor, "patch_size", vision_patch_size)
-        self.max_num_patches = getattr(self.image_processor, "max_num_patches", vision_max_num_patches)
-        self.min_num_patches = getattr(self.image_processor, "min_num_patches", vision_min_num_patches)
-        self.pixel_shuffle_scale = getattr(self.image_processor, "pixel_shuffle_scale", pixel_shuffle_scale)
-        self.rescale_factor = getattr(self.image_processor, "rescale_factor", resolved_rescale_factor)
-        self.image_mean = tuple(getattr(self.image_processor, "image_mean", resolved_image_mean))
-        self.image_std = tuple(getattr(self.image_processor, "image_std", resolved_image_std))
 
     def build_event_stream_simple(
         self,
@@ -1536,7 +1669,8 @@ class IsaacRotaryEmbedding(nn.Module):
         super().__init__()
 
         self.config = config
-        rope_scaling = getattr(config, "rope_scaling", None) or {}
+        rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
+        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
         rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", "default"))
         if rope_type not in ROPE_INIT_FUNCTIONS:
             raise ValueError(f"Unsupported rope_type '{rope_type}' for IsaacRotaryEmbedding")
@@ -1546,10 +1680,10 @@ class IsaacRotaryEmbedding(nn.Module):
 
         sanitized_scaling = {k: v for k, v in rope_scaling.items() if k not in self.EXTRA_ROPE_KEYS}
         if sanitized_scaling != rope_scaling:
-            config_for_rope = copy.copy(config)
+            config_for_rope = copy.copy(rope_source_cfg)
             config_for_rope.rope_scaling = sanitized_scaling
         else:
-            config_for_rope = config
+            config_for_rope = rope_source_cfg
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
         inv_freq, attention_scaling = rope_init_fn(config_for_rope, device=init_device)
@@ -1619,19 +1753,12 @@ class IsaacModel(Qwen3PreTrainedModel):
 
         self.rotary_emb = IsaacRotaryEmbedding(config, device=self.device)
 
-        vision_cfg = config.vision_config
-        # Use vision_attn_implementation if specified, otherwise fall back to general attn_implementation
-        vision_cfg._attn_implementation = (
-            config.vision_attn_implementation
-            if config.vision_attn_implementation is not None
-            else config._attn_implementation
-        )
-        if vision_cfg is None:
+        if config.vision_config is None:
             raise ValueError("IsaacConfig should always have vision_config")
 
-        hidden_dim = vision_cfg.hidden_size * (vision_cfg.pixel_shuffle_scale_factor**2)
+        hidden_dim = config.vision_config.hidden_size * (config.vision_config.pixel_shuffle_scale_factor**2)
         self.vision_embedding = nn.Sequential(
-            IsaacVisionTransformer(vision_cfg),
+            IsaacVisionTransformer(config.vision_config),
             nn.Linear(
                 hidden_dim,
                 4 * hidden_dim,
@@ -1970,7 +2097,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
-
         self.model = IsaacModel(config)  # Use our custom model
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -2132,18 +2258,9 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         return True
 
 
-
-def _load_isaac_fast_image_processor():
-    try:
-        from .image_processing_isaac_fast import IsaacImageProcessorFast as fast_cls
-    except ImportError:
-        fast_cls = None
-    return fast_cls
-
 AutoImageProcessor.register(
     IsaacConfig,
-    slow_image_processor_class=IsaacImageProcessor,
-    fast_image_processor_class=_load_isaac_fast_image_processor(),
+    fast_image_processor_class=IsaacImageProcessorFast,
     exist_ok=True,
 )
 
@@ -2152,20 +2269,9 @@ __all__ = [
     "IsaacConfig",
     "IsaacModel",
     "IsaacForConditionalGeneration",
-    "IsaacImageProcessor",
     "IsaacImageProcessorFast",
     "IsaacProcessor",
 ]
-def _prepare_image_tensor(image: torch.Tensor, scale: float, mean: tuple[float, ...], std: tuple[float, ...]) -> torch.Tensor:
-    """Mirror the prepare_image_tensor utility used in the training pipelines."""
-    if not torch.is_floating_point(image):
-        image = image.float()
-
-    rescaled = image * scale
-    mean_tensor = torch.tensor(mean, dtype=torch.float32, device=rescaled.device).view(1, 1, 1, -1)
-    std_tensor = torch.tensor(std, dtype=torch.float32, device=rescaled.device).view(1, 1, 1, -1)
-    normalized = (rescaled - mean_tensor) / std_tensor
-    return normalized
 
 
 def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> torch.Tensor:
@@ -2179,3 +2285,4 @@ def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> 
     p_indices = frame_indices[torch.tensor(is_p_frame, device=frames.device)]
     frames[p_indices] = frames[p_indices] - frames[last_i_indices[p_indices]]
     return frames
+
