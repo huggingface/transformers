@@ -41,6 +41,9 @@ def update_state_dict_for_hf_model(state_dict):
             # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
             if "downsample_layers." in key and ".0.conv." in key:
                 new_key = new_key.replace(".0.conv.", ".conv.")
+            # Handle Block1D mixer Convlayer -> SConv1d direct usage: mixer.conv.conv -> mixer.conv
+            if "mixer.conv.conv." in key:
+                new_key = new_key.replace("mixer.conv.conv.", "mixer.conv.")
 
         updated_state_dict[new_key] = value
     

@@ -40,7 +40,7 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         self,
         channels: int = 1,
         causal: bool = True,
-        vae_dim: int = 64,
+        vae_dim: int = 128,
         fix_std: float = 0,
         sample_latent: bool = False,
         pad_mode: str = 'constant',

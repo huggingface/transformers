@@ -303,10 +303,8 @@ class SConv1d(nn.Module):
 
     def _forward_non_streaming(self, x: torch.Tensor) -> torch.Tensor:
         """Standard forward pass without streaming"""
-        B, C, T = x.shape
         kernel_size = self.kernel_size
         stride = self.stride
-        dilation = self.dilation
         padding_total = self.padding_total
 
         # Compute extra padding for stride alignment
@@ -350,37 +348,7 @@ class FFN(nn.Module):
         return x
 
 
-class Convlayer(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride=1,
-        dilation=1,
-        groups=1,
-        bias=True,
-        pad_mode="zeros",
-        causal=True,
-    ):
-        super().__init__()
-        self.conv = SConv1d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
-            pad_mode=pad_mode,
-            causal=causal,
-        )
-
-    def forward(self, x):
-        return self.conv(x)
-
-
-class Block1D(nn.Module):
+class ConvNext1DLayer(nn.Module):
     def __init__(
         self,
         dim,
@@ -397,11 +365,11 @@ class Block1D(nn.Module):
 
         self.norm = ConvRMSNorm(dim, eps=eps)
         self.ffn_norm = ConvRMSNorm(dim, eps=eps)
-        self.mixer = Convlayer(
+        self.mixer = SConv1d(
             dim,
             dim,
-            groups=dim,
             kernel_size=kernel_size,
+            groups=dim,
             pad_mode=pad_mode,
             causal=causal,
             bias=bias,
@@ -425,9 +393,10 @@ class Block1D(nn.Module):
         x = self.mixer(x)
         if self.gamma is not None:
             x = x * self.gamma.unsqueeze(-1)
-        # Original code: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653
-        # -- uses DropPath but never actually used (and if used, it would lead to but in original code as `nn.modules.DropPath` does not exist)
-        # -- moreover, in original code, `forward` method is never even called and they do the same `residual+x`: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L768
+        # Original code (https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653)
+        # seems to use DropPath but it is never actually used (and if used, it would lead to but in original code as
+        # `nn.modules.DropPath` does not exist). Moreover, in original code, `forward` method is never even called and,
+        # they do the same `residual+x`: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L768
         x = residual + x
 
         # ffn
@@ -448,6 +417,14 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
     """
     Encoder component for the VibeVoice tokenizer that converts audio to latent representations.
 
+    Paper (https://arxiv.org/pdf/2508.19205) says:
+    "7 stages of modified Transformer blocks (using 1D depth-wise causal convolutions instead of self-attention module)
+    for efficient streaming processing. Six downsampling layers achieve a cumulative 3200X downsampling rate from a
+    24kHz input, yielding 7.5 tokens/frames per second."
+
+    But each block is more like a ConvNeXt block (but in 1D): https://arxiv.org/abs/2201.03545
+    Hence the name `ConvNext1DLayer` for the blocks.
+
     Args:
         config: Configuration object with model parameters
     """
@@ -459,13 +436,13 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
 
         # Extract parameters from config
         self.channels = config.channels
-        self.dimension = config.dimension
-        self.n_filters = config.n_filters
-        self.ratios = list(reversed(config.ratios))
-        self.depths = config.depths
+        self.dimension = config.vae_dim
+        self.n_filters = config.encoder_n_filters
+        self.ratios = list(reversed(config.encoder_ratios))
+        self.depths = config.encoder_depths
         self.causal = config.causal
         pad_mode = config.pad_mode
-        bias = config.bias
+        bias = config.conv_bias
         layernorm_eps = config.layernorm_eps
         layer_scale_init_value = config.layer_scale_init_value
 
@@ -500,7 +477,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
         for i in range(len(self.depths)):
             in_ch = self.n_filters * (2**i)
             stage = nn.ModuleList([
-                Block1D(
+                ConvNext1DLayer(
                     dim=in_ch,
                     eps=layernorm_eps,
                     causal=self.causal,
@@ -531,7 +508,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
 
 
 class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
-    """VibeVoice speech tokenizer model with only encoder for semantic tokens"""
+    """Encoder-only VibeVoice tokenizer model for semantic tokens."""
 
     config_class = VibeVoiceSemanticTokenizerConfig
     base_model_prefix = "vibevoice_semantic_tokenizer"
@@ -544,23 +521,12 @@ class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
 
         self.sample_latent = config.sample_latent
 
-        # Create encoder config
-        encoder_config = copy.deepcopy(config)
-        encoder_config.dimension = config.vae_dim
-        encoder_config.n_filters = config.encoder_n_filters
-        encoder_config.ratios = config.encoder_ratios
-        encoder_config.depths = config.encoder_depths
-        encoder_config.pad_mode = config.pad_mode
-        encoder_config.bias = config.conv_bias
-        encoder_config.layernorm_eps = config.layernorm_eps
-        encoder_config.layernorm_elementwise_affine = config.layernorm_elementwise_affine
-        encoder_config.layer_scale_init_value = config.layer_scale_init_value
+        # Initialize encoder
+        self.encoder = VibeVoiceSemanticTokenizerEncoder(config)
 
-        # Initialize encoder and decoder
-        self.encoder = VibeVoiceSemanticTokenizerEncoder(encoder_config)
-
-        # Initialize weights
-        self.apply(self._init_weights)
+        # Initialize weights and apply final processing
+        self.initialize_weights() # TODO for checking init (remove for final version)
+        self.post_init()
 
     def _init_weights(self, module):
         """Initialize weights for the model"""
@@ -568,13 +534,12 @@ class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
             nn.init.normal_(module.weight, std=self.config.weight_init_value)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            nn.init.ones_(module.weight)
-            nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Conv1d):
             nn.init.normal_(module.weight, std=self.config.weight_init_value)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
+        elif isinstance(module, ConvRMSNorm):
+            nn.init.ones_(module.weight)
 
     @torch.no_grad()
     def encode(self, audio, cache=None, sample_indices=None, use_cache=False):
