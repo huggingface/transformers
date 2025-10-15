@@ -33,7 +33,7 @@ Install [trackio](https://github.com/gradio-app/trackio) for experiment tracking
 pip install -Uq albumentations trackio transformers datasets
 ```
 
-Below we initialize [DetrConfig](../model_doc/detr#transformers.DetrConfig) with pre-trained DINOv3 ConvNext backbone. We initialize it with only single label, because we constantly detect license plate bounding boxes. We initialize [DetrForObjectDetection](../model_doc/detr#transformers.DetrForObjectDetection) with this configuration. We will freeze the backbone to make sure of features without updating the DINOv3 model weights. We also load the [DetrImageProcessor](../model_doc/detr#transformers.DetrImageProcessor).
+Initialize [`DetrConfig`] with the pre-trained DINOv3 ConvNext backbone. Use `num_labels=1` to detect the license plate bounding boxes. Create [`DetrForObjectDetection`] with this configuration. Freeze the backbone to preserve DINOv3 features without updating weights. Load the [`DetrImageProcessor`].
 
 ```py
 from transformers import DetrConfig, DetrForObjectDetection, AutoImageProcessor
