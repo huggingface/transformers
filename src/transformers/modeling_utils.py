@@ -5141,12 +5141,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # A module is already initialized if and only if all its children are also already initialized, and all
             # its immediate `nn.Parameter` and persistent buffers are also already initialized
             if (
+                # All immediate children are initialized
                 all(getattr(child, "_is_hf_initialized", False) for child in module.children())
+                # All immediate parameters are initialized
                 and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+                # All immediate persistent buffers are initialized
                 and all(
                     getattr(buffer, "_is_hf_initialized", False)
-                    for buffer in module.buffers(recurse=False)
-                    if buffer not in module._non_persistent_buffers_set
+                    for name, buffer in module.named_buffers(recurse=False)
+                    if name not in module._non_persistent_buffers_set
                 )
             ):
                 module._is_hf_initialized = True
@@ -5160,8 +5163,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
+            # keep_vars=True as we need the original tensors, so that the "_is_hf_initialized" is present on them
             not_initialized_parameters = list(
-                {v for v in self.state_dict().values() if not getattr(v, "_is_hf_initialized", False)}
+                {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)}
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
