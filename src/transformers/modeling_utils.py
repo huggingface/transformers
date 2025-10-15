@@ -50,6 +50,7 @@ from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
+    _get_device_map,
     accelerate_disk_offload,
     accelerate_dispatch,
     check_and_set_device_map,
@@ -109,7 +110,6 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_xla_available,
-    is_torch_xpu_available,
     logging,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
@@ -125,13 +125,9 @@ from .utils.quantization_config import QuantizationMethod
 
 
 if is_accelerate_available():
-    from accelerate import infer_auto_device_map
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
-        check_tied_parameters_on_same_device,
         extract_model_from_parallel,
-        get_balanced_memory,
-        get_max_memory,
         offload_weight,
         save_offload_index,
     )
@@ -275,27 +271,6 @@ def restore_default_dtype(func):
             torch.set_default_dtype(old_dtype)
 
     return _wrapper
-
-
-def get_keep_in_fp32_regex(model, hf_quantizer, dtype):
-    # Find fp32 modules if needed
-    keep_in_fp32_modules = []
-    # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
-    # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
-    # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
-    if model._keep_in_fp32_modules is not None and (
-        dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
-    ):
-        keep_in_fp32_modules.extend(model._keep_in_fp32_modules)
-
-    if model._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
-        keep_in_fp32_modules.extend(model._keep_in_fp32_modules_strict)
-
-    keep_in_fp32_regex = None
-    if keep_in_fp32_modules:
-        # We need to match exact layers, so we add either `.` on each side, or start/end of string
-        keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
-    return keep_in_fp32_regex
 
 
 def get_torch_context_manager_or_global_device():
@@ -559,7 +534,6 @@ def _infer_parameter_dtype(
     model: "PreTrainedModel",
     param_name: str,
     empty_param: torch.Tensor,
-    keep_in_fp32_regex: Optional[re.Pattern] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
 ) -> Union[bool, Optional[torch.dtype]]:
     try:
@@ -580,11 +554,8 @@ def _infer_parameter_dtype(
     casting_dtype = None
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
     if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-        # First fp32 if part of the exception list
-        if keep_in_fp32_regex is not None and keep_in_fp32_regex.search(param_name):
-            casting_dtype = torch.float32
-        # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
-        elif hf_quantizer is not None:
+        # dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
+        if hf_quantizer is not None:
             casting_dtype = model.config._pre_quantization_dtype
         else:
             casting_dtype = old_param.dtype
@@ -608,7 +579,6 @@ def _load_state_dict_into_meta_model(
     disk_offload_folder: Optional[str] = None,
     disk_offload_index: Optional[dict] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
-    keep_in_fp32_regex: Optional[re.Pattern] = None,
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
 ) -> tuple[Optional[dict], Optional[dict]]:
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
@@ -638,13 +608,7 @@ def _load_state_dict_into_meta_model(
             param = file_pointer.get_slice(serialized_param_name)
         else:
             param = empty_param.to(tensor_device)  # It is actually not empty!
-        to_contiguous, casting_dtype = _infer_parameter_dtype(
-            model,
-            param_name,
-            empty_param,
-            keep_in_fp32_regex,
-            hf_quantizer,
-        )
+        to_contiguous, casting_dtype = _infer_parameter_dtype(model, param_name, empty_param, hf_quantizer)
 
         if device_mesh is not None:
             if not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
@@ -745,7 +709,6 @@ def load_shard_file(args):
         reverse_key_renaming_mapping,
         disk_offload_folder,
         disk_offload_index,
-        keep_in_fp32_regex,
         device_mesh,
     ) = args
 
@@ -780,7 +743,6 @@ def load_shard_file(args):
             disk_offload_folder=disk_offload_folder,
             disk_offload_index=disk_offload_index,
             hf_quantizer=hf_quantizer,
-            keep_in_fp32_regex=keep_in_fp32_regex,
             device_mesh=device_mesh,
         )
 
@@ -1209,82 +1171,6 @@ def _get_dtype(
                 sub_config.dtype = default_dtype
 
     return config, dtype, dtype_orig
-
-
-def _get_device_map(
-    model: "PreTrainedModel",
-    device_map: Optional[Union[dict, str]],
-    max_memory: Optional[dict],
-    hf_quantizer: Optional[HfQuantizer],
-    dtype: Optional[torch.dtype],
-    keep_in_fp32_regex: Optional[re.Pattern],
-) -> dict:
-    """Compute the final `device_map` to use if we passed a value in ['auto', 'balanced', 'balanced_low_0', 'sequential'].
-    Otherwise, we check for any device inconsistencies in the device_map.
-    """
-    if isinstance(device_map, str):
-        special_dtypes = {}
-        if hf_quantizer is not None:
-            special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, dtype))
-        if keep_in_fp32_regex is not None:
-            special_dtypes.update(
-                {name: torch.float32 for name, _ in model.named_parameters() if keep_in_fp32_regex.search(name)}
-            )
-
-        target_dtype = dtype
-
-        if hf_quantizer is not None:
-            target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
-
-        no_split_modules = model._get_no_split_modules(device_map)
-        device_map_kwargs = {"no_split_module_classes": no_split_modules}
-
-        if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
-            device_map_kwargs["special_dtypes"] = special_dtypes
-        elif len(special_dtypes) > 0:
-            logger.warning(
-                "This model has some weights that should be kept in higher precision, you need to upgrade "
-                "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
-            )
-
-        if device_map != "sequential":
-            inferred_max_memory = get_balanced_memory(
-                model,
-                dtype=target_dtype,
-                low_zero=(device_map == "balanced_low_0"),
-                max_memory=max_memory,
-                **device_map_kwargs,
-            )
-        else:
-            inferred_max_memory = get_max_memory(max_memory)
-        if hf_quantizer is not None:
-            inferred_max_memory = hf_quantizer.adjust_max_memory(inferred_max_memory)
-
-        # `inferred_max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU,
-        # which we can use to allocate parameters.
-        for device_name in inferred_max_memory:
-            if isinstance(device_name, int):  # it's a GPU device
-                if is_torch_xpu_available():
-                    unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
-                else:
-                    unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
-                inferred_max_memory[device_name] += unused_memory
-            # respect the `max_memory` passed by the user
-            if max_memory is not None and device_name in max_memory:
-                inferred_max_memory[device_name] = min(inferred_max_memory[device_name], max_memory[device_name])
-        device_map_kwargs["max_memory"] = inferred_max_memory
-
-        device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
-
-        if hf_quantizer is not None:
-            hf_quantizer.validate_environment(device_map=device_map)
-
-    elif device_map is not None:
-        tied_params = find_tied_parameters(model)
-        # check if we don't have tied param in different devices
-        check_tied_parameters_on_same_device(tied_params, device_map)
-
-    return device_map
 
 
 def _find_missing_and_unexpected_keys(
@@ -4585,14 +4471,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+        # Potentially upcast some modules to avoid loosing precision
+        model.upcast_modules_in_fp32(hf_quantizer, dtype)
         # Make sure to tie the weights correctly
         model.tie_weights()
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
-        # Regex to keep a fixed dtype
-        keep_in_fp32_regex = get_keep_in_fp32_regex(model, hf_quantizer, dtype)
         if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
             hf_quantizer.preprocess_model(
                 model=model,
@@ -4608,7 +4494,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Prepare the full device map
         if device_map is not None:
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype, keep_in_fp32_regex)
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype)
 
         # restore default dtype
         if dtype_orig is not None:
@@ -4626,7 +4512,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             disk_offload_folder=offload_folder,
             dtype=dtype,
             hf_quantizer=hf_quantizer,
-            keep_in_fp32_regex=keep_in_fp32_regex,
             device_mesh=device_mesh,
             key_mapping=key_mapping,
             weights_only=weights_only,
@@ -4806,7 +4691,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         disk_offload_folder: Optional[str] = None,
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
-        keep_in_fp32_regex: Optional[re.Pattern] = None,
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
         key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
@@ -4873,13 +4757,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(missing_keys + mismatched_keys, is_quantized)
 
-        # Set some modules to fp32 if needed
-        if keep_in_fp32_regex is not None:
-            for name, param in model.named_parameters():
-                if keep_in_fp32_regex.search(name):
-                    # param = param.to(torch.float32) does not work here as only in the local scope.
-                    param.data = param.data.to(torch.float32)
-
         # Get reverse key mapping
         reverse_key_renaming_mapping = {v: k for k, v in key_renaming_mapping.items()}
 
@@ -4931,7 +4808,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 reverse_key_renaming_mapping,
                 disk_offload_folder,
                 disk_offload_index,
-                keep_in_fp32_regex,
                 device_mesh,
             )
             for shard_file in checkpoint_files
@@ -4979,7 +4855,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if param.device.type == "meta":
                         continue
                     # Shard the param
-                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_regex)
+                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param)
                     shard_and_distribute_module(
                         model,
                         param.to(tp_device),
@@ -5359,6 +5235,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def eval(self):
         return self.train(False)
+
+    def upcast_modules_in_fp32(self, hf_quantizer: HfQuantizer | None, dtype: torch.dtype) -> None:
+        """
+        Upcast modules defined in `_keep_in_fp32_modules` and `_keep_in_fp32_modules_strict` in fp32, if
+        `dtype` is different than fp32.
+        """
+        # If the dtype is already fp32, we can skip
+        if dtype == torch.float32:
+            return
+
+        keep_in_fp32_modules = []
+        # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
+        # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
+        # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
+        if self._keep_in_fp32_modules is not None and (
+            dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
+        ):
+            keep_in_fp32_modules.extend(self._keep_in_fp32_modules)
+
+        if self._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
+            keep_in_fp32_modules.extend(self._keep_in_fp32_modules_strict)
+
+        if len(keep_in_fp32_modules) > 0:
+            # We need to match exact layers, so we add either `.` on each side, or start/end of string
+            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
+            for name, param in self.named_parameters():
+                if keep_in_fp32_regex.search(name):
+                    # param = param.to(torch.float32) does not work here as only in the local scope.
+                    param.data = param.data.to(torch.float32)
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
