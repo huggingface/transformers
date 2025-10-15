@@ -1166,9 +1166,12 @@ def is_matplotlib_available() -> bool:
 def is_mistral_common_available() -> bool:
     return _is_package_available("mistral_common")
 
+
 @lru_cache
 def is_opentelemetry_available() -> bool:
-    return _is_package_available("opentelemetry") and version.parse(importlib.metadata.version("opentelemetry-api")) >= version.parse("1.30.0")
+    return _is_package_available("opentelemetry") and version.parse(
+        importlib.metadata.version("opentelemetry-api")
+    ) >= version.parse("1.30.0")
 
 
 def check_torch_load_is_safe() -> None:

@@ -7,6 +7,7 @@ from typing import Any, Optional, Union
 
 from .import_utils import is_opentelemetry_available
 
+
 class RequestStatus(Enum):
     """Status of a generation request through its lifecycle."""
 
@@ -22,9 +23,11 @@ class RequestStatus(Enum):
 if is_opentelemetry_available():
     from opentelemetry import metrics
     from opentelemetry.trace import Status, StatusCode, get_tracer
+
     _has_opentelemetry = True
 else:
-    _has_opentelemetry = False 
+    _has_opentelemetry = False
+
 
 def attach_tracer(tracer_name_template=None):
     """
@@ -182,8 +185,10 @@ class ContinuousBatchProcessorMetrics:
         """Initialize OpenTelemetry metrics and tracing if the library is available."""
 
         if not _has_opentelemetry:
-            logger.info("OpenTelemetry is not installed. Metrics and tracing will not be recorded."
-                        "You can install it with `pip install opentelemetry-api>=1.30.0`")
+            logger.info(
+                "OpenTelemetry is not installed. Metrics and tracing will not be recorded."
+                "You can install it with `pip install opentelemetry-api>=1.30.0`"
+            )
             return
 
         self.meter = metrics.get_meter("transformers.generation.continuous_batch_processor")
