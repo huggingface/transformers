@@ -50,6 +50,10 @@ outputs = model(
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Create sequences from actions, states, and rewards from all previous timesteps. The model treats these elements as one trajectory sequence.
+
 ## TrajectoryTransformerConfig
 
 [[autodoc]] TrajectoryTransformerConfig
