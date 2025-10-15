@@ -14,13 +14,13 @@ def parse_args():
     )
     parser.add_argument(
         "--prompt",
-        default="Hello! Who are you?",
+        default="What is the capital of France?",
         help="User message for the conversation",
     )
     parser.add_argument(
         "--max-new-tokens",
         type=int,
-        default=256,
+        default=64,
         help="Maximum number of new tokens to generate",
     )
     return parser.parse_args()
@@ -38,7 +38,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=False)
-    model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=False).to(device)
+    model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=False, torch_dtype=torch.bfloat16).to(device)
     model.eval()
 
     conversation = [
@@ -51,15 +51,24 @@ def main():
         add_generation_prompt=True,
     )
 
+    print(rendered)
+
     model_inputs = tokenizer([rendered], return_tensors="pt").to(device)
     if "attention_mask" not in model_inputs:
         model_inputs["attention_mask"] = torch.ones_like(model_inputs["input_ids"]).to(device)
 
     with torch.no_grad():
-        generated = model.generate(**model_inputs, max_new_tokens=args.max_new_tokens)
+        generated = model.generate(
+            **model_inputs,
+            max_new_tokens=args.max_new_tokens,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.eos_token_id,
+        )
 
     output_ids = generated[0, model_inputs.input_ids.shape[1] :]
     print(tokenizer.decode(output_ids, skip_special_tokens=True))
+    print("--------------------------------")
+    print(tokenizer.decode(output_ids, skip_special_tokens=False))
 
 
 if __name__ == "__main__":
