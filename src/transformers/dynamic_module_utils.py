@@ -323,6 +323,7 @@ def get_cached_module_file(
     local_files_only: bool = False,
     repo_type: Optional[str] = None,
     _commit_hash: Optional[str] = None,
+    **kwargs
 ) -> str:
     """
     Prepares Downloads a module from a local folder or a distant repo and returns its path inside the cached
