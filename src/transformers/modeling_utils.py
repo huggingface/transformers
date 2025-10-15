@@ -4372,7 +4372,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
-            tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(
+            device_map, device_mesh, tp_size = initialize_tensor_parallelism(
                 tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
             )
 
@@ -4492,7 +4492,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
-            model = distribute_model(model, distributed_config, device_mesh, tp_size)
+            model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
 
         # Prepare the full device map
         if device_map is not None:
