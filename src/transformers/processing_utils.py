@@ -782,7 +782,14 @@ class ProcessorMixin(PushToHubMixin):
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, legacy_serialization: bool = True, **kwargs):
+    def save_pretrained(
+        self,
+        save_directory,
+        push_to_hub: bool = False,
+        legacy_serialization: bool = True,
+        exclude_attributes: Optional[list[str]] = None,
+        **kwargs,
+    ):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -807,6 +814,8 @@ class ProcessorMixin(PushToHubMixin):
                 Whether or not to save processor attributes in separate config files (legacy) or in processor's config
                 file as a nested dict. Saving all attributes in a single dict will become the default in future versions.
                 Set to `legacy_serialization=True` until then.
+            exclude_attributes (`list[str]`, *optional*):
+                A list of attributes to exclude from saving.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -841,6 +850,8 @@ class ProcessorMixin(PushToHubMixin):
         save_jinja_files = kwargs.get("save_jinja_files", True)
 
         for attribute_name in self.get_attributes():
+            if exclude_attributes and attribute_name in exclude_attributes:
+                continue
             # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
             if attribute_name == "tokenizer":
                 attribute = getattr(self, attribute_name)

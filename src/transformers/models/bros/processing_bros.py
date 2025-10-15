@@ -46,7 +46,6 @@ class BrosProcessor(ProcessorMixin):
             An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
 
-    attributes = ["tokenizer"]
     valid_processor_kwargs = BrosProcessorKwargs
 
     def __init__(self, tokenizer=None, **kwargs):

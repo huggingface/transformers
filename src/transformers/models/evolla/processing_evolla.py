@@ -47,11 +47,7 @@ class EvollaProcessor(ProcessorMixin):
             The maximum length of the text to be generated.
     """
 
-    attributes = ["protein_tokenizer", "tokenizer"]
     valid_kwargs = ["sequence_max_length"]
-    # protein_tokenizer_class = "EsmTokenizer"
-    # tokenizer_class = "LlamaTokenizerFast"
-    protein_tokenizer_class = "AutoTokenizer"
     protein_tokenizer_dir_name = "protein_tokenizer"
     # tokenizer_dir_name = "text_tokenizer"
 
@@ -210,20 +206,7 @@ class EvollaProcessor(ProcessorMixin):
     def save_pretrained(self, save_directory, **kwargs):
         # only save the protein tokenizer in sub_dir
         self.protein_tokenizer.save_pretrained(os.path.join(save_directory, self.protein_tokenizer_dir_name))
-
-        # we modify the attributes so that only the text tokenizer are saved in the main folder
-        protein_tokenizer_present = "protein_tokenizer" in self.attributes
-        # find the correct position of it in the attributes list
-        protein_tokenizer_index = self.attributes.index("protein_tokenizer") if protein_tokenizer_present else None
-        if protein_tokenizer_present and protein_tokenizer_index is not None:
-            self.attributes.remove("protein_tokenizer")
-
-        outputs = super().save_pretrained(save_directory, **kwargs)
-
-        if protein_tokenizer_present and protein_tokenizer_index is not None:
-            self.attributes.insert(protein_tokenizer_index, "protein_tokenizer")
-
-        return outputs
+        return super().save_pretrained(save_directory, exclude_attributes=["protein_tokenizer"], **kwargs)
 
     # overwrite to load the protein tokenizer from a separate folder
     # Adapted from instructblip.processing_instructblip.py (https://github.com/huggingface/transformers/blob/9b479a245b793cac2a8b2e87c6d8e81bb24e20c4/src/transformers/models/instructblip/processing_instructblip.py#L191-L221)

@@ -49,8 +49,6 @@ class BarkProcessor(ProcessorMixin):
 
     """
 
-    attributes = ["tokenizer"]
-
     preset_shape = {
         "semantic_prompt": 1,  # 1D array of shape (X,)
         "coarse_prompt": 2,  # 2D array of shape (2,X)

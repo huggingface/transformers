@@ -102,9 +102,8 @@ else:
             ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
-            ("florence2", ("CLIPImageProcessor", "CLIPImageProcessorFast"))(
-                "focalnet", ("BitImageProcessor", "BitImageProcessorFast")
-            ),
+            ("florence2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
+            ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
             ("fuyu", ("FuyuImageProcessor", None)),
             ("gemma3", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("gemma3n", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
