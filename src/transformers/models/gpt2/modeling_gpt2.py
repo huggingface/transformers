@@ -820,6 +820,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
 
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if logits_to_keep not in (0, None):
+            if isinstance(logits_to_keep, int):
+                logits = logits[:, -logits_to_keep:, :]
+            elif isinstance(logits_to_keep, torch.Tensor):
+                logits = logits.index_select(1, logits_to_keep.to(logits.device))
 
         loss = None
         if labels is not None:
