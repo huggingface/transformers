@@ -33,7 +33,7 @@ This guide will show you how [`Trainer`] works and how to customize it for your 
 3. update the weights based on the gradients
 4. repeat until the predetermined number of epochs is reached
 
-Manually coding this training loop everytime can be inconvenient or a barrier if you're just getting started with machine learning. [`Trainer`] abstracts this process, allowing you to focus on the model, dataset, and training design choices.
+Manually coding this training loop every time can be inconvenient or a barrier if you're just getting started with machine learning. [`Trainer`] abstracts this process, allowing you to focus on the model, dataset, and training design choices.
 
 Configure your training with hyperparameters and options from [`TrainingArguments`] which supports many features such as distributed training, torch.compile, mixed precision training, and saving the model to the Hub.
 
