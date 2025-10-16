@@ -308,6 +308,7 @@ def default_flax_embed_init(tensor):
 class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
@@ -931,6 +932,7 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 @auto_docstring
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalAudioConfig
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]
     _supports_flash_attn = True
@@ -1529,6 +1531,7 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
         "attentions": Phi4MultimodalAttention,
     }
     _version = "0.0.5"
+    input_modalities = ["image", "audio", "text"]
 
     def _init_weights(self, module):
         super()._init_weights(module)

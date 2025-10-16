@@ -299,7 +299,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_full_processor(self):
-        url = url_to_local_path("https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png")
+        url = url_to_local_path("https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png")
         processor = AutoProcessor.from_pretrained("microsoft/kosmos-2.5")
         texts = ["<md>", "<ocr>"]
         expected_input_ids = [

@@ -364,6 +364,7 @@ This utility analyzes code similarities between model implementations to identif
 When adding a new model to transformers, many components (attention layers, MLPs, outputs, etc.) may already exist in similar form in other models. Instead of implementing everything from scratch, model adders can identify which existing classes are similar and potentially reusable through modularization.
 
 The tool computes two similarity scores:
+
 - **Embedding score**: Uses semantic code embeddings (via `Qwen/Qwen3-Embedding-4B`) to detect functionally similar code even with different naming
 - **Jaccard score**: Measures token set overlap to identify structurally similar code patterns
 
