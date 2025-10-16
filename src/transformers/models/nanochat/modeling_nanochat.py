@@ -24,11 +24,12 @@ import torch.nn.functional as F
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from .configuration_nanochat import NanoGPTConfig
+from .configuration_nanochat import NanoChatConfig
 
 
 logger = logging.get_logger(__name__)
@@ -75,7 +76,7 @@ def eager_attention_forward(
     **kwargs: Unpack[TransformersKwargs],
 ):
     """
-    Eager attention implementation for NanoGPT.
+    Eager attention implementation for NanoChat.
     
     Args:
         module: The attention module
@@ -108,8 +109,8 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class NanoGPTAttention(nn.Module):
-    def __init__(self, config: NanoGPTConfig, layer_idx: int):
+class NanoChatAttention(nn.Module):
+    def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -186,8 +187,8 @@ class NanoGPTAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class NanoGPTMLP(nn.Module):
-    def __init__(self, config: NanoGPTConfig):
+class NanoChatMLP(nn.Module):
+    def __init__(self, config: NanoChatConfig):
         super().__init__()
         self.fc = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
@@ -199,12 +200,12 @@ class NanoGPTMLP(nn.Module):
         return hidden_states
 
 
-class NanoGPTDecoderLayer(nn.Module):
-    def __init__(self, config: NanoGPTConfig, layer_idx: int):
+class NanoChatDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.self_attn = NanoGPTAttention(config, layer_idx)
-        self.mlp = NanoGPTMLP(config)
+        self.self_attn = NanoChatAttention(config, layer_idx)
+        self.mlp = NanoChatMLP(config)
 
     def forward(
         self,
@@ -216,10 +217,10 @@ class NanoGPTDecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         residual = hidden_states
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
-        hidden_states, _ = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -233,13 +234,13 @@ class NanoGPTDecoderLayer(nn.Module):
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        return hidden_states
+        return hidden_states, self_attn_weights
 
 
-class NanoGPTPreTrainedModel(PreTrainedModel):
-    config_class = NanoGPTConfig
+class NanoChatPreTrainedModel(PreTrainedModel):
+    config_class = NanoChatConfig
     base_model_prefix = "model"
-    _no_split_modules = ["NanoGPTDecoderLayer"]
+    _no_split_modules = ["NanoChatDecoderLayer"]
     _supports_attention_backend = True
 
     def _init_weights(self, module: nn.Module) -> None:
@@ -259,14 +260,14 @@ class NanoGPTPreTrainedModel(PreTrainedModel):
                 )
 
 
-class NanoGPTModel(NanoGPTPreTrainedModel):
-    def __init__(self, config: NanoGPTConfig):
+class NanoChatModel(NanoChatPreTrainedModel):
+    def __init__(self, config: NanoChatConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([NanoGPTDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
         self.register_buffer("_rotary_cos", None, persistent=False)
         self.register_buffer("_rotary_sin", None, persistent=False)
         self.gradient_checkpointing = False
@@ -305,6 +306,9 @@ class NanoGPTModel(NanoGPTPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
+        output_attentions = kwargs.get("output_attentions", False)
+        output_hidden_states = kwargs.get("output_hidden_states", False)
+        
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -338,8 +342,16 @@ class NanoGPTModel(NanoGPTPreTrainedModel):
 
         hidden_states = inputs_embeds
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
+        
+        # Collect hidden states and attentions if requested
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        
         for decoder_layer in self.layers:
-            hidden_states = decoder_layer(
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+                
+            hidden_states, self_attn_weights = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
@@ -349,18 +361,31 @@ class NanoGPTModel(NanoGPTPreTrainedModel):
                 position_embeddings=(cos, sin),
                 **kwargs,
             )
+            
+            if output_attentions:
+                all_self_attns = all_self_attns + (self_attn_weights,)
 
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values if use_cache else None)
+        
+        # Add final hidden state
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+        
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
 
 
-class NanoGPTForCausalLM(NanoGPTPreTrainedModel, GenerationMixin):
+class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config: NanoGPTConfig):
+    def __init__(self, config: NanoChatConfig):
         super().__init__(config)
-        self.model = NanoGPTModel(config)
+        self.model = NanoChatModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
 
@@ -416,9 +441,9 @@ class NanoGPTForCausalLM(NanoGPTPreTrainedModel, GenerationMixin):
 
 
 __all__ = [
-    "NanoGPTPreTrainedModel",
-    "NanoGPTModel",
-    "NanoGPTForCausalLM",
+    "NanoChatPreTrainedModel",
+    "NanoChatModel",
+    "NanoChatForCausalLM",
 ]
 
 

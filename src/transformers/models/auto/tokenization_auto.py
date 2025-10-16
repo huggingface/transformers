@@ -787,7 +787,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
-        ("nanochat", ("NanoGPTTokenizer", None)),
+        ("nanochat", ("NanoChatTokenizer", None)),
     ]
 )
 

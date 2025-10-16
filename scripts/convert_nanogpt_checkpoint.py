@@ -6,13 +6,13 @@ from pathlib import Path
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, logging
-from transformers.models.nanochat import NanoGPTConfig
+from transformers.models.nanochat import NanoChatConfig
 
 
 LOGGER = logging.get_logger(__name__)
 
 
-def infer_kv_heads(config: NanoGPTConfig, state_dict: dict[str, torch.Tensor]) -> int:
+def infer_kv_heads(config: NanoChatConfig, state_dict: dict[str, torch.Tensor]) -> int:
     key_weight = state_dict.get("transformer.h.0.attn.c_k.weight")
     if key_weight is None:
         return config.num_key_value_heads
@@ -36,8 +36,8 @@ def convert_layer(old_prefix: str, new_prefix: str) -> dict[str, str]:
     }
 
 
-def convert_checkpoint(source_dir: Path, dest_dir: Path) -> tuple[NanoGPTConfig, OrderedDict[str, torch.Tensor]]:
-    config = NanoGPTConfig.from_pretrained(source_dir)
+def convert_checkpoint(source_dir: Path, dest_dir: Path) -> tuple[NanoChatConfig, OrderedDict[str, torch.Tensor]]:
+    config = NanoChatConfig.from_pretrained(source_dir)
     LOGGER.info("Loaded config hidden_size=%s num_layers=%s", config.hidden_size, config.num_hidden_layers)
 
     old_state = torch.load(source_dir / "pytorch_model.bin", map_location="cpu")
@@ -123,7 +123,7 @@ def run_test(dest_dir: Path, prompt: str, max_new_tokens: int) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Convert NanoGPT checkpoints to the shared HF implementation")
+    parser = argparse.ArgumentParser(description="Convert NanoChat checkpoints to the shared HF implementation")
     parser.add_argument("--source", type=Path, required=True, help="Path to the legacy checkpoint directory")
     parser.add_argument("--dest", type=Path, required=True, help="Output directory for the converted checkpoint")
     parser.add_argument("--test-prompt", type=str, default=None, help="Optional prompt for a quick generation test")

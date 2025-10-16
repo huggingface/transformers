@@ -5,8 +5,8 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-class NanoGPTConfig(PretrainedConfig):
-    r"""Configuration for the NanoGPT model."""
+class NanoChatConfig(PretrainedConfig):
+    r"""Configuration for the NanoChat model."""
 
     model_type = "nanochat"
     keys_to_ignore_at_inference = ["past_key_values"]

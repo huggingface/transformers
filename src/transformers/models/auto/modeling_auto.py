@@ -438,7 +438,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
-        ("nanochat", "NanoGPTModel"),
+        ("nanochat", "NanoChatModel"),
     ]
 )
 
@@ -533,7 +533,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetLMHeadModel"),
         ("xlstm", "xLSTMForCausalLM"),
         ("xmod", "XmodForMaskedLM"),
-        ("nanochat", "NanoGPTForCausalLM"),
+        ("nanochat", "NanoChatForCausalLM"),
     ]
 )
 
@@ -765,7 +765,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
-        ("nanochat", "NanoGPTForCausalLM"),
+        ("nanochat", "NanoChatForCausalLM"),
     ]
 )
 

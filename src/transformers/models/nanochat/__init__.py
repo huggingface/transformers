@@ -1,13 +1,13 @@
-from .configuration_nanochat import NanoGPTConfig
-from .modeling_nanochat import NanoGPTModel, NanoGPTForCausalLM
-from .tokenizer_nanochat import NanoGPTTokenizer
+from .configuration_nanochat import NanoChatConfig
+from .modeling_nanochat import NanoChatModel, NanoChatForCausalLM
+from .tokenizer_nanochat import NanoChatTokenizer
 
 
 __all__ = [
-    "NanoGPTConfig",
-    "NanoGPTModel",
-    "NanoGPTForCausalLM",
-    "NanoGPTTokenizer",
+    "NanoChatConfig",
+    "NanoChatModel",
+    "NanoChatForCausalLM",
+    "NanoChatTokenizer",
 ]
 
 

@@ -7,7 +7,7 @@ from huggingface_hub.utils import HfHubHTTPError
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 
-class NanoGPTTokenizer(PreTrainedTokenizerFast):
+class NanoChatTokenizer(PreTrainedTokenizerFast):
     """Transformers-compatible tokenizer backed by a tokenizer.json produced from the tiktoken encoding."""
 
     vocab_files_names = {"tokenizer_file": "tokenizer.json"}
