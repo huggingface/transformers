@@ -75,9 +75,6 @@ class TestTensorParallel(TestCasePlus):
 
             model_id = "JackFram/llama-68m"
 
-            rank = int(os.environ["RANK"])
-            world_size = int(os.environ["WORLD_SIZE"])
-
             model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
@@ -140,9 +137,6 @@ class TestTensorParallel(TestCasePlus):
             from transformers import AutoModelForCausalLM, AutoTokenizer
 
             model_id = "JackFram/llama-68m"
-
-            rank = int(os.environ["RANK"])
-            world_size = int(os.environ["WORLD_SIZE"])
 
             model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
@@ -217,13 +211,10 @@ class TestTensorParallel(TestCasePlus):
     def test_custom_tp_plan(self):
         script_to_run = textwrap.dedent(
             r"""
-            import os
             import re
             import torch
             from torch.distributed.tensor import DTensor
             from transformers import AutoModelForCausalLM
-
-            rank = int(os.environ["RANK"])
 
             model_id = "JackFram/llama-68m"
             # only shard attentions, but not mlps
@@ -238,7 +229,7 @@ class TestTensorParallel(TestCasePlus):
             model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
 
             # Check we can generate with the tp_plan
-            inputs = torch.randint(100, 200, (1, 10), device=rank)
+            inputs = torch.randint(100, 200, (1, 10), device=model.device)
             out = model.generate(inputs, max_new_tokens=10, do_sample=False)
 
             # Check only the attentions are sharded
