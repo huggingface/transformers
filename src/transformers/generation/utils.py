@@ -2394,6 +2394,11 @@ class GenerationMixin(ContinuousMixin):
 
         # 0.b. If requested, switched to continuous batching generation
         if kwargs.get("cache_implementation") == "paged":
+            logger.warning(
+                "Detected cache_implementation=paged: switching to continuous batching. You should consider using "
+                "generate_batch directly instead."
+            )
+
             # generate_batch expects a list of lists of ints, so we create it from the inputs or input_ids
             inputs = inputs if inputs is not None else kwargs.get("input_ids")
             if inputs is None:
@@ -2435,17 +2440,13 @@ class GenerationMixin(ContinuousMixin):
                 logger.warning(f"synced_gpus is not ignored for continuous batching. Got {synced_gpus = }")
             num_return_sequences = kwargs.get("num_return_sequences", 1)
             num_beams = kwargs.get("num_beams", 1)
-            if num_return_sequences > 1 or num_beams > 1:  # FIXME: remove this once CB supports this (which is planned)
+            if num_return_sequences > 1 or num_beams > 1:  # FIXME: remove this once CB supports it (which is planned)
                 logger.warning(
                     f"num_return_sequences and num_beams are not supported for continuous batching yet. "
                     f"Got {num_return_sequences = } and {num_beams = }. "
                 )
 
-            # switch to CB and signal it
-            logger.warning(
-                "Detected cache_implementation=paged: switching to continuous batching. You should consider using "
-                "generate_batch directly instead."
-            )
+            # switch to CB
             outputs = self.generate_batch(
                 inputs=inputs,
                 generation_config=self._prepare_generation_config(generation_config, use_model_defaults, **kwargs)[0],
