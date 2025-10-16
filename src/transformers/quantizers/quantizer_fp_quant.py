@@ -97,6 +97,10 @@ class FPQuantHfQuantizer(HfQuantizer):
     ):
         module, _ = get_module_from_name(model, param_name)
 
+        if target_device == "cpu" and param_name.endswith("weight"):
+            # Works agains hard-coded missing key dispatch to CPU
+            return
+
         # The module holds either:
         #  * `weight` when `store_master_weights=True`
         #  * `qweight` and `scales` when `store_master_weights=False` and `pseudoquantization=False`
