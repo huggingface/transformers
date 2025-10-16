@@ -36,7 +36,6 @@ from ..pytorch_utils import (
     is_torch_greater_or_equal_than_2_6,
 )
 from ..utils import logging
-from .sdpa_attention import repeat_kv
 
 
 logger = logging.get_logger(__name__)
@@ -1224,16 +1223,15 @@ def sdpa_attention_forward_for_export(
             "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
-
+    sdpa_kwargs = {}
     if hasattr(module, "num_key_value_groups"):
         # Always use enable_gqa for grouped query attention which is supported by torch.export
-        key = repeat_kv(key, module.num_key_value_groups)
-        value = repeat_kv(value, module.num_key_value_groups)
+        sdpa_kwargs = {"enable_gqa": True}
 
     if attention_mask is not None and attention_mask.ndim == 4:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         # torch._check used to inform torch.export of the shape relationship
-        torch._check(attention_mask.shape[-1] == query.shape[-2])
+        torch._check(attention_mask.shape[-1] == key.shape[-2])
 
     # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
     # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
@@ -1251,6 +1249,7 @@ def sdpa_attention_forward_for_export(
         dropout_p=dropout,
         scale=scaling,
         is_causal=is_causal,
+        **sdpa_kwargs,
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
 
