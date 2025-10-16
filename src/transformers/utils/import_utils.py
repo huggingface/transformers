@@ -52,7 +52,10 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
         try:
             # importlib.metadata works with the distribution package, which may be different from the import
             # name (e.g. `PIL` is the import name, but `pillow` is the distribution name)
-            distribution_name = PACKAGE_DISTRIBUTION_MAPPING[pkg_name][0]
+            distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
+            # In most cases, the packages are well-behaved and both have the same name. If it's not the case, we
+            # pick the first item of the list as best guess (it's almost always a list of length 1 anyway)
+            distribution_name = pkg_name if pkg_name in distributions else distributions[0]
             package_version = importlib.metadata.version(distribution_name)
         except importlib.metadata.PackageNotFoundError:
             # If we cannot find the metadata (because of editable install for example), try to import directly.
