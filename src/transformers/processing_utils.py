@@ -692,7 +692,7 @@ class ProcessorMixin(PushToHubMixin):
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
         # or in the attributes
-        attrs_to_save = list(sig.parameters) + self.__class__.attributes
+        attrs_to_save = list(sig.parameters) + self.__class__.get_attributes()
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
@@ -1192,7 +1192,7 @@ class ProcessorMixin(PushToHubMixin):
 
         # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
         # If we don't pop, some specific kwargs will raise a warning or error
-        for unused_kwarg in cls.attributes + ["auto_map", "processor_class"]:
+        for unused_kwarg in cls.get_attributes() + ["auto_map", "processor_class"]:
             processor_dict.pop(unused_kwarg, None)
 
         # override processor_dict with given kwargs
