@@ -40,12 +40,6 @@ class NanoChatConfig(PretrainedConfig):
         **kwargs,
     ):
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
 
         if intermediate_size is None:
             intermediate_size = 4 * hidden_size
@@ -81,3 +75,10 @@ class NanoChatConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.logits_soft_cap = logits_soft_cap
         self.qkv_bias = qkv_bias
+
+        super().__init__(
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            **kwargs,
+        )
