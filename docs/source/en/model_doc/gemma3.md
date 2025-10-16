@@ -74,6 +74,14 @@ print(processor.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`Gemma3ForConditionalGeneration`] for image-and-text and image-only inputs.
+- Add `<start_of_image>` tokens to text wherever images should be inserted.
+- The processor includes [`apply_chat_template`] to convert chat messages to model inputs.
+- By default, images aren't cropped and only the base image forwards to the model. High-resolution images or non-square aspect ratios can cause artifacts because the vision encoder uses a fixed 896×896 resolution. Set `do_pan_and_scan=True` to crop images into multiple smaller patches and concatenate them with the base image embedding. This prevents artifacts and improves inference performance. Disable pan and scan for faster inference.
+- For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
+
 ## Gemma3ImageProcessor
 
 [[autodoc]] Gemma3ImageProcessor

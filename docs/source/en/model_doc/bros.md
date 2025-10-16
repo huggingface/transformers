@@ -42,6 +42,12 @@ for token, pred in zip(tokens, predictions[0]):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`BrosModel.forward`] requires `input_ids` and `bbox` (bounding box). Each bounding box uses `(x0, y0, x1, y1)` format (top-left corner, bottom-right corner). Get bounding boxes from external OCR systems. Normalize x coordinates by document image width and y coordinates by document image height.
+
+- [`BrosForTokenClassification.forward`], [`BrosSpadeEEForTokenClassification.forward`], and [`BrosSpadeELForTokenClassification.forward`] require `input_ids`, `bbox`, and `box_first_token_mask` for loss calculation. This mask filters out non-first tokens of each box. Save start token indices of bounding boxes when creating `input_ids` from words to obtain this mask.
+
 ## BrosConfig
 
 [[autodoc]] BrosConfig

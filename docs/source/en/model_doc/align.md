@@ -69,6 +69,10 @@ for label, score in zip(candidate_labels, probs):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- ALIGN projects text and visual features into latent space. The dot product between projected image and text features becomes the similarity score. The example below shows how to calculate image-text similarity scores with [`AlignProcessor`] and [`AlignModel`].
+
 ## AlignConfig
 
 [[autodoc]] AlignConfig

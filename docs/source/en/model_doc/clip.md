@@ -76,6 +76,10 @@ for label, score in zip(candidate_labels, probs):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`CLIPImageProcessor`] to resize and normalize images for the model.
+
 ## CLIPConfig
 
 [[autodoc]] CLIPConfig

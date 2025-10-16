@@ -69,6 +69,15 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Training supports DDP and FSDP on single-node multi-accelerator setups. The model doesn't use `torch.distributed` utilities, which may limit batch size scalability.
+- Use `padding="max_length"` and `max_length=64` when using standalone [`GemmaTokenizerFast`]. This matches how the model was trained.
+- The model trains with lowercased text. Preprocess your text labels the same way.
+- Pass the prompt template `"This is a photo of {label}."` to the processor to get the same results as the [`Pipeline`].
+- The NaFlex variant processes different image types at appropriate resolutions. It uses larger resolutions for document images and minimizes aspect ratio distortion for inference tasks like OCR.
+- NaFlex resizes input images so height and width become multiples of the patch size after resizing. It keeps aspect ratio distortion as low as possible and produces a sequence length of at most the desired target sequence length (`max_num_patches`). After resizing, the image splits into a sequence of patches and adds a mask with padding information.
+
 ## Siglip2Config
 
 [[autodoc]] Siglip2Config

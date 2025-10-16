@@ -56,6 +56,12 @@ print(processor.batch_decode(output, skip_special_tokens=True)[0])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- BLIP-2 generates conditional text from images and optional text prompts. Use the [`generate`] method at inference time.
+- Use [`Blip2Processor`] to prepare images for the model and decode predicted token IDs back to text.
+- BLIP models after release v4.46 raise warnings about adding `processor.num_query_tokens = {{num_query_tokens}}` and expanding model embeddings to add special `<image>` tokens. Add these attributes to the processor if you own the model checkpoint, or open a PR if you don't. Adding these attributes means BLIP adds the required query tokens per image and expands text with `<image>` placeholders. Usually around 500 tokens per image, so ensure text isn't truncated to avoid embedding merge failures. Get attributes from `model.config.num_query_tokens` and expand model embeddings following this [link](https://huggingface.co/docs/transformers/model_doc/blip2#blip2processor).
+
 ## Blip2Config
 
 [[autodoc]] Blip2Config

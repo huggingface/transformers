@@ -43,6 +43,11 @@ print(generated_text)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`TrOCRProcessor`] wraps [`ViTImageProcessor`]/[`DeiTImageProcessor`] and [`RobertaTokenizer`]/[`XLMRobertaTokenizer`] into a single instance to handle images and text.
+- TrOCR always operates within the [`VisionEncoderDecoder`] framework.
+
 ## TrOCRConfig
 
 [[autodoc]] TrOCRConfig

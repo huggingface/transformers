@@ -48,6 +48,15 @@ print(processor.decode(output[0]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`MllamaForConditionalGeneration`] for image+text and text inputs.
+- Use [`MllamaForCausalLM`] for text-only inputs to avoid loading the vision tower.
+- Each sample contains multiple images with varying counts. The processor pads inputs to the maximum number of images across samples and to a maximum number of tiles within each image.
+- Add `<|image|>` tokens where images should be inserted in text.
+- The processor includes [`apply_chat_template`] to convert chat messages to text for processing. With transformers>=4.49.0, [`apply_chat_template`] also returns vectorized output. See the Usage Examples below for details.
+- MLLama uses an extra token as a placeholder for image positions in text. Input IDs and input embedding layer have an extra token. Since input and output embedding weights aren't tied, the `lm_head` layer has one less token and fails when calculating loss on image tokens or applying logit processors.
+- During training, mask out special `<|image|>` tokens in labels since the model shouldn't train on predicting them.
 
 ## MllamaConfig
 

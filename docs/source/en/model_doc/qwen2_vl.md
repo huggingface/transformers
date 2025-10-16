@@ -94,6 +94,12 @@ print(output_text)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The model supports a wide range of resolution inputs. It uses native resolution by default, but higher resolutions enhance performance at the cost of more computation.
+- Set minimum and maximum pixel counts to achieve optimal configuration for your needs. This ensures each image encodes using 256-1024 tokens.
+- The model uses a patch size of 14 and temporal patch size of 2 (14 × 2 = 28).
+
 ## Qwen2VLConfig
 
 [[autodoc]] Qwen2VLConfig

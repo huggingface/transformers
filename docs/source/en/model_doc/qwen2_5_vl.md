@@ -95,6 +95,10 @@ print(output_text)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Set resolution using `min_pixels` and `max_pixels` parameters in [`AutoProcessor`]. Higher resolution requires more compute. Lower resolution saves memory.
+
 ## Qwen2_5_VLConfig
 
 [[autodoc]] Qwen2_5_VLConfig

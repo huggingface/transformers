@@ -48,6 +48,16 @@ generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].st
 print(generated_text)
 ```
 
+</hfoption>
+</hfoptions>
+
+## Usage tips
+
+- InstructBLIP uses the same architecture as BLIP-2 with one key difference: it feeds the text prompt (instruction) to the Q-Former.
+- BLIP models after release v4.46 raise warnings about adding `processor.num_query_tokens = {{num_query_tokens}}` and expanding model embeddings to add special `<image>` tokens. Add these attributes to the processor if you own the model checkpoint, or open a PR if you don't.
+- Adding these attributes means BLIP adds the required query tokens per image and expands text with `<image>` placeholders. Usually around 500 tokens per image, so ensure text isn't truncated to avoid embedding merge failures.
+- Get attributes from `model.config.num_query_tokens` and expand model embeddings following this [link](https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042).
+
 ## InstructBlipConfig
 
 [[autodoc]] InstructBlipConfig

@@ -59,6 +59,10 @@ print(scores)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`~ColPaliProcessor.score_retrieval`] returns a 2D tensor with dimensions `(number_of_queries, number_of_images)`. Higher scores indicate greater similarity between queries and images.
+
 ## ColPaliConfig
 
 [[autodoc]] ColPaliConfig

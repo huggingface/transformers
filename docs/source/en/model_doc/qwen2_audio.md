@@ -52,6 +52,11 @@ print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_to
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Voice chat mode enables free voice interactions with Qwen2-Audio without text input.
+- Audio analysis mode accepts both audio and text instructions for analysis.
+
 ## Qwen2AudioConfig
 
 [[autodoc]] Qwen2AudioConfig

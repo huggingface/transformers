@@ -77,6 +77,16 @@ print(processor.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Different checkpoints (Mistral, Vicuna, etc.) require specific prompt formats depending on the underlying LLM. Always use [`apply_chat_template`] to ensure correct formatting. Refer to the [Templates guide](https://huggingface.co/docs/transformers/chat_templating) for more details.
+- Set `padding_side="left"` during batched generation for more accurate results.
+- LLaVA-NeXT uses different numbers of patches for images and pads inputs inside the modeling code except when padding is done during processing. The default setting is left-padding if the model is in `eval()` mode, otherwise right-padding.
+- LLaVA models after v4.46 raise warnings about adding `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}`, and `processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. Add these attributes to the processor if you own the model checkpoint, or open a PR if you don't.
+- Adding these attributes means LLaVA infers the number of image tokens required per image and expands text with `<image>` token placeholders. Usually around 500 tokens per image, so ensure text isn't truncated to avoid embedding merge failures.
+- Get attributes from `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`.
+- Set `num_additional_image_tokens` to 1 if the vision backbone adds a CLS token or 0 if nothing extra is added.
+
 ## LlavaNextConfig
 
 [[autodoc]] LlavaNextConfig

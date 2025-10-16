@@ -65,6 +65,12 @@ print(" ".join(words[start : end + 1]))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- LayoutLM requires preprocessed text (words) and bounding boxes from an external OCR engine like Pytesseract. Provide these as additional inputs to the tokenizer.
+- The [`~LayoutLMModel.forward`] method expects input bounding boxes for each token. Use format `(x0, y0, x1, y1)` where `(x0, y0)` is the upper left corner and `(x1, y1)` is the lower right corner. Normalize bounding boxes on a 0-1000 scale.
+- Width and height correspond to the original document dimensions where the token occurs. Get these values from your document processing pipeline.
+
 ## LayoutLMConfig
 
 [[autodoc]] LayoutLMConfig

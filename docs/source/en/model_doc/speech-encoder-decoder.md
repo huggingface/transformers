@@ -48,6 +48,10 @@ print(generated_text)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The model requires only 2 inputs to compute loss: `input_values` (speech inputs) and `labels` (input_ids of the encoded target sequence).
+
 ## SpeechEncoderDecoderConfig
 
 [[autodoc]] SpeechEncoderDecoderConfig

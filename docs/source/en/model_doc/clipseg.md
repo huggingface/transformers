@@ -49,6 +49,11 @@ for i, (text, prob) in enumerate(zip(texts, probs[0])):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`CLIPSegForImageSegmentation`] adds a decoder on top of [`CLIPSegModel`]. [`CLIPSegModel`] is identical to [`CLIPModel`].
+- [`CLIPSegForImageSegmentation`] generates image segmentations based on arbitrary prompts at test time. Prompts can be text (provided as `input_ids`) or images (provided as `conditional_pixel_values`). Provide custom conditional embeddings as `conditional_embeddings`.
+
 ## CLIPSegConfig
 
 [[autodoc]] CLIPSegConfig

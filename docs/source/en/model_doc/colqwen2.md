@@ -77,6 +77,12 @@ processor = ColQwen2Processor.from_pretrained(model_name)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`~ColQwen2Processor.score_retrieval`] returns a 2D tensor with dimensions `(number_of_queries, number_of_images)`. Higher scores indicate greater similarity between queries and images.
+- Unlike ColPali, ColQwen2 supports arbitrary image resolutions and aspect ratios. Images aren't resized into fixed-size squares, preserving more of the original input signal.
+- Larger input images generate longer multi-vector embeddings. Adjust image resolution to balance performance and memory usage.
+
 ## ColQwen2Config
 
 [[autodoc]] ColQwen2Config

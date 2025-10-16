@@ -61,6 +61,11 @@ print(processor.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- PaliGemma isn't a conversational model. Fine-tune it for specific downstream tasks like image captioning, visual question answering (VQA), object detection, and document understanding.
+- Use [`PaliGemmaProcessor`] to prepare images, text, and optional labels for the model. Pass the `suffix` parameter to create labels during fine-tuning.
+
 ## PaliGemmaConfig
 
 [[autodoc]] PaliGemmaConfig

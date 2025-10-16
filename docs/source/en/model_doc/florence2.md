@@ -72,6 +72,28 @@ print(parsed_answer)"
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Florence-2 is a prompt-based model. Provide a task prompt to tell the model what to do. Supported tasks include:
+
+  - `<OCR>` - Optical character recognition
+  - `<OCR_WITH_REGION>` - OCR with region detection
+  - `<CAPTION>` - Image captioning
+  - `<DETAILED_CAPTION>` - Detailed image captioning
+  - `<MORE_DETAILED_CAPTION>` - More detailed image captioning
+  - `<OD>` - Object detection
+  - `<DENSE_REGION_CAPTION>` - Dense region captioning
+  - `<CAPTION_TO_PHRASE_GROUNDING>` - Caption to phrase grounding
+  - `<REFERRING_EXPRESSION_SEGMENTATION>` - Referring expression segmentation
+  - `<REGION_TO_SEGMENTATION>` - Region to segmentation
+  - `<OPEN_VOCABULARY_DETECTION>` - Open vocabulary detection
+  - `<REGION_TO_CATEGORY>` - Region to category
+  - `<REGION_TO_DESCRIPTION>` - Region to description
+  - `<REGION_TO_OCR>` - Region to OCR
+  - `<REGION_PROPOSAL>` - Region proposal
+
+- The model outputs raw strings that need parsing. Use [`Florence2Processor.post_process_generation`] to parse strings into usable formats like bounding boxes and labels for object detection.
+
 ## Florence2VisionConfig
 
 [[autodoc]] Florence2VisionConfig

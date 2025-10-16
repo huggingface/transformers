@@ -57,6 +57,13 @@ for box, score, text_label in zip(boxes, scores, text_labels):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- OmDet-Turbo differs from other zero-shot object detection models like Grounding DINO with its decoupled classes and prompt embedding structure. This allows caching of text embeddings and faster decoding.
+- The model requires both `classes` and `task` inputs. `classes` is a list of objects to detect, and `task` is the grounded text that guides open-vocabulary detection. This approach limits open-vocabulary detection scope but speeds up the decoding process.
+- Use [`OmDetTurboProcessor`] to prepare the classes, task, and image triplet. The task input is optional and defaults to "Detect [class1], [class2], [class3], ..." when not provided.
+- Process model results with [`OmDetTurboProcessor.post_process_grounded_object_detection`]. This function takes input classes since the decoupling of classes and task embeddings means no decoding of predicted class embeddings is needed. Predicted classes match inputted ones directly.
+
 ## OmDetTurboConfig
 
 [[autodoc]] OmDetTurboConfig

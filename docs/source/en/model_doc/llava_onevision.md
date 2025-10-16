@@ -55,6 +55,12 @@ print(processor.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use `padding_side="left"` for batched generation to get more accurate results. Set `processor.tokenizer.padding_side = "left"` before generating.
+- LLaVA-OneVision uses different numbers of patches for images and pads inputs inside the modeling code, aside from padding done during processing. The default setting is left-padding if the model is in `eval()` mode, otherwise right-padding.
+- Each checkpoint trains with a specific prompt format depending on the underlying large language model backbone. Use the processor's [`apply_chat_template`] method to ensure correct formatting.
+
 ## LlavaOnevisionConfig
 
 [[autodoc]] LlavaOnevisionConfig

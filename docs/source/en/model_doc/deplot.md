@@ -41,3 +41,8 @@ print(processor.decode(predictions[0], skip_special_tokens=True))
 
 </hfoption>
 </hfoptions>
+
+## Usage tips
+
+- Fine-tune DePlot using the pix2struct fine-tuning [notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_pix2struct.ipynb).
+- Fine-tune Pix2Struct models with Adafactor and cosine learning rate scheduler for faster convergence.

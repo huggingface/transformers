@@ -50,6 +50,13 @@ print(processor.post_process_generation(sequence, fix_markdown=False))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Start with Nougat by checking the [tutorial notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Nougat), which show inference and fine-tuning on custom data.
+- Nougat always uses the [`VisionEncoderDecoder`] framework. The model architecture is identical to Donut.
+- Nougat's [`VisionEncoderDecoderModel`] accepts images as input and uses [`generate`] to autoregressively generate text from input images.
+- [`NougatImageProcessor`] preprocesses input images and [`NougatTokenizerFast`] decodes generated target tokens to strings. [`NougatProcessor`] wraps both classes into a single instance to extract input features and decode predicted token IDs.
+
 ## NougatImageProcessor
 
 [[autodoc]] NougatImageProcessor

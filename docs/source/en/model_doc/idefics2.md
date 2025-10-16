@@ -62,6 +62,15 @@ print(generated_texts)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Each sample contains multiple images with varying counts. The processor pads inputs to the maximum number of images in a batch.
+- Enable `do_image_splitting=True` to split each input image into 4 sub-images and concatenate with the original to form 5 images. This improves model performance. Set `processor.image_processor.do_image_splitting=False` if the model wasn't trained with this option.
+- Add `<image>` tokens where images should be inserted in text. Add `<end_of_utterance>` at the end of each utterance for chat messages.
+- The processor includes [`apply_chat_template`] to convert chat messages to text for processing.
+- During training, determine which tokens the model shouldn't learn. For Idefics2, this typically includes image and padding tokens.
+- For multi-turn conversations between user and assistant, set all tokens corresponding to user messages to -100.
+
 ## Idefics2Config
 
 [[autodoc]] Idefics2Config

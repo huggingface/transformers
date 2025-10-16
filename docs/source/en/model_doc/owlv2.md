@@ -62,6 +62,15 @@ for box, score, text_label in zip(boxes, scores, text_labels):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- OWLv2 is a zero-shot text-conditioned object detection model like its predecessor OWL-ViT. It uses CLIP as its multi-modal backbone with a ViT-like Transformer for visual features and a causal language model for text features.
+- To use CLIP for detection, OWLv2 removes the final token pooling layer of the vision model and attaches lightweight classification and box heads to each transformer output token. Open-vocabulary classification replaces fixed classification layer weights with class-name embeddings from the text model.
+- The authors train CLIP from scratch and fine-tune it end-to-end with classification and box heads on standard detection datasets using bipartite matching loss. Use one or multiple text queries per image for zero-shot text-conditioned object detection.
+- Use [`Owlv2ImageProcessor`] to resize and normalize images for the model. Use [`CLIPTokenizer`] to encode text. [`Owlv2Processor`] wraps both into a single instance to encode text and prepare images.
+- OWLv2's architecture is identical to OWL-ViT, but the object detection head includes an objectness classifier. This predicts the query-agnostic likelihood that a predicted box contains an object (versus background). Use the objectness score to rank or filter predictions independently of text queries.
+- OWLv2 usage is identical to OWL-ViT with the new [`Owlv2ImageProcessor`].
+
 ## Owlv2Config
 
 [[autodoc]] Owlv2Config

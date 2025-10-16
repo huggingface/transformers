@@ -80,6 +80,14 @@ print(processor.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`Gemma3nForConditionalGeneration`] for image-audio-and-text, image-and-text, image-and-audio, audio-and-text, image-only, and audio-only inputs.
+- Add `<image_soft_token>` tokens to text wherever images should be inserted.
+- Add `<audio_soft_token>` tokens to text wherever audio clips should be inserted.
+- Gemma3n accepts at most one target audio clip per input. Multiple audio clips work in few-shot prompts.
+- The processor includes [`apply_chat_template`] to convert chat messages to model inputs.
+
 ## Gemma3nAudioFeatureExtractor
 
 [[autodoc]] Gemma3nAudioFeatureExtractor

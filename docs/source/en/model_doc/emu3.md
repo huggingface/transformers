@@ -69,6 +69,13 @@ print(processor.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Set `processor.tokenizer.padding_side = "left"` before batched generation for more accurate results.
+- The model trains with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to format prompts correctly.
+- Emu3 has separate checkpoints for image generation and text generation. Use the correct checkpoint when loading the model. For image generation, use `prefix_constraints` to sample only from possible image tokens.
+- Emu3 uses a special image token to indicate where to merge image embeddings. The implementation uses the reserved token `<|extra_0|>` instead of creating a new one. Add `<image>` to your prompt where the image should be embedded for correct generation.
+
 ## Emu3Config
 
 [[autodoc]] Emu3Config
