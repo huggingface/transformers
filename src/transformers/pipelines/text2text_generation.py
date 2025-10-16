@@ -194,17 +194,13 @@ class Text2TextGenerationPipeline(Pipeline):
 
     def _forward(self, model_inputs, **generate_kwargs):
         in_b, input_length = model_inputs["input_ids"].shape
-
-        self.check_inputs(
-            input_length,
-            generate_kwargs.get("min_length", self.generation_config.min_length),
-            generate_kwargs.get("max_new_tokens", self.generation_config.max_new_tokens),
-        )
-
         # User-defined `generation_config` passed to the pipeline call take precedence
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
+        min_length = generate_kwargs.get("min_length", generate_kwargs["generation_config"].min_length)
+        max_new_tokens = generate_kwargs.get("max_new_tokens", generate_kwargs["generation_config"].max_new_tokens)
+        self.check_inputs(input_length, min_length, max_new_tokens)
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])

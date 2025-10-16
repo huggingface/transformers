@@ -206,7 +206,8 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
                                                                     \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.0001):
+            The aux loss factor for the loss.
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
 
@@ -269,6 +270,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         topk_group=1,
         first_k_dense_replace=1,
         norm_topk_prob=True,
+        router_aux_loss_coef=0.0001,
         **kwargs,
     ):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
@@ -305,6 +307,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
+        self.router_aux_loss_coef = router_aux_loss_coef
 
 
 class Glm4vMoeConfig(PreTrainedConfig):
