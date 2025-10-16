@@ -163,7 +163,6 @@ class NanoChatAttention(nn.Module):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         batch, seq_len, _ = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # Project the input to get queries, keys, and values
         # Shape: [batch, seq_len, num_heads, head_dim]
