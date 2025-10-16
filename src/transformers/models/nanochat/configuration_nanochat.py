@@ -5,6 +5,9 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
+__all__ = ["NanoChatConfig"]
+
+
 class NanoChatConfig(PretrainedConfig):
     r"""Configuration for the NanoChat model."""
 
