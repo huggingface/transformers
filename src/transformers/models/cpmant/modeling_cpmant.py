@@ -722,6 +722,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
@@ -763,8 +764,9 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
             cache_position,
         )
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
-
-        logits = self.lm_head(hidden_states)
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
