@@ -30,7 +30,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations.hub_kernels import _KERNEL_MAPPING_ACROSS_MODELS, lazy_load_kernel
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -240,7 +240,7 @@ class FalconMambaMixer(nn.Module):
         self.rms_eps = config.mixer_rms_eps
 
     def warn_slow_implementation(self):
-        causal_conv1d = lazy_load_kernel("causal-conv1d", _KERNEL_MAPPING_ACROSS_MODELS)
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
         causal_conv1d_update, causal_conv1d_fn = (
             (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
             if causal_conv1d is not None
@@ -300,7 +300,7 @@ class FalconMambaMixer(nn.Module):
             )
 
         else:
-            causal_conv1d = lazy_load_kernel("causal-conv1d", _KERNEL_MAPPING_ACROSS_MODELS)
+            causal_conv1d = lazy_load_kernel("causal-conv1d")
             causal_conv1d_update, causal_conv1d_fn = (
                 (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
                 if causal_conv1d is not None
@@ -500,7 +500,7 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        causal_conv1d = lazy_load_kernel("causal-conv1d", _KERNEL_MAPPING_ACROSS_MODELS)
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
         causal_conv1d_update, causal_conv1d_fn = (
             (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
             if causal_conv1d is not None

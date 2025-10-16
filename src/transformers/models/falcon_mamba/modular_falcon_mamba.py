@@ -19,7 +19,7 @@ from typing import Optional
 import torch
 from torch import nn
 
-from ...integrations.hub_kernels import _KERNEL_MAPPING_ACROSS_MODELS, lazy_load_kernel
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import (
     is_mamba_ssm_available,
@@ -256,7 +256,7 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 
 class FalconMambaMixer(MambaMixer):
     def warn_slow_implementation(self):
-        causal_conv1d = lazy_load_kernel("causal-conv1d", _KERNEL_MAPPING_ACROSS_MODELS)
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
         causal_conv1d_update, causal_conv1d_fn = (
             (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
             if causal_conv1d is not None
@@ -327,7 +327,7 @@ class FalconMambaMixer(MambaMixer):
             )
 
         else:
-            causal_conv1d = lazy_load_kernel("causal-conv1d", _KERNEL_MAPPING_ACROSS_MODELS)
+            causal_conv1d = lazy_load_kernel("causal-conv1d")
             causal_conv1d_update, causal_conv1d_fn = (
                 (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
                 if causal_conv1d is not None
@@ -526,7 +526,7 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        causal_conv1d = lazy_load_kernel("causal-conv1d", _KERNEL_MAPPING_ACROSS_MODELS)
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
         causal_conv1d_update, causal_conv1d_fn = (
             (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
             if causal_conv1d is not None

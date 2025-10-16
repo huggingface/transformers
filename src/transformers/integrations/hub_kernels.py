@@ -163,11 +163,11 @@ except ImportError:
         raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
 
 
-_KERNEL_SIMPLE_MAPPING: dict[str, str] = {
+_HUB_KERNEL_MAPPING: dict[str, str] = {
     "causal-conv1d": "kernels-community/causal-conv1d",
 }
 
-_KERNEL_MAPPING_ACROSS_MODELS: dict[str, Optional[ModuleType]] = {}
+_KERNEL_MODULE_MAPPING: dict[str, Optional[ModuleType]] = {}
 
 
 def is_kernel(attn_implementation: Optional[str]) -> bool:
@@ -232,18 +232,18 @@ def load_and_register_attn_kernel(attn_implementation: str, attention_wrapper: O
     ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
 
 
-def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]]):
+def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] = _KERNEL_MODULE_MAPPING):
     if kernel_name in mapping and isinstance(mapping[kernel_name], ModuleType):
         return mapping[kernel_name]
-    if kernel_name not in _KERNEL_SIMPLE_MAPPING:
-        logger.warning(f"Kernel {kernel_name} not found in _KERNEL_SIMPLE_MAPPING")
+    if kernel_name not in _HUB_KERNEL_MAPPING:
+        logger.warning(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
     if is_kernels_available():
         from kernels import get_kernel
 
         try:
-            kernel = get_kernel(_KERNEL_SIMPLE_MAPPING[kernel_name])
+            kernel = get_kernel(_HUB_KERNEL_MAPPING[kernel_name])
             mapping[kernel_name] = kernel
         except FileNotFoundError:
             mapping[kernel_name] = None
@@ -281,5 +281,4 @@ __all__ = [
     "register_kernel_mapping",
     "replace_kernel_forward_from_hub",
     "lazy_load_kernel",
-    "_KERNEL_MAPPING_ACROSS_MODELS",
 ]
