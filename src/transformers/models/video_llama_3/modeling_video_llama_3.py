@@ -299,14 +299,11 @@ class VideoLlama3VisionEncoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input to the layer of shape `(seq_len, embed_dim)`.
-            cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
-                The cumulative sequence lengths of each image or video feature.
-            position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
-                The cosine and sine position embeddings for vision attention.
+        r"""
+        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
+            The cumulative sequence lengths of each image or video feature.
+        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
+            The cosine and sine position embeddings for vision attention.
         """
         residual = hidden_states
 
@@ -373,6 +370,7 @@ class VideoLlama3VisionEncoder(nn.Module):
 class VideoLlama3PreTrainedModel(PreTrainedModel):
     config: VideoLlama3Config
     base_model_prefix = "model"
+    input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -386,6 +384,7 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _can_record_outputs = {
         "hidden_states": VideoLlama3VisionEncoderLayer,
         "attentions": VideoLlama3VisionAttention,

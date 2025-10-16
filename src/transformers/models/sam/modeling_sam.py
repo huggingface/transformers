@@ -1009,6 +1009,7 @@ class SamPreTrainedModel(PreTrainedModel):
     config: SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["SamVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -1111,6 +1112,7 @@ class SamVisionModel(SamPreTrainedModel):
     """
 )
 class SamModel(SamPreTrainedModel):
+    input_modalities = ["image", "text"]
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
