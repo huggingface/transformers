@@ -1088,7 +1088,7 @@ class ProcessorMixin(PushToHubMixin):
                 "Chat templates should be in a 'chat_template.jinja' file but found key='chat_template' "
                 "in the processor's config. Make sure to move your template to its own file."
             )
-        elif chat_templates is not None:
+        elif chat_templates:
             processor_dict["chat_template"] = chat_templates
 
         # Audio tokenizer needs to load the model checkpoint first, because the saved
