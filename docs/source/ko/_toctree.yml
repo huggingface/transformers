@@ -84,6 +84,8 @@
       title: Transformers로 채팅하기
     - local: chat_templating
       title: 챗봇 템플릿 익히기
+    - local: chat_extras
+      title: Tools 와 RAG
     - local: in_translation
       title: (번역중) Multimodal templates
     - local: in_translation
