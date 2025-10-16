@@ -188,6 +188,7 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     config: DINOv3ConvNextConfig
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["DINOv3ConvNextLayer"]
 
     def _init_weights(self, module):

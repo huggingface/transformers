@@ -35,6 +35,7 @@ logger = logging.get_logger(__name__)
 class FuyuPreTrainedModel(PreTrainedModel):
     config: FuyuConfig
     base_model_prefix = "fuyu"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True

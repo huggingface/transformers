@@ -1,7 +1,7 @@
 import hashlib
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 
 KERNELIZATION_AVAILABLE = False
@@ -27,11 +27,11 @@ class BenchmarkConfig:
         sequence_length: int = 128,
         num_tokens_to_generate: int = 128,
         attn_implementation: str = "eager",
-        sdpa_backend: Optional[str] = None,
-        compile_mode: Optional[str] = None,
-        compile_options: Optional[dict[str, Any]] = None,
+        sdpa_backend: str | None = None,
+        compile_mode: str | None = None,
+        compile_options: dict[str, Any] | None = None,
         kernelize: bool = False,
-        name: Optional[str] = None,
+        name: str | None = None,
         skip_validity_check: bool = False,
     ) -> None:
         # Benchmark parameters
@@ -128,8 +128,8 @@ class BenchmarkConfig:
 
 
 def cross_generate_configs(
-    attn_impl_and_sdpa_backend: list[tuple[str, Optional[str]]],
-    compiled_mode: list[Optional[str]],
+    attn_impl_and_sdpa_backend: list[tuple[str, str | None]],
+    compiled_mode: list[str | None],
     kernelized: list[bool],
     warmup_iterations: int = 5,
     measurement_iterations: int = 20,

@@ -708,6 +708,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2BertConfig
     base_model_prefix = "wav2vec2_bert"
     main_input_name = "input_features"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):

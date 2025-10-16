@@ -376,9 +376,11 @@ class Glm4vMoeTextMoE(nn.Module):
 
     def route_tokens_to_experts(self, router_logits):
         router_logits = router_logits.sigmoid()
-        router_logits = router_logits + self.gate.e_score_correction_bias
+        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
         group_scores = (
-            router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
+            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
         )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
@@ -388,7 +390,7 @@ class Glm4vMoeTextMoE(nn.Module):
             .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
         )
-        scores_for_choice = router_logits.masked_fill(~score_mask.bool(), 0.0)
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         topk_weights = router_logits.gather(1, topk_indices)
         if self.norm_topk_prob:
@@ -512,6 +514,7 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
         "attentions": Glm4vMoeTextAttention,
         "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
     }
+    input_modalities = ["text", "image", "video"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -552,6 +555,7 @@ class Glm4vMoeCausalLMOutputWithPast(ModelOutput):
 @auto_docstring
 class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
@@ -935,6 +939,7 @@ class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
 
 class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeVisionConfig
+    input_modalities = ["image", "video"]
     _no_split_modules = ["Glm4vMoeVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -1595,6 +1600,8 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vMoeCausalLMOutputWithPast]:
         r"""
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1603,8 +1610,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
 

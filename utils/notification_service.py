@@ -21,7 +21,7 @@ import os
 import re
 import sys
 import time
-from typing import Any, Optional, Union
+from typing import Any
 
 import requests
 from compare_test_runs import compare_job_sets
@@ -120,7 +120,7 @@ def handle_stacktraces(test_results):
     return stacktraces
 
 
-def dicts_to_sum(objects: Union[dict[str, dict], list[dict]]):
+def dicts_to_sum(objects: dict[str, dict] | list[dict]):
     if isinstance(objects, dict):
         lists = objects.values()
     else:
@@ -139,7 +139,7 @@ class Message:
         ci_title: str,
         model_results: dict,
         additional_results: dict,
-        selected_warnings: Optional[list] = None,
+        selected_warnings: list | None = None,
         prev_ci_artifacts=None,
         other_ci_artifacts=None,
     ):
@@ -941,7 +941,7 @@ class Message:
                     time.sleep(1)
 
 
-def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
+def retrieve_artifact(artifact_path: str, gpu: str | None):
     if gpu not in [None, "single", "multi"]:
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
 
@@ -970,7 +970,7 @@ def retrieve_available_artifacts():
         def __str__(self):
             return self.name
 
-        def add_path(self, path: str, gpu: Optional[str] = None):
+        def add_path(self, path: str, gpu: str | None = None):
             self.paths.append({"name": self.name, "path": path, "gpu": gpu})
 
     _available_artifacts: dict[str, Artifact] = {}

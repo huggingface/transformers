@@ -204,6 +204,7 @@ class DeepseekVLHybridAligner(nn.Module):
 class DeepseekVLHybridPreTrainedModel(PreTrainedModel):
     config: DeepseekVLHybridConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
@@ -388,6 +389,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
 
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
+    output_modalities = "text"
     _can_compile_fullgraph = True
 
     def __init__(self, config: DeepseekVLHybridConfig):
@@ -404,9 +406,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
 
     def set_input_embeddings(self, value):
         self.model.language_model.set_input_embeddings(value)
-
-    def prepare_embeddings_for_image_generation(self) -> torch.Tensor:
-        raise AttributeError("Not needed for DeepseekVLHybrid")
 
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)

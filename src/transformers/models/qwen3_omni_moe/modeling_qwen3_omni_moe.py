@@ -67,6 +67,7 @@ from .configuration_qwen3_omni_moe import (
 class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     config: Qwen3OmniMoeConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "video", "audio", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen3OmniMoeDecoderLayer", "Qwen3OmniMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -88,6 +89,8 @@ def _get_feat_extract_output_lengths(input_lengths):
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModel):
+    input_modalities = ["image", "video", "audio", "text"]
+
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
         attention_mask: torch.Tensor,
@@ -634,6 +637,7 @@ class SinusoidsPositionEmbedding(nn.Module):
 class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeAudioEncoderConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
     _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer"]
     _supports_sdpa = True
 
@@ -3638,6 +3642,8 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
 
 class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
+    input_modalities = "audio"
+
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig):
         super().__init__(config)
         self.total_upsample = np.prod(config.upsample_rates + config.upsampling_ratios)
@@ -3700,6 +3706,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
 class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
     config_class = Qwen3OmniMoeConfig
+    output_modalities = ["text", "audio"]
 
     def __init__(self, config: Qwen3OmniMoeConfig):
         super().__init__(config)

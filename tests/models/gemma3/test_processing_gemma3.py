@@ -15,7 +15,6 @@
 import shutil
 import tempfile
 import unittest
-from typing import Optional
 
 from transformers import Gemma3Processor, GemmaTokenizer
 from transformers.testing_utils import get_tests_dir, require_vision
@@ -83,7 +82,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     # Override as Gemma3 needs images to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+    def prepare_image_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
         images = super().prepare_image_inputs(batch_size)
         if isinstance(images, (list, tuple)):

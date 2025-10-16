@@ -774,6 +774,7 @@ class DiaModel(DiaPreTrainedModel):
 )
 class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
     base_model_prefix = "model"
+    output_modalities = "audio"
 
     def __init__(self, config: DiaConfig):
         super().__init__(config)

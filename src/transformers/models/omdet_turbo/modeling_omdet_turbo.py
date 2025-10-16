@@ -985,6 +985,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
     config: OmDetTurboConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ["image", "text"]
 
     def _init_weights(self, module):
         def linear_init_(module_to_init):

@@ -930,6 +930,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     config: VJEPA2Config
     base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
+    input_modalities = "video"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "VJEPA2Layer",

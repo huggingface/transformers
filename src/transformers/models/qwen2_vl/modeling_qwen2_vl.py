@@ -627,6 +627,7 @@ class Qwen2VLDecoderLayer(GradientCheckpointingLayer):
 class Qwen2VLPreTrainedModel(PreTrainedModel):
     config: Qwen2VLConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2VLDecoderLayer", "Qwen2VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -640,6 +641,7 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     config: Qwen2VLVisionConfig
+    input_modalities = ["image", "video"]
     _no_split_modules = ["Qwen2VLVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -737,6 +739,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
 @auto_docstring
 class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
     config: Qwen2VLTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Qwen2VLTextConfig):
         super().__init__(config)

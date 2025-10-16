@@ -679,6 +679,7 @@ class LxmertPreTrainingHeads(nn.Module):
 class LxmertPreTrainedModel(PreTrainedModel):
     config: LxmertConfig
     base_model_prefix = "lxmert"
+    input_modalities = ["image", "text"]
     _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):

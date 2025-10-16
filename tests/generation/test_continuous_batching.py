@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-from typing import Optional
 
 import torch
 from parameterized import parameterized
@@ -43,8 +42,8 @@ class ContinuousBatchingTest(unittest.TestCase):
     )
     def test_group_layers(
         self,
-        layer_types_str: Optional[str],
-        sliding_window: Optional[int],
+        layer_types_str: str | None,
+        sliding_window: int | None,
         expected_groups: str,
     ) -> None:
         # Take a config and change the layer_types attribute to the mix we want

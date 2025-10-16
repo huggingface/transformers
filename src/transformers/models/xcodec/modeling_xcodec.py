@@ -325,6 +325,7 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     config_class = XcodecConfig
     base_model_prefix = "xcodec"
     main_input_name = "input_values"
+    input_modalities = "audio"
 
     def _init_weights(self, module):
         """Initialize the weights"""

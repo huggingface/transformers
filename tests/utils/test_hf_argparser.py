@@ -22,7 +22,7 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Optional, Union, get_args, get_origin
+from typing import Literal, Union, get_args, get_origin
 from unittest.mock import patch
 
 import yaml
@@ -59,7 +59,7 @@ class WithDefaultExample:
 class WithDefaultBoolExample:
     foo: bool = False
     baz: bool = True
-    opt: Optional[bool] = None
+    opt: bool | None = None
 
 
 class BasicEnum(Enum):
@@ -91,11 +91,11 @@ class MixedTypeEnumExample:
 
 @dataclass
 class OptionalExample:
-    foo: Optional[int] = None
-    bar: Optional[float] = field(default=None, metadata={"help": "help message"})
-    baz: Optional[str] = None
-    ces: Optional[list[str]] = list_field(default=[])
-    des: Optional[list[int]] = list_field(default=[])
+    foo: int | None = None
+    bar: float | None = field(default=None, metadata={"help": "help message"})
+    baz: str | None = None
+    ces: list[str] | None = list_field(default=[])
+    des: list[int] | None = list_field(default=[])
 
 
 @dataclass
@@ -120,7 +120,7 @@ class RequiredExample:
 class StringLiteralAnnotationExample:
     foo: int
     required_enum: "BasicEnum" = field()
-    opt: "Optional[bool]" = None
+    opt: "bool | None" = None
     baz: "str" = field(default="toto", metadata={"help": "help message"})
     foo_str: "list[str]" = list_field(default=["Hallo", "Bonjour", "Hello"])
 
