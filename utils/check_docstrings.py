@@ -43,7 +43,7 @@ import os
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from check_repo import ignore_undocumented
 from git import Repo
@@ -525,7 +525,7 @@ def stringify_default(default: Any) -> str:
         return f"`{default}`"
 
 
-def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
+def eval_math_expression(expression: str) -> float | int | None:
     # Mainly taken from the excellent https://stackoverflow.com/a/9558001
     """
     Evaluate (safely) a mathematial expression and returns its value.
@@ -673,7 +673,7 @@ def find_source_file(obj: Any) -> Path:
     return obj_file.with_suffix(".py")
 
 
-def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
+def match_docstring_with_signature(obj: Any) -> tuple[str, str] | None:
     """
     Matches the docstring of an object with its signature.
 

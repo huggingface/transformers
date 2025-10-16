@@ -1,4 +1,4 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,17 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import pytest
+from typer.testing import CliRunner
 
-from abc import ABC, abstractmethod
-from argparse import ArgumentParser
+import transformers.cli.transformers
 
 
-class BaseTransformersCLICommand(ABC):
-    @staticmethod
-    @abstractmethod
-    def register_subcommand(parser: ArgumentParser):
-        raise NotImplementedError()
+@pytest.fixture
+def cli():
+    def _cli_invoke(*args):
+        runner = CliRunner()
+        return runner.invoke(transformers.cli.transformers.app, list(args), catch_exceptions=False)
 
-    @abstractmethod
-    def run(self):
-        raise NotImplementedError()
+    return _cli_invoke

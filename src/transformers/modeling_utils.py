@@ -68,6 +68,7 @@ from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
+    ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
     distribute_model,
     initialize_tensor_parallelism,
@@ -556,7 +557,7 @@ def _infer_parameter_dtype(
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
     if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
         # dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
-        if hf_quantizer is not None:
+        if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, param_name):
             casting_dtype = model.config._pre_quantization_dtype
         else:
             casting_dtype = old_param.dtype
@@ -1733,6 +1734,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _supports_attention_backend = False
     _can_record_outputs = None
 
+    # Attributes used mainly in multimodal LLMs, though all models contain a valid field for these
+    # Possible values are: text, image, video, audio and time
+    input_modalities: Union[str, list[str]] = "text"  # most models are text
+
     @property
     @torch._dynamo.allow_in_graph
     def can_record_outputs(self) -> dict[str, OutputRecorder]:
@@ -1883,10 +1888,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             f" {self.__class__.__name__}"
                         )
 
+        self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
-        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
-        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
-        self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
+        if self.base_model is self:
+            self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
+            self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+            self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
         for name, module in self.named_children():
             if plan := getattr(module, "_ep_plan", None):
                 self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
@@ -1909,54 +1916,40 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return self._pp_plan
 
     @tp_plan.setter
-    def tp_plan(self, plan: dict[str, str]):
-        if plan is not None:
-            # Validate that all parallel styles in the plan are supported
-            from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
+    def tp_plan(self, plan: dict[str, str] | None):
+        if plan is None:
+            self._tp_plan = {}
+            return
+        if not isinstance(plan, dict):
+            raise ValueError("Can only set a dictionary as `tp_plan`")
 
-            for layer_pattern, parallel_style in plan.items():
-                if parallel_style not in ALL_PARALLEL_STYLES:
-                    raise ValueError(
-                        f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
-                        f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
-                    )
+        # Ensure the styles are all valid
+        for layer_pattern, parallel_style in plan.items():
+            if parallel_style not in ALL_PARALLEL_STYLES:
+                raise ValueError(
+                    f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
+                    f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+                )
 
-            # Validate that the layer patterns match existing model structure
-            # We check this by getting all parameter names and seeing if any match the patterns
-            if hasattr(self, "named_parameters"):
-                model_param_names = [name for name, _ in self.named_parameters()]
-                if model_param_names:  # Only validate if model has parameters
-                    for layer_pattern in plan.keys():
-                        # Convert pattern to regex (replace * with .*)
-                        regex_pattern = layer_pattern.replace("*", r"\d+")
-                        pattern_matched = False
-                        for param_name in model_param_names:
-                            if re.match(regex_pattern, param_name):
-                                pattern_matched = True
-                                break
-                        if not pattern_matched:
-                            # Try more flexible matching - check if pattern components exist
-                            pattern_parts = layer_pattern.split(".")
-                            flexible_matched = False
-                            for param_name in model_param_names:
-                                param_parts = param_name.split(".")
-                                if len(pattern_parts) <= len(param_parts):
-                                    match_count = 0
-                                    for i, pattern_part in enumerate(pattern_parts):
-                                        if pattern_part == "*":
-                                            match_count += 1
-                                        elif i < len(param_parts) and pattern_part == param_parts[i]:
-                                            match_count += 1
-                                    if match_count == len(pattern_parts):
-                                        flexible_matched = True
-                                        break
-                            if not flexible_matched:
-                                warnings.warn(
-                                    f"Layer pattern '{layer_pattern}' does not match any parameters in the model. "
-                                    f"This rule may not be applied during tensor parallelization."
-                                )
+        # Validate that the layer patterns match existing model structure. We check this by getting all parameter
+        # names and seeing if any match the patterns
+        model_param_names = [name for name, _ in self.named_parameters()]
+        for layer_pattern in plan.keys():
+            # Convert pattern to regex (replace * with .*)
+            regex_pattern = layer_pattern.replace("*", r"\d+")
+            pattern_matched = False
+            for param_name in model_param_names:
+                if re.match(regex_pattern, param_name):
+                    pattern_matched = True
+                    break
+            if not pattern_matched:
+                warnings.warn(
+                    f"Layer pattern '{layer_pattern}' does not match any parameters in the model. This rule may not "
+                    "be applied during tensor parallelization, or may lead to dimension mismatches"
+                )
 
-        self._tp_plan = plan if plan is not None else {}
+        # Set the plan
+        self._tp_plan = plan
 
     @pp_plan.setter
     def pp_plan(self, plan: dict[str, tuple[str, str]]):
@@ -2426,30 +2419,30 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{applicable_attention}"` is not supported. The only possible arguments are '
-                '`attn_implementation="eager"`'
+                '`attn_implementation="eager"`, `"paged|eager"`'
             )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
-                message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`'
+                message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`, `"attn_implementation=paged|flash_attention_2"`'
             if self._supports_sdpa:
-                message += ', `"attn_implementation=sdpa"'
+                message += ', `"attn_implementation=sdpa"`, `"attn_implementation=paged|spda"`'
             if self._supports_flex_attn:
                 message += ', `"attn_implementation=flex_attention"`'
             raise ValueError(message + ".")
 
         # Perform relevant checks
-        if applicable_attention == "flash_attention_2":
+        if "flash_attention_2" in applicable_attention:
             self._flash_attn_2_can_dispatch(is_init_check)
-        elif applicable_attention == "flash_attention_3":
+        elif "flash_attention_3" in applicable_attention:
             self._flash_attn_3_can_dispatch(is_init_check)
-        elif applicable_attention == "flex_attention":
+        elif "flex_attention" in applicable_attention:
             self._flex_attn_can_dispatch(is_init_check)
-        elif applicable_attention == "sdpa":
+        elif "sdpa" in applicable_attention:
             # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
             try:
                 self._sdpa_can_dispatch(is_init_check)
             except (ValueError, ImportError) as e:
-                if requested_attention == "sdpa":
+                if requested_attention is not None and "sdpa" in requested_attention:
                     raise e
                 applicable_attention = "eager"
 
@@ -4233,10 +4226,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             max_memory (`Dict`, *optional*):
                 A dictionary device identifier to maximum memory if using `device_map`. Will default to the maximum memory available for each
                 GPU and the available CPU RAM if unset.
-            tp_plan (`str`, *optional*):
-                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Currently, it only accepts
-                `tp_plan="auto"` to use predefined plan based on the model. Note that if you use it, you should launch your script accordingly with
-                `torchrun [args] script.py`. This will be much faster than using a `device_map`, but has limitations.
+            tp_plan (`Optional[Union[dict, str]]`, *optional*):
+                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Use `tp_plan="auto"` to
+                use the predefined plan based on the model. If it's a dict, then it should match between module names and desired layout.
+                Note that if you use it, you should launch your script accordingly with `torchrun [args] script.py`. This will be much
+                faster than using a `device_map`, but has limitations.
             tp_size (`str`, *optional*):
                 A torch tensor parallel degree. If not provided would default to world size.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
@@ -4333,7 +4327,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             key_mapping = cls._checkpoint_conversion_mapping
 
-        if distributed_config is not None:
+        if distributed_config is not None and tp_plan is None:
             tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
@@ -4371,7 +4365,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
-            tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(
+            device_map, device_mesh, tp_size = initialize_tensor_parallelism(
                 tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
             )
 
@@ -4436,6 +4430,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "loaded from GGUF files."
                 )
 
+        if kernel_config is not None and not use_kernels:
+            logger.warning_once(
+                "A kernel_config was provided but use_kernels is False; setting use_kernels=True automatically. To suppress this warning, explicitly set use_kernels to True."
+            )
+            use_kernels = True
+
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             variant=variant,
@@ -4491,7 +4491,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
-            model = distribute_model(model, distributed_config, device_mesh, tp_size)
+            model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
 
         # Prepare the full device map
         if device_map is not None:
