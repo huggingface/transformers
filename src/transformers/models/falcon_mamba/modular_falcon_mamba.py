@@ -19,6 +19,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import (
     is_mamba_ssm_available,
@@ -35,7 +36,6 @@ from ..mamba.modeling_mamba import (
     MambaOutput,
     MambaPreTrainedModel,
     MambaRMSNorm,
-    _lazy_load_causal_conv1d,
 )
 
 
@@ -53,8 +53,6 @@ if is_mamba_ssm_available():
     from ...kernels.falcon_mamba import mamba_inner_fn
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-_causal_conv1d_cache = None
 
 
 class FalconMambaConfig(MambaConfig):
@@ -258,7 +256,12 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 
 class FalconMambaMixer(MambaMixer):
     def warn_slow_implementation(self):
-        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update, causal_conv1d_fn = (
+            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+            if causal_conv1d is not None
+            else (None, None)
+        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -324,7 +327,12 @@ class FalconMambaMixer(MambaMixer):
             )
 
         else:
-            causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
+            causal_conv1d = lazy_load_kernel("causal-conv1d")
+            causal_conv1d_update, causal_conv1d_fn = (
+                (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+                if causal_conv1d is not None
+                else (None, None)
+            )
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -518,7 +526,12 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update, causal_conv1d_fn = (
+            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+            if causal_conv1d is not None
+            else (None, None)
+        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )

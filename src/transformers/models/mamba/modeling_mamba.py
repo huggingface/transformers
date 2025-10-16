@@ -25,6 +25,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -33,8 +34,6 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_kernels_available,
     is_mamba_ssm_available,
     is_mambapy_available,
 )
@@ -53,32 +52,6 @@ if is_mamba_ssm_available():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-_causal_conv1d_cache = None
-
-
-def _lazy_load_causal_conv1d():
-    global _causal_conv1d_cache
-    if _causal_conv1d_cache is not None:
-        return _causal_conv1d_cache
-
-    if is_kernels_available():
-        from kernels import get_kernel
-
-        try:
-            _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
-        except FileNotFoundError:
-            # no kernel binary match, fallback to slow path
-            _causal_conv1d_cache = (None, None)
-        else:
-            _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
-    elif is_causal_conv1d_available():
-        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-
-        _causal_conv1d_cache = (causal_conv1d_update, causal_conv1d_fn)
-    else:
-        _causal_conv1d_cache = (None, None)
-    return _causal_conv1d_cache
 
 
 class MambaCache:
@@ -236,7 +209,12 @@ class MambaMixer(nn.Module):
         self.warn_slow_implementation()
 
     def warn_slow_implementation(self):
-        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update, causal_conv1d_fn = (
+            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+            if causal_conv1d is not None
+            else (None, None)
+        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -287,7 +265,12 @@ class MambaMixer(nn.Module):
             )
 
         else:
-            causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
+            causal_conv1d = lazy_load_kernel("causal-conv1d")
+            causal_conv1d_update, causal_conv1d_fn = (
+                (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+                if causal_conv1d is not None
+                else (None, None)
+            )
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -451,7 +434,12 @@ class MambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update, causal_conv1d_fn = (
+            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+            if causal_conv1d is not None
+            else (None, None)
+        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
