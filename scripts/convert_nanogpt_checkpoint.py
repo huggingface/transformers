@@ -82,10 +82,29 @@ def convert_checkpoint(source_dir: Path, dest_dir: Path) -> tuple[NanoGPTConfig,
     config.save_pretrained(dest_dir)
     torch.save(new_state, dest_dir / "pytorch_model.bin")
 
-    for filename in ("tokenizer.json", "tokenizer_config.json", "special_tokens_map.json"):
-        src = source_dir / filename
-        if src.exists():
-            (dest_dir / filename).write_bytes(src.read_bytes())
+    # Convert the pickle tokenizer to HF format
+    tokenizer_pkl = source_dir / "tokenizer.pkl"
+    if tokenizer_pkl.exists():
+        try:
+            import pickle
+            from transformers.integrations.tiktoken import convert_tiktoken_to_fast
+            with open(tokenizer_pkl, 'rb') as f:
+                tok_pkl = pickle.load(f)
+            convert_tiktoken_to_fast(tok_pkl, dest_dir)
+            LOGGER.info("Converted tokenizer.pkl to HuggingFace format")
+        except Exception as e:
+            LOGGER.warning(f"Failed to convert tokenizer.pkl: {e}")
+            # Fallback: copy tokenizer files if they exist
+            for filename in ("tokenizer.json", "tokenizer_config.json"):
+                src = source_dir / filename
+                if src.exists():
+                    (dest_dir / filename).write_bytes(src.read_bytes())
+    else:
+        # No pickle tokenizer, copy JSON files
+        for filename in ("tokenizer.json", "tokenizer_config.json", "special_tokens_map.json"):
+            src = source_dir / filename
+            if src.exists():
+                (dest_dir / filename).write_bytes(src.read_bytes())
     return config, new_state
 
 
