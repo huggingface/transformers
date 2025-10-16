@@ -20,6 +20,7 @@ in the ./benches directory, organizing outputs into model-specific subfolders.
 
 import argparse
 import logging
+import os
 import sys
 import uuid
 
@@ -33,9 +34,8 @@ if __name__ == "__main__":
     parser.add_argument("--output-dir", type=str, default=None, help="Output dir for benchmark results")
     parser.add_argument("--log-level", type=str, choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO")
     parser.add_argument("--model-id", type=str, help="Specific model ID to benchmark (if supported by benchmarks)")
-
-    parser.add_argument("--warmup", type=int, default=3, help="Number of warmup iterations")
-    parser.add_argument("--iterations", type=int, default=10, help="Number of measurement iterations")
+    parser.add_argument("--warmup", "-w", type=int, default=3, help="Number of warmup iterations")
+    parser.add_argument("--iterations", "-i", type=int, default=10, help="Number of measurement iterations")
 
     parser.add_argument("--batch-size", "-b", type=int, nargs="+", help="Batch size")
     parser.add_argument("--sequence-length", "-s", type=int, nargs="+", help="Sequence length")
@@ -44,7 +44,18 @@ if __name__ == "__main__":
     parser.add_argument("--cross-generate", action="store_true", help="Cross-generate all combinations of configs")
     parser.add_argument("--num-tokens-to-profile", "-p", type=int, default=0, help="Number of tokens to profile")
 
+    parser.add_argument("--branch-name", type=str, help="Git branch name")
     parser.add_argument("--commit-id", type=str, help="Git commit ID (if not provided, will auto-detect from git)")
+    parser.add_argument("--commit-message", type=str, help="Git commit message")
+
+    parser.add_argument("--monitor-gpu", action="store_true", help="Whether to monitor GPU usage during benchmarks")
+
+    parser.add_argument(
+        "--push-result-to-dataset",
+        type=str,
+        default=None,
+        help="Name of the dataset to push results to. If not provided, results are not pushed to the Hub.",
+    )
     args = parser.parse_args()
 
     # Setup logging
@@ -76,6 +87,7 @@ if __name__ == "__main__":
                 batch_size=args.batch_size[0],
                 sequence_length=args.sequence_length[0],
                 num_tokens_to_generate=args.num_tokens_to_generate[0],
+                gpu_monitoring=args.monitor_gpu,
             )
         else:
             benchmark_configs = generate_main_configs(
@@ -84,6 +96,7 @@ if __name__ == "__main__":
                 batch_size=args.batch_size[0],
                 sequence_length=args.sequence_length[0],
                 num_tokens_to_generate=args.num_tokens_to_generate[0],
+                gpu_monitoring=args.monitor_gpu,
             )
 
     # Otherwise, we benchmark across all combinations of dimensions
@@ -94,6 +107,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size[0],
             sequence_length=args.sequence_length[0],
             num_tokens_to_generate=args.num_tokens_to_generate[0],
+            gpu_monitoring=args.monitor_gpu,
         )[0]
         benchmark_configs = []
         for num_tokens_to_generate in args.num_tokens_to_generate:
@@ -106,7 +120,14 @@ if __name__ == "__main__":
                     cfg_dict.pop("name")
                     benchmark_configs.append(BenchmarkConfig.from_dict(cfg_dict))
 
-    runner = BenchmarkRunner(logger, args.output_dir, args.commit_id)
+    runner = BenchmarkRunner(
+        logger,
+        args.output_dir,
+        args.branch_name,
+        args.commit_id,
+        args.commit_message,
+        dataset_id=args.push_result_to_dataset,
+    )
     results = runner.run_benchmarks(
         args.model_id,
         benchmark_configs,
