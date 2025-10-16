@@ -36,8 +36,6 @@ Explore the [Hub](https://huggingface.com/) today to find a model and use Transf
 
 Explore the [Models Timeline](./models_timeline) to discover the latest text, vision, audio and multimodal model architectures in Transformers.
 
-
-
 ## Features
 
 Transformers provides everything you need for inference or training with state-of-the-art pretrained models. Some of the main features include:
