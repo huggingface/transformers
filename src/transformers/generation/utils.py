@@ -3874,7 +3874,7 @@ def _split_model_outputs(new_outputs: tuple, cur_len: int, is_decoder_attention:
     # - Hidden states: (..., batch_size, att_query_len, hidden_size)
     att_query_len = new_outputs[0].shape[-2]  # Take tensor length from first layer
     # att_query_len is cur_len + added_len - 1 in prefill, added_len afterwards
-    added_len = att_query_len - cur_len + 1 if att_query_len >= cur_len else att_query_len
+    added_len = att_query_len - cur_len + 1 if att_query_len > cur_len else att_query_len
     is_prefill_pass = att_query_len > added_len
     outputs = ()
     if is_prefill_pass:
