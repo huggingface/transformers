@@ -239,7 +239,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] 
         logger.warning(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
-    if is_kernels_available():
+    if _kernels_available:
         from kernels import get_kernel
 
         try:
