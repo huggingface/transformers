@@ -172,6 +172,7 @@ class BambaConfig(PreTrainedConfig):
 
         self.attn_layer_indices = attn_layer_indices
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        self.partial_rotary_factor = 0.5
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
 

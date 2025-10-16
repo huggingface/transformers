@@ -38,20 +38,20 @@ The Transformers library provides a flexible and extensible implementation of va
 
 # Configuration in Model Configs
 
-To enable and customize rotary embeddings, add a `rope_scaling` field to your model’s configuration file (`config.json`). This field controls the RoPE behavior across model layers. Note that each RoPE variant defines its own set of expected keys and missing keys will raise an error. See the example below which creates a llama config with default RoPE parameters: 
+To enable and customize rotary embeddings, add a `rope_parameters` field to your model’s configuration file (`config.json`). This field controls the RoPE behavior across model layers. Note that each RoPE variant defines its own set of expected keys and missing keys will raise an error. See the example below which creates a llama config with default RoPE parameters: 
 
 
 ```python
 from transformers import LlamaConfig
 
 config = LlamaConfig()
-config.rope_scaling = {
+config.rope_parameters = {
     "rope_type": "default", # type of RoPE to use
     "rope_theta": 10000.0 # base frequency parameter
 }
 
 # If we want to apply a scaled RoPE type, we need to pass extra parameters
-config.rope_scaling = {
+config.rope_parameters = {
     "rope_type": "linear",
     "rope_theta": 10000.0,
     "factor": 8.0  # scale factor for context extension
@@ -60,14 +60,14 @@ config.rope_scaling = {
 
 ## Per-Layer-Type RoPE Configuration
 
-Some models such as Gemma-3 use different layer types with different attention mechanisms, i.e. "full attention" in some blocks and "sliding-window attention" in others. Transformers supports specifying distinct RoPE parameters per layer type for these models. In this case, `rope_scaling` should be a nested dictionary, where top-level keys correspond to `config.layer_types` and values are per-type RoPE parameters. During model initialization, each decoder layer will automatically look up the matching RoPE configuration based on its declared layer type.
+Some models such as Gemma-3 use different layer types with different attention mechanisms, i.e. "full attention" in some blocks and "sliding-window attention" in others. Transformers supports specifying distinct RoPE parameters per layer type for these models. In this case, `rope_parameters` should be a nested dictionary, where top-level keys correspond to `config.layer_types` and values are per-type RoPE parameters. During model initialization, each decoder layer will automatically look up the matching RoPE configuration based on its declared layer type.
 
 
 ```python
 from transformers import Gemma3Config
 
 config = Gemma3Config()
-config.rope_scaling = {
+config.rope_parameters = {
     "full_attention": {
         "rope_type": "dynamic",
         "rope_theta": 1000000.0,

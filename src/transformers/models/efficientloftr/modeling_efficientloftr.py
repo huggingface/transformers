@@ -30,14 +30,10 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    logging,
     torch_int,
 )
 from ...utils.generic import check_model_inputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -376,7 +372,7 @@ def eager_attention_forward(
 class EfficientLoFTRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int, is_cross_attention: bool = False):
+    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -385,7 +381,6 @@ class EfficientLoFTRAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
-        self.is_cross_attention = is_cross_attention
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -416,7 +411,7 @@ class EfficientLoFTRAttention(nn.Module):
         key_states = self.k_proj(current_states).view(batch_size, seq_len, -1, dim)
         value_states = self.v_proj(current_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
 
-        if not self.is_cross_attention:
+        if position_embeddings is not None:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
 
@@ -462,12 +457,12 @@ class EfficientLoFTRMLP(nn.Module):
 
 
 class EfficientLoFTRAggregatedAttention(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int, is_cross_attention: bool = False):
+    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
         super().__init__()
 
         self.q_aggregation_kernel_size = config.q_aggregation_kernel_size
         self.aggregation = EfficientLoFTRAggregationLayer(config)
-        self.attention = EfficientLoFTRAttention(config, layer_idx, is_cross_attention=is_cross_attention)
+        self.attention = EfficientLoFTRAttention(config, layer_idx)
         self.mlp = EfficientLoFTRMLP(config)
 
     def forward(
@@ -517,7 +512,7 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         super().__init__()
 
         self.self_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
-        self.cross_attention = EfficientLoFTRAggregatedAttention(config, layer_idx, is_cross_attention=True)
+        self.cross_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
 
     def forward(
         self,

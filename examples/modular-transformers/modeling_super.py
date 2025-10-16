@@ -51,8 +51,8 @@ class SuperRotaryEmbedding(nn.Module):
     def __init__(self, config: SuperConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        if hasattr(config, "rope_parameters") and isinstance(config.rope_parameters, dict):
+            self.rope_type = config.rope_parameters.get("rope_type", config.rope_parameters.get("type"))
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings

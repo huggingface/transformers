@@ -74,8 +74,8 @@ class CwmConfigTest(unittest.TestCase):
 
         self.assertEqual(config.layer_types, expected_types)
 
-    def test_rope_scaling_config(self):
-        custom_rope_scaling = {
+    def test_rope_parameters_config(self):
+        custom_rope_parameters = {
             "factor": 8.0,
             "high_freq_factor": 2.0,
             "low_freq_factor": 0.5,
@@ -84,9 +84,9 @@ class CwmConfigTest(unittest.TestCase):
             "rope_theta": 1_000_000.0,
         }
 
-        config = CwmConfig(rope_scaling=custom_rope_scaling)
+        config = CwmConfig(rope_parameters=custom_rope_parameters)
 
-        self.assertEqual(config.rope_scaling, custom_rope_scaling)
+        self.assertEqual(config.rope_parameters, custom_rope_parameters)
 
     def test_config_serialization(self):
         config = CwmConfig(
