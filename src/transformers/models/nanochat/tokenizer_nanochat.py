@@ -63,7 +63,7 @@ class NanoGPTTokenizer(PreTrainedTokenizerFast):
         pass
 
     @classmethod
-    def _load_vocab_file(cls, pretrained_model_name_or_path):
+    def _load_vocab_file(cls, pretrained_model_name_or_path, revision=None):
         local_tok_path = os.path.join(pretrained_model_name_or_path, "tokenizer.json")
         if os.path.isfile(local_tok_path):
             return local_tok_path
@@ -71,6 +71,7 @@ class NanoGPTTokenizer(PreTrainedTokenizerFast):
             tok_path = hf_hub_download(
                 repo_id=pretrained_model_name_or_path,
                 filename="tokenizer.json",
+                revision=revision,
             )
             return tok_path
         except (HfHubHTTPError, OSError) as e:
@@ -81,7 +82,7 @@ class NanoGPTTokenizer(PreTrainedTokenizerFast):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
-        tokenizer_file = cls._load_vocab_file(pretrained_model_name_or_path)
+        tokenizer_file = cls._load_vocab_file(pretrained_model_name_or_path, revision=kwargs.get("revision"))
         kwargs["tokenizer_file"] = tokenizer_file
         chat_template = kwargs.get("chat_template")
         if chat_template is None:
