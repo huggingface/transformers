@@ -142,7 +142,6 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
-    is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
     is_torch_mlu_available,
@@ -1074,13 +1073,6 @@ def require_torch_accelerator(test_case):
     return unittest.skipUnless(torch_device is not None and torch_device != "cpu", "test requires accelerator")(
         test_case
     )
-
-
-def require_torch_fp16(test_case):
-    """Decorator marking a test that requires a device that supports fp16"""
-    return unittest.skipUnless(
-        is_torch_fp16_available_on_device(torch_device), "test requires device with fp16 support"
-    )(test_case)
 
 
 def require_fp8(test_case):
