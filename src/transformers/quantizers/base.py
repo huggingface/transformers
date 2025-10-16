@@ -79,19 +79,6 @@ class HfQuantizer(ABC):
                 f"pass `pre_quantized=True` while knowing what you are doing."
             )
 
-    def update_torch_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        """
-        Deprecared in favor of `update_dtype`!
-
-        Args:
-            dtype (`torch.dtype`):
-                The input dtype that is passed in `from_pretrained`
-        """
-        logger.warning_once(
-            "`update_torch_dtype` is deprecated in favor of `update_dtype`! It will be removed in version v4.57"
-        )
-        return self.update_dtype(dtype)
-
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         """
         Some quantization methods require to explicitly set the dtype of the model to a
@@ -190,14 +177,6 @@ class HfQuantizer(ABC):
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 
-    def check_quantized_param(self, *args, **kwargs) -> bool:
-        """DEPRECATED -> remove in v5"""
-        logger.warning_once(
-            "`check_quantized_param` is deprecated in favor of `param_needs_quantization`, which is a much "
-            "more self.explanatory name for what the method achieves. It will be removed in v5"
-        )
-        return self.param_needs_quantization(*args, **kwargs)
-
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         """
         Check whether a given param needs quantization as defined by `create_quantized_param`.
@@ -231,6 +210,9 @@ class HfQuantizer(ABC):
     def update_ep_plan(self, config):
         "updates the tp plan for the scales"
         return config
+
+    def _process_model_before_weight_loading(self, model, **kwargs):
+        return model
 
     def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
         """
@@ -365,12 +347,6 @@ class HfQuantizer(ABC):
     def update_state_dict_with_metadata(self, state_dict, metadata):
         """Update state dict with metadata. Default behaviour returns state_dict"""
         return state_dict
-
-    @abstractmethod
-    def _process_model_before_weight_loading(self, model, **kwargs): ...
-
-    @abstractmethod
-    def _process_model_after_weight_loading(self, model, **kwargs): ...
 
     @abstractmethod
     def is_serializable(self, safe_serialization=None): ...
