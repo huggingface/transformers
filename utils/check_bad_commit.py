@@ -45,10 +45,10 @@ result = subprocess.run(
 )
 print(result.stdout)
 
-if f"PASSED {target_test}" in result.stdout:
-    print("test passed")
-    exit(0)
-elif len(result.stderr) > 0:
+if f"FAILED {target_test}" in result.stdout:
+    print("test failed")
+    exit(2)
+elif result.returncode != 0:
     if "ERROR: file or directory not found: " in result.stderr:
         print("test file or directory not found in this commit")
         exit(0)
@@ -56,12 +56,10 @@ elif len(result.stderr) > 0:
         print("test not found in this commit")
         exit(0)
     else:
-        print(f"pytest failed to run: {{result.stderr}}")
+        print(f"pytest gets unknown error: {{result.stderr}}")
         exit(-1)
-elif f"FAILED {target_test}" in result.stdout:
-    print("test failed")
-    exit(2)
 
+print(f"pytest runs successfully.")
 exit(0)
 """
 
@@ -103,22 +101,11 @@ git bisect run python3 target_script.py
     )
     print(result.stdout)
 
+    # This happens if running the script gives exit code < 0  or other issues
     if "error: bisect run failed" in result.stderr:
-        index = result.stderr.find("error: bisect run failed")
-        bash_error = result.stderr[index:]
-
-        error_msg = f"Error when running git bisect:\nbash error: {bash_error}"
-
-        pattern = "pytest failed to run: .+"
-        pytest_errors = re.findall(pattern, result.stdout)
-        if len(pytest_errors) > 0:
-            pytest_error = pytest_errors[0]
-            index = pytest_error.find("pytest failed to run: ")
-            index += len("pytest failed to run: ")
-            pytest_error = pytest_error[index:]
-            error_msg += f"pytest error: {pytest_error}"
-
-        raise ValueError(error_msg)
+        error_msg = f"Error when running git bisect:\nbash error: {result.stderr}\nbash output:\n{result.stdout}\nset `bad_commit` to `None`."
+        print(error_msg)
+        return None
 
     pattern = r"(.+) is the first bad commit"
     commits = re.findall(pattern, result.stdout)
@@ -135,6 +122,9 @@ git bisect run python3 target_script.py
 
 def get_commit_info(commit):
     """Get information for a commit via `api.github.com`."""
+    if commit is None:
+        return {"commit": None, "pr_number": None, "author": None, "merged_by": None}
+
     pr_number = None
     author = None
     merged_author = None
