@@ -31,23 +31,24 @@ def test_cli_download(cli):
 
 
 @require_torch
-def test_cli_download_trust_remote(cli, caplog):
+def test_cli_download_trust_remote(cli, caplog, capsys):
     caplog.set_level(100000)
     # ^ hack to avoid an issue happening only in CI. We don't check logs anyway so it's fine.
     #   Source: https://github.com/pallets/click/issues/824#issuecomment-562581313
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        output = cli(
-            "download",
-            "hf-internal-testing/test_dynamic_model_with_tokenizer",
-            "--trust-remote-code",
-            "--cache-dir",
-            tmpdir,
-        )
-        assert output.exit_code == 0
+    with capsys.disabled():
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = cli(
+                "download",
+                "hf-internal-testing/test_dynamic_model_with_tokenizer",
+                "--trust-remote-code",
+                "--cache-dir",
+                tmpdir,
+            )
+            assert output.exit_code == 0
 
-        # check if the model files are downloaded correctly
-        model_dir = os.path.join(tmpdir, "models--hf-internal-testing--test_dynamic_model_with_tokenizer")
-        assert os.path.exists(os.path.join(model_dir, "blobs"))
-        assert os.path.exists(os.path.join(model_dir, "refs"))
-        assert os.path.exists(os.path.join(model_dir, "snapshots"))
+            # check if the model files are downloaded correctly
+            model_dir = os.path.join(tmpdir, "models--hf-internal-testing--test_dynamic_model_with_tokenizer")
+            assert os.path.exists(os.path.join(model_dir, "blobs"))
+            assert os.path.exists(os.path.join(model_dir, "refs"))
+            assert os.path.exists(os.path.join(model_dir, "snapshots"))
