@@ -23,7 +23,7 @@ from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTraine
 from transformers.models.layoutlmv3 import LayoutLMv3Processor, LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, is_pytesseract_available
+from transformers.utils import is_pytesseract_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -81,9 +81,9 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "apply_ocr": True,
         }
 
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(image_processor_map) + "\n")
+        image_processor = LayoutLMv3ImageProcessor(**image_processor_map)
+        processor = LayoutLMv3Processor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
