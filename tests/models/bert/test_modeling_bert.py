@@ -709,8 +709,6 @@ class BertModelIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        from transformers.integrations.executorch import TorchExportableModuleForEncoderOnlyLM
-
         bert_model = "google-bert/bert-base-uncased"
         device = "cpu"
         attn_implementation = "sdpa"
@@ -735,15 +733,13 @@ class BertModelIntegrationTest(unittest.TestCase):
         eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
         self.assertEqual(eg_predicted_mask.split(), ["carpenter", "waiter", "barber", "mechanic", "salesman"])
 
-        exportable_module = TorchExportableModuleForEncoderOnlyLM(model)
-        exported_program = exportable_module.export(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
             strict=True,
         )
 
-        result = exported_program.module().forward(
-            input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
-        )
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
         ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
         self.assertEqual(eg_predicted_mask, ep_predicted_mask)
