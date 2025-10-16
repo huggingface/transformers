@@ -195,7 +195,29 @@ class LlamaTokenizer(PreTrainedTokenizer):
     def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         if self.legacy or from_slow:  # no dependency on protobuf
-            tokenizer.Load(self.vocab_file)
+            try:
+                tokenizer.Load(self.vocab_file)
+            except (TypeError, FileNotFoundError, OSError, RuntimeError) as e:
+                # Common cases:
+                # - TypeError: sentencepiece received None instead of a string path
+                # - FileNotFoundError/OSError/RuntimeError: path doesn't exist or file is invalid
+                if self.vocab_file is None or not isinstance(self.vocab_file, (str, bytes, os.PathLike)):
+                    raise TypeError(
+                        "Failed to load the SentencePiece tokenizer because no vocabulary file was found or the "
+                        "vocab path is invalid. This commonly happens when loading some third-party tokenizers "
+                        "(for example Mistral/Voxtral) that require the optional `mistral-common` package to provide "
+                        "tokenizer artifacts. Try installing it and re-running:\n\n"
+                        "    pip install mistral-common\n\n"
+                        "If you still see this error after installing, ensure the model identifier is correct and that "
+                        "the tokenizer files are present in the repository or local path.") from e
+
+                # For cases where a file path was provided but it doesn't exist or is invalid, give the same guidance
+                raise RuntimeError(
+                    "Failed to load the SentencePiece tokenizer from the provided vocab file path. "
+                    "If you're loading a third-party model (e.g. a Mistral/Voxtral tokenizer), you may need to "
+                    "install the optional `mistral-common` package which provides tokenizer files. Try:\n\n"
+                    "    pip install mistral-common\n\n"
+                    "Also verify the model identifier and that the tokenizer files exist at the expected path.") from e
             return tokenizer
 
         with open(self.vocab_file, "rb") as f:
