@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-from collections.abc import Iterable
 
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -82,7 +81,7 @@ class FastVlmConfig(PreTrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        image_token_index=151646,
+        image_token_id=151646,
         projector_hidden_act="gelu",
         vision_feature_select_strategy="full",
         vision_feature_layer=-1,
@@ -91,9 +90,10 @@ class FastVlmConfig(PreTrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
+
         if math.isqrt(image_seq_length) ** 2 != image_seq_length:
             raise ValueError(f"Inavalid image_seq_length: {image_seq_length}. It needs to be a perfect square.")
 
@@ -101,14 +101,6 @@ class FastVlmConfig(PreTrainedConfig):
             raise ValueError(
                 f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported in FastVLM."
             )
-
-        if any(
-            layer >= 0
-            for layer in (
-                vision_feature_layer if isinstance(vision_feature_layer, Iterable) else [vision_feature_layer]
-            )
-        ):
-            raise ValueError(f"Only negative vision feature layer values are supported. Got {vision_feature_layer}")
 
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
