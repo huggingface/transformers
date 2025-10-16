@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -73,7 +72,7 @@ class VibeVoiceEncoderFeedForward(nn.Module):
         return self.linear2(self.activation(self.linear1(x)))
 
 
-class VibeVoiceTokenizerStreamingCache:
+class VibeVoiceSemanticTokenizerStreamingCache:
     """Cache for streaming convolution, similar to KV cache in attention"""
 
     def __init__(self):
@@ -126,22 +125,6 @@ class VibeVoiceTokenizerStreamingCache:
             if sample_idx in sample_indices_set:
                 self.cache[key] = torch.zeros_like(self.cache[key])
 
-    def clear(self, layer_id: Optional[str] = None, sample_indices: Optional[torch.Tensor] = None):
-        """Clear cache for specific layer/samples or everything"""
-        if layer_id is None and sample_indices is None:
-            self.cache.clear()
-        elif layer_id is not None and sample_indices is None:
-            # Clear all samples for a specific layer
-            keys_to_remove = [k for k in self.cache.keys() if k[0] == layer_id]
-            for k in keys_to_remove:
-                del self.cache[k]
-        elif layer_id is not None and sample_indices is not None:
-            # Clear specific samples for a specific layer
-            sample_indices_list = sample_indices.tolist()
-            for idx in sample_indices_list:
-                key = (layer_id, idx)
-                self.cache.pop(key, None)
-
 
 class StreamingConv1d(nn.Module):
     """Conv1d with built-in handling of streaming and causal padding."""
@@ -175,7 +158,7 @@ class StreamingConv1d(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        cache: VibeVoiceTokenizerStreamingCache,
+        cache: VibeVoiceSemanticTokenizerStreamingCache,
         sample_indices: torch.Tensor,
     ) -> torch.Tensor:
         """
@@ -183,7 +166,7 @@ class StreamingConv1d(nn.Module):
 
         Args:
             x: Input tensor [batch_size, channels, time]
-            cache: VibeVoiceTokenizerStreamingCache object for maintaining states
+            cache: `VibeVoiceSemanticTokenizerStreamingCache` object for maintaining states
             sample_indices: Indices identifying each sample for cache management
 
         Returns:
@@ -382,7 +365,7 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representations.
-        cache (`VibeVoiceTokenizerStreamingCache`, *optional*):
+        cache (`VibeVoiceSemanticTokenizerStreamingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states.
         sample_indices (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Indices identifying each sample in the batch for cache management.
@@ -395,7 +378,7 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representations.
-        cache (`VibeVoiceTokenizerStreamingCache`, *optional*):
+        cache (`VibeVoiceSemanticTokenizerStreamingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states.
         sample_indices (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Indices identifying each sample in the batch for cache management.     
@@ -403,4 +386,4 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
         return self.encode(audio, cache=cache, sample_indices=sample_indices)
 
 
-__all__ = ["VibeVoiceTokenizerStreamingCache", "VibeVoiceSemanticTokenizerModel"]
+__all__ = ["VibeVoiceSemanticTokenizerStreamingCache", "VibeVoiceSemanticTokenizerModel"]
