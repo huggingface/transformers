@@ -288,6 +288,7 @@ class ASTEncoder(nn.Module):
 class ASTPreTrainedModel(PreTrainedModel):
     config: ASTConfig
     base_model_prefix = "audio_spectrogram_transformer"
+    input_modalities = "audio"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _supports_sdpa = True

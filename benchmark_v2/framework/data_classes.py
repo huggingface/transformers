@@ -82,19 +82,19 @@ class BenchmarkResult:
     def __init__(self) -> None:
         self.e2e_latency = []
         self.token_generation_times = []  # time at which each token was generated (relative to start of the generation)
-        self.decoded_outputs = []
+        self.shape_and_decoded_outputs = []
         self.gpu_metrics = []
 
     def accumulate(
         self,
         e2e_latency: float,
         token_generation_times: list[float],
-        decoded_output: str,
+        shape_and_decoded_output: str,
         gpu_metrics: GPURawMetrics | None,
     ) -> None:
         self.e2e_latency.append(e2e_latency)
         self.token_generation_times.append(token_generation_times)
-        self.decoded_outputs.append(decoded_output)
+        self.shape_and_decoded_outputs.append(shape_and_decoded_output)
         self.gpu_metrics.append(gpu_metrics)
 
     def to_dict(self) -> dict[str, None | int | float]:
@@ -106,7 +106,7 @@ class BenchmarkResult:
         return {
             "e2e_latency": self.e2e_latency,
             "token_generation_times": self.token_generation_times,
-            "decoded_outputs": self.decoded_outputs,
+            "shape_and_decoded_outputs": self.shape_and_decoded_outputs,
             "gpu_metrics": gpu_metrics,
         }
 
@@ -123,7 +123,7 @@ class BenchmarkResult:
             new_instance.accumulate(
                 e2e_latency=data["e2e_latency"][i],
                 token_generation_times=data["token_generation_times"][i],
-                decoded_output=data["decoded_output"][i],
+                shape_and_decoded_output=data["shape_and_decoded_outputs"][i],
                 gpu_metrics=gpu_metrics[i],
             )
         return new_instance
@@ -134,19 +134,27 @@ class BenchmarkResult:
     def get_measured_itl(self) -> list[float]:
         return [(dt[-1] - dt[0]) / (len(dt) - 1) for dt in self.token_generation_times if len(dt) > 1]
 
-    def pprint(self, tabs: int = 0) -> None:
-        collated_stats = equalize_lengths_and_collate(
-            [
-                add_unit_to_duration(compute_basic_statistics(self.e2e_latency)),
-                add_unit_to_duration(compute_basic_statistics(self.get_measured_ttft())),
-                add_unit_to_duration(compute_basic_statistics(self.get_measured_itl())),
-            ]
-        )
-        pretty_print_dict(
-            {
-                "E2E Latency": collated_stats[0],
-                "Time to First Token": collated_stats[1],
-                "Inter-Token Latency": collated_stats[2],
-            },
-            tabs=tabs,
-        )
+    def get_throughput(self, batch_size: int) -> float:
+        return [
+            batch_size * len(dt) / e2e_latency
+            for e2e_latency, dt in zip(self.e2e_latency, self.token_generation_times)
+        ]
+
+    def pprint(self, batch_size: int = 0, tabs: int = 0) -> None:
+        stats_to_collate = [
+            add_unit_to_duration(compute_basic_statistics(self.e2e_latency)),
+            add_unit_to_duration(compute_basic_statistics(self.get_measured_ttft())),
+            add_unit_to_duration(compute_basic_statistics(self.get_measured_itl())),
+        ]
+        if batch_size > 0:
+            throughput_stats = compute_basic_statistics(self.get_throughput(batch_size))
+            stats_to_collate.append({key: f"{value:.2f}tok/s" for key, value in throughput_stats.items()})
+        collated_stats = equalize_lengths_and_collate(stats_to_collate)
+        dict_to_pprint = {
+            "E2E Latency": collated_stats[0],
+            "Time to First Token": collated_stats[1],
+            "Inter-Token Latency": collated_stats[2],
+        }
+        if batch_size > 0:
+            dict_to_pprint["Throughput"] = collated_stats[3]
+        pretty_print_dict(dict_to_pprint, tabs=tabs)

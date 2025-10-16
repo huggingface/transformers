@@ -519,6 +519,7 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
     config: ViTMAEConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
