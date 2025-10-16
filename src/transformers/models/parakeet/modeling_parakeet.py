@@ -715,12 +715,11 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
         self.config = config
         self.gradient_checkpointing = False
 
-        self.enc = torch.nn.Linear(config.encoder_hidden, config.joint_hidden)
-        self.pred = torch.nn.Linear(config.pred_hidden, config.joint_hidden)
+        self.enc = torch.nn.Linear(config.enc_hidden_size, config.hidden_size)
+        self.pred = torch.nn.Linear(config.pred_hidden_size, config.hidden_size)
 
-        activation = config.joint_activation
-        dropout = config.joint_dropout
-        dropout = 0.1
+        activation = config.activation
+        dropout = config.dropout
 
         num_classes = config.vocab_size + 1 + len(config.durations)
 
@@ -735,7 +734,7 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
         layers = (
             [activation]
             + ([torch.nn.Dropout(p=dropout)] if dropout else [])
-            + [torch.nn.Linear(config.joint_hidden, num_classes)]
+            + [torch.nn.Linear(config.hidden_size, num_classes)]
         )
         self.joint_net = torch.nn.Sequential(*layers)
 
@@ -744,12 +743,22 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
     @auto_docstring
     @check_model_inputs()
     @can_return_tuple
-    def forward(self, enc, pred):
-        enc = self.enc(enc.view([-1]))
-        pred = self.pred(pred.view([-1]))
+    def forward(
+        self,
+        enc: torch.Tensor,
+        pred: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        #        enc = self.enc(enc.view([-1]))
+        #        pred = self.pred(pred.view([-1]))
+
+        print("HERE ENC PRED", enc.shape, pred.shape)
+        pred = pred.transpose(1, 2)  # making it B, T, D
+        enc = self.enc(enc)
+        pred = self.pred(pred)
 
         output = self.joint_net(enc + pred)
-        return output
+        return BaseModelOutput(last_hidden_state=output)
 
 
 class ParakeetTDTPredictor(ParakeetPreTrainedModel):
@@ -765,7 +774,7 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
             config.num_hidden_layers + 1,
             config.norm,
             config.forget_gate_bias,
-            config.pred_dropout,
+            config.dropout,
             config.norm_first_rnn,
             config.t_max,
             config.weights_init_scale,
@@ -842,18 +851,15 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
         hidden_state=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        y = input_token
-        return self.predict(y, state=states)
+        assert input_token is not None
+
+        device = self.embed.weight.device
+        if input_token.device != device:
+            input_token = input_token.to(device)
+        return self.predict(input_token, state=states)
 
     def predict(self, y, state):
         # Get device and dtype of current module
-        _p = self.embed.weight
-        device = _p.device
-        dtype = _p.dtype
-
-        assert y is not None
-        if y.device != device:
-            y = y.to(device)
 
         # (B, U) -> (B, U, H)
         y = self.embed(y).transpose(0, 1)  # (U + 1, B, H)
@@ -1114,7 +1120,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             symbols_added = 0
             enc = encoder_output[0, t, :]
             while symbols_added < 2:
-                logits = self.joint(enc, g)
+                logits = self.joint(enc, g).last_hidden_state
+
+                logits = logits.view([-1])
 
                 token_logits = logits[: self.blank_token_id + 1].softmax(-1)
                 duration_logits = logits[self.blank_token_id + 1 :].softmax(-1)

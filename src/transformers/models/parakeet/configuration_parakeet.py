@@ -164,7 +164,6 @@ class ParakeetTDTDecoderConfig(PreTrainedConfig):
         vocab_size=1024,
         norm=None,
         forget_gate_bias=1.0,
-        pred_dropout=0.0,
         norm_first_rnn=None,
         t_max=None,
         weights_init_scale=1.0,
@@ -181,7 +180,6 @@ class ParakeetTDTDecoderConfig(PreTrainedConfig):
         self.norm = norm
         self.forget_gate_bias=forget_gate_bias
         self.t_max=t_max
-        self.pred_dropout=pred_dropout
         self.norm_first_rnn=norm_first_rnn
         self.weights_init_scale=weights_init_scale
         self.hidden_hidden_bias_scale=hidden_hidden_bias_scale
@@ -193,26 +191,26 @@ class ParakeetTDTJointConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        encoder_hidden=1024,
-        pred_hidden=640,
-        joint_hidden=640,
+        enc_hidden_size=1024,
+        pred_hidden_size=640,
+        hidden_size=640,
         vocab_size=1024,
         durations=[0,1,2,3,4],
         norm=None,
-        joint_dropout=0.0,
-        joint_activation='relu',
+        dropout=0.0,
+        activation='relu',
         **kwargs,
     ):
         super().__init__(
             **kwargs,
         )
-        self.encoder_hidden = encoder_hidden
-        self.pred_hidden = pred_hidden
-        self.joint_hidden = joint_hidden
+        self.enc_hidden_size = enc_hidden_size
+        self.pred_hidden_size = pred_hidden_size
+        self.hidden_size = hidden_size
         self.vocab_size = vocab_size
         self.durations = durations
-        self.joint_dropout=joint_dropout
-        self.joint_activation=joint_activation
+        self.dropout = dropout
+        self.activation = activation
 
 
 class ParakeetCTCConfig(PreTrainedConfig):
