@@ -406,13 +406,28 @@ class VibeVoiceProcessor(ProcessorMixin):
         
         # Pad/truncate tokenizer input for batch
         batch_encoding = self.tokenizer.pad(
-            BatchFeature({"input_ids": input_ids, "speech_input_mask": speech_input_masks}),
+            BatchFeature({"input_ids": input_ids}),
             padding=padding,
             padding_side="left",
             max_length=max_length if truncation else None,
             return_tensors=return_tensors,
             return_attention_mask=return_attention_mask,
         )
+        
+        # Manually align speech_input_mask with padded input_ids
+        padded_length = batch_encoding["input_ids"].shape[1]
+        padded_speech_masks = []
+        for mask in speech_input_masks:
+            if len(mask) < padded_length:
+                # Pad on the left (same as input_ids padding_side="left") 
+                padding_needed = padded_length - len(mask)
+                padded_mask = [False] * padding_needed + mask
+            else:
+                # Truncate if needed (same logic as input_ids)
+                padded_mask = mask[-padded_length:] if truncation else mask[:padded_length]
+            padded_speech_masks.append(padded_mask)
+        batch_encoding["speech_input_mask"] = torch.tensor(padded_speech_masks, dtype=torch.bool)
+
         # if processed_audio is not None:
         #     # TODO would like to expand like this for proper batch dim
         #     batch_size = len(texts)

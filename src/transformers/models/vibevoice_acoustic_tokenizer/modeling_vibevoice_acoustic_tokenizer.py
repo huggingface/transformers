@@ -129,7 +129,7 @@ class NormConvTranspose1d(nn.Module):
         return x
 
 
-class VibeVoiceTokenizerStreamingCache:
+class VibeVoiceAcousticTokenizerStreamingCache:
     """Cache for streaming convolution, similar to KV cache in attention"""
     def __init__(self):
         self.cache = {}  # Dict mapping (layer_id, sample_idx) to state tensor
@@ -232,7 +232,7 @@ class SConv1d(nn.Module):
         return self._layer_id
 
     def forward(self, x: torch.Tensor,
-                cache: Optional[VibeVoiceTokenizerStreamingCache] = None,
+                cache: Optional[VibeVoiceAcousticTokenizerStreamingCache] = None,
                 sample_indices: Optional[torch.Tensor] = None,
                 use_cache: bool = False,
                 debug: bool = False) -> torch.Tensor:
@@ -241,7 +241,7 @@ class SConv1d(nn.Module):
         
         Args:
             x: Input tensor [batch_size, channels, time]
-            cache: VibeVoiceTokenizerStreamingCache object for maintaining states
+            cache: VibeVoiceAcousticTokenizerStreamingCache object for maintaining states
             sample_indices: Indices identifying each sample for cache management
             use_cache: Whether to use cached states for streaming
             debug: Whether to print debug information
@@ -263,7 +263,7 @@ class SConv1d(nn.Module):
         return self._forward_streaming(x, cache, sample_indices, debug)
 
     def _forward_streaming(self, x: torch.Tensor,
-                          cache: VibeVoiceTokenizerStreamingCache,
+                          cache: VibeVoiceAcousticTokenizerStreamingCache,
                           sample_indices: torch.Tensor,
                           debug: bool = False) -> torch.Tensor:
         """Streaming forward pass with cache operations kept separate from compiled code"""
@@ -393,7 +393,7 @@ class SConvTranspose1d(nn.Module):
         return self._layer_id
 
     def forward(self, x: torch.Tensor,
-                cache: Optional[VibeVoiceTokenizerStreamingCache] = None,
+                cache: Optional[VibeVoiceAcousticTokenizerStreamingCache] = None,
                 sample_indices: Optional[torch.Tensor] = None,
                 use_cache: bool = False,
                 debug: bool = False) -> torch.Tensor:
@@ -413,7 +413,7 @@ class SConvTranspose1d(nn.Module):
         return self._forward_streaming(x, cache, sample_indices, debug)
 
     def _forward_streaming(self, x: torch.Tensor,
-                          cache: VibeVoiceTokenizerStreamingCache,
+                          cache: VibeVoiceAcousticTokenizerStreamingCache,
                           sample_indices: torch.Tensor,
                           debug: bool = False) -> torch.Tensor:
         """Streaming forward pass with cache operations kept separate from compiled code"""
@@ -1029,6 +1029,6 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
 
 
 __all__ = [
-    "VibeVoiceTokenizerStreamingCache",
+    "VibeVoiceAcousticTokenizerStreamingCache",
     "VibeVoiceAcousticTokenizerModel",
 ]

@@ -12,7 +12,8 @@ from .audio_streamer import AsyncAudioStreamer, AudioStreamer
 from .modeling_vibevoice import VibeVoiceModel, VibeVoicePreTrainedModel
 
 # TODO import from this folder?
-from ..vibevoice_acoustic_tokenizer import VibeVoiceTokenizerStreamingCache
+from ..vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerStreamingCache
+from ..vibevoice_semantic_tokenizer import VibeVoiceSemanticTokenizerStreamingCache
 
 
 logger = logging.get_logger(__name__)
@@ -347,8 +348,8 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             None, None, tokenizer, return_processors=False, **negative_kwargs
         )
 
-        acoustic_cache = VibeVoiceTokenizerStreamingCache()
-        semantic_cache = VibeVoiceTokenizerStreamingCache()
+        acoustic_cache = VibeVoiceAcousticTokenizerStreamingCache()
+        semantic_cache = VibeVoiceSemanticTokenizerStreamingCache()
 
         batch_size = input_ids.shape[0]
         device = input_ids.device
