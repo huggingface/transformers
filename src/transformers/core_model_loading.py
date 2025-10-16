@@ -16,10 +16,13 @@
 
 from __future__ import annotations
 
+import math
+import operator
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import reduce
 from typing import Any, Optional, Union
-
+from abc import abstractmethod
 import torch
 
 
@@ -100,8 +103,12 @@ class ConversionOps:
 
 
 
-    1. ALWAYS TP FIRST !!! If we compute we compute fast locally -> communicate async.
+    ALWAYS TP FIRST !!! If we compute we compute fast locally -> communicate async.
+    The set of operations that we need to support is actually not that big:
 
+    https://github.com/cchen1436/NeMo/blob/eb5426e6d00b0d0225442d4b8ced1185dbc9a2ff/nemo/lightning/io/state.py#L511
+    I am taking a bit of inspiration from this, as it looks fairly similar appart from not having embedded quantization
+    and the TP sharding.
 
     rename region
     -------------------
@@ -176,6 +183,7 @@ class ConversionOps:
         """Free any cached buffers."""
         self._buffer = None
 
+    @abstractmethod
     def convert(self, value: Union[Sequence[torch.Tensor], torch.Tensor], *, context: dict[str, Any]) -> torch.Tensor:
         raise NotImplementedError
 
@@ -303,7 +311,51 @@ class Fp8Quantize(ConversionOps):
 
 @dataclass(frozen=True)
 class WeightConversion:
-    """Describe how a serialized weight maps to a model parameter."""
+    """Describe how a serialized weight maps to a model parameter.
+    if people need to use a custom op, they just have to make it inherit from ConversionOps
+    """
 
-    new_key: str
-    operations: tuple[Union[type[ConversionType], type[ConversionOps]]]
+    target_key: str
+    source_key: str
+    operations: tuple[Union[type[ConversionOps], type[ConversionOps]]]
+
+
+def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_config):
+    """Convert a state dict according to a weight mapping.
+
+    Given that the model might be sharded, and that some patterns might fuse experts, there will
+    be small edgecases to handle.
+
+    If q,k and v need to be merged, but they are on a different state dict, we need to make sure
+    we collected all of the keys.
+
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to load the converted state dict into. We need this to get the type
+            of the layer. TODO not used yet
+        state_dict (`dict`):
+            A state dict containing the weights to convert.
+        weight_mapping (`List[WeightConversion]`):
+            A list of `WeightConversion` objects describing how to convert the weights.
+        tp_plan:
+            The tensor parallelism plan for this model. Used to shard the weights correctly.
+        quantization_config:
+            The quantization configuration for this model. Used to quantize the weights correctly.
+
+    Returns:
+        - `dict`: The converted state dict.
+        - list[ConversionOps]: The list of operations used during the conversion. This is useful if the model needs to be saved
+          in its legacy format later on.
+    """
+    converted_state_dict = {}
+    ops_cache = {}
+    # 1. We need to rename / collect all the weights (iterate once through all the state dict)
+
+    # 2. Now that we have all the weights, we can apply the operations
+
+    # Clear cached buffers in all operations
+    for op in ops_cache.values():
+        op.clear_cache()
+
+    return converted_state_dict
