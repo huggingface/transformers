@@ -324,11 +324,9 @@ class ParakeetTDTJointModelTester:
         pred_hidden_size=64,
         enc_hidden_size=64,
         num_hidden_layers=2,
-        t_length=32,
-        u_length=16,
         durations=[0,1,2,3,4],
         is_training=True,
-        dropout=0,  # so gradient checkpointing doesn't fail
+        dropout=0.1,  # so gradient checkpointing doesn't fail
     ):
         # testing suite parameters
         self.parent = parent
@@ -340,9 +338,9 @@ class ParakeetTDTJointModelTester:
         self.pred_hidden_size = pred_hidden_size
         self.enc_hidden_size = enc_hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.t_length = t_length
-        self.u_length = u_length
-        self.output_seq_length = -1 # TODO
+        self.t_length = 1  # so far only support 1
+        self.u_length = 1  # so far only support 1
+        self.output_seq_length = -1
         self.vocab_size = vocab_size
         self.durations = durations
 
@@ -363,12 +361,12 @@ class ParakeetTDTJointModelTester:
             durations=self.durations,
         )
 
-    def create_and_check_model(self, config, input_features):
+    def create_and_check_model(self, config, enc, pred):
         model = ParakeetTDTJoint(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_features)
+            result = model(enc, pred)
 
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, config.hidden_size, self.output_seq_length)
@@ -444,8 +442,12 @@ class ParakeetTDTJointModelTest(ModelTesterMixin, unittest.TestCase):
 #
 #            check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(reason="this class only returns the last hidden state not prior ones, and there is no gradient on last hidden state w.r.t output.")
-    def test_retain_grad_hidden_states_attentions(self):
+#    @unittest.skip(reason="this class only returns the last hidden state not prior ones, and there is no gradient on last hidden state w.r.t output.")
+#    def test_retain_grad_hidden_states_attentions(self):
+#        pass
+
+    @unittest.skip(reason="ParakeetJoint does not use inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
 

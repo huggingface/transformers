@@ -571,7 +571,15 @@ class LSTMDropout(torch.nn.Module):
 
 class ParakeetTDTJoint(ParakeetPreTrainedModel):
     config: ParakeetTDTJointConfig
-    base_model_prefix = "joint"
+    base_model_prefix = "" #joint"
+    main_input_name = "enc"
+    _supports_flat_attention_mask = False
+    _supports_sdpa = True
+    _supports_flex_attn = False
+    _supports_attention_backend = False
+    _can_record_outputs = {}
+    _no_split_modules = None
+
     def __init__(self, config: ParakeetTDTJointConfig):
         super().__init__(config)
         self.config = config
@@ -580,46 +588,33 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
         self.enc = torch.nn.Linear(config.enc_hidden_size, config.hidden_size)
         self.pred = torch.nn.Linear(config.pred_hidden_size, config.hidden_size)
 
-        activation = config.activation
-        dropout = config.dropout
-
         num_classes = config.vocab_size + 1 + len(config.durations)
 
-        assert activation == 'relu'
-        if activation == 'relu':
-            activation = torch.nn.ReLU(inplace=True)
-        elif activation == 'sigmoid':
-            activation = torch.nn.Sigmoid()
-        elif activation == 'tanh':
-            activation = torch.nn.Tanh()
-
         layers = (
-            [activation]
-            + ([torch.nn.Dropout(p=dropout)] if dropout else [])
+            [torch.nn.ReLU(inplace=True)]
+            + ([torch.nn.Dropout(p=self.config.dropout)])
             + [torch.nn.Linear(config.hidden_size, num_classes)]
         )
         self.joint_net = torch.nn.Sequential(*layers)
-
         self.post_init()
 
     @auto_docstring
     @check_model_inputs()
-    @can_return_tuple
     def forward(
         self,
         enc: torch.Tensor,
         pred: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-#        enc = self.enc(enc.view([-1]))
-#        pred = self.pred(pred.view([-1]))
+    ) -> BaseModelOutputWithNoAttention:
 
+        # Right now we only support joint for inference.
 
-        print("HERE ENC PRED", enc.shape, pred.shape)
-        pred = pred.transpose(1, 2)  # making it B, T, D
+        pred = pred.view([-1, self.config.pred_hidden_size])  # making it B, D
+        enc = enc.view([-1, self.config.enc_hidden_size])  # making it B, D
         enc = self.enc(enc)
         pred = self.pred(pred)
 
+        assert enc.shape[0] == pred.shape[0]
         output = self.joint_net(enc + pred)
         return BaseModelOutput(last_hidden_state=output)
 
