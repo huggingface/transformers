@@ -216,8 +216,9 @@ class TestTensorParallel(TestCasePlus):
 
     def test_custom_tp_plan(self):
         script_to_run = textwrap.dedent(
-            rf"""
+            """
             import os
+            import re
             import torch
             from torch.distributed.tensor import DTensor
             from transformers import AutoModelForCausalLM
@@ -242,11 +243,11 @@ class TestTensorParallel(TestCasePlus):
 
             # Check only the attentions are sharded
             for name, param in model.named_parameters():
-                if re.match(r"\.self_attn\.(q|k|v|o)_proj\.", name):
+                if re.search(r"\.self_attn\.(q|k|v|o)_proj\.", name):
                     assert isinstance(param, DTensor)
                 else:
                     assert not isinstance(param, DTensor)
-            """
+            """  # noqa -> for some reason `make fixup` wants to make that a r-string...
         )
         torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
 
