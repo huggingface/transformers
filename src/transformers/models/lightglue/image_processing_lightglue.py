@@ -40,18 +40,26 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_matplotlib_available, logging, requires_backends
 from ...utils.import_utils import requires
 from .modeling_lightglue import LightGlueKeypointMatchingOutput
 
 
 if is_vision_available():
+    import PIL
     from PIL import Image, ImageDraw
 
-if is_vision_available():
-    import PIL
-
 logger = logging.get_logger(__name__)
+
+
+class LightGlueImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 def is_grayscale(

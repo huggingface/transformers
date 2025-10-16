@@ -33,12 +33,17 @@ from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
-from ..superglue.image_processing_superglue import SuperGlueImageProcessor, validate_and_format_image_pairs
+from ..superglue.image_processing_superglue import (
+    SuperGlueImageProcessor,
+    SuperGlueImageProcessorKwargs,
+    validate_and_format_image_pairs,
+)
+from ..superglue.image_processing_superglue_fast import SuperGlueImageProcessorFast
 from ..superpoint import SuperPointConfig
 
 
 if is_vision_available():
-    from PIL import Image, ImageDraw
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -217,6 +222,10 @@ class LightGlueKeypointMatchingOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
+class LightGlueImageProcessorKwargs(SuperGlueImageProcessorKwargs):
+    pass
+
+
 class LightGlueImageProcessor(SuperGlueImageProcessor):
     def post_process_keypoint_matching(
         self,
@@ -226,68 +235,70 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
     ) -> list[dict[str, torch.Tensor]]:
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
-    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor.visualize_keypoint_matching with EfficientLoFTR->LightGlue
-    def visualize_keypoint_matching(
-        self,
-        images: ImageInput,
-        keypoint_matching_output: list[dict[str, torch.Tensor]],
-    ) -> list["Image.Image"]:
+    def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: LightGlueKeypointMatchingOutput):
         """
-        Plots the image pairs side by side with the detected keypoints as well as the matching between them.
+        Plots the image pairs side by side with the detected keypoints as well as the matching between them. Requires
+        matplotlib to be installed.
+
+        .. deprecated::
+            `plot_keypoint_matching` is deprecated and will be removed in a future version. Use `visualize_keypoint_matching` instead.
 
         Args:
             images (`ImageInput`):
-                Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2
-                images or a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
-                A post processed keypoint matching output
-
-        Returns:
-            `List[PIL.Image.Image]`: A list of PIL images, each containing the image pairs side by side with the detected
-            keypoints as well as the matching between them.
+                Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2 images or
+                a list of list of 2 images list with pixel values ranging from 0 to 255.
+            keypoint_matching_output ([`LightGlueKeypointMatchingOutput`]):
+                Raw outputs of the model.
         """
+        warnings.warn(
+            "`plot_keypoint_matching` is deprecated and will be removed in transformers v. "
+            "Use `visualize_keypoint_matching` instead.",
+            FutureWarning,
+        )
+
+        if is_matplotlib_available():
+            import matplotlib.pyplot as plt
+        else:
+            raise ImportError("Please install matplotlib to use `plot_keypoint_matching` method")
+
         images = validate_and_format_image_pairs(images)
         images = [to_numpy_array(image) for image in images]
         image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
 
-        results = []
         for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
             height0, width0 = image_pair[0].shape[:2]
             height1, width1 = image_pair[1].shape[:2]
-            plot_image = np.zeros((max(height0, height1), width0 + width1, 3), dtype=np.uint8)
-            plot_image[:height0, :width0] = image_pair[0]
-            plot_image[:height1, width0:] = image_pair[1]
-
-            plot_image_pil = Image.fromarray(plot_image)
-            draw = ImageDraw.Draw(plot_image_pil)
+            plot_image = np.zeros((max(height0, height1), width0 + width1, 3))
+            plot_image[:height0, :width0] = image_pair[0] / 255.0
+            plot_image[:height1, width0:] = image_pair[1] / 255.0
+            plt.imshow(plot_image)
+            plt.axis("off")
 
             keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
             keypoints1_x, keypoints1_y = pair_output["keypoints1"].unbind(1)
             for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
                 keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
             ):
-                color = self._get_color(matching_score)
-                draw.line(
-                    (keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y),
-                    fill=color,
-                    width=3,
+                plt.plot(
+                    [keypoint0_x, keypoint1_x + width0],
+                    [keypoint0_y, keypoint1_y],
+                    color=plt.get_cmap("RdYlGn")(matching_score.item()),
+                    alpha=0.9,
+                    linewidth=0.5,
                 )
-                draw.ellipse((keypoint0_x - 2, keypoint0_y - 2, keypoint0_x + 2, keypoint0_y + 2), fill="black")
-                draw.ellipse(
-                    (keypoint1_x + width0 - 2, keypoint1_y - 2, keypoint1_x + width0 + 2, keypoint1_y + 2),
-                    fill="black",
-                )
+                plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
+                plt.scatter(keypoint1_x + width0, keypoint1_y, c="black", s=2)
+            plt.show()
 
-            results.append(plot_image_pil)
-        return results
 
-    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor._get_color
-    def _get_color(self, score):
-        """Maps a score to a color."""
-        r = int(255 * (1 - score))
-        g = int(255 * score)
-        b = 0
-        return (r, g, b)
+class LightGlueImageProcessorFast(SuperGlueImageProcessorFast):
+    def post_process_keypoint_matching(
+        self,
+        outputs: LightGlueKeypointMatchingOutput,
+        target_sizes: Union[TensorType, list[tuple]],
+        threshold: float = 0.0,
+    ) -> list[dict[str, torch.Tensor]]:
+        return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
     def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: LightGlueKeypointMatchingOutput):
         """
@@ -1077,4 +1088,10 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         )
 
 
-__all__ = ["LightGluePreTrainedModel", "LightGlueForKeypointMatching", "LightGlueConfig", "LightGlueImageProcessor"]
+__all__ = [
+    "LightGluePreTrainedModel",
+    "LightGlueForKeypointMatching",
+    "LightGlueConfig",
+    "LightGlueImageProcessor",
+    "LightGlueImageProcessorFast",
+]
