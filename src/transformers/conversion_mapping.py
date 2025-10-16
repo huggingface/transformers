@@ -5,12 +5,17 @@
 #
 # Either we keep it here, or we move it to the config, but for newcomers, seeing this is kinda weird no?
 
-from .core_model_loading import ConversionType, Fuse, MergeModuleList, WeightConversion
+from .core_model_loading import Concatenate, WeightConversion
 
-_checkpoint_conversion_mapping = { "mixtral": {
-    "experts.*.(w1|w3).weight$": WeightConversion(
-        "experts.gate_up_proj.weight", [ConversionType.MERGE_MODULE_LIST, ConversionType.FUSE]
-    ),
-    "self_attn.(q|k|v)_proj": WeightConversion("self_attn.qkv_proj", ConversionType.FUSE),
-    "experts*.w2.weight": WeightConversion("experts.down_proj.weight", ConversionType.MERGE_MODULE_LIST),
-}}
+_checkpoint_conversion_mapping = {
+    "mixtral": [
+        WeightConversion(
+            source_keys=["experts.*.w1.weight", "experts.*.w3.weight"],
+            target_keys="experts.gate_up_proj.weight",
+            operations=[Concatenate, Concatenate],
+        ),
+        WeightConversion("self_attn.(q|k|v)_proj", "self_attn.qkv_proj", Concatenate),
+        WeightConversion("experts*.w2.weight", "experts.down_proj.weight", Concatenate),
+        WeightConversion("mlp.w2.weight", "mlp.down_proj.weight"),
+    ]
+}

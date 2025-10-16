@@ -313,11 +313,18 @@ class Fp8Quantize(ConversionOps):
 class WeightConversion:
     """Describe how a serialized weight maps to a model parameter.
     if people need to use a custom op, they just have to make it inherit from ConversionOps
+    We need to allow going from a list of keys to a unique key and vice versa.
+    This will also allow us to write quantization as WeightConversion("weight", ["weight_blocks", "weight_scales"], Fp8Quantize)
+    potentially with filtering?
+
+    YES because we can check nn.Module.name in the global context -> Augment the mapping with WeightConversion
+    And sharding written as WeightConversion("weight", operations = Shard)?
+    This way we explicit the full operations
     """
 
-    target_key: str
-    source_key: str
-    operations: tuple[Union[type[ConversionOps], type[ConversionOps]]]
+    source_keys: Union[str, list[str]]
+    target_keys: Optional[Union[str, list[str]]] = None
+    operations: Optional[Union[type[ConversionOps], list[type[ConversionOps]]]] = None
 
 
 def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_config):

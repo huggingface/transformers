@@ -45,12 +45,6 @@ from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
-from .core_model_loading import (
-    WeightConversion,
-    build_weight_conversion_plans,
-    collate_converted_state_dict,
-    materialize_param_from_contributions,
-)
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -609,6 +603,7 @@ def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
     state_dict: dict,
     shard_file: str,
+    reverse_renaming_mapping: dict[str, str],
     device_map: Optional[dict] = None,
     disk_offload_folder: Optional[str] = None,
     disk_offload_index: Optional[dict] = None,
@@ -633,32 +628,16 @@ def _load_state_dict_into_meta_model(
     is_meta_state_dict = is_safetensors
     file_pointer = safe_open(shard_file, framework="pt", device=tensor_device) if is_meta_state_dict else None
     params_to_load = list(state_dict.keys())
-    conversion_plans = getattr(model, "_weight_conversion_plans", {})
-    conversion_runtime = getattr(model, "_weight_conversion_runtime", {})
 
     for param_name in params_to_load:
-        contributions = state_dict[param_name]
-        if not isinstance(contributions, list) or len(contributions) == 0:
-            continue
-
-        module, tensor_attr = get_module_from_name(model, param_name)
-        empty_param = getattr(module, tensor_attr)
-        plan = conversion_plans.get(param_name)
-
-        param = materialize_param_from_contributions(
-            model,
-            param_name,
-            contributions,
-            plan,
-            conversion_runtime,
-            file_pointer,
-            tensor_device,
-        )
-
-        if param is None:
-            # We keep accumulating slices across shards until the tensor can be materialized.
-            continue
-
+        empty_param = state_dict[param_name]
+        # we need to use serialized_param_name as file pointer is untouched
+        if is_meta_state_dict:
+            # This is the name of the parameter as it appears on disk file
+            serialized_param_name = reverse_renaming_mapping[param_name]
+            param = file_pointer.get_slice(serialized_param_name)
+        else:
+            param = empty_param.to(tensor_device)  # It is actually not empty!
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
             param_name,
@@ -746,8 +725,6 @@ def _load_state_dict_into_meta_model(
         if not is_meta_state_dict:
             del state_dict[param_name]
 
-    model._weight_conversion_runtime = conversion_runtime
-
     if file_pointer is not None:
         file_pointer.__exit__(None, None, None)
 
@@ -765,6 +742,7 @@ def load_shard_file(args):
         key_renaming_mapping,
         weights_only,
         model,
+        reverse_key_renaming_mapping,
         disk_offload_folder,
         disk_offload_index,
         keep_in_fp32_regex,
@@ -785,11 +763,10 @@ def load_shard_file(args):
             shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
         )
 
-    # Fix the key names while keeping track of original sources (needed for weight conversions)
-    state_dict = collate_converted_state_dict(state_dict, key_renaming_mapping)
+    # Fix the key names
+    state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
     error_msgs = []
-    disk_offload_index = None
     if is_deepspeed_zero3_enabled() and not is_quantized:
         error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
     # Skip it with fsdp on ranks other than 0
@@ -798,6 +775,7 @@ def load_shard_file(args):
             model,
             state_dict,
             shard_file,
+            reverse_key_renaming_mapping,
             device_map=device_map,
             disk_offload_folder=disk_offload_folder,
             disk_offload_index=disk_offload_index,
@@ -4461,17 +4439,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         kernel_config = kwargs.pop("kernel_config", None)
 
         key_mapping = kwargs.pop("key_mapping", None)
-        if key_mapping is None:
-            config_mapping = getattr(config, "checkpoint_conversion_mapping", None)
-            if config_mapping:
-                key_mapping = config_mapping
-            elif any(
-                allowed_name in class_name.__name__.lower()
-                for class_name in cls.__mro__[:-1]
-                for allowed_name in VLMS
-            ):
-                # Load models with hardcoded key mapping on class for VLMs only, to keep BC and standardize model
-                key_mapping = cls._checkpoint_conversion_mapping
+        # Load models with key mapping
+        if key_mapping is None and any(
+            allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
+        ):
+            key_mapping = cls._checkpoint_conversion_mapping
 
         if distributed_config is not None:
             tp_plan = "auto"
@@ -4736,9 +4708,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         key_mapping: Optional[dict[str, str]] = None,
         loading_base_model_from_task_state_dict: bool = False,
         loading_task_model_from_base_state_dict: bool = False,
-        *,
-        quantization_method: Optional[str] = None,
-        tp_plan: Optional[dict[str, str]] = None,
     ):
         """
         Compute a mapping between the serialized keys on disk `checkpoint_keys`, and the keys that the model
@@ -4759,8 +4728,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         renamed_keys = {}
         key_renaming_mapping = {}
-        conversion_sources = defaultdict(list)
-        conversion_specs = {}
         for key in checkpoint_keys:
             # Class specific rename
             new_key, has_changed = self._fix_state_dict_key_on_load(key)
@@ -4768,26 +4735,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Optionally map the key according to `key_mapping`
             if key_mapping is not None:
                 for pattern, replacement in key_mapping.items():
-                    if isinstance(replacement, WeightConversion):
-                        candidate_key, n_replace = re.subn(pattern, replacement.new_key, new_key)
-                        if n_replace > 0:
-                            has_changed = True
-                            new_key = candidate_key
-                            conversion_sources[new_key].append(key)
-                            if new_key in conversion_specs and conversion_specs[new_key] != replacement:
-                                raise ValueError(
-                                    "Conflicting weight conversion specifications detected for"
-                                    f" `{new_key}`: `{conversion_specs[new_key]}` vs `{replacement}`."
-                                )
-                            conversion_specs[new_key] = replacement
-                            break
-                    else:
-                        candidate_key, n_replace = re.subn(pattern, replacement, new_key)
-                        # Early exit of the loop
-                        if n_replace > 0:
-                            has_changed = True
-                            new_key = candidate_key
-                            break
+                    new_key, n_replace = re.subn(pattern, replacement, new_key)
+                    # Early exit of the loop
+                    if n_replace > 0:
+                        has_changed = True
+                        break
 
             # In this case, we need to add the prefix to the keys, to match them to the expected keys
             if loading_task_model_from_base_state_dict:
@@ -4822,18 +4774,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 warning_msg += f"* `{old_key}` -> `{new_key}`\n"
             warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
             logger.info_once(warning_msg)
-
-        if conversion_sources:
-            self._weight_conversion_plans = build_weight_conversion_plans(
-                conversion_specs,
-                conversion_sources,
-                tp_plan=tp_plan,
-                quantization_method=quantization_method,
-            )
-        else:
-            self._weight_conversion_plans = {}
-        # Reset runtime accumulators whenever we recompute the mapping
-        self._weight_conversion_runtime = {}
 
         return key_renaming_mapping
 
@@ -4895,26 +4835,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
 
         # Find the key names that the model expects from the serialized keys
-        quant_method = None
-        if hf_quantizer is not None:
-            quant_method = getattr(hf_quantizer.quantization_config, "quant_method", None)
-            if isinstance(quant_method, QuantizationMethod):
-                quant_method = quant_method.value
-
-        current_tp_plan = None
-        if hasattr(model, "tp_plan"):
-            try:
-                current_tp_plan = dict(model.tp_plan)
-            except Exception:
-                current_tp_plan = getattr(model, "_tp_plan", None)
-
         key_renaming_mapping = model._get_key_renaming_mapping(
             original_checkpoint_keys,
             key_mapping,
             loading_base_model_from_task_state_dict,
             loading_task_model_from_base_state_dict,
-            quantization_method=quant_method,
-            tp_plan=current_tp_plan,
         )
         checkpoint_keys = list(key_renaming_mapping.values())
 
@@ -4938,15 +4863,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         key_renaming_mapping = {
             k: v for k, v in key_renaming_mapping.items() if v not in mismatched_keys and v not in unexpected_keys
         }
-        active_targets = set(key_renaming_mapping.values())
-        if hasattr(model, "_weight_conversion_plans"):
-            model._weight_conversion_plans = {
-                target: plan for target, plan in model._weight_conversion_plans.items() if target in active_targets
-            }
-            runtime_conversions = getattr(model, "_weight_conversion_runtime", {})
-            model._weight_conversion_runtime = {
-                target: accumulator for target, accumulator in runtime_conversions.items() if target in active_targets
-            }
         checkpoint_keys = list(key_renaming_mapping.values())
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
@@ -5011,6 +4927,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 key_renaming_mapping,
                 weights_only,
                 model,
+                reverse_key_renaming_mapping,
                 disk_offload_folder,
                 disk_offload_index,
                 keep_in_fp32_regex,
