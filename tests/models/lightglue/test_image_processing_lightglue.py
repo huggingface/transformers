@@ -90,6 +90,7 @@ class LightGlueImageProcessingTester(SuperGlueImageProcessingTester):
 @require_vision
 class LightGlueImageProcessingTest(SuperGlueImageProcessingTest, unittest.TestCase):
     image_processing_class = LightGlueImageProcessor if is_vision_available() else None
+    fast_image_processing_class = None
 
     def setUp(self) -> None:
         super().setUp()

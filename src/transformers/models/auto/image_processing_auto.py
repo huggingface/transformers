@@ -172,7 +172,7 @@ else:
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
             ("smolvlm", ("SmolVLMImageProcessor", "SmolVLMImageProcessorFast")),
-            ("superglue", ("SuperGlueImageProcessor", None)),
+            ("superglue", ("SuperGlueImageProcessor", "SuperGlueImageProcessorFast")),
             ("superpoint", ("SuperPointImageProcessor", "SuperPointImageProcessorFast")),
             ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
