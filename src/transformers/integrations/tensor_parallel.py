@@ -38,16 +38,15 @@ if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
 
-def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, device_map=None):
+def initialize_tensor_parallelism(
+    tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
+):
     r"""
     Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
     """
     if tp_size is not None and tp_plan is None:
         raise ValueError("tp_plan has to be set when tp_size is passed.")
-    if tp_plan is not None and tp_plan != "auto":
-        # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
-        raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
     if tp_plan is not None and device_map is not None:
         raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
     if device_mesh is None:
@@ -80,7 +79,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, devic
             except Exception as e:
                 raise OSError(
                     "We tried to initialize torch.distributed for you, but it failed. Make "
-                    "sure you init torch distributed in your script to use `tp_plan='auto'`."
+                    "sure you init torch distributed in your script to use `tp_plan`."
                 ) from e
 
         if device_type != "cpu":
@@ -112,7 +111,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, devic
         tp_size = device_mesh.size()
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
-    return tp_device, device_map, device_mesh, tp_size
+    return device_map, device_mesh, tp_size
 
 
 def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int]:
@@ -1110,13 +1109,16 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def distribute_model(model, distributed_config, device_mesh, tp_size):
+def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
     model._tp_size = tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
         model.config.distributed_config = distributed_config
+    # Set the new requested tp_plan on the model
+    if isinstance(tp_plan, dict):
+        model.tp_plan = tp_plan
     model_plan = model.tp_plan
     if model_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
         for v in model_plan.values():
