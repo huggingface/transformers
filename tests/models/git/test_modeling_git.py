@@ -452,6 +452,10 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
+    @unittest.skip(reason="GIT input and output sequence lengths are not equal due to pixel values additional input")
+    def test_forward_with_logits_to_keep(self):
+        pass
+
 
 @require_torch
 @require_vision
