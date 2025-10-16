@@ -15,16 +15,45 @@
 """Core helpers for loading model checkpoints."""
 
 from __future__ import annotations
+import re
 
 import math
-import operator
+import time
 from abc import abstractmethod
+from collections import OrderedDict
 from collections.abc import Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
-from functools import reduce
+from fnmatch import fnmatchcase
+from itertools import chain
 from typing import Any, Optional, Union
 
 import torch
+from torch import Tensor
+
+from .utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+try:
+    _FP8_DTYPE = torch.float8_e4m3fn
+    _FP8_MIN = torch.finfo(_FP8_DTYPE).min
+    _FP8_MAX = torch.finfo(_FP8_DTYPE).max
+    _FP8_IS_INT = False
+except AttributeError:
+    _FP8_DTYPE = torch.int8
+    _FP8_MIN, _FP8_MAX = -127, 127
+    _FP8_IS_INT = True
+    logger.warning_once(
+        "torch.float8_e4m3fn not available; falling back to int8 emulation for Fp8Quantize operations."
+    )
+
+try:
+    from torch.profiler import ProfilerActivity, profile as torch_profile
+except (ImportError, AttributeError):
+    ProfilerActivity = None
+    torch_profile = None
 
 
 """
@@ -152,6 +181,9 @@ class ConversionOps:
     _buffer: Optional[torch.Tensor] = None
     # The inverse operation class, will be used when saving the checkpoint
     _inverse_op: type[ConversionOps]
+    # Latest runtime/profiling information for introspection.
+    last_runtime_seconds: Optional[float] = None
+    last_profile_summary: Optional[str] = None
 
     def _ensure_buffer(
         self,
@@ -188,9 +220,80 @@ class ConversionOps:
     def convert(self, value: Union[Sequence[torch.Tensor], torch.Tensor], *, context: dict[str, Any]) -> torch.Tensor:
         raise NotImplementedError
 
+    def __call__(
+        self,
+        value: Union[Sequence[torch.Tensor], torch.Tensor, dict[str, torch.Tensor]],
+        *,
+        context: dict[str, Any],
+        profile: bool = False,
+    ) -> Any:
+        """
+        Execute the conversion while measuring runtime and optionally profiling the call.
+        """
+
+        profiling_enabled = bool(profile)
+        profiler_ctx = nullcontext()
+
+        if profiling_enabled:
+            if torch_profile is None or ProfilerActivity is None:
+                logger.warning_once(
+                    "torch.profiler is unavailable; skipping profiling for %s operations.",
+                    self.__class__.__name__,
+                )
+                profiling_enabled = False
+            else:
+                activities = [ProfilerActivity.CPU]
+                if torch.cuda.is_available():
+                    activities.append(ProfilerActivity.CUDA)
+                profiler_ctx = torch_profile(activities=activities, record_shapes=True, profile_memory=True)
+
+        start = time.perf_counter()
+        with profiler_ctx as prof:
+            result = self.convert(value, context=context)
+        elapsed = time.perf_counter() - start
+
+        # Store the latest runtime for downstream consumers.
+        self.last_runtime_seconds = elapsed
+
+        logger.info("%s convert() finished in %.2f ms", self.__class__.__name__, elapsed * 1000)
+
+        if profiling_enabled and prof is not None:
+            try:
+                summary = prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=20)
+            except Exception as error:
+                logger.warning(
+                    "Failed to render profiler summary for %s due to %s.",
+                    self.__class__.__name__,
+                    error,
+                )
+            else:
+                self.last_profile_summary = summary
+                logger.info("Profiler summary for %s:\n%s", self.__class__.__name__, summary)
+
+        return result
+
 
 class Chunk(ConversionOps):
-    pass
+    """Split a tensor along ``dim`` into equally sized chunks or using explicit ``sizes``."""
+
+    _inverse_op: type[ConversionOps]
+
+    def __init__(self, dim: int = 0, chunks: Optional[int] = None, sizes: Optional[Sequence[int]] = None):
+        if chunks is None and sizes is None:
+            raise ValueError("`chunks` or `sizes` must be provided for Chunk operations.")
+        if chunks is not None and chunks <= 0:
+            raise ValueError("`chunks` must be a strictly positive integer.")
+        self.dim = dim
+        self.chunks = chunks
+        self.sizes = list(sizes) if sizes is not None else None
+        self._inverse_op = Concatenate
+
+    def convert(self, value: torch.Tensor, *, context: dict[str, Any]) -> list[torch.Tensor]:
+        if not isinstance(value, torch.Tensor):
+            raise TypeError("Chunk expects a torch.Tensor as input.")
+        if self.sizes is not None:
+            return list(torch.split(value, self.sizes, dim=self.dim))
+        return list(torch.chunk(value, self.chunks, dim=self.dim))
 
 
 class Concatenate(ConversionOps):
@@ -207,16 +310,16 @@ class Concatenate(ConversionOps):
         if not tensors:
             raise ValueError("Fuse requires at least one tensor to concatenate.")
 
-        out_shape = tensors[0].shape
+        out_shape = list(tensors[0].shape)
         out_shape[self.dim] *= len(tensors)
 
         with torch.no_grad():
-            out = self._ensure_buffer(out_shape, dtype=tensors[0].dtype, device=tensors[0].device)
+            out = self._ensure_buffer(torch.Size(out_shape), dtype=tensors[0].dtype, device=tensors[0].device)
             offset = 0
             for tensor in tensors:
                 index = [slice(None)] * tensor.ndim
                 index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
-                out[tuple(index)].copy_(tensor, async_op=True)
+                out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
                 offset += tensor.shape[self.dim]
         return out
 
@@ -228,74 +331,202 @@ class MergeModuleList(Concatenate):
 
     """
 
-    pass
+    def __init__(self, dim: int = 0):
+        super().__init__(dim=dim)
+        self._inverse_op = SplitModuleList
 
+    def convert(self, value: Sequence[Sequence[torch.Tensor]], *, context: dict[str, Any]) -> list[torch.Tensor]:
+        if not isinstance(value, Sequence):
+            raise TypeError("MergeModuleList expects a sequence of sequences of tensors.")
+        merged: list[torch.Tensor] = []
+        for group in value:
+            if not isinstance(group, Sequence) or len(group) == 0:
+                raise ValueError("MergeModuleList requires non-empty sub-sequences.")
+            merged.append(torch.cat(tuple(group), dim=self.dim))
+        return merged
+
+
+class SplitModuleList(ConversionOps):
+    """Inverse of :class:`MergeModuleList` using explicit split sizes per group."""
+
+    def __init__(self, sizes: Sequence[Sequence[int]], dim: int = 0):
+        if not isinstance(sizes, Sequence) or not all(isinstance(sub, Sequence) and sub for sub in sizes):
+            raise ValueError("`sizes` must be a sequence of non-empty sequences of integers.")
+        self.sizes = [list(sub) for sub in sizes]
+        self.dim = dim
+        self._inverse_op = MergeModuleList
+
+    def convert(self, value: Sequence[torch.Tensor], *, context: dict[str, Any]) -> list[list[torch.Tensor]]:
+        if not isinstance(value, Sequence):
+            raise TypeError("SplitModuleList expects a sequence of tensors.")
+        if len(value) != len(self.sizes):
+            raise ValueError("Number of tensors does not match the provided split specifications.")
+
+        result: list[list[torch.Tensor]] = []
+        for tensor, split_sizes in zip(value, self.sizes):
+            if not isinstance(tensor, torch.Tensor):
+                raise TypeError("SplitModuleList can only split torch.Tensor instances.")
+            splits = torch.split(tensor, split_sizes, dim=self.dim)
+            result.append(list(splits))
+        return result
 
 
 class Shard(ConversionOps):
-    def __init__(self, dim, distributed_config = None):
+    """Shard tensors along a specific dimension.
+
+    The operation supports two modes:
+
+    - ``return_all=False`` (default): behaves like classical tensor parallel sharding and returns only the shard for the
+      current ``rank``.
+    - ``return_all=True``: returns a list containing the shards for all ranks. This mode is handy when the conversion
+      needs to materialize every shard in a single pass (for instance when round-tripping in tests).
+    """
+
+    _inverse_op: type[ConversionOps] = Concatenate
+
+    def __init__(
+        self,
+        dim: int,
+        *,
+        world_size: Optional[int] = None,
+        rank: Optional[int] = None,
+        return_all: bool = False,
+    ):
         self.dim = dim
-        if distributed_config is not None:
-            self.device_mesh = distributed_config.device_mesh
-            self.rank = distributed_config.rank
+        self.world_size = world_size
+        self.rank = rank
+        self.return_all = return_all
 
-    def convert(self, param, empty_param):
-        param_dim = empty_param.dim()
-        # Flatten the mesh to get the total number of devices
-        mesh_shape = self.device_mesh.shape
-        world_size = reduce(operator.mul, mesh_shape)
+    def convert(self, value: Union[Tensor, Sequence], *, context: dict[str, Any]) -> Union[Tensor, list[Tensor]]:
+        def _shard_tensor(tensor: Tensor, rank: int) -> Tensor:
+            dim_size = tensor.shape[self.dim]
+            local_world_size = max(world_size, 1)
+            slice_size = math.ceil(dim_size / local_world_size)
+            start = min(rank * slice_size, dim_size)
+            end = min(start + slice_size, dim_size)
+            index = [slice(None)] * tensor.ndim
+            index[self.dim] = slice(start, end)
+            return tensor[tuple(index)]
 
-        if self.rank >= world_size:
-            raise ValueError(f"Rank {self.rank} is out of bounds for mesh size {world_size}")
+        world_size = self.world_size or context.get("tp_world_size") or 1
+        rank = self.rank if self.rank is not None else context.get("tp_rank", 0)
 
-        shard_size = math.ceil(empty_param.shape[self.dim] / world_size)
-        start = self.rank * shard_size
+        if isinstance(value, torch.Tensor):
+            if self.return_all and world_size > 1:
+                return [_shard_tensor(value, r) for r in range(world_size)]
+            return _shard_tensor(value, rank)
 
-        # Construct slicing index dynamically
-        end = min(start + shard_size, empty_param.shape[self.dim])
-        slice_indices = [slice(None)] * param_dim
-        if start < empty_param.shape[self.dim]:
-            slice_indices[self.dim] = slice(start, end)
-            return param[tuple(slice_indices)]
-        dimensions = list(param.shape)
-        dimensions[self.dim] = 0
-        return torch.empty(tuple(dimensions), dtype=torch.int64)
+        if isinstance(value, (list, tuple)):
+            shards = [self.convert(item, context=context) for item in value]
+            return list(shards) if isinstance(value, list) else tuple(shards)
+
+        if isinstance(value, dict):
+            return {k: self.convert(v, context=context) for k, v in value.items()}
+
+        raise TypeError("Shard only supports tensors, sequences of tensors or dicts of tensors.")
 
 
-class Fp8Quantize(ConversionOps):
+class QuantizationOp(ConversionOps):
+    """Base class for quantization operations."""
+
+    pass
+
+
+class Fp8Quantize(QuantizationOp):
     """
     A quantization operation that creates two tensors, weight and scale out of a weight.
     """
 
-    def convert(self, param_value, param_name: str) -> dict[str, torch.Tensor]:
-        param_value = param_value.to(target_device)
+    _inverse_op: type[ConversionOps]
 
-        # Get FP8 min/max values
-        fp8_min = torch.finfo(torch.float8_e4m3fn).min
-        fp8_max = torch.finfo(torch.float8_e4m3fn).max
+    def __init__(self, block_size: Optional[tuple[int, int]] = None):
+        self.block_size = block_size
+        self._inverse_op = Fp8Dequantize
 
-        block_size_m, block_size_n = self.quantization_config.weight_block_size
+    def convert(self, value: torch.Tensor, *, context: dict[str, Any]) -> dict[str, torch.Tensor]:
+        if not isinstance(value, torch.Tensor):
+            raise TypeError("Fp8Quantize expects a tensor as input.")
 
-        rows, cols = param_value.shape[-2:]
+        target_keys = context.get("target_keys")
+        if not isinstance(target_keys, str):
+            raise ValueError("Fp8Quantize requires a single string target key.")
 
-        if rows % block_size_m != 0 or cols % block_size_n != 0:
+        quant_config = context.get("quantization_config")
+        block_size = self.block_size
+        if block_size is None and quant_config is not None:
+            block_size = getattr(quant_config, "weight_block_size", None)
+        if block_size is None:
+            block_size = (value.shape[-2], value.shape[-1])
+
+        block_m, block_n = block_size
+        rows, cols = value.shape[-2:]
+        if rows % block_m != 0 or cols % block_n != 0:
             raise ValueError(
-                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_size_m}, {block_size_n})"
+                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
             )
-        param_value_orig_shape = param_value.shape
-        param_value = param_value.reshape(-1, rows // block_size_m, block_size_m, cols // block_size_n, block_size_n)
 
-        # Calculate scaling factor for each block
-        max_abs = torch.amax(torch.abs(param_value), dim=(2, 4))
-        scale = fp8_max / max_abs
-        scale_orig_shape = scale.shape
-        scale = scale.unsqueeze(-1).unsqueeze(-1)
+        original_shape = value.shape
+        value_fp32 = value.to(torch.float32)
+        reshaped = value_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
+        max_abs = reshaped.abs().amax(dim=(2, 4))
+        safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
+        scales = _FP8_MAX / safe_max_abs
+        scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))
+        scales_reshaped = scales.unsqueeze(-1).unsqueeze(2)
+        scaled = reshaped * scales_reshaped
+        if _FP8_IS_INT:
+            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        else:
+            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        quantized = quantized.reshape(original_shape)
+        inv_scales = (1.0 / scales).reshape(-1, rows // block_m, cols // block_n).to(torch.float32)
 
-        quantized_param = torch.clamp(param_value * scale, min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
-        quantized_param = quantized_param.reshape(param_value_orig_shape)
-        scale = scale.reshape(scale_orig_shape).squeeze().reciprocal()
+        scale_key = target_keys.rsplit(".", 1)[0] + ".scale"
+        return {target_keys: quantized, scale_key: inv_scales}
 
-        return {param_name: quantized_param, param_name.rsplit(".")[0] + ".scale": scale}
+
+class Fp8Dequantize(ConversionOps):
+    """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
+
+    def __init__(self, block_size: Optional[tuple[int, int]] = None):
+        self.block_size = block_size
+        self._inverse_op = Fp8Quantize
+
+    def convert(
+        self,
+        value: Union[Sequence[torch.Tensor], dict[str, torch.Tensor]],
+        *,
+        context: dict[str, Any],
+    ) -> torch.Tensor:
+        if isinstance(value, dict):
+            tensors = list(value.values())
+        else:
+            tensors = list(value) if isinstance(value, Sequence) else [value]
+        if len(tensors) != 2:
+            raise ValueError("Fp8Dequantize expects exactly two tensors: quantized weights and scales.")
+        quantized, scales = tensors
+        if not isinstance(quantized, torch.Tensor) or not isinstance(scales, torch.Tensor):
+            raise TypeError("Fp8Dequantize expects tensors as inputs.")
+
+        quantized_fp32 = quantized.to(torch.float32)
+        rows, cols = quantized_fp32.shape[-2:]
+        block_size = self.block_size
+        if block_size is None:
+            quant_config = context.get("quantization_config")
+            block_size = getattr(quant_config, "weight_block_size", None)
+        if block_size is None:
+            block_size = (rows, cols)
+        block_m, block_n = block_size
+        if rows % block_m != 0 or cols % block_n != 0:
+            raise ValueError(
+                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
+            )
+
+        reshaped = quantized_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
+        expanded_scales = scales.to(torch.float32).reshape(-1, rows // block_m, cols // block_n)
+        expanded_scales = expanded_scales.unsqueeze(-1).unsqueeze(2)
+        dequantized = reshaped * expanded_scales
+        return dequantized.reshape(quantized_fp32.shape)
 
 
 @dataclass(frozen=True)
@@ -320,7 +551,7 @@ class WeightConversion:
     ] = None
 
 
-def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_config):
+def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_config, profile: bool = False):
     """Convert a state dict according to a weight mapping.
 
     Given that the model might be sharded, and that some patterns might fuse experts, there will
@@ -348,20 +579,223 @@ def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_
             The tensor parallelism plan for this model. Used to shard the weights correctly.
         quantization_config:
             The quantization configuration for this model. Used to quantize the weights correctly.
+        profile (`bool`, *optional*, defaults to `False`):
+            If set, wraps each conversion operation in a ``torch.profiler`` context (when available) and logs per-op
+            execution time and profiling summaries.
 
     Returns:
         - `dict`: The converted state dict.
         - list[ConversionOps]: The list of operations used during the conversion. This is useful if the model needs to be saved
           in its legacy format later on.
     """
-    converted_state_dict = {}
-    ops_cache = {}
-    # 1. We need to rename / collect all the weights (iterate once through all the state dict)
+    if state_dict is None:
+        raise ValueError("`state_dict` must be provided for conversion.")
 
-    # 2. Now that we have all the weights, we can apply the operations
+    if isinstance(state_dict, OrderedDict):
+        working_state = OrderedDict(state_dict)
+    else:
+        working_state = dict(state_dict)
 
-    # Clear cached buffers in all operations
-    for op in ops_cache.values():
+    if hasattr(torch, "distributed") and torch.distributed.is_available() and torch.distributed.is_initialized():
+        default_world_size = torch.distributed.get_world_size()
+        default_rank = torch.distributed.get_rank()
+    else:
+        default_world_size = 1
+        default_rank = 0
+    from collections import defaultdict
+    collected_keys: dict[str, dict[str, list[torch.Tensor]]] = defaultdict(lambda: defaultdict(list))
+
+    # 1. we need to find which key we have (so we keep track of which pattern was matched)
+    converted_state_dict: dict[str, torch.Tensor] = {}
+    used_operations: list[ConversionOps] = []
+    keys_to_convert = [ rf"{ '|'.join(k.source_keys) if isinstance(k.source_keys, list) else k.source_keys}" for k in weight_mapping ]
+    # tensor parallel is also a conversion scheme! So add it to the keys to convert!
+    # quantization as well! But for quantization we would need to get the module, check if its a linear?
+
+    for k,v in state_dict.items():
+        if re.sub(rf"^({ '|'.join(keys_to_convert) })$", "", k) == k:
+            converted_state_dict[k] = v
+        else:
+            # we replace the whole key by the matched pattern so that we can find it later
+            pattern = re.sub(rf"^({ '|'.join(keys_to_convert) })$", r"\1", k)
+            collected_keys[pattern][k] += [v] # we collect all tensors that match the pattern
+        if pattern in tp_plan: # If we want this to work conversion needs to be explicit no?
+            # TODO: for now just shard but we should create the op based on the TP plan
+            # TODO: don't add sharding or tp ops if such ops are already present?
+            weight_mapping[pattern].operations = Shard(0) +  weight_mapping[pattern].operation
+        if pattern in quantization_config.conversion_mapping:
+            # TODO: here again we need to check for other quantization. Maybe these are two
+            # keys that we want to have explicit
+            weight_mapping[pattern].operations.append(Fp8Quantize)
+
+    # 2. now that we collectedd the tensors, we iterate over the "patterns" that were matched
+    # Cuz remember we have to add TP and QUANT to the ops of some keys. but we do it on the renamed!
+    for mapping in weight_mapping or []:
+        source_patterns = _ensure_list(mapping.source_keys)
+        matched_keys, collected_values = _collect_source_values(working_state, source_patterns)
+        if not any(matched_keys):
+            logger.debug("No keys matched pattern(s) %s; skipping conversion.", source_patterns)
+            continue
+        if any(len(group) == 0 for group in matched_keys):
+            logger.debug(
+                "At least one pattern in %s had no matches (%s); skipping conversion.",
+                source_patterns,
+                matched_keys,
+            )
+            continue
+
+        operations = _prepare_operations(mapping.operations)
+        operations = _order_operations(operations)
+
+        target_spec = mapping.target_keys
+        if isinstance(target_spec, Sequence) and not isinstance(target_spec, str) and len(target_spec) == 1:
+            target_for_ops: Union[str, Sequence[str], None] = target_spec[0]
+        else:
+            target_for_ops = target_spec
+
+        context = {
+            "model": model,
+            "tp_plan": tp_plan,
+            "quantization_config": quantization_config,
+            "target_keys": target_for_ops,
+            "source_keys": source_patterns,
+            "matched_keys": matched_keys,
+            "tp_world_size": default_world_size,
+            "tp_rank": default_rank,
+        }
+
+        current_value: Any = collected_values
+        for operation in operations:
+            used_operations.append(operation)
+            current_value = operation(current_value, context=context, profile=profile)
+
+        assignments = _assign_to_targets(current_value, target_spec, matched_keys)
+
+        # Remove consumed keys from the intermediate dict so they do not leak in the output.
+        for keys_group in matched_keys:
+            for key in keys_group:
+                working_state.pop(key, None)
+
+        converted_state_dict.update(assignments)
+        working_state.update(assignments)
+
+    # Add all leftover keys that were never converted.
+    for key, tensor in working_state.items():
+        if key not in converted_state_dict:
+            converted_state_dict[key] = tensor
+
+    # Clear cached buffers in unique operations
+    for op in {op for op in used_operations if hasattr(op, "clear_cache")}:
         op.clear_cache()
 
-    return converted_state_dict
+    return converted_state_dict, used_operations
+
+
+def _ensure_list(value: Union[str, Sequence[str]]) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    return list(value)
+
+
+def _prepare_operations(
+    operations: Optional[Union[ConversionOps, type[ConversionOps], Sequence]],
+) -> list[ConversionOps]:
+    if operations is None:
+        return []
+    if isinstance(operations, (ConversionOps, type)):
+        operations = [operations]
+    prepared: list[ConversionOps] = []
+    for op in operations:  # type: ignore[assignment]
+        if isinstance(op, ConversionOps):
+            prepared.append(op)
+        elif isinstance(op, type) and issubclass(op, ConversionOps):
+            prepared.append(op())
+        else:
+            raise TypeError(f"Unsupported operation specification: {op!r}")
+    return prepared
+
+
+def _order_operations(operations: list[ConversionOps]) -> list[ConversionOps]:
+    if not operations:
+        return []
+    tp_ops = [op for op in operations if isinstance(op, Shard)]
+    quant_ops = [op for op in operations if isinstance(op, QuantizationOp)]
+    middle_ops = [op for op in operations if op not in tp_ops and op not in quant_ops]
+    return tp_ops + middle_ops + quant_ops
+
+
+def _collect_source_values(
+    state_dict: dict[str, torch.Tensor], patterns: list[str]
+) -> tuple[list[list[str]], list[Any]]:
+    matched_keys: list[list[str]] = []
+    collected: list[Any] = []
+    for pattern in patterns:
+        keys = sorted(_match_pattern(state_dict, pattern))
+        matched_keys.append(keys)
+        collected.append([state_dict[key] for key in keys])
+
+    simplified = [_simplify_singletons(bucket) for bucket in collected]
+    return matched_keys, _simplify_singletons(simplified)
+
+
+def _match_pattern(state_dict: dict[str, torch.Tensor], pattern: str) -> list[str]:
+    if pattern in state_dict:
+        return [pattern]
+    matched = [key for key in state_dict if fnmatchcase(key, pattern)]
+    if not matched:
+        logger.debug("Pattern %s did not match any key.", pattern)
+    return matched
+
+
+def _simplify_singletons(value: Any) -> Any:
+    if isinstance(value, list) and len(value) == 1:
+        inner = value[0]
+        simplified_inner = _simplify_singletons(inner)
+        return simplified_inner
+    if isinstance(value, list) and all(isinstance(elem, list) and len(elem) == 1 for elem in value):
+        return [elem[0] for elem in value]
+    return value
+
+
+def _assign_to_targets(
+    value: Any,
+    target_spec: Optional[Union[str, Sequence[str]]],
+    matched_keys: list[list[str]],
+) -> dict[str, torch.Tensor]:
+    assignments: dict[str, torch.Tensor] = {}
+    target_keys = target_spec
+
+    if isinstance(value, dict):
+        assignments.update(value)
+        return assignments
+
+    if target_keys is None:
+        flattened = list(chain.from_iterable(matched_keys))
+        if isinstance(value, (list, tuple)):
+            if len(flattened) != len(value):
+                raise ValueError(
+                    f"Cannot assign {len(value)} tensors to {len(flattened)} targets (patterns {matched_keys})."
+                )
+            for key, tensor in zip(flattened, value):
+                assignments[key] = tensor
+        elif len(flattened) == 1:
+            assignments[flattened[0]] = value
+        else:
+            raise ValueError("Ambiguous assignment with multiple matched keys and scalar value.")
+        return assignments
+
+    if isinstance(target_keys, str):
+        assignments[target_keys] = value
+        return assignments
+
+    if isinstance(target_keys, Sequence):
+        if not isinstance(value, (list, tuple)):
+            raise ValueError("Expected a sequence of tensors to match multiple target keys.")
+        if len(target_keys) != len(value):
+            raise ValueError(
+                f"Expected {len(target_keys)} tensors but received {len(value)} for targets {target_keys}."
+            )
+        for key, tensor in zip(target_keys, value):
+            assignments[key] = tensor
+        return assignments
+    raise TypeError(f"Unsupported target key specification: {target_keys!r}")

@@ -32,7 +32,7 @@ from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Optional, TypeVar, Union, get_type_hints
+from typing import Any, Optional, Sequence, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -57,6 +57,7 @@ from .integrations.accelerate import (
     init_empty_weights,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .core_model_loading import QuantizationOp, Shard, WeightConversion, convert_state_dict
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
@@ -1129,6 +1130,34 @@ def _get_resolved_checkpoint_files(
         checkpoint_files = [resolved_archive_file] if pretrained_model_name_or_path is not None else None
 
     return checkpoint_files, sharded_metadata
+
+
+def _sort_conversion_ops(ops):
+    if ops is None:
+        return None
+    if isinstance(ops, (list, tuple)):
+        ops_list = list(ops)
+    else:
+        ops_list = [ops]
+
+    tp_ops, mid_ops, quant_ops = [], [], []
+    for op in ops_list:
+        op_cls = op if isinstance(op, type) else op.__class__
+        if issubclass(op_cls, Shard):
+            tp_ops.append(op)
+        elif issubclass(op_cls, QuantizationOp):
+            quant_ops.append(op)
+        else:
+            mid_ops.append(op)
+    ordered = tp_ops + mid_ops + quant_ops
+    return ordered
+
+def _clone_weight_conversions(conversions: Sequence[WeightConversion]):
+    cloned: list[WeightConversion] = []
+    for conversion in conversions:
+        ordered_ops = _sort_conversion_ops(conversion.operations)
+        cloned.append(WeightConversion(conversion.source_keys, conversion.target_keys, ordered_ops))
+    return cloned
 
 
 def _get_dtype(
@@ -4427,6 +4456,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
         adapter_kwargs = kwargs.pop("adapter_kwargs", {})
+
         adapter_name = kwargs.pop("adapter_name", "default")
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
@@ -4526,6 +4556,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         download_kwargs_with_commit["commit_hash"] = commit_hash
 
+        weight_conversion_profile = bool(model_kwargs.pop("weight_conversion_profile", False))
+        profile_kwarg = model_kwargs.pop("profile", None)
+
         # Because some composite configs call super().__init__ before instantiating the sub-configs, we need this call
         # to correctly redispatch recursively if the kwarg is provided
         if "attn_implementation" in kwargs:
@@ -4534,6 +4567,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         hf_quantizer, config, dtype, device_map = get_hf_quantizer(
             config, quantization_config, dtype, device_map, weights_only, user_agent
         )
+
+        weight_conversions: Optional[list[WeightConversion]] = None
+        model_type = getattr(config, "model_type", None)
+        if model_type is not None:
+            from .conversion_mapping import _checkpoint_conversion_mapping as DEFAULT_WEIGHT_CONVERSION_MAPPING
+            conversions = DEFAULT_WEIGHT_CONVERSION_MAPPING.get(model_type)
+            if conversions:
+                weight_conversions = _clone_weight_conversions(conversions)
+
+        profile_weight_conversion = kwargs.pop("profile_weight_conversion")
 
         if gguf_file:
             if hf_quantizer is not None:
@@ -4629,6 +4672,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             device_mesh=device_mesh,
             key_mapping=key_mapping,
             weights_only=weights_only,
+            weight_mapping=weight_conversions,
+            profile_weight_conversion=profile_weight_conversion,
         )
 
         model.tie_weights()  # make sure token embedding weights are still tied if needed
@@ -4809,6 +4854,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
         key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
+        weight_mapping: Optional[Sequence[WeightConversion]] = None,
+        profile_weight_conversion: bool = False,
     ):
         # TODO: we should only be calling hf_quantizer.skip_placement or something like that
         is_quantized = hf_quantizer is not None
@@ -4816,6 +4863,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
+
+        if weight_mapping:
+            if state_dict is None:
+                merged_state_dict = {}
+                for file in checkpoint_files:
+                    merged_state_dict.update(
+                        load_state_dict(file, is_quantized=is_quantized, map_location="meta", weights_only=weights_only)
+                    )
+                state_dict = merged_state_dict
+            tp_plan = getattr(model, "_tp_plan", None)
+            quant_cfg = hf_quantizer.quantization_config if hf_quantizer is not None else None
+            state_dict, conversion_ops = convert_state_dict(
+                model, state_dict, weight_mapping, tp_plan, quant_cfg, profile=profile_weight_conversion
+            )
+            if conversion_ops:
+                setattr(model, "_weight_conversion_ops", conversion_ops)
 
         # Get all the keys of the state dicts that we have to initialize the model with
         if sharded_metadata is not None:
