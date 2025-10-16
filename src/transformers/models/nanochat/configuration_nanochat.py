@@ -95,6 +95,3 @@ class NanoChatConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.logits_soft_cap = logits_soft_cap
         self.qkv_bias = qkv_bias
-
-
-
