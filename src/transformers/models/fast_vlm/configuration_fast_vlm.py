@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -50,7 +48,7 @@ class FastVlmConfig(PreTrainedConfig):
         vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
-            vision features. Must be negative.
+            vision features. Only -1 supported.
         image_seq_length (`int`, *optional*, defaults to 256):
             Sequence length of one image embedding.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
@@ -94,12 +92,14 @@ class FastVlmConfig(PreTrainedConfig):
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
 
-        if math.isqrt(image_seq_length) ** 2 != image_seq_length:
-            raise ValueError(f"Inavalid image_seq_length: {image_seq_length}. It needs to be a perfect square.")
-
         if vision_feature_select_strategy != "full":
             raise ValueError(
-                f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported in FastVLM."
+                f"Unexpected select feature strategy: {vision_feature_select_strategy}. Only 'full' is supported in FastVLM."
+            )
+
+        if vision_feature_layer != -1:
+            raise ValueError(
+                f"Unexpected vision feature layer: {vision_feature_select_strategy}. Only -1 is supported in FastVLM."
             )
 
         self.vision_feature_select_strategy = vision_feature_select_strategy
