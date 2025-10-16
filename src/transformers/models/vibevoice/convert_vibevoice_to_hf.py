@@ -73,10 +73,10 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     # -- reverse order of ratios here instead of in modeling
     model_config["semantic_tokenizer_config"]["downsampling_ratios"] = list(reversed(model_config["semantic_tokenizer_config"]["encoder_ratios"]))
     del model_config["semantic_tokenizer_config"]["encoder_ratios"]
-    model_config["semantic_tokenizer_config"]["n_filters"] = model_config["semantic_tokenizer_config"]["encoder_n_filters"]
-    del model_config["semantic_tokenizer_config"]["encoder_n_filters"]
-    model_config["semantic_tokenizer_config"]["depths"] = model_config["semantic_tokenizer_config"]["encoder_depths"]
-    del model_config["semantic_tokenizer_config"]["encoder_depths"]
+    model_config["semantic_tokenizer_config"]["n_filters"] = model_config["semantic_tokenizer_config"].pop("encoder_n_filters")
+    model_config["semantic_tokenizer_config"]["depths"] = model_config["semantic_tokenizer_config"].pop("encoder_depths")
+    model_config["semantic_tokenizer_config"]["hidden_size"] = model_config["semantic_tokenizer_config"].pop("vae_dim")
+    model_config["semantic_tokenizer_config"]["bias"] = model_config["semantic_tokenizer_config"].pop("conv_bias")
     # -- remove unused / constant parameters that lead to unused code paths removed in HF model
     if "mixer_layer" in model_config["semantic_tokenizer_config"]:
         del model_config["semantic_tokenizer_config"]["mixer_layer"]
@@ -89,7 +89,7 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     if "corpus_normalize" in model_config["semantic_tokenizer_config"]:
         del model_config["semantic_tokenizer_config"]["corpus_normalize"]
     if "std_dist_type" in model_config["semantic_tokenizer_config"]:
-        model_config["semantic_tokenizer_config"]["sample_latent"] = False if model_config["semantic_tokenizer_config"]["std_dist_type"] == "none" else True
+        # No vae component, so no sampling
         del model_config["semantic_tokenizer_config"]["std_dist_type"]
     if "layernorm_elementwise_affine" in model_config["semantic_tokenizer_config"]:
         del model_config["semantic_tokenizer_config"]["layernorm_elementwise_affine"]
@@ -102,12 +102,15 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     if "fix_std" in model_config["semantic_tokenizer_config"]:
         # Only delete for semantic model!
         del model_config["semantic_tokenizer_config"]["fix_std"]
-    if "causal" not in model_config["semantic_tokenizer_config"]:
+    if "causal" in model_config["semantic_tokenizer_config"]:
         # always True
         del model_config["semantic_tokenizer_config"]["causal"]
 
     # TODO same for acoustic tokenizer
     model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-")))
+    # if "std_dist_type" in model_config["acoustic_tokenizer_config"]:
+    #     model_config["acoustic_tokenizer_config"]["sample_latent"] = False if model_config["semantic_tokenizer_config"]["std_dist_type"] == "none" else True
+    #     del model_config["acoustic_tokenizer_config"]["std_dist_type"]
 
 
     # 3) Update state dict to match HF model structure

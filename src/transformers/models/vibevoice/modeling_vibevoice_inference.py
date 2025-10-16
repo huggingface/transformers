@@ -152,7 +152,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
+        use_cache: Optional[bool] = None,   # TODO (ebezzam) seems to always be True?
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -179,6 +179,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         Returns:
             `VibeVoiceCausalLMOutputWithPast` or tuple
         """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Get embeddings
@@ -252,7 +253,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
 
         self._prepare_special_tokens(generation_config, True, device=device)
         generation_config.use_cache = True
-        model_kwargs["use_cache"] = generation_config.use_cache
+        model_kwargs["use_cache"] = True
         input_ids = inputs_tensor.to(self.device)
 
         input_ids_length = input_ids.shape[1]
@@ -606,8 +607,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                     audio_chunk,
                     cache=semantic_cache,  # Use semantic-specific cache
                     sample_indices=diffusion_indices,
-                    use_cache=True
-                ).mean # semantic tokenizer has no VAE.
+                ).latents  # semantic tokenizer has no VAE.
 
                 # Combine acoustic and semantic features for next input
                 acoustic_embed = self.model.acoustic_connector(speech_latent)

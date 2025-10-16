@@ -14,9 +14,7 @@
 # limitations under the License.
 """ VibeVoice Semantic Tokenizer model configuration"""
 
-from typing import Optional
 import numpy as np
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -41,7 +39,7 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
     def __init__(
         self,
         channels: int = 1,
-        vae_dim: int = 128,
+        hidden_size: int = 128,
         kernel_size: int = 7,
         rms_norm_eps: float = 1e-5,
         bias: bool = True,
@@ -51,18 +49,18 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         downsampling_ratios=[2, 2, 4, 5, 5, 8],
         depths: list[int] = [3, 3, 3, 3, 3, 3, 8],
         hidden_act="gelu",
-        sample_latent: bool = False,
+        ffn_expansion: int = 4,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.channels = channels
-        self.vae_dim = vae_dim
-        self.sample_latent = sample_latent
+        self.hidden_size = hidden_size
         self.hidden_act = hidden_act
         self.kernel_size = kernel_size
         self.rms_norm_eps = rms_norm_eps
         self.bias = bias
         self.layer_scale_init_value = layer_scale_init_value
+        self.ffn_expansion = ffn_expansion
         self.weight_init_value = weight_init_value
         self.n_filters = n_filters
         self.downsampling_ratios = downsampling_ratios

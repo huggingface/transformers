@@ -261,8 +261,7 @@ class VibeVoiceProcessor(ProcessorMixin):
 
         text_kwargs = call_kwargs["text_kwargs"]
         audio_kwargs = call_kwargs["audio_kwargs"]
-        common_kwargs = call_kwargs["common_kwargs"]
-        return_tensors = common_kwargs.pop("return_tensors", None)
+        return_tensors = audio_kwargs["return_tensors"]
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 

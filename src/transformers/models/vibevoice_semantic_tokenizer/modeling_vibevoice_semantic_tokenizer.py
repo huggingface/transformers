@@ -19,10 +19,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -31,20 +30,18 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from .configuration_vibevoice_semantic_tokenizer import VibeVoiceSemanticTokenizerConfig
+from ...utils import ModelOutput, auto_docstring
 
 
 @dataclass
-class VibeVoiceTokenizerEncoderOutput:
+@auto_docstring
+class VibeVoiceSemanticTokenizerOutput(ModelOutput):
     """
-    Output of VibeVoice tokenizer encoder, representing a Gaussian distribution with fixed variance.
-
-    Args:
-        mean (`torch.FloatTensor`): The mean parameters of the distribution.
-        std (`float` or `torch.FloatTensor`): Fixed standard deviation value.
+    latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+        Projected latents (continuous representations for semantic tokens).
     """
 
-    mean: torch.Tensor
-    std: Optional[Union[float, torch.Tensor]] = None
+    latents: Optional[torch.FloatTensor] = None
 
 
 # TODO use modular from `LlamaRMSNorm`
@@ -66,24 +63,14 @@ class RMSNorm(nn.Module):
 
 
 class VibeVoiceEncoderFeedForward(nn.Module):
-    def __init__(
-        self,
-        embed_dim,
-        ffn_dim,
-        activation="gelu",
-        bias=False,
-    ):
+    def __init__(self, config, hidden_size):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.linear1 = nn.Linear(self.embed_dim, ffn_dim, bias=bias)
-        self.activation = ACT2FN[activation]
-        self.linear2 = nn.Linear(ffn_dim, self.embed_dim, bias=bias)
+        self.linear1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size, bias=config.bias)
+        self.activation = ACT2FN[config.hidden_act]
+        self.linear2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size, bias=config.bias)
 
     def forward(self, x):
-        x = self.linear1(x)
-        x = self.activation(x)
-        x = self.linear2(x)
-        return x
+        return self.linear2(self.activation(self.linear1(x)))
 
 
 class VibeVoiceTokenizerStreamingCache:
@@ -153,16 +140,8 @@ class VibeVoiceTokenizerStreamingCache:
                 self.cache.pop(key, None)
 
 
-def get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
-    """Calculate extra padding needed for convolution to have the same output length"""
-    length = x.shape[-1]
-    n_frames = (length - kernel_size + padding_total) / stride + 1
-    ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
-    return ideal_length - length
-
-
-class SConv1d(nn.Module):
-    """Conv1d with built-in handling of causal padding and normalization."""
+class StreamingConv1d(nn.Module):
+    """Conv1d with built-in handling of streaming, causal padding, and normalization."""
 
     def __init__(
         self,
@@ -181,14 +160,10 @@ class SConv1d(nn.Module):
 
         # Store configuration
         self.kernel_size = kernel_size
-        self.dilation = dilation
         self.stride = stride
-        self.in_channels = in_channels
-        self.out_channels = out_channels
 
-        # For causal convolution, we need to maintain kernel_size - 1 samples as context
-        # need to check use which context_size is more suitable
-        # self.context_size = (kernel_size - 1) * dilation
+        # For streaming mode (causal convolution), need to maintain kernel_size - 1 samples as context
+        # to check use which context_size is more suitable
         self.context_size = (kernel_size - 1) * dilation - (stride - 1)
 
         # For non-streaming mode, calculate padding
@@ -208,7 +183,6 @@ class SConv1d(nn.Module):
         x: torch.Tensor,
         cache: Optional[VibeVoiceTokenizerStreamingCache] = None,
         sample_indices: Optional[torch.Tensor] = None,
-        use_cache: bool = False,
     ) -> torch.Tensor:
         """
         Forward pass with optional streaming support via cache.
@@ -217,29 +191,26 @@ class SConv1d(nn.Module):
             x: Input tensor [batch_size, channels, time]
             cache: VibeVoiceTokenizerStreamingCache object for maintaining states
             sample_indices: Indices identifying each sample for cache management
-            use_cache: Whether to use cached states for streaming
 
         Returns:
             Output tensor
         """
-        batch_size = x.shape[0]
+        batch_size, channels, _ = x.shape
 
         # Non-streaming mode
-        if not use_cache or cache is None:
-            return self._forward_non_streaming(x)
+        if cache is None:
+            # Compute extra padding for stride alignment
+            n_frames = (x.shape[-1] - self.kernel_size + self.padding_total) / self.stride + 1
+            ideal_length = (math.ceil(n_frames) - 1) * self.stride + (self.kernel_size - self.padding_total)
+            extra_padding = ideal_length - x.shape[-1]
+            x = F.pad(x, (self.padding_total, extra_padding), mode="constant", value=0)
+            return self.conv(x)
 
-        # Streaming mode
-        # TODO remove asserts
-        assert sample_indices is not None, "sample_indices must be provided for streaming mode"
-        assert len(sample_indices) == batch_size, "sample_indices must match batch size"
-
-        return self._forward_streaming(x, cache, sample_indices)
-
-    def _forward_streaming(
-        self, x: torch.Tensor, cache: VibeVoiceTokenizerStreamingCache, sample_indices: torch.Tensor
-    ) -> torch.Tensor:
-        """Streaming forward pass with cache operations kept separate from compiled code"""
-        B, C, T = x.shape
+        # Streaming mode (TODO simplify this code path)
+        if sample_indices is None:
+            raise ValueError("sample_indices must be provided for streaming mode")
+        if len(sample_indices) != batch_size:
+            raise ValueError("sample_indices must match batch size")
 
         # Cache operations (not compiled)
         cached_states = cache.get(self.layer_id, sample_indices)
@@ -247,9 +218,9 @@ class SConv1d(nn.Module):
         if cached_states is None:
             # First chunk - initialize with zeros for context
             if self.context_size > 0:
-                cached_states = torch.zeros(B, C, self.context_size, device=x.device, dtype=x.dtype)
+                cached_states = torch.zeros(batch_size, channels, self.context_size, device=x.device, dtype=x.dtype)
             else:
-                cached_states = torch.zeros(B, C, 0, device=x.device, dtype=x.dtype)
+                cached_states = torch.zeros(batch_size, channels, 0, device=x.device, dtype=x.dtype)
 
         # Concatenate cached states with input
         if cached_states.shape[2] > 0:
@@ -278,55 +249,41 @@ class SConv1d(nn.Module):
 
         return output
 
-    def _forward_non_streaming(self, x: torch.Tensor) -> torch.Tensor:
-        """Standard forward pass without streaming"""
-        kernel_size = self.kernel_size
-        stride = self.stride
-        padding_total = self.padding_total
 
-        # Compute extra padding for stride alignment
-        extra_padding = get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
-        x = F.pad(x, (padding_total, extra_padding), mode="constant", value=0)
-        output = self.conv(x)
+class ConvNext1dLayer(nn.Module):
+    """
+    ConvNeXt-like block adapted for 1D convolutions, used in VibeVoice tokenizer encoder.
 
-        return output
-
-
-class ConvNext1DLayer(nn.Module):
-    def __init__(
-        self,
-        hidden_size,
-        kernel_size=7,
-        layer_scale_init_value=1e-6,
-        rms_norm_eps=1e-6,
-        ffn_expansion=4,
-        bias=True,
-        activation="gelu",
-        **kwargs,
-    ):
+    For reference, original 2D `ConvNextLayer`:
+    https://github.com/huggingface/transformers/blob/e20df45bf676d80bdddb9757eeeafe6c0c81ecfa/src/transformers/models/convnext/modeling_convnext.py#L120
+    """
+    def __init__(self, config, hidden_size, drop_path=0.0):
         super().__init__()
 
-        self.norm = RMSNorm(hidden_size, eps=rms_norm_eps)
-        self.ffn_norm = RMSNorm(hidden_size, eps=rms_norm_eps)
-        self.mixer = SConv1d(
+        self.norm = RMSNorm(hidden_size, eps=config.rms_norm_eps)
+        self.ffn_norm = RMSNorm(hidden_size, eps=config.rms_norm_eps)
+        self.mixer = StreamingConv1d(
             in_channels=hidden_size,
             out_channels=hidden_size,
-            kernel_size=kernel_size,
+            kernel_size=config.kernel_size,
             groups=hidden_size,
-            bias=bias,
+            bias=config.bias,
         )
-        self.ffn = VibeVoiceEncoderFeedForward(
-            hidden_size,
-            ffn_expansion * hidden_size,
-            activation=activation,
-            bias=bias,
-        )
-        if layer_scale_init_value > 0:
-            self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((hidden_size)), requires_grad=True)
-            self.ffn_gamma = nn.Parameter(layer_scale_init_value * torch.ones((hidden_size)), requires_grad=True)
+        self.ffn = VibeVoiceEncoderFeedForward(config, hidden_size)
+        if config.layer_scale_init_value > 0:
+            self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones((hidden_size)), requires_grad=True)
+            self.ffn_gamma = nn.Parameter(config.layer_scale_init_value * torch.ones((hidden_size)), requires_grad=True)
         else:
             self.gamma = None
             self.ffn_gamma = None
+
+        # TODO (ebezzam) original code has option for DropPath but is never actually used (and `nn.modules.DropPath` does not exist): https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L637
+        # however, could be interesting feature for future versions of `ConvNext1dLayer` as the 2D version has it: https://github.com/huggingface/transformers/blob/e20df45bf676d80bdddb9757eeeafe6c0c81ecfa/src/transformers/models/convnext/modeling_convnext.py#L146
+        if drop_path > 0.0:
+            # possible implementation (that may needed to be adapted for 1D):
+            # https://github.com/huggingface/transformers/blob/e20df45bf676d80bdddb9757eeeafe6c0c81ecfa/src/transformers/models/convnext/modeling_convnext.py#L40
+            raise NotImplementedError("DropPath is not implemented.")
+        self.drop_path = nn.Identity()
 
     def forward(self, x):
         # mixer
@@ -335,11 +292,11 @@ class ConvNext1DLayer(nn.Module):
         x = self.mixer(x)
         if self.gamma is not None:
             x = x * self.gamma.unsqueeze(-1)
-        # Original code (https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653)
-        # seems to use DropPath but it is never actually used (and if used, it would lead to but in original code as
-        # `nn.modules.DropPath` does not exist). Moreover, in original code, `forward` method is never even called and,
-        # they do the same `residual+x`: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L768
-        x = residual + x
+        # (ebezzam) original code (https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653)
+        # as mentioned above, drop_path is not used and the VibeVoice authors don't use the `forward` method but a custom
+        # call which does `residual + x` directly (see link below), which is same as using identity
+        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L768
+        x = residual + self.drop_path(x)
 
         # ffn
         residual = x
@@ -349,9 +306,8 @@ class ConvNext1DLayer(nn.Module):
         x = x.permute(0, 2, 1)
         if self.ffn_gamma is not None:
             x = x * self.ffn_gamma.unsqueeze(-1)
-        # See comment above
-        x = residual + x
-
+        # (ebezzam) see comment above
+        x = residual + self.drop_path(x)
         return x
 
 
@@ -365,7 +321,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
     24kHz input, yielding 7.5 tokens/frames per second."
 
     But each block is more like a ConvNeXt block (but 1D): https://arxiv.org/abs/2201.03545
-    Hence the name `ConvNext1DLayer` in this code for the blocks.
+    Hence the name `ConvNext1dLayer` in this code for the blocks.
 
     Args:
         config: Configuration object with model parameters
@@ -374,13 +330,10 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.depths = config.depths
-        layer_scale_init_value = config.layer_scale_init_value
-
         # stem and intermediate downsampling conv layers
         self.downsample_layers = nn.ModuleList()
         self.downsample_layers.append(
-            SConv1d(
+            StreamingConv1d(
                 in_channels=config.channels,
                 out_channels=config.n_filters,
                 kernel_size=config.kernel_size,
@@ -388,72 +341,51 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
             )
         )
         for i in range(len(config.downsampling_ratios)):
-            in_ch = config.n_filters * (2**i)
-            out_ch = config.n_filters * (2 ** (i + 1))
-            downsample_layer = SConv1d(
-                in_channels=in_ch,
-                out_channels=out_ch,
+            downsample_layer = StreamingConv1d(
+                in_channels=config.n_filters * (2**i),
+                out_channels=config.n_filters * (2 ** (i + 1)),
                 kernel_size=config.downsampling_ratios[i] * 2,
                 stride=config.downsampling_ratios[i],
                 bias=config.bias,
             )
             self.downsample_layers.append(downsample_layer)
 
-        # configure the transformer blocks
+        # configure ConvNext1D blocks
         self.stages = nn.ModuleList()
-        for i in range(len(self.depths)):
+        for i in range(len(config.depths)):
             in_ch = config.n_filters * (2**i)
             stage = nn.ModuleList([
-                ConvNext1DLayer(
-                    hidden_size=in_ch,
-                    kernel_size=config.kernel_size,
-                    rms_norm_eps=config.rms_norm_eps,
-                    bias=config.bias,
-                    layer_scale_init_value=layer_scale_init_value,
-                    activation=config.hidden_act,
-                )
-                for _ in range(self.depths[i])
+                ConvNext1dLayer(config, hidden_size=in_ch)
+                for _ in range(config.depths[i])
             ])
             self.stages.append(stage)
 
-        self.head = SConv1d(
+        self.head = StreamingConv1d(
             in_channels=in_ch,
-            out_channels=config.vae_dim,
+            out_channels=config.hidden_size,
             kernel_size=config.kernel_size,
             bias=config.bias,
         )
 
-    def forward(self, x, cache=None, sample_indices=None, use_cache=False):
-        for i in range(len(self.depths)):
-            x = self.downsample_layers[i](x, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
+    def forward(self, x, cache=None, sample_indices=None):
+        for i, downsample_layer in enumerate(self.downsample_layers):
+            x = downsample_layer(x, cache=cache, sample_indices=sample_indices)
             for block in self.stages[i]:
                 x = block(x)
-        x = self.head(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
+        x = self.head(x, cache=cache, sample_indices=sample_indices)
         return x.permute(0, 2, 1)
 
 
-class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
-    """Encoder-only VibeVoice tokenizer model for semantic tokens."""
-
-    config_class = VibeVoiceSemanticTokenizerConfig
+@auto_docstring
+class VibeVoiceSemanticTokenizerPreTrainedModel(PreTrainedModel):
+    config = VibeVoiceSemanticTokenizerConfig
     base_model_prefix = "vibevoice_semantic_tokenizer"
+    main_input_name = "audio"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _no_split_modules = ["VibeVoiceSemanticTokenizerEncoder"]
 
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.sample_latent = config.sample_latent
-
-        # Initialize encoder
-        self.encoder = VibeVoiceSemanticTokenizerEncoder(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
     def _init_weights(self, module):
-        """Initialize weights for the model"""
         if isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, std=self.config.weight_init_value)
             if module.bias is not None:
@@ -465,32 +397,44 @@ class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
         elif isinstance(module, RMSNorm):
             nn.init.ones_(module.weight)
 
-    @torch.no_grad()
-    def encode(self, audio, cache=None, sample_indices=None, use_cache=False):
-        """Convert audio to latent representations"""
-        latents = self.encoder(audio, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
-        return VibeVoiceTokenizerEncoderOutput(mean=latents)
 
-    @torch.no_grad()
-    def sample(self, encoder_output):
-        """Sample from the encoder output distribution with a Gaussian distribution."""
-        batch_size = encoder_output.mean.size(0)
-        value = encoder_output.std / 0.8
-        std = torch.randn(batch_size, device=encoder_output.mean.device, dtype=encoder_output.mean.dtype) * value
+@auto_docstring
+class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel):
+    """Encoder-only VibeVoice tokenizer model for semantic tokens."""
 
-        while std.dim() < encoder_output.mean.dim():
-            std = std.unsqueeze(-1)
+    def __init__(self, config):
+        super().__init__(config)
 
-        x = encoder_output.mean + std * torch.randn_like(encoder_output.mean)
-        return x, std
+        # Initialize encoder
+        self.encoder = VibeVoiceSemanticTokenizerEncoder(config)
 
-    def forward(self, audio, cache=None, sample_indices=None, use_cache=False):
-        encoder_output = self.encode(audio, cache=cache, sample_indices=sample_indices, use_cache=use_cache)
-        if self.sample_latent:
-            sampled_latents, _ = self.sample(encoder_output)
-        else:
-            sampled_latents = encoder_output.mean
-        return sampled_latents
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @auto_docstring
+    def encode(self, audio, cache=None, sample_indices=None):
+        r"""
+        audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+            Input audio waveform to be encoded into latent representations.
+        cache (`VibeVoiceTokenizerStreamingCache`, *optional*):
+            Cache object for streaming mode to maintain convolution states.
+        sample_indices (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Indices identifying each sample in the batch for cache management.
+        """
+        latents = self.encoder(audio, cache=cache, sample_indices=sample_indices)
+        return VibeVoiceSemanticTokenizerOutput(latents=latents)
+
+    @auto_docstring
+    def forward(self, audio, cache=None, sample_indices=None):
+        r"""
+        audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+            Input audio waveform to be encoded into latent representations.
+        cache (`VibeVoiceTokenizerStreamingCache`, *optional*):
+            Cache object for streaming mode to maintain convolution states.
+        sample_indices (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Indices identifying each sample in the batch for cache management.     
+        """
+        return self.encode(audio, cache=cache, sample_indices=sample_indices)
 
 
 __all__ = ["VibeVoiceTokenizerStreamingCache", "VibeVoiceSemanticTokenizerModel"]
