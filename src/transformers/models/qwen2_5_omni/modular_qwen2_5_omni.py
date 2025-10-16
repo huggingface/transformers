@@ -388,7 +388,9 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
+        rope_scaling = kwargs.pop(
+            "rope_scaling", {"mrope_section": [16, 24, 24], "rope_type": "default", "rope_theta": 1000000.0}
+        )
         self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
@@ -740,9 +742,6 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
