@@ -551,7 +551,6 @@ class AutoImageProcessor:
                     if image_processor_type in image_processors:
                         break
                 else:
-                    # do something
                     image_processor_type = image_processor_type[:-4]
                     use_fast = False
                     logger.warning_once(
