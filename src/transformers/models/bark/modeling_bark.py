@@ -326,7 +326,6 @@ class BarkBlock(GradientCheckpointingLayer):
 @auto_docstring
 class BarkPreTrainedModel(PreTrainedModel):
     config: BarkConfig
-    output_modalities = "audio"
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
 
@@ -371,6 +370,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
+    output_modalities = "audio"
 
     def __init__(self, config):
         super().__init__(config)

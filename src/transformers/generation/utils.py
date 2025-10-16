@@ -366,6 +366,9 @@ class GenerationMixin(ContinuousMixin):
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
+    # Should be overwritten by models that can generate non-text output
+    output_modalities = "text"
+
     def adjust_generation_fn(
         self,
         generation_config,

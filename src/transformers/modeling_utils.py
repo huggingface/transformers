@@ -2090,20 +2090,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return getattr(self, self.base_model_prefix, self)
 
     @classmethod
-    def output_modalities(cls) -> Optional[Union[str, list[str]]]:
-        """
-        Returns a list of output modalities that a model can generate. For non-generative models
-        returns a `None`. Multimodal models that can output several modalities or non-text modalities
-        should overwrite this method.
-
-        Returns:
-            `Union[str, list[str]]`: Output modalities supported for models that can call `.generate()`.
-        """
-        if cls.can_generate():
-            return "text"
-        return None
-
-    @classmethod
     def can_generate(cls) -> bool:
         """
         Returns whether this model can generate sequences with `.generate()` from the `GenerationMixin`.

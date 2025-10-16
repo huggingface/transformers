@@ -2316,7 +2316,6 @@ def _generate_speech(
 )
 class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     input_modalities = "text"
-    output_modalities = "audio"
     main_input_name = "input_ids"
 
     def __init__(self, config: SpeechT5Config):
@@ -2671,8 +2670,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     """
 )
 class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
-    output_modalities = ["audio", "text"]
-
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
 

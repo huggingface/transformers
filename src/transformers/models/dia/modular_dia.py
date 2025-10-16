@@ -51,7 +51,6 @@ logger = logging.get_logger(__name__)
 class DiaPreTrainedModel(PreTrainedModel):
     config: DiaConfig
     base_model_prefix = "model"
-    output_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -596,6 +595,7 @@ class DiaModel(DiaPreTrainedModel):
 )
 class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
     base_model_prefix = "model"
+    output_modalities = "audio"
 
     def __init__(self, config: DiaConfig):
         super().__init__(config)

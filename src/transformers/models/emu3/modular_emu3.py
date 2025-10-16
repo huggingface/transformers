@@ -839,7 +839,6 @@ class Emu3ImageVocabularyMapping:
 
 
 class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
-    output_modalities = ["image", "text"]
     _no_split_modules = [
         "Emu3DecoderLayer",
     ]
@@ -848,7 +847,6 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
 
 
 class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
-    output_modalities = "text"
     _can_record_outputs = {
         "hidden_states": Emu3DecoderLayer,
         "attentions": Emu3Attention,
@@ -1044,6 +1042,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     base_model_prefix = ""
+    output_modalities = ["image", "text"]
     _tied_weights_keys = ["lm_head.weight"]
     _checkpoint_conversion_mapping = {
         "^text_model.model": "model.text_model",

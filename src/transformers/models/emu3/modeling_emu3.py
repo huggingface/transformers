@@ -1105,7 +1105,6 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _supports_param_buffer_assignment = False
     _supports_flex_attn = True
     _supports_attention_backend = True
-    output_modalities = ["image", "text"]
 
 
 class Emu3RotaryEmbedding(nn.Module):
@@ -1146,7 +1145,6 @@ class Emu3RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Emu3TextModel(Emu3PreTrainedModel):
-    output_modalities = "text"
     _can_record_outputs = {
         "hidden_states": Emu3DecoderLayer,
         "attentions": Emu3Attention,
@@ -1461,6 +1459,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     base_model_prefix = ""
+    output_modalities = ["image", "text"]
     _tied_weights_keys = ["lm_head.weight"]
     _checkpoint_conversion_mapping = {
         "^text_model.model": "model.text_model",

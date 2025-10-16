@@ -1199,7 +1199,6 @@ class VitsPreTrainedModel(PreTrainedModel):
     config: VitsConfig
     base_model_prefix = "vits"
     main_input_name = "input_ids"
-    output_modalities = "audio"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module: nn.Module):

@@ -980,7 +980,6 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "fastspeech2_conformer"
 
     main_input_name = "input_ids"
-    output_modalities = "audio"
 
     def _init_weights(self, module):
         """Initialize the weights"""

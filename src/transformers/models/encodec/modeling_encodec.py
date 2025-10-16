@@ -480,8 +480,6 @@ class EncodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     """
 )
 class EncodecModel(EncodecPreTrainedModel):
-    output_modalities = "audio"
-
     def __init__(self, config: EncodecConfig):
         super().__init__(config)
         self.config = config
