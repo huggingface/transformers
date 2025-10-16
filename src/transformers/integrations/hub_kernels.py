@@ -136,7 +136,7 @@ try:
             }
         },
     }
-    # We pin the version here for xpu support
+    # We pin the version here for xpu support, if kernels is not available at all we won't reach this point, so it's safe.
     if is_kernels_available(MIN_VERSION="0.10.2"):
         register_kernel_mapping(_KERNEL_MAPPING)
     else:
