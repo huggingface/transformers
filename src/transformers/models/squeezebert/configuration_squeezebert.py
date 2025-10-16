@@ -115,6 +115,8 @@ class SqueezeBertConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         embedding_size=768,
         q_groups=4,
         k_groups=4,
@@ -129,6 +131,8 @@ class SqueezeBertConfig(PreTrainedConfig):
 
         self.is_decoder = is_decoder
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

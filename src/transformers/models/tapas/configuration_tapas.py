@@ -152,6 +152,8 @@ class TapasConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         positive_label_weight=10.0,
         num_aggregation_labels=0,
         aggregation_loss_weight=1.0,
@@ -186,6 +188,8 @@ class TapasConfig(PreTrainedConfig):
         self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

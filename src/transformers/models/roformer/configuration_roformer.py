@@ -107,6 +107,8 @@ class RoFormerConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         rotary_value=False,
         use_cache=True,
         is_decoder=False,
@@ -115,6 +117,8 @@ class RoFormerConfig(PreTrainedConfig):
     ):
         super().__init__(**kwargs)
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
