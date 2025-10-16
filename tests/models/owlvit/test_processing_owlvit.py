@@ -23,7 +23,7 @@ import pytest
 from transformers import CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -60,9 +60,9 @@ class OwlViTProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_mean": [0.48145466, 0.4578275, 0.40821073],
             "image_std": [0.26862954, 0.26130258, 0.27577711],
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
+        image_processor = OwlViTImageProcessor(**image_processor_map)
+        processor = OwlViTProcessor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return CLIPTokenizer.from_pretrained(self.tmpdirname, pad_token="!", **kwargs)

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
 import random
 import shutil
@@ -24,7 +23,7 @@ import pytest
 from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -76,9 +75,9 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "codebook_image_std": FLAVA_CODEBOOK_STD,
         }
 
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
+        image_processor = FlavaImageProcessor(**image_processor_map)
+        processor = FlavaProcessor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)

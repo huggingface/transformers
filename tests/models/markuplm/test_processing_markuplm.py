@@ -28,7 +28,7 @@ from transformers import (
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_bs4, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, is_bs4_available, is_tokenizers_available
+from transformers.utils import is_bs4_available, is_tokenizers_available
 
 
 if is_bs4_available():
@@ -64,10 +64,9 @@ class MarkupLMProcessorTest(unittest.TestCase):
         with open(self.tokenizer_config_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps({"tags_dict": self.tags_dict}))
 
-        feature_extractor_map = {"feature_extractor_type": "MarkupLMFeatureExtractor"}
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(feature_extractor_map) + "\n")
+        feature_extractor = MarkupLMFeatureExtractor()
+        processor = MarkupLMProcessor(tokenizer=self.get_tokenizer(), feature_extractor=feature_extractor)
+        processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
