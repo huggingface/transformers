@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -113,9 +112,6 @@ class FastVlmModel(FastVlmPreTrainedModel):
 
     def __init__(self, config: FastVlmConfig):
         super().__init__(config)
-        # Timm models don't support this way of setting attention mode so we set the vision config to eager while keeping the language part
-        # the same as the user requested
-        config.vision_config._attn_implementation = "eager"
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = FastVlmMultiModalProjector(config)
@@ -163,20 +159,6 @@ class FastVlmModel(FastVlmPreTrainedModel):
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
         )
-
-        # only this value makes sense in FastVLM (we can't have a CLS token in conv layers)
-        if vision_feature_select_strategy != "full":
-            raise ValueError(
-                f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported in FastVLM."
-            )
-
-        if any(
-            layer >= 0
-            for layer in (
-                vision_feature_layer if isinstance(vision_feature_layer, Iterable) else [vision_feature_layer]
-            )
-        ):
-            raise ValueError(f"Only negative vision feature layer values are supported. Got {vision_feature_layer}")
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory-efficient at all
@@ -431,7 +413,17 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         >>> model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B").to(device)
         >>> processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
-        >>> prompt = "<|im_start|>user\n<image>\nWhat's the content of the image?<|im_end|>\n<|im_start|>assistant\n"
+        >>> conversation = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What are these?"},
+                        {"type": "image"}
+                    ]
+                }
+            ]
+
+        >>> prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -440,6 +432,7 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         >>> # Generate
         >>> generated_ids = model.generate(**inputs, max_new_tokens=15)
         >>> print(processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
+        system\n You are a helpful assistant.\n user\n What are these?\n assistant\n The image depicts a traditional Chinese street...
         ```"""
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer

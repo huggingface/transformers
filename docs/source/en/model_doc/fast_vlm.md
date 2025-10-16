@@ -90,8 +90,6 @@ print(text_prompt)
 >>> "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<image>\nWhat’s shown in this image?<|im_end|>\n<|im_start|>assistant\n\nThis image shows a red stop sign.<|im_end|>\n<|im_start|>user\n\nDescribe the image in more details.<|im_end|>\n<|im_start|>assistant\n"
 ```
 
-🚀 **Bonus:** If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the **Usage Examples** below for more details on how to use it.
-
 ## Usage examples
 
 ### Single input inference
@@ -181,46 +179,11 @@ processor.batch_decode(generate_ids, skip_special_tokens=True)
 
 ## Note regarding reproducing original implementation
 
-In order to match the logits of the [original implementation](https://github.com/apple/ml-fastvlm), one needs to set the default timm attention implementation to the most basic version(not fused):
-
-```
-import os
-# at the beginning of your script
-os.environ["TIMM_FUSED_ATTN"] = "0"
-```
-
-In addition, the layer norm used by Apple doesn't use the standard LayerNorm class form Torch and therefore our logits diverge. To get exactly the same values, one needs to manually change `timm/layers/norm.py`:
-
-```
-class LayerNorm2d(nn.LayerNorm):
-    """ LayerNorm for channels of '2D' spatial NCHW tensors """
-    _fast_norm: torch.jit.Final[bool]
-
-    def __init__():
-        ... # not important
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        u = x.mean(1, keepdim=True)
-        s = (x - u).pow(2).mean(1, keepdim=True)
-        x = (x - u) / torch.sqrt(s + self.eps)
-        x = self.weight.unsqueeze(-1).unsqueeze(-1) * x \
-            + self.bias.unsqueeze(-1).unsqueeze(-1)
-        return x
-```
-Please note, that this is only needed in oder to get the exact same numerical values on the output of the model. It's not necessary to make this change to use FastVLM.
+In order to match the logits of the [original implementation](https://github.com/apple/ml-fastvlm), one needs to use float32. In half precision the logit difference is higher due to tiny differences in how some ops are implemented in timm.
 
 ### Using Flash Attention 2
 
 Flash Attention 2 is an even faster, optimized version of the previous optimization, please refer to the [Flash Attention 2 section of performance docs](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with image-to-text transformers (here using Llava as an example).
-
-<PipelineTag pipeline="image-to-text"/>
-
-- A [Google Colab demo](https://colab.research.google.com/drive/1qsl6cd2c8gGtEW1xV5io7S8NHh-Cp1TV?usp=sharing) on how to run Llava on a free-tier Google colab instance leveraging 4-bit inference.
-- A [similar notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LLaVa/Inference_with_LLaVa_for_multimodal_generation.ipynb) showcasing batched inference. 🌎
 
 ## FastVlmConfig
 
