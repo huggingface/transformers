@@ -45,6 +45,13 @@ print("Predicted answer:", model.config.id2label[idx])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Check the example [notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ViLT) to get started with ViLT. They showcase both inference and fine-tuning on custom data.
+- ViLT takes both `pixel_values` and `input_ids` as input. Use [`ViltProcessor`] to prepare data for the model. This processor wraps an image processor (for the image modality) and a tokenizer (for the language modality) into one.
+- ViLT trains with images of various sizes. The model resizes the shorter edge of input images to 384 and limits the longer edge to under 640 while preserving the aspect ratio. To enable batching, the model uses a `pixel_mask` that indicates which pixel values are real and which are padding. [`ViltProcessor`] automatically creates this for you.
+- This model requires PyTorch 1.10 or higher.
+
 ## ViltConfig
 
 [[autodoc]] ViltConfig

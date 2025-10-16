@@ -69,6 +69,12 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 </hfoption>
 </hfoptions>
 
+## Usage options
+
+- Training supports DDP and FSDP on single-node multi-GPU setups. The model doesn't use `torch.distributed` utilities, which may limit batch size scalability.
+- Use `padding="max_length"` when using standalone [`SiglipTokenizer`] or [`SiglipProcessor`]. This matches how the model was trained.
+- Pass the prompt template `"This is a photo of {label}."` to the processor to get the same results as the [`Pipeline`].
+
 ## SiglipConfig
 
 [[autodoc]] SiglipConfig

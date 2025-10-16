@@ -67,6 +67,12 @@ for box, score, labels in zip(result["boxes"], result["scores"], result["labels"
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`GroundingDinoProcessor`] to prepare image-text pairs for the model.
+- Separate classes in text with periods. For example: `"a cat. a dog."`
+- For multiple classes, use [`GroundingDinoProcessor.post_process_grounded_object_detection`] to post-process outputs. Labels from `post_process_object_detection` represent indices from the model dimension where probability exceeds the threshold.
+
 ## GroundingDinoImageProcessor
 
 [[autodoc]] GroundingDinoImageProcessor

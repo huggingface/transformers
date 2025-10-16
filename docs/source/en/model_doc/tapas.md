@@ -65,6 +65,13 @@ for i, query in enumerate(queries):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- TAPAS uses relative position embeddings by default (restarting position embeddings at every table cell). This feature was added after the original paper publication. According to the authors, this usually improves performance slightly and lets you encode longer sequences without running out of embeddings.
+- The `reset_position_index_per_cell` parameter in [`TapasConfig`] controls this behavior and defaults to `True`. Default models on the hub use relative position embeddings. Use absolute position embeddings by passing `revision="no_reset"` to the [`from_pretrained`] method. Pad inputs on the right rather than the left.
+- TAPAS checkpoints fine-tuned on SQA handle conversational table questions. Ask follow-up questions like "what is his age?" related to previous questions. Conversational setups require feeding table-question pairs one by one so `prev_labels` token type ids overwrite with predicted labels from the previous question.
+- TAPAS relies on masked language modeling (MLM) like BERT. It excels at predicting masked tokens and natural language understanding but isn't optimal for text generation. Models trained with causal language modeling (CLM) perform better for generation. Use TAPAS as an encoder in the [`EncoderDecoderModel`] framework to combine it with autoregressive text decoders like GPT-2.
+
 ## TAPAS specific outputs
 
 [[autodoc]] models.tapas.modeling_tapas.TableQuestionAnsweringOutput

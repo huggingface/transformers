@@ -137,6 +137,13 @@ print(f"The time slot of the video corresponding to the text \"{text}\" is from 
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- TVLT takes both `pixel_values` and `audio_values` as input. Use [`TvltProcessor`] to prepare data for the model. This processor wraps an image processor (for image/video modality) and an audio feature extractor (for audio modality) into one.
+- TVLT trains with images/videos and audios of various sizes. The authors resize and crop input images/videos to 224 pixels and limit audio spectrogram length to 2048. They use `pixel_mask` to indicate which pixels are real/padding and `audio_mask` to indicate which audio values are real/padding for batching.
+- TVLT's design resembles a standard Vision Transformer (ViT) and masked autoencoder (MAE) as in ViTMAE. The difference is that the model includes embedding layers for the audio modality.
+- This model requires PyTorch 1.10 or higher.
+
 ## TvltConfig
 
 [[autodoc]] TvltConfig

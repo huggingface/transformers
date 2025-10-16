@@ -74,6 +74,15 @@ processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spac
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use `padding_side="left"` for batched generation to get more accurate results. Set `processor.tokenizer.padding_side = "left"` before generating.
+- The model doesn't explicitly train to process multiple images/videos in the same prompt. While technically possible, you may get inaccurate results.
+- Video inputs must have exactly 8 frames since the models train with that setting.
+- LLaVA models after release v4.46 raise warnings about adding `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}`, and `processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. Add these attributes to the processor if you own the model checkpoint, or open a PR if you don't.
+- Adding these attributes means LLaVA infers the number of image tokens required per image and expands text with `<image>` placeholders. Usually around 500 tokens per image, so ensure text isn't truncated to avoid embedding merge failures.
+- Get attributes from `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`. Set `num_additional_image_tokens` to 1 if the vision backbone adds a CLS token or 0 if nothing extra adds to the vision patches.
+
 ## VideoLlavaConfig
 
 [[autodoc]] VideoLlavaConfig

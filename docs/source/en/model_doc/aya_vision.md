@@ -71,6 +71,10 @@ print(processor.tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_sp
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use the `<image>` tag to represent images in the chat template.
+
 ## AyaVisionProcessor
 
 [[autodoc]] AyaVisionProcessor

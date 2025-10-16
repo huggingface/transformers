@@ -53,6 +53,10 @@ print(processor.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- This model loads as a [`LlavaNextForConditionalGeneration`] instance.
+
 ## LlavaNextConfig
 
 [[autodoc]] LlavaNextConfig

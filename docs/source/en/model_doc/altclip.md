@@ -62,6 +62,12 @@ for label, prob in zip(labels, probs[0]):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- AltCLIP uses bidirectional attention instead of causal attention. It uses the `[CLS]` token in XLM-R to represent text embeddings.
+- Use [`CLIPImageProcessor`] to resize and normalize images for the model.
+- [`AltCLIPProcessor`] combines [`CLIPImageProcessor`] and [`XLMRobertaTokenizer`] into a single instance to encode text and prepare images.
+
 ## AltCLIPConfig
 
 [[autodoc]] AltCLIPConfig

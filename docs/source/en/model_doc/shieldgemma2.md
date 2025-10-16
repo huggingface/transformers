@@ -43,6 +43,12 @@ print(output.probabilities)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- ShieldGemma 2's [`Processor`] accepts a list of images and an optional list of policies as input. It constructs a batch of prompts as the product of these two lists using the provided chat template.
+- Extend ShieldGemma's built-in policies with the `custom_policies` argument to the processor. Using the same key as a built-in policy overwrites that policy with your custom definition.
+- ShieldGemma 2 doesn't support the image cropping capabilities used by Gemma 3.
+
 ## ShieldGemma2Processor
 
 [[autodoc]] ShieldGemma2Processor

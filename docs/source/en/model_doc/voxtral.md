@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 [Voxtral](https://huggingface.co/papers/2507.13264) are multimodal audio–text chat models designed to process both spoken audio and written language. They achieve state-of-the-art results on diverse audio benchmarks while maintaining strong text performance. Voxtral Small, despite its compact size and ability to run locally, surpasses several closed-source systems. Both models support a 32K context window—allowing analysis of up to 40-minute audio segments and long conversations—and are released under the Apache 2.0 license along with three new benchmarks for evaluating speech understanding in knowledge and trivia tasks.
 
 <hfoptions id="usage">
-<hfoption id="">
+<hfoption id="VoxtralForConditionalGeneration">
 
 ```py
 import torch

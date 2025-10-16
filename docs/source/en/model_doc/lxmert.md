@@ -55,6 +55,12 @@ print(f"Confidence score: {qa_scores[0][predicted_answer_idx]:.4f}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Bounding boxes aren't necessary for visual feature embeddings. Any visual-spatial features work.
+- LXMERT outputs both language and visual hidden states through the cross-modality layer, so they contain information from both modalities. Select vision or language hidden states from the first input in the tuple to access a modality that only attends to itself.
+- The bidirectional cross-modality encoder attention returns attention values only when the language modality is the input and the vision modality is the context vector. The cross-modality encoder contains self-attention for each modality and cross-attention, but only cross-attention is returned. Self-attention outputs are disregarded.
+
 ## LxmertConfig
 
 [[autodoc]] LxmertConfig

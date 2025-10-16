@@ -56,6 +56,10 @@ processor.batch_decode(generate_ids, skip_special_tokens=True)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- IDEFICS modeling code supports fine-tuning and inference for pre-trained IDEFICS models.
+
 ## IdeficsConfig
 
 [[autodoc]] IdeficsConfig

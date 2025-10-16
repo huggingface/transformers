@@ -79,6 +79,17 @@ print(text)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use [`Qwen2_5OmniForConditionalGeneration`] to generate both audio and text output. For single output types, use [`Qwen2_5OmniThinkerForConditionalGeneration`] for text-only or [`Qwen2_5OmniTalkersForConditionalGeneration`] for audio-only outputs.
+- Audio generation with [`Qwen2_5OmniForConditionalGeneration`] supports only single batch size currently.
+- Decrease `processor.max_pixels` if you encounter out-of-memory errors when working with video input. By default, the maximum is set to a very large value and high-resolution visuals won't resize unless resolution exceeds `processor.max_pixels`.
+- The processor includes [`apply_chat_template`] to convert chat messages to model inputs.
+- The model supports a wide range of resolution inputs. It uses native resolution by default, but higher resolutions enhance performance at the cost of more computation. Set minimum and maximum pixel counts to achieve optimal configuration for your needs.
+- For audio output, set the system prompt to: "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech." Otherwise, audio output won't work as expected.
+- The model supports both text and audio outputs. Set `enable_audio_output` in the `from_pretrained` function if you don't need audio outputs. This saves about 2GB of GPU memory but limits `return_audio` to `False` in the generate function. For flexibility, set `enable_audio_output=True` when initializing the model, then decide whether to return audio when calling generate. When `return_audio=False`, the model returns only text outputs for faster responses.
+- Qwen2.5-Omni supports voice changes for output audio. Use the `spk` parameter in the generate function to specify voice type. The "Qwen/Qwen2.5-Omni-7B" checkpoint supports two voice types: Chelsie (female) and Ethan (male). Chelsie is the default voice if `spk` isn't specified.
+
 ## Qwen2_5OmniConfig
 
 [[autodoc]] Qwen2_5OmniConfig

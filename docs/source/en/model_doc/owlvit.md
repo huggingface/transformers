@@ -62,6 +62,13 @@ for box, score, text_label in zip(boxes, scores, text_labels):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- OWL-ViT is a zero-shot text-conditioned object detection model that uses CLIP as its multi-modal backbone. It uses a ViT-like Transformer for visual features and a causal language model for text features.
+- To use CLIP for detection, OWL-ViT removes the final token pooling layer of the vision model and attaches lightweight classification and box heads to each transformer output token. Open-vocabulary classification replaces fixed classification layer weights with class-name embeddings from the text model.
+- The authors train CLIP from scratch and fine-tune it end-to-end with classification and box heads on standard detection datasets using bipartite matching loss. Use one or multiple text queries per image for zero-shot text-conditioned object detection.
+- Use [`OwlViTImageProcessor`] to resize and normalize images for the model. Use [`CLIPTokenizer`] to encode text. [`OwlViTProcessor`] wraps both into a single instance to encode text and prepare images.
+
 ## OwlViTConfig
 
 [[autodoc]] OwlViTConfig

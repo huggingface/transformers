@@ -51,6 +51,12 @@ print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_to
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pixtral uses [`PixtralVisionModel`] as the vision encoder and [`MistralForCausalLM`] for its language decoder.
+- The model internally replaces `[IMG]` token placeholders with image embeddings. The number of `[IMG]` tokens depends on each image's height and width.
+- Each image row separates by a `[IMG_BREAK]` token. Each image separates by an `[IMG_END]` token. Use [`Processor.apply_chat_template`] to manage these tokens automatically.
+
 ## PixtralVisionConfig
 
 [[autodoc]] PixtralVisionConfig
