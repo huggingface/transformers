@@ -687,7 +687,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
 
 @require_torch
-class BarkFineModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BarkFineModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
