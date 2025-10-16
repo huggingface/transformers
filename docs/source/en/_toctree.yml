@@ -218,6 +218,11 @@
   title: Quantization
 - isExpanded: false
   sections:
+  - local: kernel_doc/overview
+    title: Kernels in transformers
+  title: Kernels
+- isExpanded: false
+  sections:
   - local: serialization
     title: ONNX
   - local: executorch
@@ -279,6 +284,8 @@
         title: Knowledge Distillation for Computer Vision
       - local: tasks/keypoint_matching
         title: Keypoint matching
+      - local: tasks/training_vision_backbone
+        title: Training vision models using Backbone API
       title: Computer vision
     - sections:
       - local: tasks/image_captioning
@@ -368,6 +375,8 @@
       title: Image Processor
     - local: main_classes/video_processor
       title: Video Processor
+    - local: main_classes/kernels
+      title: Kernels
     title: Main Classes
   - sections:
     - sections:
@@ -537,8 +546,6 @@
         title: Helium
       - local: model_doc/herbert
         title: HerBERT
-      - local: model_doc/hgnet_v2
-        title: HGNet-V2
       - local: model_doc/hunyuan_v1_dense
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
@@ -555,6 +562,8 @@
         title: LED
       - local: model_doc/lfm2
         title: LFM2
+      - local: model_doc/lfm2_moe
+        title: LFM2Moe
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
@@ -1017,6 +1026,8 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/cwm
+        title: Code World Model (CWM)
       - local: model_doc/cohere2_vision
         title: Cohere2Vision
       - local: model_doc/colpali
@@ -1177,6 +1188,8 @@
         title: TVP
       - local: model_doc/udop
         title: UDOP
+      - local: model_doc/video_llama_3
+        title: VideoLlama3
       - local: model_doc/video_llava
         title: VideoLlava
       - local: model_doc/vilt

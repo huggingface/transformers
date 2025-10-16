@@ -109,8 +109,6 @@ class DepthProConfig(PreTrainedConfig):
         fov_model_config=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         # scaled_images_ratios is sorted
         if scaled_images_ratios != sorted(scaled_images_ratios):
             raise ValueError(
@@ -199,6 +197,8 @@ class DepthProConfig(PreTrainedConfig):
                 )
 
             setattr(self, sub_config_key, sub_config)
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["DepthProConfig"]

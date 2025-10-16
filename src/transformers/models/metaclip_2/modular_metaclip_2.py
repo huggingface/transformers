@@ -197,7 +197,7 @@ class MetaClip2Config(CLIPConfig):
     >>> config_text = MetaClip2TextConfig()
     >>> config_vision = MetaClip2VisionConfig()
 
-    >>> config = MetaClip2Config.from_text_vision_configs(config_text, config_vision)
+    >>> config = MetaClip2Config(text_config=config_text, vision_config=config_vision)
     ```"""
 
     pass
@@ -223,6 +223,7 @@ class MetaClip2MLP(CLIPMLP):
 class MetaClip2PreTrainedModel(PreTrainedModel):
     config: MetaClip2Config
     base_model_prefix = "metaclip_2"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True

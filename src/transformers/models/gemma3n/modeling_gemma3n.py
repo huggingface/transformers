@@ -40,7 +40,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
 
@@ -912,6 +911,7 @@ class Gemma3nAudioEncoder(PreTrainedModel):
     config: Gemma3nAudioConfig
 
     main_input_name = "audio_mel"
+    input_modalities = "audio"
 
     def __init__(self, config: Gemma3nAudioConfig):
         super().__init__(config)
@@ -1309,7 +1309,6 @@ class Gemma3nTextAttention(nn.Module):
                 config.layer_types[layer_idx]
             )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1406,7 +1405,6 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1494,6 +1492,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
         "hidden_states": Gemma3nTextDecoderLayer,
         "attentions": Gemma3nTextAttention,
     }
+    input_modalities = ["image", "text", "audio"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -1508,6 +1507,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")
 class Gemma3nTextModel(Gemma3nPreTrainedModel):
     config: Gemma3nTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Gemma3nTextConfig):
         super().__init__(config)

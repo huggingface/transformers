@@ -28,6 +28,7 @@ This model was contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber
 The original code can be found [here](https://huggingface.co/deepseek-ai/DeepSeek-V2).
 
 ### Usage tips
+
 The model uses Multi-head Latent Attention (MLA) and DeepSeekMoE architectures for efficient inference and cost-effective training. It employs an auxiliary-loss-free strategy for load balancing and multi-token prediction training objective. The model can be used for various language tasks after being pre-trained on 14.8 trillion tokens and going through Supervised Fine-Tuning and Reinforcement Learning stages.
 
 ## DeepseekV2Config

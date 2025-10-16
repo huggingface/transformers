@@ -22,12 +22,11 @@ import importlib.util
 import json
 import numbers
 import os
-import pickle
 import re
 import shutil
 import sys
 import tempfile
-from dataclasses import asdict, fields
+from dataclasses import fields
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
@@ -104,13 +103,6 @@ from ..utils import ENV_VARS_TRUE_VALUES, is_torch_xla_available  # noqa: E402
 
 # Integration functions:
 def is_wandb_available():
-    # any value of WANDB_DISABLED disables wandb
-    if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
-        logger.warning(
-            "Using the `WANDB_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
-            "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
-        )
-        return False
     if importlib.util.find_spec("wandb") is not None:
         import wandb
 
@@ -130,13 +122,6 @@ def is_clearml_available():
 
 
 def is_comet_available():
-    if os.getenv("COMET_MODE", "").upper() == "DISABLED":
-        logger.warning(
-            "Using the `COMET_MODE=DISABLED` environment variable is deprecated and will be removed in v5. Use the "
-            "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
-        )
-        return False
-
     if _is_comet_installed is False:
         return False
 
@@ -178,10 +163,6 @@ def is_ray_tune_available():
     if not is_ray_available():
         return False
     return importlib.util.find_spec("ray.tune") is not None
-
-
-def is_sigopt_available():
-    return importlib.util.find_spec("sigopt") is not None
 
 
 def is_azureml_available():
@@ -234,11 +215,8 @@ def hp_params(trial):
 
         if isinstance(trial, optuna.trial.BaseTrial):
             return trial.params
-    if is_ray_tune_available():
-        if isinstance(trial, dict):
-            return trial
 
-    if is_sigopt_available():
+    if is_ray_tune_available():
         if isinstance(trial, dict):
             return trial
 
@@ -286,10 +264,13 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
         timeout = kwargs.pop("timeout", None)
         n_jobs = kwargs.pop("n_jobs", 1)
         gc_after_trial = kwargs.pop("gc_after_trial", False)
+        catch = kwargs.pop("catch", ())
         directions = direction if isinstance(direction, list) else None
         direction = None if directions is not None else direction
         study = optuna.create_study(direction=direction, directions=directions, **kwargs)
-        study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial)
+        study.optimize(
+            _objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial, catch=catch
+        )
         if not study._is_multi_objective():
             best_trial = study.best_trial
             return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
@@ -312,8 +293,16 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    """
+    Environment:
+        - **RAY_SCOPE** (`str`, *optional*, defaults to `"last"`):
+            The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray
+            will then use the last checkpoint of all trials, compare those, and select the best one. However,
+            other options are also available. See the Ray documentation (https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial)
+            for more options
+    """
     import ray
-    import ray.train
+    import ray.tune
 
     def _objective(trial: dict, local_trainer):
         try:
@@ -326,7 +315,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         local_trainer.objective = None
 
-        checkpoint = ray.train.get_checkpoint()
+        checkpoint = ray.tune.get_checkpoint()
         if checkpoint:
             # Upon trial resume, the local_trainer's objective gets reset to None.
             # If `local_trainer.train` is a noop (training has already reached
@@ -350,8 +339,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
             with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-                checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
-                ray.train.report(metrics, checkpoint=checkpoint)
+                checkpoint = ray.tune.Checkpoint.from_directory(temp_checkpoint_dir)
+                ray.tune.report(metrics, checkpoint=checkpoint)
 
     if not trainer._memory_tracker.skip_memory_metrics:
         from ..trainer_utils import TrainerMemoryTracker
@@ -417,7 +406,9 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         Assumes that `_objective`, defined above, is a function.
         """
-        if is_datasets_available():
+        if is_datasets_available() and packaging.version.parse(
+            importlib.metadata.version("datasets")
+        ) < packaging.version.parse("4.0.0"):
             import datasets.load
 
             dynamic_modules_path = os.path.join(datasets.load.init_dynamic_modules(), "__init__.py")
@@ -438,109 +429,12 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         num_samples=n_trials,
         **kwargs,
     )
-    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
+    ray_scope = os.getenv("RAY_SCOPE", "last")
+    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=ray_scope)
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config, analysis)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
     return best_run
-
-
-def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    import sigopt
-
-    if trainer.args.process_index == 0:
-        if importlib.metadata.version("sigopt") >= "8.0.0":
-            sigopt.set_project("huggingface")
-
-            experiment = sigopt.create_experiment(
-                name="huggingface-tune",
-                type="offline",
-                parameters=trainer.hp_space(None),
-                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
-                parallel_bandwidth=1,
-                budget=n_trials,
-            )
-
-            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
-
-            for run in experiment.loop():
-                with run:
-                    trainer.objective = None
-                    if trainer.args.world_size > 1:
-                        if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
-                            raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
-                        trainer._hp_search_setup(run.run)
-                        torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-                        trainer.train(resume_from_checkpoint=None)
-                    else:
-                        trainer.train(resume_from_checkpoint=None, trial=run.run)
-                    # If there hasn't been any evaluation during the training loop.
-                    if getattr(trainer, "objective", None) is None:
-                        metrics = trainer.evaluate()
-                        trainer.objective = trainer.compute_objective(metrics)
-                    run.log_metric("objective", trainer.objective)
-
-            best = list(experiment.get_best_runs())[0]
-            best_run = BestRun(best.id, best.values["objective"].value, best.assignments)
-        else:
-            from sigopt import Connection
-
-            conn = Connection()
-            proxies = kwargs.pop("proxies", None)
-            if proxies is not None:
-                conn.set_proxies(proxies)
-
-            experiment = conn.experiments().create(
-                name="huggingface-tune",
-                parameters=trainer.hp_space(None),
-                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
-                parallel_bandwidth=1,
-                observation_budget=n_trials,
-                project="huggingface",
-            )
-            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
-
-            while experiment.progress.observation_count < experiment.observation_budget:
-                suggestion = conn.experiments(experiment.id).suggestions().create()
-                trainer.objective = None
-                if trainer.args.world_size > 1:
-                    if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
-                        raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
-                    trainer._hp_search_setup(suggestion)
-                    torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-                    trainer.train(resume_from_checkpoint=None)
-                else:
-                    trainer.train(resume_from_checkpoint=None, trial=suggestion)
-                # If there hasn't been any evaluation during the training loop.
-                if getattr(trainer, "objective", None) is None:
-                    metrics = trainer.evaluate()
-                    trainer.objective = trainer.compute_objective(metrics)
-
-                values = [{"name": "objective", "value": trainer.objective}]
-                obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
-                logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
-                experiment = conn.experiments(experiment.id).fetch()
-
-            best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
-            best_run = BestRun(best.id, best.value, best.assignments)
-        return best_run
-    else:
-        for i in range(n_trials):
-            trainer.objective = None
-            args_main_rank = list(pickle.dumps(trainer.args))
-            if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
-                raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
-            torch.distributed.broadcast_object_list(args_main_rank, src=0)
-            args = pickle.loads(bytes(args_main_rank))
-            for key, value in asdict(args).items():
-                if key != "local_rank":
-                    setattr(trainer.args, key, value)
-            trainer.train(resume_from_checkpoint=None)
-            # If there hasn't been any evaluation during the training loop.
-            if getattr(trainer, "objective", None) is None:
-                metrics = trainer.evaluate()
-                trainer.objective = trainer.compute_objective(metrics)
-        return None
 
 
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
@@ -663,6 +557,17 @@ def rewrite_logs(d):
     return new_d
 
 
+def default_logdir() -> str:
+    """
+    Same default as PyTorch
+    """
+    import socket
+    from datetime import datetime
+
+    current_time = datetime.now().strftime("%b%d_%H-%M-%S")
+    return os.path.join("runs", current_time + "_" + socket.gethostname())
+
+
 class TensorBoardCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [TensorBoard](https://www.tensorflow.org/tensorboard).
@@ -670,49 +575,47 @@ class TensorBoardCallback(TrainerCallback):
     Args:
         tb_writer (`SummaryWriter`, *optional*):
             The writer to use. Will instantiate one if not set.
+    Environment:
+        - **TENSORBOARD_LOGGING_DIR** (`str`, *optional*, defaults to `None`):
+            The logging dir to log the results. Default value is os.path.join(args.output_dir, default_logdir())
     """
 
     def __init__(self, tb_writer=None):
-        has_tensorboard = is_tensorboard_available()
-        if not has_tensorboard:
+        if not is_tensorboard_available():
             raise RuntimeError(
                 "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or"
                 " install tensorboardX."
             )
-        if has_tensorboard:
-            try:
-                from torch.utils.tensorboard import SummaryWriter
+        try:
+            from torch.utils.tensorboard import SummaryWriter
+        except ImportError:
+            from tensorboardX import SummaryWriter
 
-                self._SummaryWriter = SummaryWriter
-            except ImportError:
-                try:
-                    from tensorboardX import SummaryWriter
-
-                    self._SummaryWriter = SummaryWriter
-                except ImportError:
-                    self._SummaryWriter = None
-        else:
-            self._SummaryWriter = None
+        self._SummaryWriter = SummaryWriter
         self.tb_writer = tb_writer
+        self.logging_dir = os.getenv("TENSORBOARD_LOGGING_DIR", None)
+        if self.logging_dir is not None:
+            self.logging_dir = os.path.expanduser(self.logging_dir)
 
-    def _init_summary_writer(self, args, log_dir=None):
-        log_dir = log_dir or args.logging_dir
+    def _init_summary_writer(self, args):
         if self._SummaryWriter is not None:
-            self.tb_writer = self._SummaryWriter(log_dir=log_dir)
+            self.tb_writer = self._SummaryWriter(log_dir=self.logging_dir)
 
     def on_train_begin(self, args, state, control, **kwargs):
         if not state.is_world_process_zero:
             return
 
-        log_dir = None
-
         if state.is_hyper_param_search:
             trial_name = state.trial_name
             if trial_name is not None:
-                log_dir = os.path.join(args.logging_dir, trial_name)
+                # overwrite logging dir for trials
+                self.logging_dir = os.path.join(args.output_dir, default_logdir(), trial_name)
+
+        if self.logging_dir is None:
+            self.logging_dir = os.path.join(args.output_dir, default_logdir())
 
         if self.tb_writer is None:
-            self._init_summary_writer(args, log_dir)
+            self._init_summary_writer(args)
 
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", args.to_json_string())
@@ -777,13 +680,6 @@ class WandbLogModel(str, Enum):
     def _missing_(cls, value: Any) -> "WandbLogModel":
         if not isinstance(value, str):
             raise TypeError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
-        if value.upper() in ENV_VARS_TRUE_VALUES:
-            raise DeprecationWarning(
-                f"Setting `WANDB_LOG_MODEL` as {os.getenv('WANDB_LOG_MODEL')} is deprecated and will be removed in "
-                "version 5 of transformers. Use one of `'end'` or `'checkpoint'` instead."
-            )
-            logger.info(f"Setting `WANDB_LOG_MODEL` from {os.getenv('WANDB_LOG_MODEL')} to `end` instead")
-            return WandbLogModel.END
         logger.warning(
             f"Received unrecognized `WANDB_LOG_MODEL` setting value={value}; so disabling `WANDB_LOG_MODEL`"
         )
@@ -798,24 +694,11 @@ class WandbCallback(TrainerCallback):
     def __init__(self):
         has_wandb = is_wandb_available()
         if not has_wandb:
-            # Check if wandb is actually installed but disabled via WANDB_DISABLED
-            if importlib.util.find_spec("wandb") is not None:
-                # wandb is installed but disabled
-                wandb_disabled = os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES
-                if wandb_disabled:
-                    raise RuntimeError(
-                        "You specified `report_to='wandb'` but also set the `WANDB_DISABLED` environment variable.\n"
-                        "This disables wandb logging, even though it was explicitly requested.\n\n"
-                        "- To enable wandb logging: unset `WANDB_DISABLED`.\n"
-                        "- To disable logging: use `report_to='none'`.\n\n"
-                        "Note: WANDB_DISABLED is deprecated and will be removed in v5."
-                    )
-            # If wandb is not installed at all, use the original error message
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
-        if has_wandb:
-            import wandb
 
-            self._wandb = wandb
+        import wandb
+
+        self._wandb = wandb
         self._initialized = False
         self._log_model = WandbLogModel(os.getenv("WANDB_LOG_MODEL", "false"))
 
@@ -833,19 +716,11 @@ class WandbCallback(TrainerCallback):
             to `"end"`, the model will be uploaded at the end of training. If set to `"checkpoint"`, the checkpoint
             will be uploaded every `args.save_steps` . If set to `"false"`, the model will not be uploaded. Use along
             with [`~transformers.TrainingArguments.load_best_model_at_end`] to upload best model.
-
-            <Deprecated version="5.0">
-
-            Setting `WANDB_LOG_MODEL` as `bool` will be deprecated in version 5 of 🤗 Transformers.
-
-            </Deprecated>
         - **WANDB_WATCH** (`str`, *optional* defaults to `"false"`):
             Can be `"gradients"`, `"all"`, `"parameters"`, or `"false"`. Set to `"all"` to log gradients and
             parameters.
         - **WANDB_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
             Set this to a custom string to store results in a different project.
-        - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
-            Whether to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
         """
         if self._wandb is None:
             return
@@ -855,9 +730,6 @@ class WandbCallback(TrainerCallback):
         from wandb.sdk.lib.config_util import ConfigError as WandbConfigError
 
         if state.is_world_process_zero:
-            logger.info(
-                'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
-            )
             combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
@@ -1214,13 +1086,8 @@ class CometCallback(TrainerCallback):
                 * `create`: Always create a new Comet Experiment.
                 * `get`: Always try to append to an Existing Comet Experiment.
                   Requires `COMET_EXPERIMENT_KEY` to be set.
-                * `ONLINE`: **deprecated**, used to create an online
-                  Experiment. Use `COMET_START_ONLINE=1` instead.
-                * `OFFLINE`: **deprecated**, used to created an offline
-                  Experiment. Use `COMET_START_ONLINE=0` instead.
-                * `DISABLED`: **deprecated**, used to disable Comet logging.
-                  Use the `--report_to` flag to control the integrations used
-                  for logging result instead.
+        - **COMET_START_ONLINE** (`bool`, *optional*):
+            Whether to create an online or offline Experiment.
         - **COMET_PROJECT_NAME** (`str`, *optional*):
             Comet project name for experiments.
         - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
@@ -1242,12 +1109,7 @@ class CometCallback(TrainerCallback):
 
             if comet_old_mode is not None:
                 comet_old_mode = comet_old_mode.lower()
-
-                if comet_old_mode == "online":
-                    online = True
-                elif comet_old_mode == "offline":
-                    online = False
-                elif comet_old_mode in ("get", "get_or_create", "create"):
+                if comet_old_mode in ("get", "get_or_create", "create"):
                     mode = comet_old_mode
                 elif comet_old_mode:
                     logger.warning("Invalid COMET_MODE env value %r, Comet logging is disabled", comet_old_mode)
@@ -1796,7 +1658,7 @@ class NeptuneCallback(TrainerCallback):
 
     def on_init_end(self, args, state, control, **kwargs):
         self._volatile_checkpoints_dir = None
-        if self._log_checkpoints and (args.overwrite_output_dir or args.save_total_limit is not None):
+        if self._log_checkpoints and args.save_total_limit is not None:
             self._volatile_checkpoints_dir = tempfile.TemporaryDirectory().name
 
         if self._log_checkpoints == "best" and not args.load_best_model_at_end:

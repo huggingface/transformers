@@ -44,10 +44,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
-        return AutoTokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return AutoTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_audio_processor(self, **kwargs):
-        return GraniteSpeechFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return GraniteSpeechFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)

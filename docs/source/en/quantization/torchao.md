@@ -87,6 +87,7 @@ Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of
 We'll show examples for recommended quantization methods based on hardwares, e.g. A100 GPU, H100 GPU, CPU.
 
 ### H100 GPU
+
 <hfoptions id="examples-H100-GPU">
 <hfoption id="float8-dynamic-and-weight-only">
 
@@ -182,6 +183,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### A100 GPU
+
 <hfoptions id="examples-A100-GPU">
 <hfoption id="int8-dynamic-and-weight-only">
 
@@ -284,6 +286,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### Intel XPU
+
 <hfoptions id="examples-Intel-XPU">
 <hfoption id="int8-dynamic-and-weight-only">
 
@@ -350,6 +353,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### CPU
+
 <hfoptions id="examples-CPU">
 <hfoption id="int8-dynamic-and-weight-only">
 
@@ -415,7 +419,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoptions>
 
 ### Per Module Quantization
+
 #### 1. Skip quantization for certain layers
+
 With `ModuleFqnToConfig` we can specify a default configuration for all layers while skipping quantization for certain layers.
 
 ```py
@@ -445,7 +451,7 @@ output_text = tokenizer.batch_decode(
 print(output_text)
 ```
 
-#### 2. Quantizing different layers with different quantization configs
+#### 2. Quantizing different layers with different quantization configs (no regex)
 
 ```py
 import torch
@@ -482,6 +488,120 @@ output_text = tokenizer.batch_decode(
     generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
 )
 print(output_text)
+```
+
+#### 3. Quantizing different layers with different quantization configs (with regex)
+
+We can also use regex to specify the config for all modules that has `module_fqn` that
+matches the regex, all regex should start with `re:`, for example `re:layers\..*\.gate_proj` will
+match all layers like `layers.0.gate_proj`. See [here](https://github.com/pytorch/ao/blob/2fe0ca0899c730c528efdbec8886feaa38879f39/torchao/quantization/quant_api.py#L2392) for docs.
+
+```py
+import logging
+
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+# Configure logging to see warnings and debug information
+logging.basicConfig(
+    level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s"
+)
+
+# Enable specific loggers that might contain the serialization warnings
+logging.getLogger("transformers").setLevel(logging.INFO)
+logging.getLogger("torchao").setLevel(logging.INFO)
+logging.getLogger("safetensors").setLevel(logging.INFO)
+logging.getLogger("huggingface_hub").setLevel(logging.INFO)
+
+model_id = "facebook/opt-125m"
+
+from torchao.quantization import (
+    Float8DynamicActivationFloat8WeightConfig,
+    Int4WeightOnlyConfig,
+    IntxWeightOnlyConfig,
+    PerRow,
+    PerAxis,
+    ModuleFqnToConfig,
+    Float8Tensor,
+    Int4TilePackedTo4dTensor,
+    IntxUnpackedToInt8Tensor,
+)
+
+float8dyn = Float8DynamicActivationFloat8WeightConfig(granularity=PerRow())
+int4wo = Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d")
+intxwo = IntxWeightOnlyConfig(weight_dtype=torch.int8, granularity=PerAxis(0))
+
+qconfig_dict = {
+    # highest priority
+    "model.decoder.layers.3.self_attn.q_proj": int4wo,
+    "model.decoder.layers.3.self_attn.k_proj": int4wo,
+    "model.decoder.layers.3.self_attn.v_proj": int4wo,
+    # vllm
+    "model.decoder.layers.3.self_attn.qkv_proj": int4wo,
+
+    "re:model\.decoder\.layers\..+\.self_attn\.q_proj": float8dyn,
+    "re:model\.decoder\.layers\..+\.self_attn\.k_proj": float8dyn,
+    "re:model\.decoder\.layers\..+\.self_attn\.v_proj": float8dyn,
+    # this should not take effect and we'll fallback to _default
+    # since no full mach (missing `j` in the end)
+    "re:model\.decoder\.layers\..+\.self_attn\.out_pro": float8dyn,
+    # vllm
+    "re:model\.decoder\.layers\..+\.self_attn\.qkv_proj": float8dyn,
+
+    "_default": intxwo,
+}
+quant_config = ModuleFqnToConfig(qconfig_dict)
+quantization_config = TorchAoConfig(quant_type=quant_config)
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+    quantization_config=quantization_config,
+)
+print("quantized model:", quantized_model)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+for i in range(12):
+    if i == 3:
+        assert isinstance(quantized_model.model.decoder.layers[i].self_attn.q_proj.weight, Int4TilePackedTo4dTensor)
+        assert isinstance(quantized_model.model.decoder.layers[i].self_attn.k_proj.weight, Int4TilePackedTo4dTensor)
+        assert isinstance(quantized_model.model.decoder.layers[i].self_attn.v_proj.weight, Int4TilePackedTo4dTensor)
+    else:
+        assert isinstance(quantized_model.model.decoder.layers[i].self_attn.q_proj.weight, Float8Tensor)
+        assert isinstance(quantized_model.model.decoder.layers[i].self_attn.k_proj.weight, Float8Tensor)
+        assert isinstance(quantized_model.model.decoder.layers[i].self_attn.v_proj.weight, Float8Tensor)
+    assert isinstance(quantized_model.model.decoder.layers[i].self_attn.out_proj.weight, IntxUnpackedToInt8Tensor)
+
+# Manual Testing
+prompt = "What are we having for dinner?"
+print("Prompt:", prompt)
+inputs = tokenizer(
+    prompt,
+    return_tensors="pt",
+).to("cuda")
+# setting temperature to 0 to make sure result deterministic
+generated_ids = quantized_model.generate(**inputs, max_new_tokens=128, temperature=0)
+
+correct_output_text = tokenizer.batch_decode(
+    generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print("Response:", correct_output_text[0][len(prompt) :])
+
+
+# Load model from saved checkpoint
+reloaded_model = AutoModelForCausalLM.from_pretrained(
+    save_to,
+    device_map="cuda:0",
+    torch_dtype=torch.bfloat16,
+    # quantization_config=quantization_config,
+)
+
+generated_ids = reloaded_model.generate(**inputs, max_new_tokens=128, temperature=0)
+output_text = tokenizer.batch_decode(
+    generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print("Response:", output_text[0][len(prompt) :])
+
+assert(correct_output_text == output_text)
 ```
 
 ### Autoquant

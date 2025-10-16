@@ -14,8 +14,9 @@
 # limitations under the License.
 """PyTorch PaliGemmamodel."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -206,6 +207,7 @@ def create_causal_mask_mapping(
 class PaliGemmaPreTrainedModel(PreTrainedModel):
     config: PaliGemmaConfig
     base_model_prefix = ""
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
