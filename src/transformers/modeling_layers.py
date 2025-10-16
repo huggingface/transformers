@@ -138,14 +138,13 @@ class GenericForSequenceClassification:
         else:
             batch_size = inputs_embeds.shape[0]
 
-        pad_token_id = getattr(self.config, "pad_token_id", None)
-        if pad_token_id is None and batch_size != 1:
+        if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if pad_token_id is None:
+        if self.config.pad_token_id is None:
             last_non_pad_token = -1
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != pad_token_id).to(logits.device, torch.int32)
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
             token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:

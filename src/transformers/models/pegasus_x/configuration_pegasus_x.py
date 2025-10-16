@@ -130,6 +130,7 @@ class PegasusXConfig(PreTrainedConfig):
         num_global_tokens=32,
         block_size=512,
         stagger_local_blocks=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -158,6 +159,7 @@ class PegasusXConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,

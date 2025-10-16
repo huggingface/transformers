@@ -164,8 +164,10 @@ class FalconConfig(PreTrainedConfig):
         rope_scaling=None,
         bos_token_id=11,
         eos_token_id=11,
+        pad_token_id=None,
         ffn_hidden_size=None,
         activation="gelu",
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -181,6 +183,7 @@ class FalconConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.num_kv_heads = num_attention_heads if num_kv_heads is None else num_kv_heads
         self.alibi = alibi
         self.new_decoder_architecture = new_decoder_architecture
@@ -192,6 +195,7 @@ class FalconConfig(PreTrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.activation = activation
+        self.tie_word_embeddings = tie_word_embeddings
         if ffn_hidden_size is None:
             self.ffn_hidden_size = hidden_size * 4
         else:

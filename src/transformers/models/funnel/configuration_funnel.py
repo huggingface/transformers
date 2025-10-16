@@ -109,9 +109,11 @@ class FunnelConfig(PreTrainedConfig):
         truncate_seq=True,
         pool_q_only=True,
         pad_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes
         self.block_repeats = [1] * len(block_sizes) if block_repeats is None else block_repeats

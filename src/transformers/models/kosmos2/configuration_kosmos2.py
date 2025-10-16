@@ -104,6 +104,7 @@ class Kosmos2TextConfig(PreTrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -111,6 +112,7 @@ class Kosmos2TextConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

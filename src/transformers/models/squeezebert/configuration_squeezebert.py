@@ -125,11 +125,13 @@ class SqueezeBertConfig(PreTrainedConfig):
         intermediate_groups=4,
         output_groups=4,
         is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

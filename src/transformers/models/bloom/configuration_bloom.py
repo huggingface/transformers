@@ -114,11 +114,13 @@ class BloomConfig(PreTrainedConfig):
         use_cache=True,
         bos_token_id=1,
         eos_token_id=2,
+        pad_token_id=None,
         apply_residual_connection_post_layernorm=False,
         hidden_dropout=0.0,
         attention_dropout=0.0,
         pretraining_tp=1,  # TP rank used when training with megatron
         slow_but_exact=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -137,7 +139,9 @@ class BloomConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.slow_but_exact = slow_but_exact
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

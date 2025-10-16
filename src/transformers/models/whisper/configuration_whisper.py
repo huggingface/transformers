@@ -234,6 +234,7 @@ class WhisperConfig(PreTrainedConfig):
         mask_feature_length=10,
         mask_feature_min_masks=0,
         median_filter_width=7,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -276,6 +277,7 @@ class WhisperConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,

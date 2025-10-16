@@ -98,6 +98,7 @@ class MT5Config(PreTrainedConfig):
         use_cache=True,
         tokenizer_class="T5Tokenizer",
         tie_word_embeddings=False,
+        bos_token_id=None,
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
@@ -143,6 +144,7 @@ class MT5Config(PreTrainedConfig):
 
         self.tokenizer_class = tokenizer_class
         self.tie_word_embeddings = tie_word_embeddings
+        self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id

@@ -150,6 +150,7 @@ class Speech2TextConfig(PreTrainedConfig):
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -190,6 +191,7 @@ class Speech2TextConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 

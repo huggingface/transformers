@@ -111,6 +111,7 @@ class BioGptConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -128,10 +129,11 @@ class BioGptConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.layerdrop = layerdrop
         self.activation_dropout = activation_dropout
-        super().__init__(**kwargs)
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["BioGptConfig"]

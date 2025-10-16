@@ -108,6 +108,7 @@ class LayoutLMConfig(PreTrainedConfig):
         pad_token_id=0,
         use_cache=True,
         max_2d_position_embeddings=1024,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -126,6 +127,7 @@ class LayoutLMConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.max_2d_position_embeddings = max_2d_position_embeddings
+        self.tie_word_embeddings = tie_word_embeddings
 
 
 class LayoutLMOnnxConfig(OnnxConfig):

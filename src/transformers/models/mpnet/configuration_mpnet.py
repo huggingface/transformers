@@ -96,6 +96,7 @@ class MPNetConfig(PreTrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -104,6 +105,7 @@ class MPNetConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

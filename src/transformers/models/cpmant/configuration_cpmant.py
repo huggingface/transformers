@@ -99,9 +99,11 @@ class CpmAntConfig(PreTrainedConfig):
         prompt_length: int = 32,
         segment_types: int = 32,
         use_cache: bool = True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
         self.prompt_types = prompt_types
         self.prompt_length = prompt_length
         self.segment_types = segment_types

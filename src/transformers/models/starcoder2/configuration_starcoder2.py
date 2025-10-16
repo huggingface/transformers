@@ -164,6 +164,7 @@ class Starcoder2Config(PreTrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        pad_token_id=None,
         rope_theta=10000.0,
         rope_scaling=None,
         sliding_window=None,
@@ -171,6 +172,7 @@ class Starcoder2Config(PreTrainedConfig):
         residual_dropout=0.0,
         embedding_dropout=0.0,
         use_bias=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -199,6 +201,8 @@ class Starcoder2Config(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

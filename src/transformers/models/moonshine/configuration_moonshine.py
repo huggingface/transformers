@@ -183,6 +183,7 @@ class MoonshineConfig(PreTrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         pad_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -219,6 +220,7 @@ class MoonshineConfig(PreTrainedConfig):
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)

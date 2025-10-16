@@ -123,6 +123,8 @@ class GPTNeoConfig(PreTrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        pad_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,6 +145,8 @@ class GPTNeoConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.attention_types = attention_types
         self.attention_layers = self.expand_attention_types_params(attention_types)

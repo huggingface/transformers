@@ -120,12 +120,14 @@ class AlbertConfig(PreTrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size

@@ -247,6 +247,7 @@ class SpeechT5Config(PreTrainedConfig):
         guided_attention_loss_scale=10.0,
         use_cache=True,
         is_encoder_decoder=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -323,6 +324,7 @@ class SpeechT5Config(PreTrainedConfig):
 
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
