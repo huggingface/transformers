@@ -137,7 +137,7 @@ class BenchmarkResult:
     def get_throughput(self, batch_size: int) -> float:
         return [
             batch_size * len(dt) / e2e_latency
-            for e2e_latency , dt in zip(self.e2e_latency, self.token_generation_times)
+            for e2e_latency, dt in zip(self.e2e_latency, self.token_generation_times)
         ]
 
     def pprint(self, batch_size: int = 0, tabs: int = 0) -> None:

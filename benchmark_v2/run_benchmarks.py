@@ -20,7 +20,6 @@ in the ./benches directory, organizing outputs into model-specific subfolders.
 
 import argparse
 import logging
-import random
 import sys
 import uuid
 

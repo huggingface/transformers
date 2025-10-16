@@ -144,9 +144,7 @@ class BenchmarkStreamer(BaseStreamer):
 class BenchmarkRunner:
     """Main benchmark runner that coordinates benchmark execution."""
 
-    def __init__(
-        self, logger: logging.Logger, output_dir: str | None = None, commit_id: str | None = None
-    ) -> None:
+    def __init__(self, logger: logging.Logger, output_dir: str | None = None, commit_id: str | None = None) -> None:
         # Those stay constant for the whole run
         self.logger = logger
         if output_dir is None:
