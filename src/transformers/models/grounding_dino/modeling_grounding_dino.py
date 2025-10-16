@@ -861,11 +861,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -1418,8 +1413,6 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
             module.vision_param.data.fill_(1e-4)
             module.text_param.data.fill_(1e-4)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -2117,6 +2110,11 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             token_type_ids = token_type_ids[:, :max_text_len]
             text_token_mask = text_token_mask[:, :max_text_len]
 
+        # 3D -> 4D correction (add head dim)
+        # NOTE: we squeeze this later again as there is custom 3D logic in this model
+        if text_self_attention_masks.ndim == 3:
+            text_self_attention_masks = text_self_attention_masks[:, None, :, :]
+
         # Extract text features from text backbone
         text_outputs = self.text_backbone(
             input_ids, text_self_attention_masks, token_type_ids, position_ids, return_dict=return_dict
@@ -2199,7 +2197,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 text_features=text_features,
                 text_attention_mask=~text_token_mask,
                 text_position_embedding=None,
-                text_self_attention_masks=~text_self_attention_masks,
+                text_self_attention_masks=~text_self_attention_masks.squeeze(1),
                 text_position_ids=position_ids,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,

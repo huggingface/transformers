@@ -17,7 +17,8 @@
 """PyTorch Doge model."""
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -25,7 +26,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -33,7 +34,6 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, is_torch_flex_attn_available
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
@@ -52,13 +52,13 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
 
-class DogeConfig(PretrainedConfig):
+class DogeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DogeModel`]. It is used to instantiate an Doge
     model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-320M](https://huggingface.co/SmallDoge/Doge-320M).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32768):
@@ -282,7 +282,6 @@ def flex_attention_forward(
     attention_mask: Union[torch.Tensor, "BlockMask"],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     block_mask = None
@@ -300,8 +299,6 @@ def flex_attention_forward(
             score = softcap * torch.tanh(score / softcap)
         if causal_mask is not None:
             score = score + causal_mask[batch_idx][head_idx][q_idx][kv_idx]
-        if head_mask is not None:
-            score = score + head_mask[batch_idx][head_idx][0][0]
         return score
 
     attn_output, attention_weights = compile_friendly_flex_attention(
@@ -358,7 +355,6 @@ class DogeAttention(nn.Module):
         self.q_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -527,14 +523,13 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         self.mlp = DogeMLP(config) if not config.is_moe else DogeCDMoE(config)
         self.post_attention_residual = nn.Parameter(torch.ones(config.hidden_size))
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -708,7 +703,7 @@ class DogeForCausalLM(MixtralForCausalLM):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

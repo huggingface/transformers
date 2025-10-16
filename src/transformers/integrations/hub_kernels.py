@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from collections.abc import Callable
 from functools import partial
 from typing import Optional, Union
 
@@ -41,7 +42,6 @@ try:
         },
         "Llama4TextMoe": {
             "cuda": LayerRepository(
-                # Move to kernels-community/moe once we release.
                 repo_id="kernels-community/moe",
                 layer_name="Llama4TextMoe",
             )
@@ -50,13 +50,11 @@ try:
             "cuda": LayerRepository(
                 repo_id="kernels-community/liger_kernels",
                 layer_name="LigerRMSNorm",
-                # revision="pure-layer-test",
             ),
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
-                    # revision="pure-layer-test",
                 )
             },
         },
@@ -83,6 +81,54 @@ try:
                     layer_name="MegaBlocksMoeMLP",
                 )
             },
+        },
+        "FastGELU": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation",
+                    layer_name="FastGELU",
+                    version=">=0.0.4,<0.1.0",
+                )
+            }
+        },
+        "QuickGELU": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation",
+                    layer_name="QuickGELU",
+                    version=">=0.0.4,<0.1.0",
+                )
+            }
+        },
+        "NewGELU": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation",
+                    layer_name="NewGELU",
+                    version=">=0.0.4,<0.1.0",
+                )
+            }
+        },
+        "SiLU": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation", layer_name="Silu", version=">=0.1.0"
+                )
+            }
+        },
+        "GeLU": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation", layer_name="Gelu", version=">=0.1.0"
+                )
+            }
+        },
+        "GeluTanh": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=">=0.1.0"
+                )
+            }
         },
     }
 
@@ -120,24 +166,29 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_kernel(attn_implementation: str) -> None:
-    """Load and register the kernel associated to `attn_implementation`."""
-    if not is_kernel(attn_implementation):
-        return
-    if not _kernels_available:
-        raise ImportError("`kernels` is not installed. Please install it with `pip install kernels`.")
+def load_and_register_attn_kernel(attn_implementation: str, attention_wrapper: Optional[Callable] = None) -> None:
+    """
+    Load and register the kernel associated to `attn_implementation`.
 
-    # Need to be imported here as otherwise we have a circular import in `modeling_utils`
+    Args:
+        attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
+        attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
+            have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
+            They just prepare the arguments properly. This is mostly used for continious batching, where we
+            want the `paged` wrapper, which calls the paged cache.
+    """
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
 
-    attention_wrapper = None
-    # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-    actual_attn_name = attn_implementation
-    if "|" in attn_implementation:
-        attention_wrapper, actual_attn_name = attn_implementation.split("|")
-        # `transformers` has wrapper for sdpa, paged, flash, flex etc.
-        attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
+    actual_attn_name = attn_implementation.split("|")[1] if "|" in attn_implementation else attn_implementation
+    if not is_kernel(actual_attn_name):
+        return
+    if not _kernels_available:
+        raise ImportError(
+            "`kernels` is either not installed or uses an incompatible version. "
+            "Please install the latest version with `pip install -U kernels`."
+        )
+
     # Extract repo_id and kernel_name from the string
     if ":" in actual_attn_name:
         repo_id, kernel_name = actual_attn_name.split(":")
@@ -161,7 +212,7 @@ def load_and_register_kernel(attn_implementation: str) -> None:
         if attention_wrapper is None:
             attention_wrapper = flash_attention_forward
         kernel_function = partial(attention_wrapper, implementation=kernel)
-        lazy_import_flash_attention(kernel)
+        lazy_import_flash_attention(kernel, force_import=True)
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
     # Register the kernel as a valid attention

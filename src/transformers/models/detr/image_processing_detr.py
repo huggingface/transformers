@@ -18,7 +18,7 @@ import io
 import pathlib
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -27,6 +27,7 @@ from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
+    get_size_with_aspect_ratio,
     id_to_rgb,
     pad,
     rescale,
@@ -52,13 +53,10 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
-    is_flax_available,
-    is_jax_tensor,
     is_scipy_available,
-    is_tf_available,
-    is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
@@ -86,46 +84,30 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
+class DetrImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the DETR model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+        Whether to return segmentation masks.
+    annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
+        Annotations to transform according to the padding that is applied to the images.
+    masks_path (`str` or `pathlib.Path`, *optional*):
+        Path to the directory containing the segmentation masks.
+    """
+
+    format: Union[str, AnnotationFormat]
+    do_convert_annotations: bool
+    return_segmentation_masks: bool
+    annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
+    masks_path: Optional[Union[str, pathlib.Path]]
+
+
 # From the original repo: https://github.com/facebookresearch/detr/blob/3af9fa878e73b6894ce3596450a8d9b89d918ca9/datasets/transforms.py#L76
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
-    """
-    Computes the output image size given the input image size and the desired output size.
-
-    Args:
-        image_size (`tuple[int, int]`):
-            The input image size.
-        size (`int`):
-            The desired output size.
-        max_size (`int`, *optional*):
-            The maximum allowed output size.
-    """
-    height, width = image_size
-    raw_size = None
-    if max_size is not None:
-        min_original_size = float(min((height, width)))
-        max_original_size = float(max((height, width)))
-        if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
-            size = int(round(raw_size))
-
-    if (height <= width and height == size) or (width <= height and width == size):
-        oh, ow = height, width
-    elif width < height:
-        ow = size
-        if max_size is not None and raw_size is not None:
-            oh = int(raw_size * height / width)
-        else:
-            oh = int(size * height / width)
-    else:
-        oh = size
-        if max_size is not None and raw_size is not None:
-            ow = int(raw_size * width / height)
-        else:
-            ow = int(size * width / height)
-
-    return (oh, ow)
-
-
 def get_image_size_for_max_height_width(
     input_image: np.ndarray,
     max_height: int,
@@ -187,30 +169,6 @@ def get_resize_output_image_size(
         return size
 
     return get_size_with_aspect_ratio(image_size, size, max_size)
-
-
-def get_numpy_to_framework_fn(arr) -> Callable:
-    """
-    Returns a function that converts a numpy array to the framework of the input array.
-
-    Args:
-        arr (`np.ndarray`): The array to convert.
-    """
-    if isinstance(arr, np.ndarray):
-        return np.array
-    if is_tf_available() and is_tf_tensor(arr):
-        import tensorflow as tf
-
-        return tf.convert_to_tensor
-    if is_torch_available() and is_torch_tensor(arr):
-        import torch
-
-        return torch.tensor
-    if is_flax_available() and is_jax_tensor(arr):
-        import jax.numpy as jnp
-
-        return jnp.array
-    raise ValueError(f"Cannot convert arrays of type {type(arr)}")
 
 
 def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
@@ -635,7 +593,6 @@ def resize_annotation(
     return new_annotation
 
 
-# TODO - (Amy) make compatible with other frameworks
 def binary_mask_to_rle(mask):
     """
     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -658,7 +615,6 @@ def binary_mask_to_rle(mask):
     return list(runs)
 
 
-# TODO - (Amy) make compatible with other frameworks
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -841,6 +797,7 @@ class DetrImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = DetrImageProcessorKwargs
 
     def __init__(
         self,
@@ -1179,10 +1136,8 @@ class DetrImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -1366,10 +1321,7 @@ class DetrImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor.")
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
@@ -1500,12 +1452,11 @@ class DetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # POSTPROCESSING METHODS - TODO: add support for other frameworks
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+        bottom_right_x, bottom_right_y) format.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
@@ -1773,7 +1724,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None
+        self, outputs, threshold: float = 0.5, target_sizes: Optional[Union[TensorType, list[tuple]]] = None
     ):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

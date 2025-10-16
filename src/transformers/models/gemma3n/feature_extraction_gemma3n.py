@@ -296,7 +296,7 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of (`int`, *optional*, defaults to 128):
                 When padding, pad to a multiple of this value. The default value is defined for optimal TPU support.
             return_tensors (`Union[str, TensorType]`, *optional*, defaults to `None`):
-                The type of tensors to return (e.g., NumPy, Torch, JAX, TensorFlow).
+                The type of tensors to return (e.g., NumPy, or Torch).
             return_attention_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return the attention mask for the generated MEL spectrograms.
         """

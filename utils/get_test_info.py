@@ -81,15 +81,14 @@ def get_tester_classes(test_file):
 def get_test_classes(test_file):
     """Get all [test] classes in a model test file with attribute `all_model_classes` that are non-empty.
 
-    These are usually the (model) test classes containing the (non-slow) tests to run and are subclasses of one of the
-    classes `ModelTesterMixin`, `TFModelTesterMixin` or `FlaxModelTesterMixin`, as well as a subclass of
-    `unittest.TestCase`. Exceptions include `RagTestMixin` (and its subclasses).
+    These are usually the (model) test classes containing the (non-slow) tests to run and are subclasses of
+    `ModelTesterMixin`, as well as a subclass of `unittest.TestCase`. Exceptions include `RagTestMixin` (and its subclasses).
     """
     test_classes = []
     test_module = get_test_module(test_file)
     for attr in dir(test_module):
         attr_value = getattr(test_module, attr)
-        # (TF/Flax)ModelTesterMixin is also an attribute in specific model test module. Let's exclude them by checking
+        # ModelTesterMixin is also an attribute in specific model test module. Let's exclude them by checking
         # `all_model_classes` is not empty (which also excludes other special classes).
         model_classes = getattr(attr_value, "all_model_classes", [])
         if len(model_classes) > 0:
@@ -118,7 +117,7 @@ def get_model_tester_from_test_class(test_class):
 
     model_tester = None
     if hasattr(test, "model_tester"):
-        # `(TF/Flax)ModelTesterMixin` has this attribute default to `None`. Let's skip this case.
+        # `ModelTesterMixin` has this attribute default to `None`. Let's skip this case.
         if test.model_tester is not None:
             model_tester = test.model_tester.__class__
 

@@ -194,8 +194,7 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     all_model_classes = (InformerModel, InformerForPrediction) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": InformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
     test_torchscript = False
     test_inputs_embeds = False
@@ -343,9 +342,6 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 [
                     "future_observed_mask",
                     "decoder_attention_mask",
-                    "head_mask",
-                    "decoder_head_mask",
-                    "cross_attn_head_mask",
                     "encoder_outputs",
                     "past_key_values",
                     "output_hidden_states",
@@ -356,9 +352,6 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 if "future_observed_mask" in arg_names
                 else [
                     "decoder_attention_mask",
-                    "head_mask",
-                    "decoder_head_mask",
-                    "cross_attn_head_mask",
                     "encoder_outputs",
                     "past_key_values",
                     "output_hidden_states",

@@ -34,15 +34,15 @@ model = AutoModelForKeypointMatching.from_pretrained("zju-community/matchanythin
 Load two images that have the same object of interest. The second photo is taken a second apart, it's colors are edited, and it is further cropped and rotated.
 
 <div style="display: flex; align-items: center;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" 
-         alt="Bee" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
+         alt="Bee"
          style="height: 200px; object-fit: contain; margin-right: 10px;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_edited.jpg" 
-         alt="Bee edited" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_edited.jpg"
+         alt="Bee edited"
          style="height: 200px; object-fit: contain;">
 </div>
 
-```python 
+```python
 from transformers.image_utils import load_image
 image1 = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
 image2 = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_edited.jpg")
@@ -69,7 +69,7 @@ print(outputs)
 
 Here's the outputs.
 
-```
+```text
 [{'keypoints0': tensor([[4514,  550],
           [4813,  683],
           [1972, 1547],
@@ -82,16 +82,16 @@ Here's the outputs.
           [1521, 2560]], dtype=torch.int32),
   'matching_scores': tensor([0.2189, 0.2073, 0.2414, ...
     ])}]
-``` 
+```
 
 We have trimmed the output but there's 401 matches!
 
 ```python
 len(outputs[0]["keypoints0"])
 # 401
-``` 
+```
 
-We can visualize them using the processor's [`~EfficientLoFTRImageProcessor.visualize_keypoint_matching`] method. 
+We can visualize them using the processor's [`~EfficientLoFTRImageProcessor.visualize_keypoint_matching`] method.
 
 ```python
 plot_images = processor.visualize_keypoint_matching(images, outputs)
@@ -100,7 +100,7 @@ plot_images
 
 ![Matched Image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/matched_bees.png)
 
-Optionally, you can use the [`Pipeline`] API and set the task to `keypoint-matching`. 
+Optionally, you can use the [`Pipeline`] API and set the task to `keypoint-matching`.
 
 ```python
 from transformers import pipeline 

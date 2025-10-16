@@ -346,7 +346,6 @@ use_cpu: false
 </hfoption>
 </hfoptions>
 
-
 Run [accelerate_launch](https://hf.co/docs/accelerate/package_reference/cli#accelerate-launch) to start training with the configurations set in `config_file.yaml`. This file is saved to the Accelerate cache folder and automatically loaded when you run `accelerate_launch`.
 
 The example below launches the [run_glue.py](../../../examples/pytorch/text-classification/run_glue) script with the FSDP configuration shown earlier. Parameters from the `config_file.yaml` file can also be directly set in the command line.
@@ -362,8 +361,7 @@ accelerate launch \
     --per_device_train_batch_size 16 \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
-    --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
+    --output_dir /tmp/$TASK_NAME/
 ```
 
 > [!TIP]

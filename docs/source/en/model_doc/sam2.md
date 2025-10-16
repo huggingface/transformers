@@ -13,6 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-29 and added to Hugging Face Transformers on 2025-08-14.*
+
+# SAM2
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -20,8 +24,6 @@ rendered properly in your Markdown viewer.
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
 </div>
-
-# SAM2
 
 ## Overview
 
@@ -67,12 +69,13 @@ SAM2 can be used for automatic mask generation to segment all objects in an imag
 You can segment objects by providing a single point click on the object you want to segment:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model, infer_device
+>>> from transformers import Sam2Processor, Sam2Model
+from accelerate import Accelerator
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = infer_device()
+>>> device = Accelerator().device
 
 >>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
 >>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
@@ -155,12 +158,13 @@ Generated masks for 2 objects
 Process multiple images simultaneously for improved efficiency:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model, infer_device
+>>> from transformers import Sam2Processor, Sam2Model
+from accelerate import Accelerator
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = infer_device()
+>>> device = Accelerator().device
 
 >>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
 >>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")

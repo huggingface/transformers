@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -104,7 +103,7 @@ class CpmAntAttention(nn.Module):
                 Provide positional information to self-attention block.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -191,7 +190,7 @@ class CpmAntSelfAttentionBlock(nn.Module):
                 Provide positional information to self-attention block.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -315,7 +314,7 @@ class CpmAntTransformerBlock(nn.Module):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`tuple[torch.Tensor, torch.Tensor])`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -352,7 +351,7 @@ class CpmAntEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
-        cache_postion: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ):
         """
         Args:
@@ -366,7 +365,7 @@ class CpmAntEncoder(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            past_key_values (`tuple[torch.Tensor, torch.Tensor])`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -493,16 +492,16 @@ class CpmAntSegmentPositionEmbedding(nn.Module):
         relative_position = torch.abs(relative_position)
         max_exact = num_buckets // 2
         is_small = relative_position < max_exact
-        relative_postion_if_large = max_exact + (
+        relative_position_if_large = max_exact + (
             torch.log(relative_position.float() / max_exact)
             / math.log(max_distance / max_exact)
             * (num_buckets - max_exact)
         ).to(torch.int32)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large,
-            torch.full_like(relative_postion_if_large, num_buckets - 1),
+        relative_position_if_large = torch.min(
+            relative_position_if_large,
+            torch.full_like(relative_position_if_large, num_buckets - 1),
         )
-        relative_buckets += torch.where(is_small, relative_position.to(torch.int32), relative_postion_if_large)
+        relative_buckets += torch.where(is_small, relative_position.to(torch.int32), relative_position_if_large)
         return relative_buckets
 
 
@@ -590,7 +589,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
@@ -638,13 +637,6 @@ class CpmAntModel(CpmAntPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         input_ids = input_ids.contiguous()
@@ -722,7 +714,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[tuple[torch.Tensor, torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -730,6 +722,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
@@ -771,8 +764,9 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
             cache_position,
         )
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
-
-        logits = self.lm_head(hidden_states)
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -796,13 +790,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, embeddings):
         self.cpmant.input_embedding = embeddings
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        past_key_values = [list(each) if each is not None else each for each in past_key_values]
-        for key_value_layer in past_key_values:
-            key_value_layer[0] = key_value_layer[0][beam_idx]
-            key_value_layer[1] = key_value_layer[1][beam_idx]
-        return past_key_values
 
 
 __all__ = ["CpmAntForCausalLM", "CpmAntModel", "CpmAntPreTrainedModel"]

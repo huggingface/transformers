@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 
 if TYPE_CHECKING:
-    from ..configuration_utils import PretrainedConfig
+    from ..configuration_utils import PreTrainedConfig
 
 
 class BackboneType(enum.Enum):
@@ -76,7 +76,7 @@ def verify_out_features_out_indices(
 
 def _align_output_features_output_indices(
     out_features: Optional[list[str]],
-    out_indices: Optional[Union[list[int], tuple[int]]],
+    out_indices: Optional[Union[list[int], tuple[int, ...]]],
     stage_names: list[str],
 ):
     """
@@ -252,7 +252,7 @@ class BackboneMixin:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig` to
+        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
         include the `out_features` and `out_indices` attributes.
         """
         output = super().to_dict()
@@ -284,7 +284,7 @@ class BackboneConfigMixin:
         return self._out_indices
 
     @out_indices.setter
-    def out_indices(self, out_indices: Union[tuple[int], list[int]]):
+    def out_indices(self, out_indices: Union[tuple[int, ...], list[int]]):
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
@@ -294,7 +294,7 @@ class BackboneConfigMixin:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig` to
+        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
         include the `out_features` and `out_indices` attributes.
         """
         output = super().to_dict()
@@ -363,7 +363,7 @@ def verify_backbone_config_arguments(
     use_timm_backbone: bool,
     use_pretrained_backbone: bool,
     backbone: Optional[str],
-    backbone_config: Optional[Union[dict, "PretrainedConfig"]],
+    backbone_config: Optional[Union[dict, "PreTrainedConfig"]],
     backbone_kwargs: Optional[dict],
 ):
     """

@@ -86,7 +86,6 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             return_token_type_ids (`bool`, *optional*):
@@ -509,11 +508,11 @@ class UdopTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(UDOP_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
         boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
         word_labels: Optional[Union[list[int], list[list[int]]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         text_pair_target: Optional[
             Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
         ] = None,
@@ -704,7 +703,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -772,7 +771,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -815,7 +814,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,

@@ -45,12 +45,14 @@ The original code for PhiMoE can be found [here](https://huggingface.co/microsof
 <Tip warning={true}>
 
 Phi-3.5-MoE-instruct has been integrated in the development version (4.44.2.dev) of `transformers`. Until the official version is released through `pip`, ensure that you are doing the following:
+
 * When loading the model, ensure that `trust_remote_code=True` is passed as an argument of the `from_pretrained()` function.
 
 The current `transformers` version can be verified with: `pip list | grep transformers`.
 
 Examples of required packages:
-```
+
+```bash
 flash_attn==2.5.8
 torch==2.3.1
 accelerate==0.31.0
@@ -101,9 +103,6 @@ print(output[0]['generated_text'])
 
 [[autodoc]] PhimoeConfig
 
-<frameworkcontent>
-<pt>
-
 ## PhimoeModel
 
 [[autodoc]] PhimoeModel
@@ -119,6 +118,3 @@ print(output[0]['generated_text'])
 
 [[autodoc]] PhimoeForSequenceClassification
     - forward
-
-</pt>
-</frameworkcontent>

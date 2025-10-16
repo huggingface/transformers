@@ -19,8 +19,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -147,11 +148,19 @@ class SmolVLMVisionEmbeddings(nn.Module):
             nb_patches_h = p_attn_mask[:, 0].sum()
             nb_patches_w = p_attn_mask[0].sum()
 
-            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=pixel_values.dtype)
-            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=pixel_values.dtype)
+            step_h = 1.0 / nb_patches_h
+            step_w = 1.0 / nb_patches_w
 
-            fractional_coords_h = h_indices / nb_patches_h * (1 - 1e-6)
-            fractional_coords_w = w_indices / nb_patches_w * (1 - 1e-6)
+            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=torch.float32)
+            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=torch.float32)
+            fractional_coords_h = h_indices * step_h
+            fractional_coords_w = w_indices * step_w
+
+            fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
+            fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
+
+            fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
+            fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
 
             bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
             bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
@@ -363,11 +372,12 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings = value
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values,
         patch_attention_mask: Optional[torch.BoolTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
@@ -418,10 +428,8 @@ class SmolVLMBaseModelOutputWithPast(ModelOutput):
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-        encoder_sequence_length, embed_size_per_head)`.
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
         Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
         `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
         input) to speed up sequential decoding.
@@ -432,7 +440,7 @@ class SmolVLMBaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -740,8 +748,8 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
@@ -752,7 +760,7 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None

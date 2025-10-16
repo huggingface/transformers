@@ -60,7 +60,7 @@ class TextToAudioPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
 
     >>> # diversify the music generation by adding randomness with a high temperature and set a maximum music length
     >>> generate_kwargs = {
@@ -80,9 +80,6 @@ class TextToAudioPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
 
-    # Introducing the processor at load time for new behaviour
-    _load_processor = True
-
     _pipeline_calls_generate = True
     _load_processor = False
     _load_image_processor = False
@@ -99,9 +96,6 @@ class TextToAudioPipeline(Pipeline):
 
         # Legacy behaviour just uses the tokenizer while new models use the processor as a whole at any given time
         self.no_processor = no_processor
-
-        if self.framework == "tf":
-            raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
 
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():

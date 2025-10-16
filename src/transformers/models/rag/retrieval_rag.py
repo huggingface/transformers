@@ -509,10 +509,7 @@ class RagRetriever:
         def cat_input_and_doc(doc_title, doc_text, input_string, prefix):
             # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
             # TODO(piktus): better handling of truncation
-            if doc_title.startswith('"'):
-                doc_title = doc_title[1:]
-            if doc_title.endswith('"'):
-                doc_title = doc_title[:-1]
+            doc_title = doc_title.removeprefix('"').removesuffix('"')
             if prefix is None:
                 prefix = ""
             out = (prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string).replace(
@@ -610,7 +607,6 @@ class RagRetriever:
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to "pt"):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 

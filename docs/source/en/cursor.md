@@ -21,9 +21,10 @@ where `port` is the port used by `transformers serve` (`8000` by default). On th
 </h3>
 
 You're now ready to set things up on the app side! In Cursor, while you can't set a new provider, you can change the endpoint for OpenAI requests in the model selection settings. First, navigate to "Settings" > "Cursor Settings", "Models" tab, and expand the "API Keys" collapsible. To set your `transformers serve` endpoint, follow this order:
+
 1. Unselect ALL models in the list above (e.g. `gpt4`, ...);
 2. Add and select the model you want to use (e.g. `Qwen/Qwen3-4B`)
-3. Add some random text to OpenAI API Key. This field won't be used, but it can’t be empty;
+3. Add some random text to OpenAI API Key. This field won't be used, but it can't be empty;
 4. Add the https address from `ngrok` to the "Override OpenAI Base URL" field, appending `/v1` to the address (i.e. `https://(...).ngrok-free.app/v1`);
 5. Hit "Verify".
 
@@ -38,5 +39,3 @@ You are now ready to use your local model in Cursor! For instance, if you toggle
 <h3 align="center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_serve_cursor_chat.png"/>
 </h3>
-
-

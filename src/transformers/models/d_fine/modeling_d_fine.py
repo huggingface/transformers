@@ -459,6 +459,12 @@ class DFinePreTrainedModel(PreTrainedModel):
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
+            if hasattr(module, "reg_scale"):
+                module.reg_scale.fill_(self.config.reg_scale)
+
+            if hasattr(module, "up"):
+                module.up.fill_(self.config.up)
+
         if isinstance(module, DFineMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
@@ -495,6 +501,10 @@ class DFinePreTrainedModel(PreTrainedModel):
         if isinstance(module, DFineLQE):
             init.constant_(module.reg_conf.layers[-1].bias, 0)
             init.constant_(module.reg_conf.layers[-1].weight, 0)
+
+        if isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.xavier_uniform_(module.weight_embedding.weight)
@@ -1833,8 +1843,6 @@ class DFineCSPRepLayer(nn.Module):
         self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
     ):
         super().__init__()
-        in_channels = in_channels
-        out_channels = out_channels
         activation = config.activation_function
 
         hidden_channels = int(out_channels * expansion)
@@ -2056,7 +2064,7 @@ class DFineHybridEncoder(nn.Module):
     ):
         grid_w = torch.arange(torch_int(width), device=device).to(dtype)
         grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
         pos_dim = embed_dim // 4
@@ -2066,7 +2074,7 @@ class DFineHybridEncoder(nn.Module):
         out_w = grid_w.flatten()[..., None] @ omega[None]
         out_h = grid_h.flatten()[..., None] @ omega[None]
 
-        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
+        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
 
     def forward(
         self,

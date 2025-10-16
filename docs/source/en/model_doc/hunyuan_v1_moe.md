@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-22.*
 
 # HunYuanMoEV1
 
@@ -23,7 +24,6 @@ To be released with the official model launch.
 ### Model Details
 
 To be released with the official model launch.
-
 
 ## Usage tips
 
@@ -47,4 +47,3 @@ To be released with the official model launch.
 
 [[autodoc]] HunYuanMoEV1ForSequenceClassification
     - forward
-

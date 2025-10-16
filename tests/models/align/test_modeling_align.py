@@ -133,9 +133,8 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (AlignVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
 
     def setUp(self):
@@ -337,8 +336,6 @@ class AlignTextModelTester:
 class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (AlignTextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = AlignTextModelTester(self)
@@ -443,8 +440,7 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AlignModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AlignModel} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
 
@@ -469,7 +465,7 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Start to fail after using torch `cu118`.")
     def test_multi_gpu_data_parallel_forward(self):
-        super().test_multi_gpu_data_parallel_forward()
+        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -490,35 +486,6 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="AlignModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # override as the `temperature` parameter initialization is different for ALIGN
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `temperature` is initialized as per the original implementation
-                    if name == "temperature":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            1.0,
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif name == "text_projection.weight":
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

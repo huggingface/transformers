@@ -210,9 +210,8 @@ class MetaClip2VisionModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (MetaClip2VisionModel, MetaClip2VisionModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = MetaClip2VisionModelTester(self)
@@ -406,8 +405,7 @@ class MetaClip2TextModelTester:
 class MetaClip2TextModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (MetaClip2TextModel, MetaClip2TextModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
@@ -539,8 +537,7 @@ class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittes
     )
     additional_model_inputs = ["pixel_values"]
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     _is_composite = True
@@ -574,30 +571,6 @@ class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittes
     @unittest.skip(reason="MetaClip2Model does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # override as the `logit_scale` parameter initialization is different for MetaClip2
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -736,8 +709,7 @@ class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, Pipeli
     all_model_classes = (MetaClip2ForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": MetaClip2ForImageClassification} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     _is_composite = True
@@ -763,10 +735,6 @@ class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, Pipeli
 
     @unittest.skip(reason="MetaClip2ForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="MetaClip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)

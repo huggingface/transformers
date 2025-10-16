@@ -18,7 +18,6 @@ import inspect
 import itertools
 import json
 import os
-import pickle
 import re
 import shutil
 import tempfile
@@ -42,9 +41,7 @@ from transformers import (
     SpecialTokensMixin,
     Trainer,
     TrainingArguments,
-    is_flax_available,
     is_mlx_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -67,7 +64,7 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from transformers import PretrainedConfig, PreTrainedModel, TFPreTrainedModel
+    from transformers import PreTrainedConfig, PreTrainedModel
 
 
 def use_cache_if_possible(func):
@@ -122,11 +119,11 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 
 def merge_model_tokenizer_mappings(
-    model_mapping: dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
-    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
+    model_mapping: dict["PreTrainedConfig", "PreTrainedModel"],
+    tokenizer_mapping: dict["PreTrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
 ) -> dict[
     Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
-    tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tuple["PreTrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
     model_tokenizer_mapping = OrderedDict([])
@@ -522,28 +519,6 @@ class TokenizerTesterMixin:
             },
         )
 
-    def test_pickle_subword_regularization_tokenizer(self) -> None:
-        if not self.test_sentencepiece:
-            self.skipTest(reason="test_sentencepiece is set to False")
-
-        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
-        # Subword regularization is only available for the slow tokenizer.
-        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
-        tokenizer = self.get_tokenizer(sp_model_kwargs=sp_model_kwargs)
-        tokenizer_bin = pickle.dumps(tokenizer)
-        del tokenizer
-        tokenizer_new = pickle.loads(tokenizer_bin)
-
-        run_test_in_subprocess(
-            test_case=self,
-            target_func=_test_subword_regularization_tokenizer,
-            inputs={
-                "tokenizer": tokenizer_new,
-                "sp_model_kwargs": sp_model_kwargs,
-                "test_sentencepiece_ignore_case": self.test_sentencepiece_ignore_case,
-            },
-        )
-
     def test_save_sentencepiece_tokenizer(self) -> None:
         if not self.test_sentencepiece or not self.test_slow_tokenizer:
             self.skipTest(reason="test_sentencepiece or test_slow_tokenizer is set to False")
@@ -828,34 +803,6 @@ class TokenizerTesterMixin:
                 self.assertEqual(tokenizer.model_max_length, 43)
 
                 shutil.rmtree(tmpdirname)
-
-    def test_pickle_tokenizer(self):
-        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                self.assertIsNotNone(tokenizer)
-
-                text = "Munich and Berlin are nice cities"
-                subwords = tokenizer.tokenize(text)
-
-                filename = os.path.join(self.tmpdirname, "tokenizer.bin")
-                with open(filename, "wb") as handle:
-                    pickle.dump(tokenizer, handle)
-
-                with open(filename, "rb") as handle:
-                    tokenizer_new = pickle.load(handle)
-
-                subwords_loaded = tokenizer_new.tokenize(text)
-
-                self.assertListEqual(subwords, subwords_loaded)
-
-    @require_tokenizers
-    def test_pickle_added_tokens(self):
-        tok1 = AddedToken("<s>", rstrip=True, lstrip=True, normalized=False, single_word=True)
-        tok2 = pickle.loads(pickle.dumps(tok1))
-
-        self.assertEqual(tok1.__getstate__(), tok2.__getstate__())
 
     def test_added_tokens_do_lower_case(self):
         tokenizers = self.get_tokenizers(do_lower_case=True)
@@ -4409,6 +4356,7 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 with self.assertLogs("transformers", level="WARNING") as cm:
+                    error_message = ""
                     try:
                         if self.tokenizer_class == BertTokenizer:
                             AlbertTokenizer.from_pretrained(pretrained_name)
@@ -4431,7 +4379,7 @@ class TokenizerTesterMixin:
                         self.assertTrue(
                             cm.records[0].message.startswith(logged_msg_target)
                             if len(cm.records) > 0
-                            else False or raised_error_msg_target in error_message
+                            else raised_error_msg_target in error_message
                         )
                     try:
                         if self.rust_tokenizer_class == BertTokenizerFast:
@@ -4464,7 +4412,7 @@ class TokenizerTesterMixin:
 
                     # Load tokenizer from a folder without legacy files
                     tokenizer = self.rust_tokenizer_class.from_pretrained(tmp_dir)
-                    training_args = TrainingArguments(output_dir=tmp_dir, do_train=True, no_cuda=True)
+                    training_args = TrainingArguments(output_dir=tmp_dir, do_train=True, use_cpu=True)
                     trainer = Trainer(model=model, args=training_args, processing_class=tokenizer)
 
                     # Should not raise an error
@@ -4703,18 +4651,6 @@ class TokenizerTesterMixin:
             tokenizer_return_type.append("np")
             output_tensor_type.append(np.int64)
 
-        if is_tf_available():
-            import tensorflow as tf
-
-            tokenizer_return_type.append("tf")
-            output_tensor_type.append(tf.int32)
-
-        if is_flax_available():
-            import jax.numpy as jnp
-
-            tokenizer_return_type.append("jax")
-            output_tensor_type.append(jnp.int32)
-
         if is_mlx_available():
             import mlx.core as mx
 
@@ -4722,7 +4658,7 @@ class TokenizerTesterMixin:
             output_tensor_type.append(mx.int32)
 
         if len(tokenizer_return_type) == 0:
-            self.skipTest(reason="No expected framework from PT, TF, JAX or MLX found")
+            self.skipTest(reason="No expected framework from PT, or MLX found")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:

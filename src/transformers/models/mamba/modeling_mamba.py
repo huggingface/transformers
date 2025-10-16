@@ -19,12 +19,11 @@ from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -33,7 +32,12 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
+from ...utils.import_utils import (
+    is_causal_conv1d_available,
+    is_kernels_available,
+    is_mamba_ssm_available,
+    is_mambapy_available,
+)
 from .configuration_mamba import MambaConfig
 
 
@@ -50,10 +54,31 @@ if is_mamba_ssm_available():
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
+_causal_conv1d_cache = None
+
+
+def _lazy_load_causal_conv1d():
+    global _causal_conv1d_cache
+    if _causal_conv1d_cache is not None:
+        return _causal_conv1d_cache
+
+    if is_kernels_available():
+        from kernels import get_kernel
+
+        try:
+            _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
+        except FileNotFoundError:
+            # no kernel binary match, fallback to slow path
+            _causal_conv1d_cache = (None, None)
+        else:
+            _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
+    elif is_causal_conv1d_available():
+        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+
+        _causal_conv1d_cache = (causal_conv1d_update, causal_conv1d_fn)
+    else:
+        _causal_conv1d_cache = (None, None)
+    return _causal_conv1d_cache
 
 
 class MambaCache:
@@ -61,7 +86,7 @@ class MambaCache:
     Cache for mamba model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
@@ -95,7 +120,7 @@ class MambaCache:
     # TODO (joao): add layer_device_map arg and update code in `generate` accordingly
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.float16,
         device: Union[torch.device, str, None] = None,
@@ -211,6 +236,7 @@ class MambaMixer(nn.Module):
         self.warn_slow_implementation()
 
     def warn_slow_implementation(self):
+        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -219,8 +245,8 @@ class MambaMixer(nn.Module):
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
-                        " https://github.com/Dao-AILab/causal-conv1d"
+                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                        " install the kernels library using `pip install kernels` or https://github.com/Dao-AILab/causal-conv1d for causal-conv1d"
                     )
                 else:
                     raise ImportError(
@@ -229,8 +255,8 @@ class MambaMixer(nn.Module):
             else:
                 logger.warning_once(
                     "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
-                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                    " install the kernels library using `pip install kernels` or https://github.com/Dao-AILab/causal-conv1d for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def cuda_kernels_forward(
@@ -261,6 +287,7 @@ class MambaMixer(nn.Module):
             )
 
         else:
+            causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -424,6 +451,7 @@ class MambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -779,6 +807,12 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
                 "attention_mask": attention_mask,
             }
         )
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
     @auto_docstring
@@ -793,6 +827,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,  # for now we need this for generation
     ) -> Union[tuple, MambaCausalLMOutput]:
         r"""
@@ -818,13 +853,15 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             attention_mask=attention_mask,
         )
-        hidden_states = mamba_outputs[0]
 
-        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
+        hidden_states = mamba_outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()

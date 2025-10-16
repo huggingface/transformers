@@ -14,18 +14,18 @@
 # limitations under the License.
 from collections import deque
 from math import floor, gcd, sqrt
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .requests import get_device_and_memory_breakdown, logger
 
 
-def group_layers_by_attn_type(config: PretrainedConfig) -> tuple[list[list[int]], list[str]]:
+def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
     """
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
         - Layers in each group need to have the same type of attention
@@ -79,7 +79,7 @@ class PagedAttentionCache:
         layer group, and the shape of the cache tensor is `[num_blocks * block_size, num_heads, head_size]`.
 
     Grouping layers into groups is useful because when we allocate one block to a group N, the block allocated is the
-        same for all layers in group N, equivalently it is allocated accross all cache tensors. This allows us to
+        same for all layers in group N, equivalently it is allocated across all cache tensors. This allows us to
         efficiently allocate and free blocks, and to efficiently read and write key and value states.
 
     For instance, imagine we have 8 blocks of cache and a model with two layer groups: a full-attention group with 3
@@ -119,11 +119,10 @@ class PagedAttentionCache:
     # TODO: this init is quite long, maybe a refactor is in order
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         generation_config: GenerationConfig,
         device: torch.device,
         dtype: torch.dtype = torch.float16,
-        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
         tp_size: Optional[int] = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage.
@@ -133,7 +132,6 @@ class PagedAttentionCache:
             generation_config: Generation configuration containing cache parameters
             device: Device for the cache tensors
             dtype: Data type of the cache
-            layer_device_map: Optional mapping of layer indices to devices
             tp_size: Tensor parallelism size
         """
         self.config = config
@@ -174,8 +172,8 @@ class PagedAttentionCache:
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads
 
-        if getattr(config, "attn_implementation", None) == "paged_attention":
-            num_attention_masks = 0
+        if "flash" in self.config._attn_implementation:
+            num_attention_masks = 1  # only used to compute the default meme args
         else:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
             num_attention_masks = 2 if "sliding_attention" in group_types else 1
@@ -198,7 +196,7 @@ class PagedAttentionCache:
         # Add the inferred attributes to the class
         self.num_blocks = num_blocks
         self.max_batch_tokens = max_batch_tokens
-        logger.warning(
+        logger.info(
             f"PagedAttentionCache initialized with {self.num_blocks = }, {self.block_size = }, {page_size = }, "
             f"{self.max_batch_tokens = } {num_attention_masks = }"
         )
@@ -206,8 +204,8 @@ class PagedAttentionCache:
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
-        # We add one extra token to the cache to handle padding and generally discard unwanted tokens
-        self.cache_shape = (num_blocks * self.block_size + 1, self.num_key_value_heads, self.head_dim)
+        # We add two extra tokens to the cache to handle padding and generally discard unwanted tokens
+        self.cache_shape = (num_blocks * self.block_size + 2, self.num_key_value_heads, self.head_dim)
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
             new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -253,7 +251,7 @@ class PagedAttentionCache:
         return len(self._free_blocks)
 
     @traced
-    def get_read_indices(
+    def extend_read_indices(
         self, request_id: str, past_length: int, query_length: int, read_index: list[list[int]]
     ) -> None:
         """Retrieve physical cache indices for reading KV states in the cache across all layer groups. This method
@@ -264,7 +262,7 @@ class PagedAttentionCache:
             read_indices.extend(indices)
 
     @traced
-    def get_write_indices(
+    def extend_write_indices(
         self, request_id: str, past_length: int, query_length: int, write_index: list[list[int]]
     ) -> None:
         """Retrieve physical cache indices for writing new KV states to the cache across all layer groups. This method
@@ -275,6 +273,16 @@ class PagedAttentionCache:
             write_indices.extend(indices)
 
     @traced
+    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> dict[str, int]:
+        """Retrieve the key sequence length for the given request_id across all layer types. Returns a dictionary of
+        layer types to their corresponding key sequence lengths."""
+        seqlens_k = {}
+        for cm in self.group_cache_managers:
+            attn_type, seqlen_k = cm.get_seqlens_k(request_id, past_length, query_length)
+            seqlens_k[attn_type] = seqlen_k
+        return seqlens_k
+
+    @traced
     def update(
         self,
         key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_kv, head_dim]
@@ -282,7 +290,6 @@ class PagedAttentionCache:
         layer_idx: int,
         read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
         write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
-        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
         """Update the cache with new key-value states for a specific layer. This method writes new KV states to the
         appropriate cache locations. The behavior differs based on the layer's attention type:
@@ -316,11 +323,11 @@ class PagedAttentionCache:
         # the only case where you may write over cache you need to use
         else:
             # Add the cache to the key and value states
-            mask = layer_read_index == -1  # TODO: can this can be efficiently precomputed?
+            mask = (layer_read_index == -1).unsqueeze(-1).unsqueeze(-1)  # TODO: should this be precomputed?
             key_states_with_cache = k_cache[layer_read_index, :, :]
-            key_states_with_cache[mask] = key_states
+            key_states_with_cache.masked_scatter_(mask, key_states)
             value_states_with_cache = v_cache[layer_read_index, :, :]
-            value_states_with_cache[mask] = value_states
+            value_states_with_cache.masked_scatter_(mask, value_states)
             # Write new KV values to the cache
             k_cache[layer_write_index, :, :] = key_states
             v_cache[layer_write_index, :, :] = value_states
@@ -339,7 +346,7 @@ class PagedAttentionMemoryHandler:
     The memory footprint consists of three main components:
     - Cache memory: the space needed to store the cache tensors:
         2 * layer_group_size * [num_pages, page_size] * cache_dtype
-    - Activation memory: the space temporarly taken by the largest activation during the model forward pass:
+    - Activation memory: the space temporarily taken by the largest activation during the model forward pass:
         peak_activation_per_token * max_tokens_per_batch * activation_dtype_size
     - Static tensors: the space taken by the input/output buffers and metadata tensors for batch processing, sum of:
         - inputs_ids + outputs_ids + position_ids + logits_indices: 4 * max_tokens_per_batch * int32_size
@@ -471,7 +478,7 @@ class PagedAttentionMemoryHandler:
         b = 2 * (self.group_size * self.page_size * cache_dtype.itemsize + 2 * self.num_groups)
         b += m * (self.peak_activation_per_token * self._activation_dtype.itemsize + 28 + 4 * self.num_groups)
         c = -cache_memory
-        logger.info(f"Coefficients of 2nd degree polynomial: {a = }, {b = }, {c = }")
+        logger.debug(f"Coefficients of 2nd degree polynomial: {a = }, {b = }, {c = }")
 
         # Compute discriminant and greatest solution
         discriminant = b**2 - 4 * a * c
@@ -485,11 +492,11 @@ class PagedAttentionMemoryHandler:
         num_pages = floor(greatest_solution)
         num_blocks = num_pages // self.block_size
         if num_blocks > self._upper_bound_num_blocks:
-            logger.warning(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
+            logger.info(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
             num_blocks = self._upper_bound_num_blocks
         max_batch_tokens = int(greatest_solution * m)
         if max_batch_tokens > self._upper_bound_max_batch_tokens:
-            logger.warning(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
+            logger.info(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
             max_batch_tokens = self._upper_bound_max_batch_tokens
         return num_blocks, max_batch_tokens
 
@@ -517,7 +524,7 @@ class PagedAttentionMemoryHandler:
         # Compute max batch tokens and return
         max_batch_tokens = floor(num / denum)
         if max_batch_tokens > self._upper_bound_max_batch_tokens:
-            logger.warning(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
+            logger.info(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
             max_batch_tokens = self._upper_bound_max_batch_tokens
         return max_batch_tokens
 
@@ -545,7 +552,7 @@ class PagedAttentionMemoryHandler:
         num_pages = floor(num / denum)
         num_blocks = num_pages // self.block_size
         if num_blocks > self._upper_bound_num_blocks:
-            logger.warning(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
+            logger.info(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
             num_blocks = self._upper_bound_num_blocks
         return num_blocks
 
