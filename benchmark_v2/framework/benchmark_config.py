@@ -104,7 +104,7 @@ class BenchmarkConfig:
             "attn_implementation": self.attn_implementation,
             "sdpa_backend": self.sdpa_backend,
             "compile_mode": self.compile_mode,
-            "compile_options": self.compile_options,
+            "compile_options": self.compile_options | {},  # to avoid inplace modification of the original dict
             "kernelize": self.kernelize,
         }
 
@@ -191,7 +191,7 @@ def generate_all_configs(
     )
 
 
-def generate_default_configs(
+def generate_main_configs(
     warmup_iterations: int = 5,
     measurement_iterations: int = 20,
     batch_size: int = 1,
@@ -199,20 +199,17 @@ def generate_default_configs(
     num_tokens_to_generate: int = 128,
     gpu_monitoring: bool = False,
 ) -> list[BenchmarkConfig]:
-    all_attn_implementations = [
-        ("flash_attention_2", None),
-        ("eager", None),
-        ("sdpa", "math"),
-        ("sdpa", "flash_attention"),  # note: this one can fail with compile because of attn mask
+    # Create kwargs common to all configs
+    kwargs = {
+        "warmup_iterations": warmup_iterations,
+        "measurement_iterations": measurement_iterations,
+        "batch_size": batch_size,
+        "sequence_length": sequence_length,
+        "num_tokens_to_generate": num_tokens_to_generate,
+        "gpu_monitoring": gpu_monitoring,
+    }
+    return [  # TODO: test max-autotune instead of default
+        BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", **kwargs),
+        BenchmarkConfig(attn_implementation="eager", compile_mode="default", **kwargs),
+        BenchmarkConfig(attn_implementation="flash_attention_2", **kwargs),
     ]
-    return cross_generate_configs(
-        attn_impl_and_sdpa_backend=all_attn_implementations,
-        compiled_mode=[None, "max-autotune"],
-        kernelized=[False, KERNELIZATION_AVAILABLE],
-        warmup_iterations=warmup_iterations,
-        measurement_iterations=measurement_iterations,
-        batch_size=batch_size,
-        sequence_length=sequence_length,
-        num_tokens_to_generate=num_tokens_to_generate,
-        gpu_monitoring=gpu_monitoring,
-    )

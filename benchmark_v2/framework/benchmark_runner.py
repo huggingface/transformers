@@ -144,11 +144,11 @@ class BenchmarkStreamer(BaseStreamer):
 class BenchmarkRunner:
     """Main benchmark runner that coordinates benchmark execution."""
 
-    def __init__(
-        self, logger: logging.Logger, output_dir: str = "benchmark_results", commit_id: str | None = None
-    ) -> None:
+    def __init__(self, logger: logging.Logger, output_dir: str | None = None, commit_id: str | None = None) -> None:
         # Those stay constant for the whole run
         self.logger = logger
+        if output_dir is None:
+            output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "benchmark_results")
         self.output_dir = output_dir
         self.commit_id = get_git_revision() if commit_id is None else commit_id
         os.makedirs(self.output_dir, exist_ok=True)
@@ -214,7 +214,7 @@ class BenchmarkRunner:
 
             # Quick validation: try one measurement first to see if this scenario works
             flush_memory()
-            e2e_latency, token_generation_times, decoded_output, gpu_metrics = self.time_generate(
+            e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = self.time_generate(
                 max_new_tokens=1, gpu_monitor=None
             )
             if e2e_latency < 0:
@@ -231,11 +231,11 @@ class BenchmarkRunner:
             result = BenchmarkResult()
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
             for _ in trange(config.measurement_iterations):
-                e2e_latency, token_generation_times, decoded_output, gpu_metrics = self.time_generate(
+                e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = self.time_generate(
                     max_new_tokens=config.num_tokens_to_generate,
                     gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
                 )
-                result.accumulate(e2e_latency, token_generation_times, decoded_output, gpu_metrics)
+                result.accumulate(e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics)
             self.logger.info("Benchmarking done. Cleaning up.")
 
             # Profile if needed
@@ -277,10 +277,11 @@ class BenchmarkRunner:
             raise RuntimeError(f"Generated {new_tokens} tokens, expected {max_new_tokens}")
         # Decode outputs
         decoded_output = self.tokenizer.decode(outputs[0, input_tokens:], skip_special_tokens=True)
+        shape_and_decoded_output = f"{tuple(outputs.shape)} | {decoded_output}"
         # Compute intermediate quantities
         e2e_latency = wall_time_1 - wall_time_0
         token_generation_times = [t - wall_time_0 for t in streamer.timestamps[1:]]
-        return e2e_latency, token_generation_times, decoded_output, gpu_metrics
+        return e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
         """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
@@ -351,10 +352,10 @@ class BenchmarkRunner:
                 first_metadata = all_results[first_key]["metadata"].to_dict()
                 hardware_info = first_metadata.pop("hardware_info")
                 pretty_print_dict(first_metadata | hardware_info, tabs=1)
-            for value in all_results.values():
+            for result in all_results.values():
                 print("=" * 100)
-                print(f"Config: {value['config'].infer_name(compact=False)}\n")
-                value["measurements"].pprint(tabs=1)
+                print(f"Config: {result['config'].infer_name(compact=False)}\n")
+                result["measurements"].pprint(batch_size=result["config"].batch_size, tabs=1)
             print("=" * 100)
 
         return all_results
