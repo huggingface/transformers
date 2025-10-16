@@ -895,7 +895,7 @@ class BarkCoarseModel(BarkCausalModel):
     language modeling heads, one for each codebook.
     """
 )
-class BarkFineModel(BarkPreTrainedModel):
+class BarkFineModel(BarkPreTrainedModel, GenerationMixin):
     base_model_prefix = "fine_acoustics"
     config: BarkFineConfig
     main_input_name = "codebook_idx"
@@ -1315,7 +1315,7 @@ class BarkFineModel(BarkPreTrainedModel):
     output sound according to specific predefined voice.
     """
 )
-class BarkModel(BarkPreTrainedModel):
+class BarkModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkConfig
 
     def __init__(self, config):
