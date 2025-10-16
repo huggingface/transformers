@@ -26,7 +26,6 @@ from ..cache_utils import (
 from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
-    _ignore_bidirectional_mask_sdpa,
     _ignore_causal_mask_sdpa,
     _is_torch_greater_or_equal_than_2_5,
     prepare_padding_mask,
@@ -191,101 +190,6 @@ class TorchExportableModuleForVLM:
             Generated sequences
         """
         pass
-
-
-class TorchExportableModuleForEncoderOnlyLM(torch.nn.Module):
-    """
-    A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
-    specifically for encoder-only LM. This module ensures that the exported model is compatible
-    with further lowering and execution in `ExecuTorch`.
-    """
-
-    def __init__(self, model: PreTrainedModel) -> None:
-        """
-        Initializes the exportable module.
-
-        Args:
-            model (`PreTrainedModel`): The pretrained model to wrap.
-        """
-        super().__init__()
-
-        self.model = model
-        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
-        ALL_MASK_ATTENTION_FUNCTIONS.register(
-            "sdpa_bidirectional_mask_without_vmap", sdpa_bidirectional_mask_without_vmap
-        )
-        ALL_ATTENTION_FUNCTIONS.register("sdpa_bidirectional_mask_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
-        self.model.config._attn_implementation = "sdpa_bidirectional_mask_without_vmap"
-
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """
-        Forward pass of the module, which is compatible with the ExecuTorch llm runner.
-
-        Args:
-            input_ids (`torch.Tensor`): Tensor representing current input token id to the module.
-            inputs_embeds (`torch.Tensor`): Tensor representing current input embeddings to the module.
-            cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
-
-        Returns:
-            torch.Tensor: Logits output from the model.
-        """
-        return self.model.forward(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-        )
-
-    def export(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        strict: Optional[bool] = None,
-    ) -> torch.export.ExportedProgram:
-        """
-        Export the wrapped module using `torch.export`.
-
-        Args:
-            input_ids (`Optional[torch.Tensor]`):
-                Tensor representing current input token id to the module. Must specify either this or inputs_embeds.
-            inputs_embeds (`Optional[torch.Tensor]`):
-                Tensor representing current input embeddings to the module. Must specify either this or input_ids.
-            strict(`Optional[bool]`):
-                Flag to instruct `torch.export` to use `torchdynamo`.
-
-        Returns:
-            torch.export.ExportedProgram: The exported program that can be used for inference.
-
-        """
-        if not (input_ids is None) ^ (inputs_embeds is None):
-            raise ValueError("Need to specify either input_ids or inputs_embeds.")
-
-        if input_ids is not None:
-            input_kwargs = {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask if attention_mask is not None else torch.ones_like(input_ids),
-            }
-        else:
-            input_kwargs = {
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask
-                if attention_mask is not None
-                else torch.ones_like(inputs_embeds)[..., 0],
-            }
-
-        exported_program = torch.export.export(
-            self.model,
-            args=(),
-            kwargs=input_kwargs,
-            strict=strict if strict is not None else True,
-        )
-
-        return exported_program
 
 
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
@@ -1296,51 +1200,3 @@ def sdpa_mask_without_vmap(
     if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
         causal_mask |= torch.all(~causal_mask, dim=-1, keepdim=True)
     return causal_mask
-
-
-def sdpa_bidirectional_mask_without_vmap(
-    kv_length: int,
-    kv_offset: int = 0,
-    attention_mask: Optional[torch.Tensor] = None,
-    allow_torch_fix: bool = True,
-    allow_is_bidirectional_skip: bool = True,
-    **kwargs,
-) -> Optional[torch.Tensor]:
-    """
-    Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
-    the element should take part in the attention computation, and False that it should not.
-
-    This is similar to `masking_utils.sdpa_mask` but does not use `vmap` which is incompatible with export.
-    Additionally, surrounding logic for causal masks is omitted for simplicity.
-
-    Args:
-        kv_length (`int`):
-            The size that the key and value states will have during the attention computation.
-        kv_offset (`int`, optional):
-            An optional offset to indicate at which first position the key and values states will refer to.
-        attention_mask (`torch.Tensor`, optional):
-            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
-        allow_torch_fix (`bool`, optional):
-            Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
-            versions. We need an arg to skip it when using eager. By default `True`.
-        allow_is_bidirectional_skip (`bool`, optional):
-            Whether to allow to return `None` for the mask under conditions where we do not have to add any bias,
-            i.e. full attention without any padding. Default to `True`.
-    """
-    # Potentially pad the 2D mask, and slice it correctly
-    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
-
-    # Under specific conditions, we can avoid materializing the mask
-    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
-        return None
-
-    bidirectional_mask = None
-    if padding_mask is not None:
-        bidirectional_mask = padding_mask[:, None, None, :]
-
-    # Due to a bug in some older torch version, we need to update the mask in case a query is not attending to any
-    # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
-    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix and bidirectional_mask is not None:
-        bidirectional_mask |= torch.all(~bidirectional_mask, dim=-1, keepdim=True)
-
-    return bidirectional_mask
