@@ -172,3 +172,6 @@ tags
 
 # modular conversion
 *.modular_backup
+
+# Cursor IDE files
+.cursor/
