@@ -1230,6 +1230,7 @@ def sdpa_attention_forward_for_export(
 
     if attention_mask is not None and attention_mask.ndim == 4:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        # torch._check used to inform torch.export of the shape relationship
         torch._check(
             attention_mask.shape[-1] == query.shape[-2],
             lambda: "attention_mask.shape[-1] == query.shape[-2] should be True",
