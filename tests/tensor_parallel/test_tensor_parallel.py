@@ -216,7 +216,7 @@ class TestTensorParallel(TestCasePlus):
 
     def test_custom_tp_plan(self):
         script_to_run = textwrap.dedent(
-            """
+            r"""
             import os
             import re
             import torch
@@ -247,7 +247,7 @@ class TestTensorParallel(TestCasePlus):
                     assert isinstance(param, DTensor)
                 else:
                     assert not isinstance(param, DTensor)
-            """  # noqa -> for some reason `make fixup` wants to make that a r-string...
+            """
         )
         torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
 
