@@ -549,8 +549,6 @@ class DINOv3ViTForImageClassification(DINOv3ViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.dinov3.embeddings.patch_embeddings
 
     @can_return_tuple
     @auto_docstring
