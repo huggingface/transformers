@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
@@ -24,14 +25,9 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
-from ...utils import logging
-from ...utils.generic import TransformersKwargs
-from ...modeling_layers import (
-    GenericForQuestionAnswering,
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, logging
 from .configuration_nanochat import NanoGPTConfig
 
 
@@ -68,6 +64,50 @@ def _repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, seq_len, head_dim)
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    """
+    Eager attention implementation for NanoGPT.
+    
+    Args:
+        module: The attention module
+        query: Query states of shape [batch, num_heads, seq_len, head_dim]
+        key: Key states of shape [batch, num_kv_heads, seq_len, head_dim]
+        value: Value states of shape [batch, num_kv_heads, seq_len, head_dim]
+        attention_mask: Attention mask
+        scaling: Scaling factor for attention scores
+        dropout: Dropout probability
+    """
+    # Handle GQA by repeating key/value heads
+    key_states = _repeat_kv(key, module.num_key_value_groups)
+    value_states = _repeat_kv(value, module.num_key_value_groups)
+    
+    # Compute attention scores
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+    
+    # Apply softmax and dropout
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    
+    # Compute attention output
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    
+    return attn_output, attn_weights
+
+
 class NanoGPTAttention(nn.Module):
     def __init__(self, config: NanoGPTConfig, layer_idx: int):
         super().__init__()
@@ -95,50 +135,55 @@ class NanoGPTAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: TransformersKwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        del kwargs
         batch, seq_len, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query = self.q_proj(hidden_states).view(batch, seq_len, self.num_heads, self.head_dim)
-        key = self.k_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
-        value = self.v_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
+        # Project to Q, K, V and reshape to [batch, seq_len, num_heads, head_dim]
+        query_states = self.q_proj(hidden_states).view(batch, seq_len, self.num_heads, self.head_dim)
+        key_states = self.k_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
+        value_states = self.v_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
 
+        # Apply RoPE
         cos, sin = position_embeddings
-        query, key = _apply_rotary_pos_emb(query, key, cos, sin)
-        query = F.rms_norm(query, (query.size(-1),), eps=self.config.rms_norm_eps)
-        key = F.rms_norm(key, (key.size(-1),), eps=self.config.rms_norm_eps)
+        query_states, key_states = _apply_rotary_pos_emb(query_states, key_states, cos, sin)
         
-        query = query.transpose(1, 2)
-        key = key.transpose(1, 2)
-        value = value.transpose(1, 2)
+        # Apply RMSNorm to Q and K (model-specific feature)
+        query_states = F.rms_norm(query_states, (query_states.size(-1),), eps=self.config.rms_norm_eps)
+        key_states = F.rms_norm(key_states, (key_states.size(-1),), eps=self.config.rms_norm_eps)
+        
+        # Transpose to [batch, num_heads, seq_len, head_dim]
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
+        # Update cache
         if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
-            key, value = past_key_values.update(key, value, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        key = _repeat_kv(key, self.num_key_value_groups)
-        value = _repeat_kv(value, self.num_key_value_groups)
+        # Use attention interface pattern for vLLM compatibility
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Use F.scaled_dot_product_attention like the original implementation
-        query_len = query.size(2)
-        key_len = key.size(2)
-        
-        if query_len == key_len:
-            attn_output = F.scaled_dot_product_attention(query, key, value, is_causal=True)
-        elif query_len == 1:
-            attn_output = F.scaled_dot_product_attention(query, key, value, is_causal=False)
-        else:
-            attn_mask = torch.zeros((query_len, key_len), dtype=torch.bool, device=query.device)
-            prefix_len = key_len - query_len
-            if prefix_len > 0:
-                attn_mask[:, :prefix_len] = True
-            attn_mask[:, prefix_len:] = torch.tril(torch.ones((query_len, query_len), dtype=torch.bool, device=query.device))
-            attn_output = F.scaled_dot_product_attention(query, key, value, attn_mask=attn_mask)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        attn_output = attn_output.transpose(1, 2).contiguous().view(batch, seq_len, -1)
+        # Reshape and project output
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, None
+        return attn_output, attn_weights
 
 
 class NanoGPTMLP(nn.Module):
@@ -170,9 +215,8 @@ class NanoGPTDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs: TransformersKwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        del kwargs, position_ids
         residual = hidden_states
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
         hidden_states, _ = self.self_attn(
@@ -181,6 +225,7 @@ class NanoGPTDecoderLayer(nn.Module):
             past_key_values=past_key_values,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -195,6 +240,7 @@ class NanoGPTPreTrainedModel(PreTrainedModel):
     config_class = NanoGPTConfig
     base_model_prefix = "model"
     _no_split_modules = ["NanoGPTDecoderLayer"]
+    _supports_attention_backend = True
 
     def _init_weights(self, module: nn.Module) -> None:
         if isinstance(module, nn.Linear):
@@ -257,7 +303,7 @@ class NanoGPTModel(NanoGPTPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: TransformersKwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -285,8 +331,10 @@ class NanoGPTModel(NanoGPTPreTrainedModel):
         )
 
         cos, sin = self._precompute_rotary_embeddings(inputs_embeds.device, inputs_embeds.dtype)
-        cos = cos[:, cache_position]
-        sin = sin[:, cache_position]
+        # Clamp cache_position to max_position_embeddings to avoid out-of-bounds indexing
+        position_ids_to_use = cache_position.clamp(0, self.config.max_position_embeddings - 1)
+        cos = cos[:, position_ids_to_use]
+        sin = sin[:, position_ids_to_use]
 
         hidden_states = inputs_embeds
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
@@ -299,6 +347,7 @@ class NanoGPTModel(NanoGPTPreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=(cos, sin),
+                **kwargs,
             )
 
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
@@ -332,7 +381,7 @@ class NanoGPTForCausalLM(NanoGPTPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: TransformersKwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         outputs = self.model(
             input_ids=input_ids,
