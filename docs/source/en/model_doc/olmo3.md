@@ -26,6 +26,7 @@ limitations under the License.
 </div>
 
 # OLMo3
+
 Olmo3 is an improvement on [OLMo2](./olmo2). More details will be released on *soon*.
 
 > [!TIP]

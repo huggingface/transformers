@@ -79,6 +79,8 @@ When token_type_ids=None or all zero, it is equivalent to regular causal mask
 for example:
 
 >>> x_token = tokenizer("ｱｲｳｴ")
+
+```text
 input_ids:      | SOT | SEG | ｱ | ｲ | ｳ | ｴ |
 token_type_ids: | 1   | 0   | 0 | 0 | 0 | 0 |
 prefix_lm_mask:
@@ -88,8 +90,11 @@ SEG | 1 1 0 0 0 0 |
 ｲ   | 1 1 1 1 0 0 |
 ｳ   | 1 1 1 1 1 0 |
 ｴ   | 1 1 1 1 1 1 |
+```
 
 >>> x_token = tokenizer("", prefix_text="ｱｲｳｴ")
+
+```text
 input_ids:      | SOT | ｱ | ｲ | ｳ | ｴ | SEG |
 token_type_ids: | 1   | 1 | 1 | 1 | 1 | 0  |
 prefix_lm_mask:
@@ -99,8 +104,11 @@ SOT | 1 1 1 1 1 0 |
 ｳ   | 1 1 1 1 1 0 |
 ｴ   | 1 1 1 1 1 0 |
 SEG | 1 1 1 1 1 1 |
+```
 
 >>> x_token = tokenizer("ｳｴ", prefix_text="ｱｲ")
+
+```text
 input_ids:      | SOT | ｱ | ｲ | SEG | ｳ | ｴ |
 token_type_ids: | 1   | 1 | 1 | 0   | 0 | 0 |
 prefix_lm_mask:
@@ -110,6 +118,7 @@ SOT | 1 1 1 0 0 0 |
 SEG | 1 1 1 1 0 0 |
 ｳ   | 1 1 1 1 1 0 |
 ｴ   | 1 1 1 1 1 1 |
+```
 
 ### Spout Vector
 

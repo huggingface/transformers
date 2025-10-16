@@ -21,21 +21,22 @@ specific language governing permissions and limitations under the License.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-### License
+## License
 
+Minitron is released under the [NVIDIA Open Model License Agreement](https://developer.download.nvidia.com/licenses/nvidia-open-model-license-agreement-june-2024.pdf).
 The use of this model is governed by the [NVIDIA AI Foundation Models Community License Agreement](https://developer.nvidia.com/downloads/nv-ai-foundation-models-license).
 
-### Description
+## Description
 
 Nemotron-4 is a family of enterprise ready generative text models compatible with [NVIDIA NeMo Framework](https://www.nvidia.com/en-us/ai-data-science/generative-ai/nemo-framework/).
 
 NVIDIA NeMo is an end-to-end, cloud-native platform to build, customize, and deploy generative AI models anywhere. It includes training and inferencing frameworks, guardrailing toolkits, data curation tools, and pretrained models, offering enterprises an easy, cost-effective, and fast way to adopt generative AI. To get access to NeMo Framework, please sign up at [this link](https://developer.nvidia.com/nemo-framework/join).
 
-### References
+## References
 
 [Announcement Blog](https://developer.nvidia.com/blog/nvidia-ai-foundation-models-build-custom-enterprise-chatbots-and-co-pilots-with-production-ready-llms/)
 
-### Model Architecture
+## Model Architecture
 
 **Architecture Type:** Transformer
 
@@ -80,10 +81,6 @@ output_text = tokenizer.decode(outputs[0])
 print(output_text)
 ```
 
-### License
-
-Minitron is released under the [NVIDIA Open Model License Agreement](https://developer.download.nvidia.com/licenses/nvidia-open-model-license-agreement-june-2024.pdf).
-
 ### Evaluation Results
 
 *5-shot performance.* Language Understanding evaluated using [Massive Multitask Language Understanding](https://huggingface.co/papers/2009.03300):
@@ -96,7 +93,7 @@ Minitron is released under the [NVIDIA Open Model License Agreement](https://dev
 
 | HellaSwag | Winogrande | GSM8K| ARC-C | XLSum |
 | :------------- | :------------- | :------------- | :------------- | :------------- |
-| 75.0 | 74.0 | 24.1  | 50.9 | 29.5
+| 75.0 | 74.0 | 24.1  | 50.9 | 29.5 |
 
 *Code generation performance*. Evaluated using [HumanEval](https://github.com/openai/human-eval):
 

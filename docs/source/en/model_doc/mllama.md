@@ -136,11 +136,6 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] MllamaModel
 
-## MllamaForCausalLM
-
-[[autodoc]] MllamaForCausalLM
-    - forward
-
 ## MllamaVisionModel
 
 [[autodoc]] MllamaVisionModel

@@ -76,6 +76,7 @@ output = model(input_ids, lang_ids=lang_ids)
 ```
 
 ### Fine-tuning
+
 The paper recommends that the embedding layer and the language adapters are frozen during fine-tuning. A method for doing this is provided:
 
 ```python
@@ -84,6 +85,7 @@ model.freeze_embeddings_and_language_adapters()
 ```
 
 ### Cross-lingual transfer
+
 After fine-tuning, zero-shot cross-lingual transfer can be tested by activating the language adapter of the target language:
 
 ```python

@@ -208,7 +208,7 @@ Some models have a unique way of storing past kv pairs or states that is not com
 
 Mamba models, such as [Mamba](./model_doc/mamba), require a specific cache because the model doesn't have an attention mechanism or kv states. Thus, they are not compatible with the above [`Cache`] classes.
 
-# Iterative generation
+## Iterative generation
 
 A cache can also work in iterative generation settings where there is back-and-forth interaction with a model (chatbots). Like regular generation, iterative generation with a cache allows a model to efficiently handle ongoing conversations without recomputing the entire context at each step.
 

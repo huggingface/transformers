@@ -55,6 +55,7 @@ deepspeed --num_gpus 2 trainer-program.py ...
 </hfoptions>
 
 ## Order of accelerators
+
 To select specific accelerators to use and their order, use the environment variable appropriate for your hardware. This is often set on the command line for each run, but can also be added to your `~/.bashrc` or other startup config file.
 
 For example, if there are 4 accelerators (0, 1, 2, 3) and you only want to run accelerators 0 and 2:
