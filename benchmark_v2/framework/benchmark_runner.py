@@ -8,7 +8,7 @@ import time
 from contextlib import nullcontext
 from datetime import datetime
 from queue import Queue
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from tqdm import trange
@@ -74,7 +74,7 @@ def get_git_revision() -> str:
         return git_hash.readline().strip()
 
 
-def get_sdpa_backend(backend_name: Optional[str]) -> Optional[torch.nn.attention.SDPBackend]:
+def get_sdpa_backend(backend_name: str | None) -> torch.nn.attention.SDPBackend | None:
     """Get the SDPA backend enum from string name."""
     if backend_name is None:
         return None
@@ -145,7 +145,7 @@ class BenchmarkRunner:
     """Main benchmark runner that coordinates benchmark execution."""
 
     def __init__(
-        self, logger: logging.Logger, output_dir: str = "benchmark_results", commit_id: Optional[str] = None
+        self, logger: logging.Logger, output_dir: str = "benchmark_results", commit_id: str | None = None
     ) -> None:
         # Those stay constant for the whole run
         self.logger = logger
@@ -156,7 +156,7 @@ class BenchmarkRunner:
         # Attributes that are reset for each model
         self._setup_for = ""
         # Attributes that are reset for each run
-        self.model: Optional[GenerationMixin] = None
+        self.model: GenerationMixin | None = None
 
     def cleanup(self) -> None:
         del self.model
@@ -251,8 +251,8 @@ class BenchmarkRunner:
     def time_generate(
         self,
         max_new_tokens: int,
-        gpu_monitor: Optional[GPUMonitor] = None,
-    ) -> tuple[float, list[float], str, Optional[GPURawMetrics]]:
+        gpu_monitor: GPUMonitor | None = None,
+    ) -> tuple[float, list[float], str, GPURawMetrics | None]:
         """Time the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
         # Prepare gpu monitoring if needed
         if gpu_monitor is not None:
