@@ -43,14 +43,6 @@ if is_mambapy_available():
 else:
     pscan = None
 
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-
-    from ...kernels.falcon_mamba import mamba_inner_fn
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
 
 class FalconMambaConfig(MambaConfig):
     """
@@ -257,6 +249,12 @@ class FalconMambaMixer(MambaMixer):
             if causal_conv1d is not None
             else (None, None)
         )
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update, selective_scan_fn, mamba_inner_fn = (
+            (mamba_ssm.selective_state_update, mamba_ssm.selective_scan_fn, mamba_ssm.mamba_inner_fn)
+            if mamba_ssm is not None
+            else (None, None, None)
+        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -299,7 +297,12 @@ class FalconMambaMixer(MambaMixer):
     ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update, selective_scan_fn, mamba_inner_fn = (
+            mamba_ssm.selective_state_update,
+            mamba_ssm.selective_scan_fn,
+            mamba_ssm.mamba_inner_fn,
+        )
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
             contextualized_states = mamba_inner_fn(
                 projected_states,
@@ -526,6 +529,16 @@ class FalconMambaMixer(MambaMixer):
             (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
             if causal_conv1d is not None
             else (None, None)
+        )
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update, selective_scan_fn, mamba_inner_fn = (
+            (
+                mamba_ssm.selective_state_update,
+                mamba_ssm.selective_scan_fn,
+                mamba_ssm.mamba_inner_fn,
+            )
+            if mamba_ssm is not None
+            else (None, None, None)
         )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
