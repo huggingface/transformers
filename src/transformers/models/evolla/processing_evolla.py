@@ -47,10 +47,6 @@ class EvollaProcessor(ProcessorMixin):
             The maximum length of the text to be generated.
     """
 
-    valid_kwargs = ["sequence_max_length"]
-    protein_tokenizer_dir_name = "protein_tokenizer"
-    # tokenizer_dir_name = "text_tokenizer"
-
     def __init__(self, protein_tokenizer, tokenizer=None, protein_max_length=1024, text_max_length=512, **kwargs):
         if protein_tokenizer is None:
             raise ValueError("You need to specify an `protein_tokenizer`.")
@@ -205,7 +201,7 @@ class EvollaProcessor(ProcessorMixin):
     # Adapted from instructblip.processing_instructblip.py (https://github.com/huggingface/transformers/blob/9b479a245b793cac2a8b2e87c6d8e81bb24e20c4/src/transformers/models/instructblip/processing_instructblip.py#L191-L221)
     def save_pretrained(self, save_directory, **kwargs):
         # only save the protein tokenizer in sub_dir
-        self.protein_tokenizer.save_pretrained(os.path.join(save_directory, self.protein_tokenizer_dir_name))
+        self.protein_tokenizer.save_pretrained(os.path.join(save_directory, "protein_tokenizer"))
         return super().save_pretrained(save_directory, exclude_attributes=["protein_tokenizer"], **kwargs)
 
     # overwrite to load the protein tokenizer from a separate folder
@@ -217,9 +213,7 @@ class EvollaProcessor(ProcessorMixin):
         # if return_unused_kwargs a tuple is returned where the second element is 'unused_kwargs'
         if isinstance(processor, tuple):
             processor = processor[0]
-        protein_tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path, subfolder=cls.protein_tokenizer_dir_name
-        )
+        protein_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="protein_tokenizer")
 
         processor.protein_tokenizer = protein_tokenizer
 

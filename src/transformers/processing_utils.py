@@ -560,8 +560,6 @@ class ProcessorMixin(PushToHubMixin):
 
     optional_attributes = ["chat_template", "audio_tokenizer"]
     # Names need to be attr_class for attr in attributes
-    feature_extractor_class = None
-    tokenizer_class = None
     _auto_class = None
     valid_processor_kwargs = ProcessingKwargs
 

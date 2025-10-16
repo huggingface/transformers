@@ -65,8 +65,6 @@ class InstructBlipProcessor(ProcessorMixin):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
-    qformer_tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = AddedToken("<image>", normalized=False, special=True)

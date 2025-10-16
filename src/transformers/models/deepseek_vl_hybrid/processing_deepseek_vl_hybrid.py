@@ -52,8 +52,6 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
             The number of special image tokens used as placeholders for visual content in text sequences.
     """
 
-    valid_kwargs = ["chat_template", "num_image_tokens"]
-
     def __init__(
         self,
         image_processor,
