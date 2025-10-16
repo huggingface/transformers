@@ -485,7 +485,7 @@
         title: CANINE
       - local: model_doc/codegen
         title: CodeGen
-      - local: in_translation
+      - local: model_doc/code_llama
         title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
