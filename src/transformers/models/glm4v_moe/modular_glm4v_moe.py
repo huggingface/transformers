@@ -22,8 +22,8 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -62,10 +62,6 @@ class Glm4vMoeVisionConfig(Glm4vVisionConfig):
 
 
 class Glm4vMoeRMSNorm(Glm4MoeRMSNorm):
-    pass
-
-
-class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
     pass
 
 

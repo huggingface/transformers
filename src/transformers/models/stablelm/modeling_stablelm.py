@@ -29,7 +29,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
