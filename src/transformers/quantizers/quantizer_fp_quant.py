@@ -178,6 +178,3 @@ class FPQuantHfQuantizer(HfQuantizer):
             return True
         else:
             return False
-
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        pass
