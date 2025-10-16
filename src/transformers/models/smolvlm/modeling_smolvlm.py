@@ -73,6 +73,7 @@ class SmolVLMRMSNorm(nn.Module):
 class SmolVLMPreTrainedModel(PreTrainedModel):
     config: SmolVLMConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["SmolVLMVisionAttention", "SmolVLMDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -349,6 +350,7 @@ class SmolVLMEncoder(nn.Module):
 )
 class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
     config: SmolVLMVisionConfig
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True

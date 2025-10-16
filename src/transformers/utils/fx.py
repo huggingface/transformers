@@ -777,9 +777,9 @@ class HFProxyableClassMeta(type):
         attrs: dict[str, Any],
         proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
     ):
-        cls = super().__new__(cls, name, bases, attrs)
-        for attr_name in dir(cls):
-            attr = getattr(cls, attr_name, None)
+        instance = super().__new__(cls, name, bases, attrs)
+        for attr_name in dir(instance):
+            attr = getattr(instance, attr_name, None)
             if attr is None:
                 continue
             if attr_name == "__init__":
@@ -793,8 +793,8 @@ class HFProxyableClassMeta(type):
             else:
                 op_type = None
             if op_type is not None:
-                setattr(cls, attr_name, create_wrapper(attr, op_type, proxy_factory_fn=proxy_factory_fn))
-        return cls
+                setattr(instance, attr_name, create_wrapper(attr, op_type, proxy_factory_fn=proxy_factory_fn))
+        return instance
 
 
 def gen_constructor_wrapper(target: Callable) -> tuple[Callable, Callable]:
