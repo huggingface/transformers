@@ -164,8 +164,7 @@ class NanoChatAttention(nn.Module):
         batch, seq_len, _ = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
 
-        # Project the input to get queries, keys, and values
-        # Shape: [batch, seq_len, num_heads, head_dim]
+        # Project the input to get queries, keys, and values [batch, seq_len, num_heads, head_dim]
         query_states = self.q_proj(hidden_states).view(batch, seq_len, self.num_heads, self.head_dim)
         key_states = self.k_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
         value_states = self.v_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
@@ -174,12 +173,10 @@ class NanoChatAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = _apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        # Apply QK normalization (RMSNorm) - a key feature of NanoChat architecture
-        # This helps stabilize training and is applied AFTER RoPE
+        # Apply QK normalization (RMSNorm)
         query_states = F.rms_norm(query_states, (query_states.size(-1),), eps=self.config.rms_norm_eps)
         key_states = F.rms_norm(key_states, (key_states.size(-1),), eps=self.config.rms_norm_eps)
 
-        # Transpose to make head dimension the batch dimension
         # Shape: [batch, num_heads, seq_len, head_dim]
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
