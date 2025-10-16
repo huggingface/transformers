@@ -99,7 +99,7 @@ def _pad(items, key, padding_value, padding_side):
             # we can consistently pad since the size should be matching
             return torch.cat([item[key] for item in items], dim=0)
         else:
-            tensor = torch.zeros([batch_size, max_length] + list(shape[2:]), dtype=dtype) + padding_value
+            tensor = torch.full([batch_size, max_length] + list(shape[2:]), fill_value=padding_value, dtype=dtype)
 
         for i, item in enumerate(items):
             if padding_side == "left":
