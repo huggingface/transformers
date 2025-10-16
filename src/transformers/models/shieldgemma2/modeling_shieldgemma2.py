@@ -44,7 +44,7 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 @auto_docstring
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _checkpoint_conversion_mapping = {
         "model.language_model.model": "model.model.language_model",
         "model.vision_tower": "model.model.vision_tower",

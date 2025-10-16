@@ -370,7 +370,7 @@ class VideoLlama3VisionEncoder(nn.Module):
 class VideoLlama3PreTrainedModel(PreTrainedModel):
     config: VideoLlama3Config
     base_model_prefix = "model"
-    input_modalities = ["image", "video", "text"]
+    input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -384,7 +384,7 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _can_record_outputs = {
         "hidden_states": VideoLlama3VisionEncoderLayer,
         "attentions": VideoLlama3VisionAttention,

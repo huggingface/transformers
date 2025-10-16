@@ -3916,7 +3916,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
     """
 )
 class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     output_modalities = ["audio", "text"]
     _tied_weights_keys = [
         "lm_head.weight",

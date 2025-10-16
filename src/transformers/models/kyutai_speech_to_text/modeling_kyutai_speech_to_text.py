@@ -115,7 +115,7 @@ class KyutaiSpeechToTextFlexibleLinear(nn.Module):
 class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
     config: KyutaiSpeechToTextConfig
     base_model_prefix = "model"
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["KyutaiSpeechToTextDecoderLayer", "MimiTransformerLayer"]
     _supports_flash_attn = True
