@@ -974,6 +974,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     config: Wav2Vec2Config
     base_model_prefix = "wav2vec2"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1474,7 +1475,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
         predicted_features: torch.FloatTensor,
-        temperature: int = 0.1,
+        temperature: float = 0.1,
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
