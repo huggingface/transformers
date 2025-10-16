@@ -221,35 +221,23 @@ class Concatenate(ConversionOps):
         return out
 
 
-class MergeModuleList(ConversionOps):
-    """Stack tensors along a new leading dimension."""
+class MergeModuleList(Concatenate):
+    """
+    Merge a list of tensors into a single tensor along the first dimension.
+    We explicitly define this because for EP or TP you want to make sure you know what you are doing!
 
-    def __init__(self, stack_dim: int = 0):
-        self.stack_dim = stack_dim
+    """
 
-    def convert(self, value: Sequence[torch.Tensor], *, context: dict[str, Any]) -> torch.Tensor:
-        tensors = tuple(value)
-        if not tensors:
-            raise ValueError("MergeModuleList requires at least one tensor to merge.")
+    pass
 
-        first = tensors[0]
-        dtype, device = first.dtype, first.device
-        out_shape = tensors[0].shape
-        out_shape[0] *= len(tensors)
-
-        with torch.no_grad():
-            out = self._ensure_buffer(out_shape, dtype=dtype, device=device)
-            for index, tensor in enumerate(tensors):
-                slice = slice(index, index + 1)
-                out[slice].copy_(tensor)
-        return out
 
 
 class Shard(ConversionOps):
-    def __init__(self, device_mesh, rank, dim):
+    def __init__(self, dim, distributed_config = None):
         self.dim = dim
-        self.device_mesh = device_mesh
-        self.rank = rank
+        if distributed_config is not None:
+            self.device_mesh = distributed_config.device_mesh
+            self.rank = distributed_config.rank
 
     def convert(self, param, empty_param):
         param_dim = empty_param.dim()
@@ -341,6 +329,12 @@ def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_
     If q,k and v need to be merged, but they are on a different state dict, we need to make sure
     we collected all of the keys.
 
+
+    There is an ordered collection. so experts.*.w1.weight will collect all keys that match first.
+
+    Given that the tensors are mmaped, its fine if we read all safetensors.json files first! We
+    can load directly any tensors that does not match the mapping, but for those that do, we need to
+    collect them first.
 
     Args:
         model (`torch.nn.Module`):
