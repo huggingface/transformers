@@ -26,7 +26,6 @@ import shutil
 import signal
 import sys
 import threading
-import warnings
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional, Union
