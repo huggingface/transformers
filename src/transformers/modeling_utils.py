@@ -68,6 +68,7 @@ from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
+    ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
     distribute_model,
     initialize_tensor_parallelism,
@@ -1917,9 +1918,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `tp_plan`")
-
-        # Validate that all parallel styles in the plan are supported
-        from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 
         # Ensure the styles are all valid
         for layer_pattern, parallel_style in plan.items():
