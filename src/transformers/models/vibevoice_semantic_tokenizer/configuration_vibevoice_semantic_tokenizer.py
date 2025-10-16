@@ -32,6 +32,8 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
 
     Args:
     TODO list and remove type hints
+        bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in convolution and feed-forward layers.
     
     """
     model_type = "vibevoice_semantic_tokenizer"
@@ -39,43 +41,35 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
     def __init__(
         self,
         channels: int = 1,
-        causal: bool = True,
         vae_dim: int = 128,
-        fix_std: float = 0,
-        sample_latent: bool = False,
-        pad_mode: str = 'constant',
-        layernorm_eps: float = 1e-5,
-        layernorm_elementwise_affine: bool = True,
-        conv_bias: bool = True,
+        kernel_size: int = 7,
+        rms_norm_eps: float = 1e-5,
+        bias: bool = True,
         layer_scale_init_value: float = 1e-6,
         weight_init_value: float = 1e-2,
-        encoder_n_filters: int = 32,
-        encoder_ratios: Optional[list[int]] = [8,5,5,4,2,2],
-        encoder_depths: list[int] = [3,3,3,3,3,3,8],
+        n_filters: int = 32,
+        downsampling_ratios=[2, 2, 4, 5, 5, 8],
+        depths: list[int] = [3, 3, 3, 3, 3, 3, 8],
+        hidden_act="gelu",
+        sample_latent: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.channels = channels
-        self.causal = causal
         self.vae_dim = vae_dim
-        self.fix_std = fix_std
         self.sample_latent = sample_latent
-
-        # common parameters
-        self.pad_mode = pad_mode
-        self.layernorm_eps = layernorm_eps
-        self.layernorm_elementwise_affine = layernorm_elementwise_affine
-        self.conv_bias = conv_bias
+        self.hidden_act = hidden_act
+        self.kernel_size = kernel_size
+        self.rms_norm_eps = rms_norm_eps
+        self.bias = bias
         self.layer_scale_init_value = layer_scale_init_value
         self.weight_init_value = weight_init_value
-
-        # encoder specific parameters
-        self.encoder_n_filters = encoder_n_filters
-        self.encoder_ratios = encoder_ratios
-        self.encoder_depths = encoder_depths
+        self.n_filters = n_filters
+        self.downsampling_ratios = downsampling_ratios
+        self.depths = depths
 
     @property
     def hop_length(self) -> int:
-        return np.prod(self.encoder_ratios)
+        return np.prod(self.downsampling_ratios)
 
 __all__ = ["VibeVoiceSemanticTokenizerConfig"]
