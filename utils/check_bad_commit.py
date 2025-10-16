@@ -59,6 +59,7 @@ elif result.returncode != 0:
         print(f"pytest gets unknown error: {{result.stderr}}")
         exit(-1)
 
+print(f"pytest runs successfully.")
 exit(0)
 """
 
