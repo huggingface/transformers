@@ -512,6 +512,7 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
         "attentions": Glm4vMoeTextAttention,
         "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
     }
+    input_modalities = ["text", "image", "video"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -552,6 +553,7 @@ class Glm4vMoeCausalLMOutputWithPast(ModelOutput):
 @auto_docstring
 class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
@@ -1047,7 +1049,6 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
 @auto_docstring
 class Glm4vMoeModel(Glm4vMoePreTrainedModel):
     base_model_prefix = ""
-    input_modalities = "text"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
