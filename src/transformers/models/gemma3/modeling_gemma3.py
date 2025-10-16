@@ -169,7 +169,7 @@ class Gemma3RotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[Gemma3Config] = None,
+        config: Optional[Gemma3TextConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
         layer_type: Optional[str] = None,
@@ -186,17 +186,13 @@ class Gemma3RotaryEmbedding(nn.Module):
             layer_type (`str`, *optional*):
                 The current layer type if the model has different RoPE parameters per type.
                 Should not be used unless `config.layer_types is not None`
+
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-
-        base = (
-            config.rope_parameters[layer_type]["rope_theta"]
-            if layer_type is not None
-            else config.rope_parameters["rope_theta"]
-        )
+        base = config.rope_parameters[layer_type]["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE

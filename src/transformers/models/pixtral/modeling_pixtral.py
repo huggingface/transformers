@@ -80,7 +80,6 @@ class PixtralRotaryEmbedding(nn.Module):
         config: Optional[PixtralVisionConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
-        layer_type: Optional[str] = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -95,8 +94,6 @@ class PixtralRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 

@@ -2731,13 +2731,11 @@ class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
         config: Optional[Qwen2_5OmniDiTConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
-        layer_type: Optional[str] = None,
     ) -> tuple["torch.Tensor", float]:
         return super().compute_default_rope_parameters(
             config,
             device=device,
             seq_len=seq_len,
-            layer_type=layer_type,
         )
 
 
