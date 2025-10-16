@@ -67,9 +67,6 @@ def sdpa_attention_forward(
 
     if attention_mask is not None and attention_mask.ndim == 4:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
-        torch._check(
-            attention_mask.shape[3] == key.shape[-2], lambda: "The key and attention mask have incompatible shapes."
-        )
 
     # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
     # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
