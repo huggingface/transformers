@@ -42,7 +42,7 @@ except ImportError:
     GenerationConfig = None
     StaticCache = None
 
-os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+os.environ["HF_XET_HIGH_PERFORMANCE"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "1"
 
 # Only set torch precision if torch is available
