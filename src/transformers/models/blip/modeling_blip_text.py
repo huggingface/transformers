@@ -674,13 +674,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds or encoder_embeds")
 
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
 
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length + past_key_values_length)).to(device)
@@ -790,6 +784,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         is_decoder: Optional[bool] = True,
         reduction: Optional[str] = "mean",
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states (`torch.FloatTensor`, *optional*): Sequence of
@@ -833,8 +828,10 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        hidden_states = outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        prediction_scores = self.cls(hidden_states[:, slice_indices, :])
 
         if return_logits:
             return prediction_scores[:, :-1, :].contiguous()

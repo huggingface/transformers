@@ -94,6 +94,7 @@ def _pad(items, key, padding_value, padding_side):
         min_length = min(item[key].shape[1] for item in items)
         dtype = items[0][key].dtype
 
+        tensor = None
         if dim == 2:
             if max_length == min_length:
                 # Bypass for `ImageGPT` which doesn't provide a padding value, yet
@@ -104,6 +105,9 @@ def _pad(items, key, padding_value, padding_side):
             tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
         elif dim == 4:
             tensor = torch.zeros((batch_size, max_length, shape[-2], shape[-1]), dtype=dtype) + padding_value
+
+        if tensor is None:
+            raise ValueError(f"Unable to create tensor for padding from {key} with dimension {dim}")
 
         for i, item in enumerate(items):
             if dim == 2:
@@ -866,7 +870,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             self.device = self.model.device
-        logger.warning(f"Device set to use {self.device}")
+        logger.debug(f"Device set to use {self.device}")
 
         self.binary_output = binary_output
 
@@ -1127,6 +1131,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if self.task in SUPPORTED_PEFT_TASKS:
                 supported_models_names.extend(SUPPORTED_PEFT_TASKS[self.task])
 
+            model_name = None
             for model_name in supported_models.values():
                 # Mapping can now contain tuples of models for the same configuration.
                 if isinstance(model_name, tuple):

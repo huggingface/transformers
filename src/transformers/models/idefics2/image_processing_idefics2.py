@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
-    import PIL
     from PIL import Image
 
 
@@ -142,7 +141,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
         image (Image):
             The image to convert.
     """
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background

@@ -385,8 +385,6 @@ class TrainingArguments:
             experimental API and it may change.
         ddp_backend (`str`, *optional*):
             The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"ccl"`, `"gloo"`, `"hccl"`.
-        tpu_num_cores (`int`, *optional*):
-            When training on TPU, the number of TPU cores (automatically passed by launcher script).
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
@@ -996,15 +994,18 @@ class TrainingArguments:
             )
         },
     )
+    local_rank: int = field(
+        default=-1,
+        metadata={
+            "help": "When using torch.distributed.launch (Deprecated), it will pass `local_rank` in the script, so we need this for the parser. To get the local rank, prefer using the property `local_process_index`"
+        },
+    )
     ddp_backend: Optional[str] = field(
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
             "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl", "mccl"],
         },
-    )
-    tpu_num_cores: Optional[int] = field(
-        default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
     )
     debug: Union[str, list[DebugOption]] = field(
         default="",
@@ -1272,12 +1273,6 @@ class TrainingArguments:
             "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
         },
     )
-    _n_gpu: int = field(init=False, repr=False, default=-1)
-    mp_parameters: str = field(
-        default="",
-        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
-    )
-
     auto_find_batch_size: bool = field(
         default=False,
         metadata={
@@ -1293,20 +1288,6 @@ class TrainingArguments:
             "help": (
                 "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed"
                 " training. Important: this will negatively impact the performance, so only use it for debugging."
-            )
-        },
-    )
-    ray_scope: str = field(
-        default=None,
-        metadata={
-            "help": (
-                "This argument is deprecated and will be removed in v5.2. Set env var RAY_SCOPE instead."
-                'The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray'
-                " will then use the last checkpoint of all trials, compare those, and select the best one. However,"
-                " other options are also available. See the Ray documentation"
-                " (https://docs.ray.io/en/latest/tune/api_docs/analysis.html"
-                "#ray.tune.ExperimentAnalysis.get_best_trial)"
-                " for more options."
             )
         },
     )

@@ -635,9 +635,9 @@ class Sam2VideoProcessor(Sam2Processor):
         self,
         video: Optional[VideoInput] = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Union[str, "torch.device"] = None,
-        processing_device: Union[str, "torch.device"] = None,
-        video_storage_device: Union[str, "torch.device"] = None,
+        inference_state_device: Optional[Union[str, "torch.device"]] = None,
+        processing_device: Optional[Union[str, "torch.device"]] = None,
+        video_storage_device: Optional[Union[str, "torch.device"]] = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):

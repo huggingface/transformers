@@ -118,7 +118,6 @@ if is_torch_available():
         AutoModelForTextToWaveform,
         AutoModelForTokenClassification,
         AutoModelForVideoClassification,
-        AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
         AutoModelForZeroShotImageClassification,
         AutoModelForZeroShotObjectDetection,
@@ -277,7 +276,7 @@ SUPPORTED_TASKS = {
     },
     "image-to-text": {
         "impl": ImageToTextPipeline,
-        "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
+        "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
         "default": {"model": ("ydshieh/vit-gpt2-coco-en", "5bebf1e")},
         "type": "multimodal",
     },
