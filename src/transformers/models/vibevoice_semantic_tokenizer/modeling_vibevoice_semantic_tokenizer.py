@@ -81,48 +81,50 @@ class VibeVoiceTokenizerStreamingCache:
 
     def get(self, layer_id: str, sample_indices: torch.Tensor) -> Optional[torch.Tensor]:
         """Get cached states for given layer and sample indices"""
+        sample_indices_list = sample_indices.tolist()
         states = []
-        max_length = 0
-
-        # First pass: collect states and find max length
-        for idx in sample_indices.tolist():
+        
+        # Collect states and check if all samples exist
+        for idx in sample_indices_list:
             key = (layer_id, idx)
             if key not in self.cache:
                 return None  # If any sample is missing, return None
-            state = self.cache[key]
-            states.append(state)
-            max_length = max(max_length, state.shape[-1])
+            states.append(self.cache[key])
 
-        # Second pass: pad states to max length if needed
-        if len(states) > 0 and states[0].dim() >= 2:
-            padded_states = []
-            for state in states:
-                if state.shape[-1] < max_length:
-                    # Pad on the time dimension (last dimension)
-                    pad_size = max_length - state.shape[-1]
-                    # Pad with zeros on the LEFT to align the most recent samples
-                    padded_state = F.pad(state, (pad_size, 0), mode="constant", value=0)
-                    padded_states.append(padded_state)
-                else:
-                    padded_states.append(state)
-            return torch.stack(padded_states, dim=0)
-        else:
+        if not states:
+            return None
+
+        # If all states have the same shape, stack directly
+        if all(state.shape == states[0].shape for state in states):
             return torch.stack(states, dim=0)
+
+        # Otherwise, pad to max length
+        max_length = max(state.shape[-1] for state in states)
+        padded_states = []
+        for state in states:
+            if state.shape[-1] < max_length:
+                pad_size = max_length - state.shape[-1]
+                # Pad with zeros on the LEFT to align the most recent samples
+                padded_state = F.pad(state, (pad_size, 0), mode="constant", value=0)
+                padded_states.append(padded_state)
+            else:
+                padded_states.append(state)
+        return torch.stack(padded_states, dim=0)
 
     def set(self, layer_id: str, sample_indices: torch.Tensor, states: torch.Tensor):
         """Set cached states for given layer and sample indices"""
-        for i, idx in enumerate(sample_indices.tolist()):
+        sample_indices_list = sample_indices.tolist()
+        for i, idx in enumerate(sample_indices_list):
             key = (layer_id, idx)
             self.cache[key] = states[i].detach()
 
     def set_to_zero(self, sample_indices: torch.Tensor):
         """Set all cached states to zero for given sample indices"""
+        sample_indices_set = set(sample_indices.tolist())
         for key in list(self.cache.keys()):
             layer_id, sample_idx = key
-            if sample_idx in sample_indices.tolist():
-                # Create zero tensor with same shape and dtype as cached tensor
-                cached_tensor = self.cache[key]
-                self.cache[key] = torch.zeros_like(cached_tensor)
+            if sample_idx in sample_indices_set:
+                self.cache[key] = torch.zeros_like(self.cache[key])
 
     def clear(self, layer_id: Optional[str] = None, sample_indices: Optional[torch.Tensor] = None):
         """Clear cache for specific layer/samples or everything"""
@@ -135,7 +137,8 @@ class VibeVoiceTokenizerStreamingCache:
                 del self.cache[k]
         elif layer_id is not None and sample_indices is not None:
             # Clear specific samples for a specific layer
-            for idx in sample_indices.tolist():
+            sample_indices_list = sample_indices.tolist()
+            for idx in sample_indices_list:
                 key = (layer_id, idx)
                 self.cache.pop(key, None)
 
@@ -187,6 +190,8 @@ class StreamingConv1d(nn.Module):
         """
         Forward pass with optional streaming support via cache.
 
+        TODO: better handling of streaming and non-streaming
+
         Args:
             x: Input tensor [batch_size, channels, time]
             cache: VibeVoiceTokenizerStreamingCache object for maintaining states
@@ -206,45 +211,24 @@ class StreamingConv1d(nn.Module):
             x = F.pad(x, (self.padding_total, extra_padding), mode="constant", value=0)
             return self.conv(x)
 
-        # Streaming mode (TODO simplify this code path)
+        # Streaming mode
         if sample_indices is None:
             raise ValueError("sample_indices must be provided for streaming mode")
         if len(sample_indices) != batch_size:
             raise ValueError("sample_indices must match batch size")
 
-        # Cache operations (not compiled)
+        # Get cached context or initialize with zeros
         cached_states = cache.get(self.layer_id, sample_indices)
-
         if cached_states is None:
-            # First chunk - initialize with zeros for context
-            if self.context_size > 0:
-                cached_states = torch.zeros(batch_size, channels, self.context_size, device=x.device, dtype=x.dtype)
-            else:
-                cached_states = torch.zeros(batch_size, channels, 0, device=x.device, dtype=x.dtype)
+            cached_states = torch.zeros(batch_size, channels, self.context_size, device=x.device, dtype=x.dtype)
 
-        # Concatenate cached states with input
-        if cached_states.shape[2] > 0:
-            input_with_context = torch.cat([cached_states, x], dim=2)
-        else:
-            input_with_context = x
-
-        # Apply convolution directly - no extra padding in streaming mode
-        # The conv layer will handle its own padding internally
+        # Concatenate context with input and apply convolution
+        input_with_context = torch.cat([cached_states, x], dim=2) if self.context_size > 0 else x
         output = self.conv(input_with_context)
 
-        # Update cache for next chunk
+        # Update cache with the last context_size samples
         if self.context_size > 0:
-            # Calculate how many samples to keep
-            total_input_length = input_with_context.shape[2]
-
-            # Keep the last context_size samples
-            if total_input_length >= self.context_size:
-                new_cache_start = total_input_length - self.context_size
-                new_cache = input_with_context[:, :, new_cache_start:]
-            else:
-                # If we have less than context_size samples, keep everything
-                new_cache = input_with_context
-
+            new_cache = input_with_context[:, :, -self.context_size:]
             cache.set(self.layer_id, sample_indices, new_cache)
 
         return output
