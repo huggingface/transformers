@@ -63,6 +63,7 @@ class NanoChatAttention(LlamaAttention):
 
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.is_causal = True
         # Override bias settings for NanoChat
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias
