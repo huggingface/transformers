@@ -219,7 +219,7 @@ class MetaClip2Attention(nn.Module):
         values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
         # METACLIP_2 text model uses both `causal_attention_mask` and `attention_mask`
         # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash" in self.config._attn_implementation:
             self.is_causal = causal_attention_mask is not None
         else:
             if attention_mask is not None and causal_attention_mask is not None:
