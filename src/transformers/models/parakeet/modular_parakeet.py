@@ -706,31 +706,21 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
         hidden_state = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        y = input_token
-        g, states = self.predict(y, state=states) #, add_sos=add_sos)  # (B, U, D)
+        assert input_token not None
 
-        g = g.transpose(1, 2)  # (B, D, U)
-
-        return g, states
+        device = self.embed.weight.device
+        if input_token.device != device:
+            input_token = input_token.to(device)
+        return self.predict(input_token, state=states)
 
     def predict(self, y, state):
         # Get device and dtype of current module
-        _p = next(self.parameters())
-        device = _p.device
-        dtype = _p.dtype
-
-        # If y is not None, it is of shape [B, U] with dtype long.
-        assert y is not None
-        if y.device != device:
-            y = y.to(device)
 
         # (B, U) -> (B, U, H)
-        y = self.embed(y)
-
-        y = y.transpose(0, 1)  # (U + 1, B, H)
+        y = self.embed(y).transpose(0, 1) # (U + 1, B, H)
 
         g, hid = self.dec_rnn(y, state)
-        g = g.transpose(0, 1)  # (B, U + 1, H)
+        g = g.transpose(0, 1).transpose(1, 2)  # (B, H, U + 1)
 
         return g, hid
 
@@ -789,14 +779,10 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
     ) -> BaseModelOutputWithNoAttention:
 
         if hidden_state is not None:
-            hidden_state = tuple(hidden_state.unbind(dim=0)) # tuple(hidden_state[0], hidden_state[1])
-#            hidden_state = [h.contiguous() for h in hidden_state]
+            hidden_state = tuple(hidden_state.unbind(dim=0))
 
         h_out, h_state = self.prediction(input_token, hidden_state, **kwargs)
         return BaseModelOutputWithNoAttention(h_out, torch.stack(h_state, dim=0))
-
-
-
 
 
 

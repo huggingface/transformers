@@ -194,7 +194,7 @@ class ParakeetTDTDecoderModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=16,
         vocab_size=128,
         hidden_size=64,
         num_hidden_layers=2,
@@ -249,6 +249,7 @@ class ParakeetTDTDecoderModelTester:
 
 
 
+
 @require_torch
 class ParakeetTDTDecoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ParakeetTDTDecoder,) if is_torch_available() else ()
@@ -268,10 +269,6 @@ class ParakeetTDTDecoderModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-#    @unittest.skip(reason="ParakeetTDTDecoder does not use inputs_embeds")
-#    def test_model_get_set_embeddings(self):
-#        pass
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -311,6 +308,10 @@ class ParakeetTDTDecoderModelTest(ModelTesterMixin, unittest.TestCase):
                     getattr(config, k).output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    @unittest.skip(reason="this class only returns the last hidden state not prior ones, and there is no gradient on last hidden state w.r.t output.")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
 
 #class ParakeetForCTCModelTester:
