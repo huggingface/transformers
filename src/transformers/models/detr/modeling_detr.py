@@ -22,7 +22,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -405,20 +405,22 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
-        if attention_mask.dtype == torch.bool:
-            attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
-                attention_mask, -torch.inf
-            )
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -438,26 +440,18 @@ class DetrSelfAttention(nn.Module):
         hidden_size: int,
         num_attention_heads: int,
         dropout: float = 0.0,
-        bias: bool = True,
     ):
         super().__init__()
         self.config = config
-        self.hidden_size = hidden_size
-        self.num_attention_heads = num_attention_heads
-        self.attention_dropout = dropout
         self.head_dim = hidden_size // num_attention_heads
-        if self.head_dim * num_attention_heads != self.hidden_size:
-            raise ValueError(
-                f"hidden_size must be divisible by num_attention_heads (got `hidden_size`: {self.hidden_size} and `num_attention_heads`:"
-                f" {num_attention_heads})."
-            )
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
         self.is_causal = False
 
-        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.k_proj = nn.Linear(hidden_size, hidden_size)
+        self.v_proj = nn.Linear(hidden_size, hidden_size)
+        self.q_proj = nn.Linear(hidden_size, hidden_size)
+        self.o_proj = nn.Linear(hidden_size, hidden_size)
 
     def forward(
         self,
@@ -512,26 +506,18 @@ class DetrCrossAttention(nn.Module):
         hidden_size: int,
         num_attention_heads: int,
         dropout: float = 0.0,
-        bias: bool = True,
     ):
         super().__init__()
         self.config = config
-        self.hidden_size = hidden_size
-        self.num_attention_heads = num_attention_heads
-        self.attention_dropout = dropout
         self.head_dim = hidden_size // num_attention_heads
-        if self.head_dim * num_attention_heads != self.hidden_size:
-            raise ValueError(
-                f"hidden_size must be divisible by num_attention_heads (got `hidden_size`: {self.hidden_size} and `num_attention_heads`:"
-                f" {num_attention_heads})."
-            )
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
         self.is_causal = False
 
-        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.k_proj = nn.Linear(hidden_size, hidden_size)
+        self.v_proj = nn.Linear(hidden_size, hidden_size)
+        self.q_proj = nn.Linear(hidden_size, hidden_size)
+        self.o_proj = nn.Linear(hidden_size, hidden_size)
 
     def forward(
         self,
@@ -843,7 +829,11 @@ class DetrEncoder(DetrPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         for i, encoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
@@ -942,18 +932,24 @@ class DetrDecoder(DetrPreTrainedModel):
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
 
         # expand decoder attention mask (for self-attention on object queries)
         if attention_mask is not None:
             # [batch_size, num_queries] -> [batch_size, 1, num_queries, num_queries]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         # expand encoder attention mask (for cross-attention on encoder outputs)
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
 
         # optional intermediate hidden states
