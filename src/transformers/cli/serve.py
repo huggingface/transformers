@@ -25,14 +25,13 @@ import tempfile
 import threading
 import time
 import uuid
-from argparse import ArgumentParser, Namespace
 from collections.abc import Generator, Iterable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
-from typing import Optional, TypedDict, Union
+from typing import Annotated, Optional, TypedDict, Union
 
+import typer
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
 from openai.types.chat.chat_completion import Choice
@@ -60,7 +59,6 @@ from .. import (
     TextIteratorStreamer,
 )
 from ..utils import is_torch_available, logging
-from . import BaseTransformersCLICommand
 
 
 if is_torch_available():
@@ -224,15 +222,6 @@ class Modality(enum.Enum):
     TTS = "TTS"
 
 
-def serve_command_factory(args: Namespace):
-    """
-    Factory function used to instantiate serving server from provided command line arguments.
-
-    Returns: ServeCommand
-    """
-    return ServeCommand(args)
-
-
 def create_generation_config_from_req(
     req: dict,
     model_generation_config: "GenerationConfig",
@@ -359,157 +348,106 @@ class TimedModel:
         return not hasattr(self, "model") or self.model is None
 
 
-@dataclass
-class ServeArguments:
-    r"""
-    Arguments for the serve CLI.
-
-    See the metadata arg for each argument's description -- the metadata will be printed with
-    `transformers serve --help`
-    """
-
-    continuous_batching: bool = field(
-        default=False,
-        metadata={"help": "Whether to use continuous batching for chat completions."},
-    )
-    device: str = field(
-        default="auto",
-        metadata={
-            "help": "Device to use for inference; will default to `auto` and"
-            "place the model on an accelerator if available."
-        },
-    )
-    torch_dtype: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "`torch_dtype` is deprecated! Please use `dtype` argument instead.",
-            "choices": ["auto", "bfloat16", "float16", "float32"],
-        },
-    )
-    dtype: Optional[str] = field(
-        default="auto",
-        metadata={
-            "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
-            "the dtype will be automatically derived from the model's weights.",
-            "choices": ["auto", "bfloat16", "float16", "float32"],
-        },
-    )
-    trust_remote_code: bool = field(
-        default=False, metadata={"help": "Whether to trust remote code when loading a model."}
-    )
-    attn_implementation: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in "
-            "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
-        },
-    )
-    load_in_8bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
-    )
-    load_in_4bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
-    )
-    bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
-    use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
-
-    # Serving settings
-    host: str = field(default="localhost", metadata={"help": "Interface the server will listen to."})
-    port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
-    model_timeout: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "Time in seconds after which a model will be removed from memory; defaults to 300 unless "
-            "`force_model` is set, in which case the model will not be removed from memory unless a value"
-            "is specified here."
-        },
-    )
-
-    # Other settings
-    log_level: str = field(
-        default="info", metadata={"help": "Logging level as a string. Example: 'info' or 'warning'."}
-    )
-    default_seed: Optional[int] = field(
-        default=None, metadata={"help": "The default seed for torch, should be an integer."}
-    )
-    enable_cors: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Whether to enable CORS. Some apps that make requests from external domains (e.g. Cursor) require "
-                "CORS to be enabled."
+class Serve:
+    # Defining a class to help with internal state but in practice it's just a method to call
+    # TODO: refactor into a proper module with helpers + 1 main method
+    def __init__(
+        self,
+        continuous_batching: Annotated[
+            bool, typer.Option(help="Whether to use continuous batching for chat completions.")
+        ] = False,
+        device: Annotated[
+            str,
+            typer.Option(
+                help="Device to use for inference; will default to `auto` and place the model on an accelerator if available."
             ),
-        },
-    )
-
-    # TODO
-    # Testing
-    # As of 2025-07-11, testing on https://github.com/openai/openai-responses-starter-app/, validation on the
-    # Response input is failing. The app works well without validation. Enable at some point in the future.
-    input_validation: bool = field(
-        default=False,
-        metadata={
-            "help": ("Whether to turn on strict input validation."),
-        },
-    )
-    force_model: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Name of the model to be forced on all requests. This is useful for testing Apps that don't allow "
-                "changing models in the request."
+        ] = "auto",
+        dtype: Annotated[
+            Optional[str],
+            typer.Option(
+                help="Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, the dtype will be automatically derived from the model's weights."
             ),
-        },
-    )
-
-    def __post_init__(self):
-        """Only used for BC `torch_dtype` argument."""
-        # In this case only the BC torch_dtype was given
-        if self.torch_dtype is not None:
-            if self.dtype is None:
-                self.dtype = self.torch_dtype
-            elif self.torch_dtype != self.dtype:
-                raise ValueError(
-                    f"`torch_dtype` {self.torch_dtype} and `dtype` {self.dtype} have different values. `torch_dtype` is deprecated and "
-                    "will be removed in 4.59.0, please set `dtype` instead."
-                )
-
-
-class ServeCommand(BaseTransformersCLICommand):
-    @staticmethod
-    def register_subcommand(parser: ArgumentParser):
-        """
-        Register this command to argparse so it's available for the transformer-cli
-
-        Args:
-            parser: Root parser to register command-specific arguments
-        """
-        dataclass_types = (ServeArguments,)
-        serve_parser = parser.add_parser("serve", dataclass_types=dataclass_types)
-        serve_parser.set_defaults(func=serve_command_factory)
-
-    def __init__(self, args: ServeArguments):
+        ] = "auto",
+        trust_remote_code: Annotated[
+            bool, typer.Option(help="Whether to trust remote code when loading a model.")
+        ] = False,
+        attn_implementation: Annotated[
+            Optional[str],
+            typer.Option(
+                help="Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
+            ),
+        ] = None,
+        load_in_8bit: Annotated[
+            bool, typer.Option(help="Whether to use 8 bit precision for the base model - works only with LoRA.")
+        ] = False,
+        load_in_4bit: Annotated[
+            bool, typer.Option(help="Whether to use 4 bit precision for the base model - works only with LoRA.")
+        ] = False,
+        bnb_4bit_quant_type: Annotated[str, typer.Option(help="Quantization type.")] = "nf4",
+        use_bnb_nested_quant: Annotated[bool, typer.Option(help="Whether to use nested quantization.")] = False,
+        host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
+        port: Annotated[int, typer.Option(help="Port the server will listen to.")] = 8000,
+        model_timeout: Annotated[
+            int, typer.Option(help="Time in seconds after which a model will be removed from memory.")
+        ] = 300,
+        log_level: Annotated[
+            str, typer.Option(help="Logging level as a string. Example: 'info' or 'warning'.")
+        ] = "info",
+        default_seed: Annotated[
+            Optional[int], typer.Option(help="The default seed for torch, should be an integer.")
+        ] = None,
+        enable_cors: Annotated[
+            bool,
+            typer.Option(
+                help="Whether to enable CORS. Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled."
+            ),
+        ] = False,
+        input_validation: Annotated[bool, typer.Option(help="Whether to turn on strict input validation.")] = False,
+        force_model: Annotated[
+            Optional[str],
+            typer.Option(
+                help="Name of the model to be forced on all requests. This is useful for testing Apps that don't allow changing models in the request."
+            ),
+        ] = None,
+        non_blocking: Annotated[
+            bool, typer.Option(hidden=True, help="Whether to run the server in a separate thread.")
+        ] = False,
+    ) -> None:
         if not serve_dependencies_available:
             raise ImportError(
                 "Missing dependencies for the serving CLI. Please install with `pip install transformers[serving]`"
             )
 
-        # Store and process input arguments
-        self.args = args
-        self.use_continuous_batching = self.args.continuous_batching
-        self.enable_cors = self.args.enable_cors
+        # Save input arguments
+        self.continuous_batching = continuous_batching
+        self.device = device
+        self.dtype = dtype
+        self.trust_remote_code = trust_remote_code
+        self.attn_implementation = attn_implementation
+        self.load_in_8bit = load_in_8bit
+        self.load_in_4bit = load_in_4bit
+        self.bnb_4bit_quant_type = bnb_4bit_quant_type
+        self.use_bnb_nested_quant = use_bnb_nested_quant
+        self.host = host
+        self.port = port
+        self.model_timeout = model_timeout
+        self.log_level = log_level
+        self.default_seed = default_seed
+        self.enable_cors = enable_cors
+        self.input_validation = input_validation
+        self.force_model = force_model
+        self.non_blocking = non_blocking
 
-        if self.args.default_seed is not None:
-            torch.manual_seed(self.args.default_seed)
+        # Seed
+        if default_seed is not None:
+            torch.manual_seed(default_seed)
 
         # Set up logging
         transformers_logger = logging.get_logger("transformers")
-        transformers_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
+        transformers_logger.setLevel(logging.log_levels[log_level.lower()])
 
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
-        cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
+        cb_logger.setLevel(logging.log_levels[log_level.lower()])
 
         # Internal state:
         # 1. Tracks models in memory, to prevent reloading the model unnecessarily
@@ -517,18 +455,129 @@ class ServeCommand(BaseTransformersCLICommand):
         self.running_continuous_batching_manager: Optional[ContinuousBatchingManager] = None
 
         # 2. preserves information about the last call and last KV cache, to determine whether we can reuse the KV
-        # cache and avoid re-running prefil
+        # cache and avoid re-running prefill
         self.last_messages = None
         self.last_kv_cache = None
         self.last_model = None
 
-        if self.args.model_timeout is None:
-            self.args.model_timeout = -1 if self.args.force_model else 300
+        if self.model_timeout is None:
+            self.model_timeout = -1 if self.force_model else 300
 
-        if self.args.force_model:
-            model_id_and_revision = self.process_model_name(self.args.force_model)
+        if self.force_model:
+            model_id_and_revision = self.process_model_name(self.force_model)
             self.last_model = model_id_and_revision
             self.load_model_and_processor(model_id_and_revision)
+
+        @asynccontextmanager
+        async def lifespan(app: "FastAPI"):
+            yield
+            for model in self.loaded_models.values():
+                model.delete_model()
+            if self.running_continuous_batching_manager is not None:
+                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+
+        app = FastAPI(lifespan=lifespan)
+
+        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
+        # security purposes, it's disabled by default
+        if self.enable_cors:
+            app.add_middleware(
+                CORSMiddleware,
+                allow_origins=["*"],
+                allow_credentials=True,
+                allow_methods=["*"],
+                allow_headers=["*"],
+            )
+            logger.warning_once(
+                "CORS allow origin is set to `*`. This is not recommended for production environments."
+            )
+
+        from fastapi import Request
+
+        @app.post("/v1/chat/completions")
+        def chat_completion(request: Request, body: dict):
+            self.validate_chat_completion_request(request=body)
+
+            if self.continuous_batching:
+                return self.continuous_batching_chat_completion(body, request.state.request_id)
+            else:
+                return self.generate_chat_completion(body)
+
+        @app.post("/v1/responses")
+        def responses(request: dict):
+            self.validate_response_request(request=request)
+            # Support non-streaming mode when `stream=false` is provided
+            stream = request.get("stream", True)
+            if not stream:
+                response_obj = self.generate_response_non_streaming(request)
+                return JSONResponse(response_obj)
+
+            output = self.generate_response(request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.post("/v1/audio/transcriptions")
+        async def audio_transcriptions(request: Request):
+            # Parses the multipart/form-data request into the request format used by other endpoints
+            async with request.form() as form:
+                parsed_request = TransformersTranscriptionCreateParams(
+                    file=await form["file"].read(),
+                    model=form["model"],
+                    # TODO: add other fields
+                )
+                logger.debug(
+                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
+                    f"size: {form['file'].size / 1024:.2f} KiB"
+                )
+            self.validate_transcription_request(request=parsed_request)
+
+            output = self.generate_transcription(parsed_request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.options("/v1/models")
+        @app.get("/v1/models")
+        def get_all_models():
+            return JSONResponse({"object": "list", "data": self.get_gen_models()})
+
+        @app.get("/health")
+        def healthcheck():
+            return JSONResponse({"status": "ok"})
+
+        @app.middleware("http")
+        async def get_or_set_request_id(request: Request, call_next):
+            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
+            request.state.request_id = request_id
+            response = await call_next(request)
+            response.headers[X_REQUEST_ID] = request_id
+            return response
+
+        config = uvicorn.Config(app, host=self.host, port=self.port, log_level=self.log_level)
+        self.server = uvicorn.Server(config)
+
+        if self.non_blocking:
+            self.start_server()
+        else:
+            self.server.run()
+
+    def start_server(self):
+        def _run():
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+            # serve() is a coroutine; it exits when server.should_exit becomes True
+            self._loop.run_until_complete(self.server.serve())
+
+        self._thread = threading.Thread(target=_run, name="uvicorn-thread", daemon=False)
+        self._thread.start()
+
+    def kill_server(self):
+        if not self._thread:
+            raise ValueError("The server cannot be killed as it was not launched in a separate thread.")
+
+        if not self._thread.is_alive():
+            raise ValueError("The server is already killed.")
+
+        self.server.should_exit = True
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2)
 
     def _validate_request(
         self,
@@ -563,7 +612,7 @@ class ServeCommand(BaseTransformersCLICommand):
             logger.error(f"Unexpected keys in the request: {unexpected_keys}")
             raise HTTPException(status_code=422, detail=f"Unexpected keys in the request: {unexpected_keys}")
 
-        if self.args.input_validation:
+        if self.input_validation:
             # Validate expected keys
             try:
                 validator.validate_python(request)
@@ -677,106 +726,6 @@ class ServeCommand(BaseTransformersCLICommand):
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
-
-    def run(self):
-        """
-        Setup and run the FastAPI server for transformers serve.
-
-        Models will be loaded and unloaded automatically based on usage and a timeout.
-
-        The server will expose the following endpoints:
-        - POST /v1/chat/completions: Generates chat completions.
-        - POST /v1/responses: Generates responses.
-        - POST /v1/audio/transcriptions: Generates transcriptions from audio.
-        - GET /v1/models: Lists available models for 3rd party tools.
-        - GET /health: Health check.
-
-        Requires FastAPI and Uvicorn to be installed.
-        """
-
-        @asynccontextmanager
-        async def lifespan(app: FastAPI):
-            yield
-            for model in self.loaded_models.values():
-                model.delete_model()
-            if self.running_continuous_batching_manager is not None:
-                self.running_continuous_batching_manager.stop(block=True, timeout=5)
-
-        app = FastAPI(lifespan=lifespan)
-
-        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
-        # security purposes, it's disabled by default
-        if self.enable_cors:
-            app.add_middleware(
-                CORSMiddleware,
-                allow_origins=["*"],
-                allow_credentials=True,
-                allow_methods=["*"],
-                allow_headers=["*"],
-            )
-            logger.warning_once(
-                "CORS allow origin is set to `*`. This is not recommended for production environments."
-            )
-
-        from fastapi import Request
-
-        @app.post("/v1/chat/completions")
-        def chat_completion(request: Request, body: dict):
-            self.validate_chat_completion_request(request=body)
-
-            if self.use_continuous_batching:
-                return self.continuous_batching_chat_completion(body, request.state.request_id)
-            else:
-                return self.generate_chat_completion(body)
-
-        @app.post("/v1/responses")
-        def responses(request: dict):
-            self.validate_response_request(request=request)
-            # Support non-streaming mode when `stream=false` is provided
-            stream = request.get("stream", True)
-            if not stream:
-                response_obj = self.generate_response_non_streaming(request)
-                return JSONResponse(response_obj)
-
-            output = self.generate_response(request)
-            return StreamingResponse(output, media_type="text/event-stream")
-
-        @app.post("/v1/audio/transcriptions")
-        async def audio_transcriptions(request: Request):
-            # Parses the multipart/form-data request into the request format used by other endpoints
-            async with request.form() as form:
-                parsed_request = TransformersTranscriptionCreateParams(
-                    file=await form["file"].read(),
-                    model=form["model"],
-                    # TODO: add other fields
-                )
-                logger.debug(
-                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
-                    f"size: {form['file'].size / 1024:.2f} KiB"
-                )
-            self.validate_transcription_request(request=parsed_request)
-
-            output = self.generate_transcription(parsed_request)
-            return StreamingResponse(output, media_type="text/event-stream")
-
-        @app.options("/v1/models")
-        @app.get("/v1/models")
-        def get_all_models():
-            return JSONResponse({"object": "list", "data": self.get_gen_models()})
-
-        @app.get("/health")
-        def healthcheck():
-            return JSONResponse({"status": "ok"})
-
-        @app.middleware("http")
-        async def get_or_set_request_id(request: Request, call_next):
-            request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
-            request.state.request_id = request_id
-            response = await call_next(request)
-            response.headers[X_REQUEST_ID] = request_id
-            return response
-
-        uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
     @functools.cache
     def get_gen_models(self) -> list[dict[str, any]]:
@@ -1025,8 +974,10 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `Generator[str, None, None]`: A generator that yields the OpenAI Chat Completion chunks.
         """
-        if self.args.force_model is not None:
-            req["model"] = self.args.force_model
+
+        # TODO: This should throw an error in case the specified model in the request is different to the forced model.
+        if self.force_model is not None:
+            req["model"] = self.force_model
 
         messages: Iterable[ChatCompletionMessageParam] = req["messages"]
 
@@ -1730,27 +1681,23 @@ class ServeCommand(BaseTransformersCLICommand):
         self.last_messages = messages
         return req_continues_last_messages
 
-    @staticmethod
-    def get_quantization_config(args: ServeArguments) -> Optional["BitsAndBytesConfig"]:
+    def get_quantization_config(self) -> Optional["BitsAndBytesConfig"]:
         """
         Returns the quantization config for the given CLI arguments.
-
-        Args:
-            args (`ServeArguments`): The serve arguments. May contain quantization settings, device, etc.
 
         Returns:
             `Optional[BitsAndBytesConfig]`: The quantization config.
         """
-        if args.load_in_4bit:
+        if self.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 # For consistency with model weights, we use the same value as `dtype`
-                bnb_4bit_compute_dtype=args.dtype,
-                bnb_4bit_quant_type=args.bnb_4bit_quant_type,
-                bnb_4bit_use_double_quant=args.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=args.dtype,
+                bnb_4bit_compute_dtype=self.dtype,
+                bnb_4bit_quant_type=self.bnb_4bit_quant_type,
+                bnb_4bit_use_double_quant=self.use_bnb_nested_quant,
+                bnb_4bit_quant_storage=self.dtype,
             )
-        elif args.load_in_8bit:
+        elif self.load_in_8bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_8bit=True,
             )
@@ -1770,8 +1717,8 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `str`: The canonicalized model name to be used
         """
-        if self.args.force_model is not None:
-            model_id = self.args.force_model
+        if self.force_model is not None:
+            model_id = self.force_model
         if "@" in model_id:
             return model_id
         return f"{model_id}@main"
@@ -1791,7 +1738,6 @@ class ServeCommand(BaseTransformersCLICommand):
             `tuple[PreTrainedModel, Union[ProcessorMixin, PreTrainedTokenizerFast]]`: The loaded model and
             data processor (tokenizer, audio processor, etc.).
         """
-        args = self.args
         logger.info(f"Loading {model_id_and_revision}")
 
         if "@" in model_id_and_revision:
@@ -1802,18 +1748,18 @@ class ServeCommand(BaseTransformersCLICommand):
         data_processor = AutoProcessor.from_pretrained(
             model_id,
             revision=revision,
-            trust_remote_code=args.trust_remote_code,
+            trust_remote_code=self.trust_remote_code,
         )
 
-        dtype = args.dtype if args.dtype in ["auto", None] else getattr(torch, args.dtype)
-        quantization_config = self.get_quantization_config(args)
+        dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
+        quantization_config = self.get_quantization_config()
 
         model_kwargs = {
             "revision": revision,
-            "attn_implementation": args.attn_implementation,
+            "attn_implementation": self.attn_implementation,
             "dtype": dtype,
             "device_map": "auto",
-            "trust_remote_code": args.trust_remote_code,
+            "trust_remote_code": self.trust_remote_code,
         }
         if quantization_config is not None:
             model_kwargs["quantization_config"] = quantization_config
@@ -1823,7 +1769,7 @@ class ServeCommand(BaseTransformersCLICommand):
         model = architecture.from_pretrained(model_id, **model_kwargs)
 
         if getattr(model, "hf_device_map", None) is None:
-            model = model.to(args.device)
+            model = model.to(self.device)
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
@@ -1854,7 +1800,7 @@ class ServeCommand(BaseTransformersCLICommand):
             model, processor = self._load_model_and_data_processor(model_id_and_revision)
             self.loaded_models[model_id_and_revision] = TimedModel(
                 model,
-                timeout_seconds=self.args.model_timeout,
+                timeout_seconds=self.model_timeout,
                 processor=processor,
             )
         else:
@@ -1879,7 +1825,7 @@ class ServeCommand(BaseTransformersCLICommand):
             audio_model, audio_processor = self._load_model_and_data_processor(model_id_and_revision)
             self.loaded_models[model_id_and_revision] = TimedModel(
                 audio_model,
-                timeout_seconds=self.args.model_timeout,
+                timeout_seconds=self.model_timeout,
                 processor=audio_processor,
             )
         else:
@@ -1890,6 +1836,21 @@ class ServeCommand(BaseTransformersCLICommand):
         return audio_model, audio_processor
 
 
+# set docstring separately to make it look nice (Typer doesn't play well with the class command)
+Serve.__doc__ = """
+Run a FastAPI server to serve models on-demand with an OpenAI compatible API.
+
+Models will be loaded and unloaded automatically based on usage and a timeout.
+
+\b
+The server will expose the following endpoints:
+    - POST /v1/chat/completions: Generates chat completions.
+    - POST /v1/responses: Generates responses.
+    - POST /v1/audio/transcriptions: Generates transcriptions from audio.
+    - GET /v1/models: Lists available models for 3rd party tools.
+
+Requires FastAPI and Uvicorn to be installed.
+"""
+
 if __name__ == "__main__":
-    serve = ServeCommand()
-    serve.run()
+    serve = Serve()

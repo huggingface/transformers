@@ -11,22 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import asyncio
 import os
 import time
 import unittest
 from threading import Thread
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-import aiohttp.client_exceptions
 import httpx
-from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
+from huggingface_hub import ChatCompletionStreamOutput, InferenceClient
 from parameterized import parameterized
 
-import transformers.commands.transformers_cli as cli
 from transformers import GenerationConfig
-from transformers.commands.serving import Modality, ServeArguments, ServeCommand
-from transformers.testing_utils import CaptureStd, require_openai, slow
+from transformers.cli.serve import Modality, Serve
+from transformers.testing_utils import require_openai, slow
 from transformers.utils.import_utils import is_openai_available
 
 
@@ -48,132 +45,170 @@ if is_openai_available():
 
 
 @require_openai
-class ServeCLITest(unittest.TestCase):
-    def test_help(self):
-        """Minimal test: we can invoke the help command."""
-        with patch("sys.argv", ["transformers", "serve", "--help"]), CaptureStd() as cs:
-            with self.assertRaises(SystemExit):
-                cli.main()
-        self.assertIn("serve", cs.out.lower())
-
-    def test_parsed_args(self):
-        """Minimal test: we can set arguments through the CLI."""
-        with (
-            patch.object(ServeCommand, "__init__", return_value=None) as init_mock,
-            patch.object(ServeCommand, "run") as run_mock,
-            patch("sys.argv", ["transformers", "serve", "--host", "0.0.0.0", "--port", "9000"]),
-        ):
-            cli.main()
-        init_mock.assert_called_once()
-        run_mock.assert_called_once()
-        parsed_args = init_mock.call_args[0][0]
-        self.assertEqual(parsed_args.host, "0.0.0.0")
-        self.assertEqual(parsed_args.port, 9000)
-
-    def test_build_chat_completion_chunk(self):
-        """
-        Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implicitly
-        confirm that empty fields are not emitted.
-        """
-        dummy = ServeCommand.__new__(ServeCommand)
-        dummy.args = type("Args", (), {})()
-
-        # The keys for these fields must be present in every chunk
-        MANDATORY_FIELDS = ["data", "id", "choices", "created", "model", "object", "system_fingerprint"]
-
-        # Case 1: most fields are provided
-        chunk = ServeCommand.build_chat_completion_chunk(
-            dummy, request_id="req0", content="hello", finish_reason="stop", role="user", model="dummy_model@main"
-        )
-        chunk = ServeCommand.chunk_to_sse_element(chunk)
-        for field in MANDATORY_FIELDS:
-            self.assertIn(field, chunk)
-        self.assertIn(
-            '"choices":[{"delta":{"content":"hello","role":"user"},"finish_reason":"stop","index":0}]', chunk
-        )
-
-        # Case 2: only the role is provided -- other fields in 'choices' are omitted
-        chunk = dummy.build_chat_completion_chunk(request_id="req0", role="user", model="dummy_model@main")
-        chunk = ServeCommand.chunk_to_sse_element(chunk)
-        for field in MANDATORY_FIELDS:
-            self.assertIn(field, chunk)
-        self.assertIn('"choices":[{"delta":{"role":"user"},"index":0}]', chunk)
-
-        # Case 3: only the content is provided -- other fields in 'choices' are omitted
-        chunk = dummy.build_chat_completion_chunk(request_id="req0", content="hello", model="dummy_model@main")
-        chunk = ServeCommand.chunk_to_sse_element(chunk)
-        for field in MANDATORY_FIELDS:
-            self.assertIn(field, chunk)
-        self.assertIn('"choices":[{"delta":{"content":"hello"},"index":0}]', chunk)
-
-        # Case 4: tool calls support a list of ChoiceDeltaToolCall objects
-        tool_call = ChoiceDeltaToolCall(
-            index=0,
-            function=ChoiceDeltaToolCallFunction(name="foo_bar", arguments='{"foo1": "bar1", "foo2": "bar2"}'),
-            type="function",
-        )
-        chunk = dummy.build_chat_completion_chunk(request_id="req0", tool_calls=[tool_call], model="dummy_model@main")
-        chunk = ServeCommand.chunk_to_sse_element(chunk)
-        for field in MANDATORY_FIELDS:
-            self.assertIn(field, chunk)
-        expected_choices_content = (
-            'choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"foo1\\": \\"bar1\\", '
-            '\\"foo2\\": \\"bar2\\"}","name":"foo_bar"},"type":"function"}]},"index":0}]'
-        )
-        self.assertIn(expected_choices_content, chunk)
-
-    def test_build_response_event(self):
-        """
-        Tests that the events are correctly built for the Response API.
-
-        Contrarily to the Chat Completion API, the Response API has a wide set of possible output objects. This test
-        only checks a few basic assumptions -- we rely on OpenAI's pydantic models to enforce the correct schema.
-        """
-        dummy = ServeCommand.__new__(ServeCommand)
-        dummy.args = type("Args", (), {})()
-
-        response_created = ResponseCreatedEvent(
-            type="response.created",
-            sequence_number=0,
-            response=Response(
-                id="resp_0",
-                created_at=time.time(),
-                status="queued",
-                model="dummy_model@main",
-                instructions=None,  # <--- is set to None = should NOT be in the output.
-                text={"format": {"type": "text"}},
-                object="response",
-                tools=[],  # <--- empty lists should be in the output (they are often mandatory fields)
-                output=[],
-                parallel_tool_calls=False,
-                tool_choice="auto",
-                metadata=None,
-            ),
-        )
-
-        event = dummy.chunk_to_sse_element(response_created)
-        self.assertTrue(event.startswith("data: "))  # Sanity check: event formatting
-        self.assertIn('"model":"dummy_model@main"', event)  # Sanity check: set field
-        self.assertIn('"status":"queued"', event)
-        self.assertIn("tools", event)  # empty lists should be in the output
-        self.assertIn("output", event)
-        self.assertNotIn("instructions", event)  # None fields should NOT be in the output
-        self.assertNotIn("metadata", event)
-        self.assertNotIn("error", event)  # Unset optional fields should NOT be in the output
-        self.assertNotIn("top_p", event)
+def test_help(cli):
+    """Minimal test: we can invoke the help command."""
+    output = cli("serve", "--help")
+    assert output.exit_code == 0
+    assert "serve" in output.output
 
 
-def async_retry(fn, max_attempts=5, delay=2):
+@require_openai
+def test_host_port_blocking(cli):
+    """Minimal test: we can set arguments through the CLI - blocking"""
+    with (
+        patch("uvicorn.Config") as ConfigMock,
+        patch("uvicorn.Server") as ServerMock,
+    ):
+        server_instance = Mock()
+        ServerMock.return_value = server_instance
+
+        # Call the serve CLI with host/port
+        out = cli("serve", "--host", "0.0.0.0", "--port", "9000")
+        _, kwargs = ConfigMock.call_args
+
+        assert out.exit_code == 0
+        assert kwargs["host"] == "0.0.0.0"
+        assert kwargs["port"] == 9000
+
+        ServerMock.assert_called_once_with(ConfigMock.return_value)
+        server_instance.run.assert_called_once()
+
+
+@require_openai
+def test_host_port_non_blocking(cli, caplog):
+    """Minimal test: we can set arguments through the CLI - non-blocking"""
+    caplog.set_level(100000)
+    # ^ hack to avoid an issue happening only in CI. We don't check logs anyway so it's fine.
+    #   Source: https://github.com/pallets/click/issues/824#issuecomment-562581313
+
+    with (
+        patch("uvicorn.Config") as ConfigMock,
+        patch("uvicorn.Server") as ServerMock,
+        patch.object(Serve, "start_server") as start_mock,
+    ):
+        server_instance = Mock()
+        ServerMock.return_value = server_instance
+
+        out = cli("serve", "--host", "0.5.0.0", "--port", "9002", "--non-blocking")
+        assert out.exit_code == 0
+
+        # Config got the CLI args
+        _, kwargs = ConfigMock.call_args
+        assert kwargs["host"] == "0.5.0.0"
+        assert kwargs["port"] == 9002
+
+        # Non-blocking path uses start_server(), not server.run()
+        start_mock.assert_called_once()
+        server_instance.run.assert_not_called()
+
+
+@require_openai
+def test_build_chat_completion_chunk():
+    """
+    Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implicitly
+    confirm that empty fields are not emitted.
+    """
+    dummy = Serve.__new__(Serve)
+
+    # The keys for these fields must be present in every chunk
+    MANDATORY_FIELDS = ["data", "id", "choices", "created", "model", "object", "system_fingerprint"]
+
+    # Case 1: most fields are provided
+    chunk = dummy.build_chat_completion_chunk(
+        request_id="req0", content="hello", finish_reason="stop", role="user", model="dummy_model@main"
+    )
+    chunk = dummy.chunk_to_sse_element(chunk)
+    for field in MANDATORY_FIELDS:
+        assert field in chunk
+    assert '"choices":[{"delta":{"content":"hello","role":"user"},"finish_reason":"stop","index":0}]' in chunk
+
+    # Case 2: only the role is provided -- other fields in 'choices' are omitted
+    chunk = dummy.build_chat_completion_chunk(request_id="req0", role="user", model="dummy_model@main")
+    chunk = dummy.chunk_to_sse_element(chunk)
+    for field in MANDATORY_FIELDS:
+        assert field in chunk
+    assert '"choices":[{"delta":{"role":"user"},"index":0}]' in chunk
+
+    # Case 3: only the content is provided -- other fields in 'choices' are omitted
+    chunk = dummy.build_chat_completion_chunk(request_id="req0", content="hello", model="dummy_model@main")
+    chunk = dummy.chunk_to_sse_element(chunk)
+    for field in MANDATORY_FIELDS:
+        assert field in chunk
+    assert '"choices":[{"delta":{"content":"hello"},"index":0}]' in chunk
+
+    # Case 4: tool calls support a list of ChoiceDeltaToolCall objects
+    tool_call = ChoiceDeltaToolCall(
+        index=0,
+        function=ChoiceDeltaToolCallFunction(name="foo_bar", arguments='{"foo1": "bar1", "foo2": "bar2"}'),
+        type="function",
+    )
+    chunk = dummy.build_chat_completion_chunk(request_id="req0", tool_calls=[tool_call], model="dummy_model@main")
+    chunk = dummy.chunk_to_sse_element(chunk)
+    for field in MANDATORY_FIELDS:
+        assert field in chunk
+    expected_choices_content = (
+        'choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"foo1\\": \\"bar1\\", '
+        '\\"foo2\\": \\"bar2\\"}","name":"foo_bar"},"type":"function"}]},"index":0}]'
+    )
+    assert expected_choices_content in chunk
+
+
+@require_openai
+def test_build_response_event():
+    """
+    Tests that the events are correctly built for the Response API.
+
+    Contrarily to the Chat Completion API, the Response API has a wide set of possible output objects. This test
+    only checks a few basic assumptions -- we rely on OpenAI's pydantic models to enforce the correct schema.
+    """
+    dummy = Serve.__new__(Serve)
+
+    response_created = ResponseCreatedEvent(
+        type="response.created",
+        sequence_number=0,
+        response=Response(
+            id="resp_0",
+            created_at=time.time(),
+            status="queued",
+            model="dummy_model@main",
+            instructions=None,  # <--- is set to None = should NOT be in the output.
+            text={"format": {"type": "text"}},
+            object="response",
+            tools=[],  # <--- empty lists should be in the output (they are often mandatory fields)
+            output=[],
+            parallel_tool_calls=False,
+            tool_choice="auto",
+            metadata=None,
+        ),
+    )
+
+    event = dummy.chunk_to_sse_element(response_created)
+    assert event.startswith("data: ")  # Sanity check: event formatting
+    assert '"model":"dummy_model@main"' in event  # Sanity check: set field
+    assert '"status":"queued"' in event
+    assert "tools" in event  # empty lists should be in the output
+    assert "output" in event
+    assert "instructions" not in event  # None fields should NOT be in the output
+    assert "metadata" not in event
+    assert "error" not in event  # Unset optional fields should NOT be in the output
+    assert "top_p" not in event
+
+
+def retry(fn, max_attempts=5, delay=2):
     """
     Retry a function up to `max_attempts` times with a `delay` between attempts.
-    Useful for testing async functions that may fail due to server not being ready.
+    Useful for testing functions that may fail due to server not being ready.
     """
 
-    async def wrapper(*args, **kwargs):
-        for _ in range(max_attempts):
+    def wrapper(*args, **kwargs):
+        nb_attempts = 0
+        while True:
+            nb_attempts += 1
             try:
-                return await fn(*args, **kwargs)
-            except (aiohttp.client_exceptions.ClientConnectorError, APIConnectionError):
+                return fn(*args, **kwargs)
+            except (httpx.HTTPError, APIConnectionError):
+                if nb_attempts >= max_attempts:
+                    raise
                 time.sleep(delay)
 
     return wrapper
@@ -185,17 +220,10 @@ class ServeCompletionsMixin:
     (`generate` and `continuous_batching`).
     """
 
-    @async_retry
-    async def run_server(self, request):
-        client = AsyncInferenceClient(f"http://localhost:{self.port}")
-        stream = client.chat_completion(**request)
-
-        all_payloads = []
-        async for payload in await stream:
-            all_payloads.append(payload)
-
-        await client.close()
-        return all_payloads
+    @retry
+    def run_server(self, request):
+        with InferenceClient(f"http://localhost:{self.port}") as client:
+            return list(client.chat_completion(**request))
 
     @parameterized.expand(
         [
@@ -229,10 +257,10 @@ class ServeCompletionsMixin:
             "max_tokens": 5,  # Small generation by default
         }
         request.update(request_flags)
-        all_payloads = asyncio.run(self.run_server(request))
+        all_payloads = self.run_server(request)
 
         # If a request is successful, the returned payload needs to follow the schema, which we test here.
-        # NOTE: the output of our server is wrapped by `AsyncInferenceClient`, which sends fields even when they
+        # NOTE: the output of our server is wrapped by `InferenceClient`, which sends fields even when they
         # are empty.
 
         # Finish reason: the last payload should have a finish reason of "stop", all others should be empty
@@ -265,7 +293,7 @@ class ServeCompletionsMixin:
                 "generation_config": generation_config.to_json_string(),
             },
         }
-        all_payloads = asyncio.run(self.run_server(request))
+        all_payloads = self.run_server(request)
         contents = [payload.choices[0].delta.content for payload in all_payloads]
         output_text = "".join([text for text in contents if text is not None])
         # The generation config sets greedy decoding, so the output is reproducible. By default, `Qwen/Qwen3-0.6B`
@@ -284,7 +312,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
             {"role": "user", "content": "Can you help me write tests?"},
         ]
-        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages, modality)
         self.assertListEqual(expected_outputs, outputs)
 
         messages_with_type = [
@@ -297,7 +325,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             },
             {"role": "user", "content": [{"type": "text", "text": "Can you help me write tests?"}]},
         ]
-        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages_with_type, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages_with_type, modality)
         self.assertListEqual(expected_outputs, outputs)
 
         messages_multiple_text = [
@@ -315,7 +343,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
                 "content": "How are you doing? I'm doing great, thank you for asking! How can I assist you today?",
             },
         ]
-        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages_multiple_text, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages_multiple_text, modality)
         self.assertListEqual(expected_outputs_multiple_text, outputs)
 
     def test_processor_inputs_from_inbound_messages_vlm_text_only(self):
@@ -337,7 +365,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "Can you help me write tests?"}]},
         ]
 
-        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages, modality)
         self.assertListEqual(expected_outputs, outputs)
 
     def test_processor_inputs_from_inbound_messages_vlm_text_and_image_in_base_64(self):
@@ -382,7 +410,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "Alright"}]},
         ]
 
-        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages, modality)
+        outputs = Serve.get_processor_inputs_from_inbound_messages(messages, modality)
 
         for expected_output, output in zip(expected_outputs, outputs):
             expected_output_content = expected_output["content"]
@@ -414,19 +442,11 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8001
-        args = ServeArguments(port=cls.port)
-        cls.serve_command = ServeCommand(args)
-        cls.thread = Thread(target=cls.serve_command.run)
-        cls.thread.daemon = True
-        cls.thread.start()
+        cls.server = Serve(port=cls.port, non_blocking=True)
 
     @classmethod
     def tearDownClass(cls):
-        cls.thread.join(timeout=1)
-
-    def setUp(self):
-        """Ensures that the healthcheck works before each test."""
-        _call_healthcheck(f"http://localhost:{self.port}")
+        cls.server.kill_server()
 
     @slow
     def test_tool_call(self):
@@ -477,7 +497,7 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
                 }
             ],
         }
-        all_payloads = asyncio.run(self.run_server(request))
+        all_payloads = self.run_server(request)
 
         # The first payload should contain the role
         roles = [payload.choices[0].delta.role for payload in all_payloads]
@@ -560,19 +580,13 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8002
-        args = ServeArguments(port=cls.port, continuous_batching=True, default_seed=42)
-        cls.serve_command = ServeCommand(args)
-        cls.thread = Thread(target=cls.serve_command.run)
-        cls.thread.daemon = True
-        cls.thread.start()
+        cls.server = Serve(
+            port=cls.port, continuous_batching=True, attn_implementation="sdpa", default_seed=42, non_blocking=True
+        )
 
     @classmethod
     def tearDownClass(cls):
-        cls.thread.join(timeout=1)
-
-    def setUp(self):
-        """Ensures that the healthcheck works before each test."""
-        _call_healthcheck(f"http://localhost:{self.port}")
+        cls.server.kill_server()
 
     def test_full_request(self):
         """Tests that an inference using the Responses API and Continuous Batching works"""
@@ -586,7 +600,7 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
             "stream": True,
             "max_tokens": 30,
         }
-        all_payloads = asyncio.run(self.run_server(request))
+        all_payloads = self.run_server(request)
 
         full_text = ""
         for token in all_payloads:
@@ -610,7 +624,7 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
             ],
             "stream": True,
         }
-        all_payloads = asyncio.run(self.run_server(request))
+        all_payloads = self.run_server(request)
 
         full_text = ""
         for token in all_payloads:
@@ -638,7 +652,7 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
 
         _open_stream_and_cancel(base_url, request_id)
 
-        scheduler = _get_scheduler(self.serve_command)
+        scheduler = _get_scheduler(self.server)
 
         # Because cancellation is non-blocking, poll for a short, bounded time.
         deadline = time.time() + 8.0  # generous but still CI-friendly
@@ -665,8 +679,8 @@ class ServeResponsesMixin:
     (`generate` and `continuous_batching`).
     """
 
-    @async_retry
-    async def run_server(self, request):
+    @retry
+    def run_server(self, request):
         client = OpenAI(base_url=f"http://localhost:{self.port}/v1", api_key="<KEY>")
         stream = client.responses.create(**request)
 
@@ -686,7 +700,7 @@ class ServeResponsesMixin:
             "stream": True,
             "max_output_tokens": 1,
         }
-        all_payloads = asyncio.run(self.run_server(request))
+        all_payloads = self.run_server(request)
 
         # Allow variable number of delta events depending on tokenizer/streamer behavior
         self.assertGreaterEqual(len(all_payloads), 8)
@@ -719,19 +733,11 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8003
-        args = ServeArguments(port=cls.port, default_seed=42)
-        serve_command = ServeCommand(args)
-        cls.thread = Thread(target=serve_command.run)
-        cls.thread.daemon = True
-        cls.thread.start()
+        cls.server = Serve(port=cls.port, default_seed=42, non_blocking=True)
 
     @classmethod
     def tearDownClass(cls):
-        cls.thread.join(timeout=1)
-
-    def setUp(self):
-        """Ensures that the healthcheck works before each test."""
-        _call_healthcheck(f"http://localhost:{self.port}")
+        cls.server.kill_server()
 
     @slow
     def test_full_request(self):
@@ -746,7 +752,7 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
             # Disable sampling for deterministic output
             "temperature": 0,
         }
-        all_payloads = asyncio.run(self.run_server(request))
+        all_payloads = self.run_server(request)
 
         full_text = ""
         for token in all_payloads:
@@ -791,19 +797,9 @@ class ServeInfrastructureTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.port = 8042
-        args = ServeArguments(port=cls.port)
-        serve_command = ServeCommand(args)
-        cls.thread = Thread(target=serve_command.run)
-        cls.thread.daemon = True
-        cls.thread.start()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.thread.join(timeout=1)
-
-    def setUp(self):
-        """Ensures that the healthcheck works before each test."""
-        _call_healthcheck(f"http://localhost:{self.port}")
+        thread = Thread(target=Serve, kwargs={"port": cls.port})
+        thread.daemon = True
+        thread.start()
 
     def test_healthcheck(self):
         """Tests that the healthcheck endpoint works."""

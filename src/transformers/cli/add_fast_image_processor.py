@@ -11,15 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import os
 import re
-from argparse import ArgumentParser, Namespace
 from datetime import date
 from pathlib import Path
+from typing import Annotated
+
+import typer
 
 from ..utils import logging
-from . import BaseTransformersCLICommand
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -28,6 +28,75 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 CURRENT_YEAR = date.today().year
 TRANSFORMERS_PATH = Path(__file__).parent.parent
 REPO_PATH = TRANSFORMERS_PATH.parent.parent
+
+### Entrypoint
+
+
+def add_fast_image_processor(
+    model_name: Annotated[str, typer.Argument(help="The name of the folder containing the model's implementation.")],
+):
+    """
+    Add a fast image processor to a model.
+
+    Adds the necessary references to the fast image processor in the transformers package, and create the fast image processor file in the model's folder.
+    """
+    model_module = TRANSFORMERS_PATH / "models" / model_name
+    image_processing_module_file = list(model_module.glob("image_processing*.py"))
+    if not image_processing_module_file:
+        raise ValueError(f"No image processing module found in {model_module}")
+    elif len(image_processing_module_file) > 1:
+        for file_name in image_processing_module_file:
+            if not str(file_name).endswith("_fast.py"):
+                image_processing_module_file = str(file_name)
+                break
+    else:
+        image_processing_module_file = str(image_processing_module_file[0])
+
+    with open(image_processing_module_file, "r", encoding="utf-8") as f:
+        content_base_file = f.read()
+
+    # regex to find object starting with "class " and ending with "ImageProcessor", including "ImageProcessor" in the match
+    image_processor_name = re.findall(r"class (\w*ImageProcessor)", content_base_file)
+    if not image_processor_name:
+        raise ValueError(f"No ImageProcessor class found in {image_processing_module_file}")
+    elif len(image_processor_name) > 1:
+        raise ValueError(f"Multiple ImageProcessor classes found in {image_processing_module_file}")
+
+    image_processor_name = image_processor_name[0]
+    fast_image_processor_name = image_processor_name + "Fast"
+    fast_image_processing_module_file = image_processing_module_file.replace(".py", "_fast.py")
+
+    print(f"Adding {fast_image_processor_name} to {fast_image_processing_module_file}")
+
+    add_fast_image_processor_to_model_init(
+        fast_image_processing_module_file=fast_image_processing_module_file,
+        fast_image_processor_name=fast_image_processor_name,
+        model_name=model_name,
+    )
+
+    add_fast_image_processor_to_auto(
+        image_processor_name=image_processor_name,
+        fast_image_processor_name=fast_image_processor_name,
+    )
+
+    add_fast_image_processor_to_doc(
+        fast_image_processor_name=fast_image_processor_name,
+        model_name=model_name,
+    )
+
+    add_fast_image_processor_to_tests(
+        fast_image_processor_name=fast_image_processor_name,
+        model_name=model_name,
+    )
+
+    add_fast_image_processor_file(
+        fast_image_processing_module_file=fast_image_processing_module_file,
+        fast_image_processor_name=fast_image_processor_name,
+        content_base_file=content_base_file,
+    )
+
+
+### Core logic
 
 
 def add_fast_image_processor_to_model_init(
@@ -444,87 +513,3 @@ def add_fast_image_processor_file(
 
     with open(fast_image_processing_module_file, "w", encoding="utf-8") as f:
         f.write(content)
-
-
-def add_fast_image_processor(model_name: str):
-    """
-    Add the necessary references to the fast image processor in the transformers package,
-    and create the fast image processor file in the model's folder.
-    """
-    model_module = TRANSFORMERS_PATH / "models" / model_name
-    image_processing_module_file = list(model_module.glob("image_processing*.py"))
-    if not image_processing_module_file:
-        raise ValueError(f"No image processing module found in {model_module}")
-    elif len(image_processing_module_file) > 1:
-        for file_name in image_processing_module_file:
-            if not str(file_name).endswith("_fast.py"):
-                image_processing_module_file = str(file_name)
-                break
-    else:
-        image_processing_module_file = str(image_processing_module_file[0])
-
-    with open(image_processing_module_file, "r", encoding="utf-8") as f:
-        content_base_file = f.read()
-
-    # regex to find object starting with "class " and ending with "ImageProcessor", including "ImageProcessor" in the match
-    image_processor_name = re.findall(r"class (\w*ImageProcessor)", content_base_file)
-    if not image_processor_name:
-        raise ValueError(f"No ImageProcessor class found in {image_processing_module_file}")
-    elif len(image_processor_name) > 1:
-        raise ValueError(f"Multiple ImageProcessor classes found in {image_processing_module_file}")
-
-    image_processor_name = image_processor_name[0]
-    fast_image_processor_name = image_processor_name + "Fast"
-    fast_image_processing_module_file = image_processing_module_file.replace(".py", "_fast.py")
-
-    print(f"Adding {fast_image_processor_name} to {fast_image_processing_module_file}")
-
-    add_fast_image_processor_to_model_init(
-        fast_image_processing_module_file=fast_image_processing_module_file,
-        fast_image_processor_name=fast_image_processor_name,
-        model_name=model_name,
-    )
-
-    add_fast_image_processor_to_auto(
-        image_processor_name=image_processor_name,
-        fast_image_processor_name=fast_image_processor_name,
-    )
-
-    add_fast_image_processor_to_doc(
-        fast_image_processor_name=fast_image_processor_name,
-        model_name=model_name,
-    )
-
-    add_fast_image_processor_to_tests(
-        fast_image_processor_name=fast_image_processor_name,
-        model_name=model_name,
-    )
-
-    add_fast_image_processor_file(
-        fast_image_processing_module_file=fast_image_processing_module_file,
-        fast_image_processor_name=fast_image_processor_name,
-        content_base_file=content_base_file,
-    )
-
-
-def add_new_model_like_command_factory(args: Namespace):
-    return AddFastImageProcessorCommand(model_name=args.model_name)
-
-
-class AddFastImageProcessorCommand(BaseTransformersCLICommand):
-    @staticmethod
-    def register_subcommand(parser: ArgumentParser):
-        add_fast_image_processor_parser = parser.add_parser("add-fast-image-processor")
-        add_fast_image_processor_parser.add_argument(
-            "--model-name",
-            type=str,
-            required=True,
-            help="The name of the folder containing the model's implementation.",
-        )
-        add_fast_image_processor_parser.set_defaults(func=add_new_model_like_command_factory)
-
-    def __init__(self, model_name: str, *args):
-        self.model_name = model_name
-
-    def run(self):
-        add_fast_image_processor(model_name=self.model_name)

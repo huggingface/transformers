@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.57.0.dev0"
+__version__ = "5.0.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -58,7 +58,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # Base objects, independent of any specific backend
 _import_structure = {
     "audio_utils": [],
-    "commands": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
