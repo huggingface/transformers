@@ -42,7 +42,6 @@ import os
 import re
 import subprocess
 from collections import OrderedDict
-from typing import Optional, Union
 
 from transformers.utils import direct_transformers_import
 
@@ -384,8 +383,8 @@ def split_code_into_blocks(
 
 
 def find_code_in_transformers(
-    object_name: str, base_path: Optional[str] = None, return_indices: bool = False
-) -> Union[str, tuple[list[str], int, int]]:
+    object_name: str, base_path: str | None = None, return_indices: bool = False
+) -> str | tuple[list[str], int, int]:
     """
     Find and return the source code of an object.
 
@@ -485,7 +484,7 @@ def replace_code(code: str, replace_pattern: str) -> str:
     return code
 
 
-def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict] = None):
+def find_code_and_splits(object_name: str, base_path: str, buffer: dict | None = None):
     """Find the code of an object (specified by `object_name`) and split it into blocks.
 
     Args:
@@ -581,7 +580,7 @@ def stylify(code: str) -> str:
     return formatted_code[len("class Bla:\n") :] if has_indent else formatted_code
 
 
-def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int]:
+def check_codes_match(observed_code: str, theoretical_code: str) -> int | None:
     """
     Checks if two version of a code match with the exception of the class/function name.
 
@@ -633,8 +632,8 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
 
 
 def is_copy_consistent(
-    filename: str, overwrite: bool = False, buffer: Optional[dict] = None
-) -> Optional[list[tuple[str, int]]]:
+    filename: str, overwrite: bool = False, buffer: dict | None = None
+) -> list[tuple[str, int]] | None:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -826,7 +825,7 @@ def is_copy_consistent(
     return diffs
 
 
-def check_copies(overwrite: bool = False, file: Optional[str] = None):
+def check_copies(overwrite: bool = False, file: str | None = None):
     """
     Check every file is copy-consistent with the original. Also check the model list in the main README and other
     READMEs are consistent.

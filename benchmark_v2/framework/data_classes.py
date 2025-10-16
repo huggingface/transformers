@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -90,14 +90,14 @@ class BenchmarkResult:
         e2e_latency: float,
         token_generation_times: list[float],
         decoded_output: str,
-        gpu_metrics: Optional[GPURawMetrics],
+        gpu_metrics: GPURawMetrics | None,
     ) -> None:
         self.e2e_latency.append(e2e_latency)
         self.token_generation_times.append(token_generation_times)
         self.decoded_outputs.append(decoded_output)
         self.gpu_metrics.append(gpu_metrics)
 
-    def to_dict(self) -> dict[str, Union[None, int, float]]:
+    def to_dict(self) -> dict[str, None | int | float]:
         # Save GPU metrics as None if it contains only None values
         if all(gm is None for gm in self.gpu_metrics):
             gpu_metrics = None
@@ -111,7 +111,7 @@ class BenchmarkResult:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Union[None, int, float]]) -> "BenchmarkResult":
+    def from_dict(cls, data: dict[str, None | int | float]) -> "BenchmarkResult":
         # Handle GPU metrics, which is saved as None if it contains only None values
         if data["gpu_metrics"] is None:
             gpu_metrics = [None for _ in range(len(data["e2e_latency"]))]
