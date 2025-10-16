@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch IJEPA model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import IJepaConfig
 from transformers.testing_utils import (
@@ -26,7 +27,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
@@ -203,9 +203,7 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     fx_compatible = False  # broken by output recording refactor
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):

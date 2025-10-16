@@ -25,34 +25,29 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
 
 
-class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[list[Union[int, float]]] = None
-    use_audio_in_video: Optional[bool] = None
-    seconds_per_chunk: Optional[float] = None
-    position_id_per_seconds: Optional[int] = None
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
-class Qwen2_5_OmniImagesKwargs(ImagesKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+# Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
+# and does not use them in video processor class
+class Qwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
+    use_audio_in_video: bool
+    seconds_per_chunk: float
+    position_id_per_seconds: Union[int, float]
 
 
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
     videos_kwargs: Qwen2_5_OmniVideosKwargs
-    images_kwargs: Qwen2_5_OmniImagesKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -62,8 +57,10 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
             "seconds_per_chunk": 2.0,
             "position_id_per_seconds": 25,
             "use_audio_in_video": False,
-            "min_pixels": 128 * 28 * 28,
-            "max_pixels": 768 * 28 * 28,
+            "size": {
+                "shortest_edge": 128 * 28 * 28,
+                "longest_edge": 768 * 28 * 28,
+            },
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -113,9 +110,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        audio: AudioInput = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs: Unpack[Qwen2_5OmniProcessorKwargs],
     ) -> BatchFeature:
         """

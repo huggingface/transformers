@@ -33,11 +33,8 @@ You can find all the original checkpoints under the [VinAI](https://huggingface.
 
 The example below demonstrates how to summarize text with [`Pipeline`] or the [`AutoModel`] class.
 
-
 <hfoptions id="usage">
 <hfoption id="Pipeline">
-
-
 
 ```python
 import torch
@@ -97,8 +94,6 @@ transformers run --task summarization --model vinai/bartpho-word --device 0
 
 </hfoption>
 </hfoptions>
-
-
 
 ## Notes
 

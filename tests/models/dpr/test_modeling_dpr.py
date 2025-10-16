@@ -187,8 +187,6 @@ class DPRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_missing_keys = False  # why?
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = DPRModelTester(self)

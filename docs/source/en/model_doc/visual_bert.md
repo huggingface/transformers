@@ -27,7 +27,6 @@ rendered properly in your Markdown viewer.
 
 You can find all the original VisualBERT checkpoints under the [UCLA NLP](https://huggingface.co/uclanlp/models?search=visualbert) organization.
 
-
 > [!TIP]
 > This model was contributed by [gchhablani](https://huggingface.co/gchhablani).
 > Click on the VisualBERT models in the right sidebar for more examples of how to apply VisualBERT to different image and language tasks.

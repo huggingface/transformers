@@ -15,13 +15,13 @@
 """PyTorch VideoMAE (masked autoencoder) model."""
 
 import collections.abc
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import MSELoss
 
@@ -30,7 +30,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from ...utils.generic import can_return_tuple, check_model_inputs
@@ -200,10 +199,6 @@ def eager_attention_forward(
     # seem a bit unusual, but is taken from the original Transformer paper.
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    # Mask heads if we want to
-    if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
-
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -237,7 +232,7 @@ class VideoMAESelfAttention(nn.Module):
             self.q_bias = None
             self.v_bias = None
 
-    def forward(self, hidden_states, head_mask: Optional[torch.Tensor] = None) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: Optional[torch.Tensor] = None) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
 
         k_bias = torch.zeros_like(self.v_bias, requires_grad=False) if self.q_bias is not None else None
@@ -258,7 +253,7 @@ class VideoMAESelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
+            None,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -294,28 +289,9 @@ class VideoMAEAttention(nn.Module):
         super().__init__()
         self.attention = VideoMAESelfAttention(config)
         self.output = VideoMAESelfOutput(config)
-        self.pruned_heads = set()
 
-    def prune_heads(self, heads: set[int]):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, head_mask)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -364,9 +340,9 @@ class VideoMAELayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm, head_mask)
+        attention_output = self.attention(hidden_states_norm)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -389,10 +365,9 @@ class VideoMAEEncoder(nn.Module):
         self.layer = nn.ModuleList([VideoMAELayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            hidden_states = layer_module(hidden_states, layer_head_mask)
+            hidden_states = layer_module(hidden_states)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -403,6 +378,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["VideoMAEEmbeddings", "VideoMAELayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -415,8 +391,6 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv3d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -445,21 +419,12 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -471,87 +436,33 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         Examples:
 
         ```python
-        >>> import av
-        >>> import numpy as np
-
-        >>> from transformers import AutoImageProcessor, VideoMAEModel
+        >>> import torch
+        >>> from transformers import VideoMAEVideoProcessor, VideoMAEModel
         >>> from huggingface_hub import hf_hub_download
 
-        >>> np.random.seed(0)
-
-
-        >>> def read_video_pyav(container, indices):
-        ...     '''
-        ...     Decode the video with PyAV decoder.
-        ...     Args:
-        ...         container (`av.container.input.InputContainer`): PyAV container.
-        ...         indices (`list[int]`): List of frame indices to decode.
-        ...     Returns:
-        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
-        ...     '''
-        ...     frames = []
-        ...     container.seek(0)
-        ...     start_index = indices[0]
-        ...     end_index = indices[-1]
-        ...     for i, frame in enumerate(container.decode(video=0)):
-        ...         if i > end_index:
-        ...             break
-        ...         if i >= start_index and i in indices:
-        ...             frames.append(frame)
-        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
-
-
-        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
-        ...     '''
-        ...     Sample a given number of frame indices from the video.
-        ...     Args:
-        ...         clip_len (`int`): Total number of frames to sample.
-        ...         frame_sample_rate (`int`): Sample every n-th frame.
-        ...         seg_len (`int`): Maximum allowed index of sample's last frame.
-        ...     Returns:
-        ...         indices (`list[int]`): List of sampled frame indices
-        ...     '''
-        ...     converted_len = int(clip_len * frame_sample_rate)
-        ...     end_idx = np.random.randint(converted_len, seg_len)
-        ...     start_idx = end_idx - converted_len
-        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
-        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
-        ...     return indices
-
-
-        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
-        >>> file_path = hf_hub_download(
+        >>> # replace this with your own video file
+        >>> video_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> container = av.open(file_path)
 
-        >>> # sample 16 frames
-        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
-        >>> video = read_video_pyav(container, indices)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
+        >>> video_processor = VideoMAEVideoProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = VideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
 
         >>> # prepare video for the model
-        >>> inputs = image_processor(list(video), return_tensors="pt")
+        >>> inputs = video_processor(video_path, return_tensors="pt")
 
         >>> # forward pass
-        >>> outputs = model(**inputs)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
         [1, 1568, 768]
         ```"""
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(pixel_values, bool_masked_pos)
 
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, head_mask=head_mask)
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output)
         sequence_output = encoder_outputs.last_hidden_state
         if self.layernorm is not None:
             sequence_output = self.layernorm(sequence_output)
@@ -585,7 +496,7 @@ class VideoMAEDecoder(nn.Module):
     def forward(self, hidden_states: torch.Tensor, return_token_num: int):
         # Apply transformer layers
         for layer_module in self.decoder_layers:
-            hidden_states = layer_module(hidden_states, head_mask=None)
+            hidden_states = layer_module(hidden_states)
 
         if return_token_num > 0:
             hidden_states = hidden_states[:, -return_token_num:]
@@ -626,7 +537,6 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         bool_masked_pos: torch.BoolTensor,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideoMAEForPreTrainingOutput:
         r"""
@@ -656,9 +566,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
         >>> loss = outputs.loss
         ```"""
-        outputs: BaseModelOutput = self.videomae(
-            pixel_values, bool_masked_pos=bool_masked_pos, head_mask=head_mask, **kwargs
-        )
+        outputs: BaseModelOutput = self.videomae(pixel_values, bool_masked_pos=bool_masked_pos, **kwargs)
 
         sequence_output = outputs.last_hidden_state
         sequence_output = self.encoder_to_decoder(sequence_output)
@@ -793,7 +701,6 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
@@ -806,69 +713,19 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         Examples:
 
         ```python
-        >>> import av
         >>> import torch
-        >>> import numpy as np
-
-        >>> from transformers import AutoImageProcessor, VideoMAEForVideoClassification
+        >>> from transformers import VideoMAEVideoProcessor, VideoMAEForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
-        >>> np.random.seed(0)
-
-
-        >>> def read_video_pyav(container, indices):
-        ...     '''
-        ...     Decode the video with PyAV decoder.
-        ...     Args:
-        ...         container (`av.container.input.InputContainer`): PyAV container.
-        ...         indices (`list[int]`): List of frame indices to decode.
-        ...     Returns:
-        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
-        ...     '''
-        ...     frames = []
-        ...     container.seek(0)
-        ...     start_index = indices[0]
-        ...     end_index = indices[-1]
-        ...     for i, frame in enumerate(container.decode(video=0)):
-        ...         if i > end_index:
-        ...             break
-        ...         if i >= start_index and i in indices:
-        ...             frames.append(frame)
-        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
-
-
-        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
-        ...     '''
-        ...     Sample a given number of frame indices from the video.
-        ...     Args:
-        ...         clip_len (`int`): Total number of frames to sample.
-        ...         frame_sample_rate (`int`): Sample every n-th frame.
-        ...         seg_len (`int`): Maximum allowed index of sample's last frame.
-        ...     Returns:
-        ...         indices (`list[int]`): List of sampled frame indices
-        ...     '''
-        ...     converted_len = int(clip_len * frame_sample_rate)
-        ...     end_idx = np.random.randint(converted_len, seg_len)
-        ...     start_idx = end_idx - converted_len
-        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
-        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
-        ...     return indices
-
-
-        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
-        >>> file_path = hf_hub_download(
+        >>> # replace this with your own video file
+        >>> video_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> container = av.open(file_path)
 
-        >>> # sample 16 frames
-        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
-        >>> video = read_video_pyav(container, indices)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        >>> video_processor = VideoMAEVideoProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         >>> model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
 
-        >>> inputs = image_processor(list(video), return_tensors="pt")
+        >>> inputs = video_processor(video_path, return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -880,7 +737,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         eating spaghetti
         ```"""
 
-        outputs: BaseModelOutput = self.videomae(pixel_values, head_mask=head_mask, **kwargs)
+        outputs: BaseModelOutput = self.videomae(pixel_values, **kwargs)
         sequence_output = outputs.last_hidden_state
 
         if self.fc_norm is not None:

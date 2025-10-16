@@ -27,7 +27,6 @@ The abstract from the original FastSpeech2 paper is the following:
 
 This model was contributed by [Connor Henderson](https://huggingface.co/connor-henderson). The original code can be found [here](https://github.com/espnet/espnet/blob/master/espnet2/tts/fastspeech2/fastspeech2.py).
 
-
 ## 🤗 Model Architecture
 FastSpeech2's general structure with a Mel-spectrogram decoder was implemented, and the traditional transformer blocks were replaced with conformer blocks as done in the ESPnet library.
 
@@ -90,6 +89,7 @@ sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
 ```
 
 4. Run inference with a pipeline and specify which vocoder to use
+
 ```python
 from transformers import pipeline, FastSpeech2ConformerHifiGan
 import soundfile as sf
@@ -101,7 +101,6 @@ speech = synthesiser("Hello, my dog is cooler than you!")
 
 sf.write("speech.wav", speech["audio"].squeeze(), samplerate=speech["sampling_rate"])
 ```
-
 
 ## FastSpeech2ConformerConfig
 

@@ -5,27 +5,27 @@
 #                          modular_metaclip_2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MetaClip2TextConfig(PretrainedConfig):
+class MetaClip2TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MetaClip2TextModel`]. It is used to instantiate a METACLIP_2
-    text encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the text encoder of the METACLIP_2
-    [openai/metaclip_2-vit-base-patch32](https://huggingface.co/openai/metaclip_2-vit-base-patch32) architecture.
+    This is the configuration class to store the configuration of a [`MetaClip2TextModel`]. It is used to instantiate
+    a MetaClip2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the MetaClip2
+    [facebook/metaclip-2-worldwide-huge-quickgelu](https://huggingface.co/facebook/metaclip-2-worldwide-huge-quickgelu) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the METACLIP_2 text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`MetaClip2Model`].
+            Vocabulary size of the MetaClip2 text model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`MetaClip2TextModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -63,10 +63,10 @@ class MetaClip2TextConfig(PretrainedConfig):
     ```python
     >>> from transformers import MetaClip2TextConfig, MetaClip2TextModel
 
-    >>> # Initializing a MetaClip2TextConfig with openai/metaclip_2-vit-base-patch32 style configuration
+    >>> # Initializing a MetaClip2TextConfig with facebook/metaclip-2-worldwide-huge-quickgelu style configuration
     >>> configuration = MetaClip2TextConfig()
 
-    >>> # Initializing a MetaClip2TextModel (with random weights) from the openai/metaclip_2-vit-base-patch32 style configuration
+    >>> # Initializing a MetaClip2TextModel (with random weights) from the facebook/metaclip-2-worldwide-huge-quickgelu style configuration
     >>> model = MetaClip2TextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -113,15 +113,15 @@ class MetaClip2TextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class MetaClip2VisionConfig(PretrainedConfig):
+class MetaClip2VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MetaClip2VisionModel`]. It is used to instantiate a
-    METACLIP_2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the METACLIP_2
-    [openai/metaclip_2-vit-base-patch32](https://huggingface.co/openai/metaclip_2-vit-base-patch32) architecture.
+    This is the configuration class to store the configuration of a [`MetaClip2VisionModel`]. It is used to instantiate a MetaClip2
+    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the vision encoder of the MetaClip2
+    [facebook/metaclip-2-worldwide-huge-quickgelu](https://huggingface.co/facebook/metaclip-2-worldwide-huge-quickgelu) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -158,10 +158,10 @@ class MetaClip2VisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import MetaClip2VisionConfig, MetaClip2VisionModel
 
-    >>> # Initializing a MetaClip2VisionConfig with openai/metaclip_2-vit-base-patch32 style configuration
+    >>> # Initializing a MetaClip2VisionConfig with facebook/metaclip-2-worldwide-huge-quickgelu style configuration
     >>> configuration = MetaClip2VisionConfig()
 
-    >>> # Initializing a MetaClip2VisionModel (with random weights) from the openai/metaclip_2-vit-base-patch32 style configuration
+    >>> # Initializing a MetaClip2VisionModel (with random weights) from the facebook/metaclip-2-worldwide-huge-quickgelu style configuration
     >>> model = MetaClip2VisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -205,15 +205,15 @@ class MetaClip2VisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class MetaClip2Config(PretrainedConfig):
+class MetaClip2Config(PreTrainedConfig):
     r"""
-    [`MetaClip2Config`] is the configuration class to store the configuration of a [`MetaClip2Model`]. It is used to instantiate
-    a METACLIP_2 model according to the specified arguments, defining the text model and vision model configs. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the METACLIP_2
-    [openai/metaclip_2-vit-base-patch32](https://huggingface.co/openai/metaclip_2-vit-base-patch32) architecture.
+    [`MetaClip2Config`] is the configuration class to store the configuration of a [`MetaClip2Model`]. It is used to
+    instantiate a MetaClip2 model according to the specified arguments, defining the text model and vision model configs.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the MetaClip2
+    [facebook/metaclip-2-worldwide-huge-quickgelu](https://huggingface.co/facebook/metaclip-2-worldwide-huge-quickgelu) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -223,7 +223,7 @@ class MetaClip2Config(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original METACLIP_2 implementation.
+            The initial value of the *logit_scale* parameter. Default is used as per the original MetaClip2 implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -232,10 +232,10 @@ class MetaClip2Config(PretrainedConfig):
     ```python
     >>> from transformers import MetaClip2Config, MetaClip2Model
 
-    >>> # Initializing a MetaClip2Config with openai/metaclip_2-vit-base-patch32 style configuration
+    >>> # Initializing a MetaClip2Config with facebook/metaclip-2-worldwide-huge-quickgelu style configuration
     >>> configuration = MetaClip2Config()
 
-    >>> # Initializing a MetaClip2Model (with random weights) from the openai/metaclip_2-vit-base-patch32 style configuration
+    >>> # Initializing a MetaClip2Model (with random weights) from the facebook/metaclip-2-worldwide-huge-quickgelu style configuration
     >>> model = MetaClip2Model(configuration)
 
     >>> # Accessing the model configuration
@@ -248,7 +248,7 @@ class MetaClip2Config(PretrainedConfig):
     >>> config_text = MetaClip2TextConfig()
     >>> config_vision = MetaClip2VisionConfig()
 
-    >>> config = MetaClip2Config.from_text_vision_configs(config_text, config_vision)
+    >>> config = MetaClip2Config(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "metaclip_2"
@@ -263,8 +263,6 @@ class MetaClip2Config(PretrainedConfig):
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
@@ -277,7 +275,7 @@ class MetaClip2Config(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -309,7 +307,7 @@ class MetaClip2Config(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -328,19 +326,24 @@ class MetaClip2Config(PretrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `MetaClip2TextConfig` with default values.")
+            text_config = MetaClip2TextConfig()
+            logger.info("`text_config` is `None`. initializing the `MetaClip2TextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = MetaClip2TextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = MetaClip2VisionConfig()
             logger.info("`vision_config` is `None`. initializing the `MetaClip2VisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = MetaClip2VisionConfig(**vision_config)
 
-        self.text_config = MetaClip2TextConfig(**text_config)
-        self.vision_config = MetaClip2VisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+        super().__init__(**kwargs)
 
 
 __all__ = ["MetaClip2Config", "MetaClip2TextConfig", "MetaClip2VisionConfig"]

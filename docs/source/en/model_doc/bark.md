@@ -43,10 +43,11 @@ Bark can be optimized with just a few extra lines of code, which **significantly
 You can speed up inference and reduce memory footprint by 50% simply by loading the model in half-precision.
 
 ```python
-from transformers import BarkModel, infer_device
+from transformers import BarkModel
+from accelerate import Accelerator
 import torch
 
-device = infer_device()
+device = Accelerator().device
 model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16).to(device)
 ```
 
@@ -62,30 +63,18 @@ model.enable_cpu_offload()
 
 Note that 🤗 Accelerate must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/accelerate/basic_tutorials/install)
 
-#### Using Better Transformer
-
-Better Transformer is an 🤗 Optimum feature that performs kernel fusion under the hood. You can gain 20% to 30% in speed with zero performance degradation. It only requires one line of code to export the model to 🤗 Better Transformer:
-
-```python
-model =  model.to_bettertransformer()
-```
-
-Note that 🤗 Optimum must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/optimum/installation)
-
 #### Using Flash Attention 2
 
 Flash Attention 2 is an even faster, optimized version of the previous optimization.
 
-##### Installation 
+##### Installation
 
-First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
-
+First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features).
 Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-features) the latest version of Flash Attention 2:
 
 ```bash
 pip install -U flash-attn --no-build-isolation
 ```
-
 
 ##### Usage
 
@@ -97,8 +86,7 @@ model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_i
 
 ##### Performance comparison
 
-
-The following diagram shows the latency for the native attention implementation (no optimisation) against Better Transformer and Flash Attention 2. In all cases, we generate 400 semantic tokens on a 40GB A100 GPU with PyTorch 2.1. Flash Attention 2 is also consistently faster than Better Transformer, and its performance improves even more as batch sizes increase:
+The following diagram shows the latency for the native attention implementation (no optimisation) against Flash Attention 2. In all cases, we generate 400 semantic tokens on a 40GB A100 GPU with PyTorch 2.1:
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ylacombe/benchmark-comparison/resolve/main/Bark%20Optimization%20Benchmark.png">
@@ -106,18 +94,16 @@ The following diagram shows the latency for the native attention implementation 
 
 To put this into perspective, on an NVIDIA A100 and when generating 400 semantic tokens with a batch size of 16, you can get 17 times the [throughput](https://huggingface.co/blog/optimizing-bark#throughput) and still be 2 seconds faster than generating sentences one by one with the native model implementation. In other words, all the samples will be generated 17 times faster.
 
-At batch size 8, on an NVIDIA A100, Flash Attention 2 is also 10% faster than Better Transformer, and at batch size 16, 25%.
-
-
 #### Combining optimization techniques
 
-You can combine optimization techniques, and use CPU offload, half-precision and Flash Attention 2 (or 🤗 Better Transformer) all at once.
+You can combine optimization techniques, and use CPU offload, half-precision and Flash Attention 2 all at once.
 
 ```python
-from transformers import BarkModel, infer_device
+from transformers import BarkModel
+from accelerate import Accelerator
 import torch
 
-device = infer_device()
+device = Accelerator().device
 
 # load in fp16 and use Flash Attention 2
 model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
@@ -147,7 +133,7 @@ These presets are also uploaded in the hub [here](https://huggingface.co/suno/ba
 >>> audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
-Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects. 
+Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects.
 
 ```python
 >>> # Multilingual speech - simplified Chinese
@@ -164,7 +150,6 @@ Bark can generate highly realistic, **multilingual** speech as well as other aud
 ```
 
 The model can also produce **nonverbal communications** like laughing, sighing and crying.
-
 
 ```python
 >>> # Adding non-speech cues to the input text
@@ -235,4 +220,3 @@ To save the audio, simply take the sample rate from the model config and some sc
 
 [[autodoc]] BarkSemanticConfig
     - all
-

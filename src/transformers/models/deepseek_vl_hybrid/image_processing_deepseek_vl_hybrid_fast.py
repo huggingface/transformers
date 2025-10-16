@@ -21,59 +21,26 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     get_size_dict,
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torchvision_available,
-    is_torchvision_v2_available,
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+    ChannelDimension,
+    PILImageResampling,
+    SizeDict,
+    pil_torch_interpolation_mapping,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-
-    from ...image_utils import pil_torch_interpolation_mapping
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
-
-    from ...image_utils import pil_torch_interpolation_mapping
-
-
-class DeepseekVLHybridFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-     high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
-        Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
-        method.
-    high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-        Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-        overridden by the `high_res_resample` parameter in the `preprocess` method.
-    high_res_image_mean (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
-        Mean to use if normalizing the high resolution image. This is a float or list of floats the length of the number of
-        channels in the image. Can be overridden by the `high_res_image_mean` parameter in the `preprocess` method.
-    high_res_image_std (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
-        Standard deviation to use if normalizing the high resolution image. This is a float or list of floats the length of the
-        number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
-    """
-
-    min_size: int
-    high_res_size: dict
-    high_res_resample: "PILImageResampling"
-    high_res_image_mean: list[float]
-    high_res_image_std: list[float]
+from ...processing_utils import Unpack
+from ...utils import TensorType, auto_docstring
+from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorKwargs
 
 
 @auto_docstring
@@ -86,18 +53,19 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    valid_kwargs = DeepseekVLHybridFastImageProcessorKwargs
+    do_pad = True
+    valid_kwargs = DeepseekVLHybridImageProcessorKwargs
     high_res_image_mean = OPENAI_CLIP_MEAN
     high_res_image_std = OPENAI_CLIP_STD
     high_res_size = {"height": 1024, "width": 1024}
     high_res_resample = PILImageResampling.BICUBIC
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
-    def __init__(self, **kwargs: Unpack[DeepseekVLHybridFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
-            background_color = tuple([int(x * 255) for x in kwargs.get("image_mean")])
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
         if kwargs.get("high_res_image_mean") is None:
             high_res_background_color = (127, 127, 127)
         else:
@@ -111,7 +79,7 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         min_size: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -147,7 +115,7 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
 
         Returns:
             `torch.Tensor`: The padded images.

@@ -17,9 +17,10 @@ import re
 import subprocess
 import textwrap
 from argparse import ArgumentParser, Namespace
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
@@ -93,7 +94,7 @@ COPYRIGHT = f"""
 
 class ModelInfos:
     """
-    Retrieve the basic informations about an existing model classes.
+    Retrieve the basic information about an existing model classes.
     """
 
     def __init__(self, lowercase_name: str):
@@ -158,7 +159,7 @@ def add_model_to_auto_mappings(
 
     Args:
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_lowercase_name (`str`):
             The new lowercase model name.
         new_model_paper_name (`str`):
@@ -357,7 +358,7 @@ def find_modular_structure(
         module_name (`str`):
             The full path to the python module to copy with modular.
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_cased_name (`str`):
             The new cased model name.
     """
@@ -383,7 +384,7 @@ def create_modular_file(
 
     Args:
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_lowercase_name (`str`):
             The new lowercase model name.
         filenames_to_add (`list[tuple[str, bool]]`):
@@ -430,7 +431,7 @@ def create_test_files(old_model_infos: ModelInfos, new_lowercase_name, filenames
 
     Args:
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_lowercase_name (`str`):
             The new lowercase model name.
         filenames_to_add (`list[tuple[str, bool]]`):
@@ -486,7 +487,7 @@ def create_new_model_like(
 
     Args:
         old_model_infos (`ModelInfos`):
-            The structure containing the class informations of the old model.
+            The structure containing the class information of the old model.
         new_lowercase_name (`str`):
             The new lowercase model name.
         new_model_paper_name (`str`):
@@ -755,7 +756,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
         )
         add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
 
-    def __init__(self, path_to_repo=None, *args):
+    def __init__(self, path_to_repo=None, **kwargs):
         (
             self.old_model_infos,
             self.new_lowercase_name,

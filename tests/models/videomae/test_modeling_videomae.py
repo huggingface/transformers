@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -33,7 +34,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, check_torch_load_is_safe, is_torch_available, is_vision_available
+from transformers.utils import check_torch_load_is_safe, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -193,10 +194,9 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     )
     # Addition keys that are required for forward, used in tests where we manipulate and create new input dict from scratch
     additional_model_inputs = ["bool_masked_pos"]
-    test_pruning = False
+
     test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):

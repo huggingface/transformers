@@ -18,11 +18,14 @@ import json
 import os
 import pickle
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 import torch
 from safetensors.torch import save_file
+
+from ...utils import strtobool
 
 
 # Avoid Using Megatron Lib
@@ -248,6 +251,14 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
 
 
 def merge_tp_weights(model_path, output_path, vllm_config_path=None):
+    if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+        raise ValueError(
+            "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+            "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+            "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+            "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+        )
+
     tp_size = 0
     for item in Path(model_path).iterdir():
         if item.is_dir():
@@ -417,7 +428,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             )
             layer_i += 1
 
-    # Embedd Model, LM Head, and Norm
+    # Embedded Model, LM Head, and Norm
     embed_tokens = merge_tensors(
         tp_sd=mgt_sd[0],
         keys=["model", "embedding.word_embeddings.weight"],

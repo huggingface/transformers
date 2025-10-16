@@ -18,15 +18,13 @@ from typing import Optional
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPoolingAndNoAttention,
-)
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
@@ -39,11 +37,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -200,8 +193,6 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -258,4 +249,51 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
         )
 
 
-__all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel"]
+@auto_docstring
+class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
+    config: DINOv3ConvNextConfig
+
+    def __init__(self, config: DINOv3ConvNextConfig):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.num_features = [config.num_channels] + list(config.hidden_sizes)
+
+        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, s) for s in range(config.num_stages)])
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return None
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
+    ) -> BackboneOutput:
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
+
+        hidden_states = pixel_values
+        all_hidden_states: list[torch.Tensor] = [hidden_states]
+
+        for stage in self.stages:
+            hidden_states = stage(hidden_states)
+            all_hidden_states.append(hidden_states)
+
+        # hidden_states are already in NCHW (batch_size, channels, height, width) format
+        feature_maps: list[torch.Tensor] = []
+        for stage, hidden_states in zip(self.stage_names, all_hidden_states):
+            if stage in self.out_features:
+                feature_maps.append(hidden_states)
+
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps),
+            hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
+        )
+
+
+__all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel", "DINOv3ConvNextBackbone"]

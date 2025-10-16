@@ -126,9 +126,8 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GitVisionModel,) if is_torch_available() else ()
     fx_compatible = True
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = GitVisionModelTester(self)
@@ -331,24 +330,6 @@ class GitModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertTrue(result.loss.item() > 0)
 
-    def _test_beam_search_generate(self, config, input_ids, input_mask, pixel_values):
-        model = GitForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # generate
-        generated_ids = model.generate(
-            input_ids,
-            attention_mask=input_mask,
-            pixel_values=pixel_values,
-            do_sample=False,
-            max_length=20,
-            num_beams=2,
-            num_return_sequences=2,
-        )
-
-        self.parent.assertEqual(generated_ids.shape, (self.batch_size * 2, 20))
-
     def _test_batched_generate_captioning(self, config, input_ids, input_mask, pixel_values):
         model = GitForCausalLM(config=config)
         model.to(torch_device)
@@ -431,19 +412,9 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
-    def test_beam_search_generate(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester._test_beam_search_generate(*config_and_inputs)
-
     def test_batched_generate_captioning(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester._test_batched_generate_captioning(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
@@ -478,19 +449,11 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
     def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="GIT input and output sequence lengths are not equal due to pixel values additional input")
+    def test_forward_with_logits_to_keep(self):
         pass
 
 

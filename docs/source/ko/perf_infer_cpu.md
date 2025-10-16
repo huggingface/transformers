@@ -17,10 +17,6 @@ rendered properly in your Markdown viewer.
 
 이 가이드는 CPU에서 대규모 모델을 효율적으로 추론하는 방법에 중점을 두고 있습니다.
 
-## 더 빠른 추론을 위한 `BetterTransformer` [[bettertransformer-for-faster-inference]]
-
-우리는 최근 CPU에서 텍스트, 이미지 및 오디오 모델의 빠른 추론을 위해 `BetterTransformer`를 통합했습니다. 이 통합에 대한 더 자세한 내용은 [이 문서](https://huggingface.co/docs/optimum/bettertransformer/overview)를 참조하세요.
-
 ## PyTorch JIT 모드 (TorchScript) [[pytorch-jitmode-torchscript]]
 TorchScript는 PyTorch 코드에서 직렬화와 최적화가 가능한 모델을 생성할때 쓰입니다. TorchScript로 만들어진 프로그램은 기존 Python 프로세스에서 저장한 뒤, 종속성이 없는 새로운 프로세스로 가져올 수 있습니다. PyTorch의 기본 설정인 `eager` 모드와 비교했을때, `jit` 모드는 연산자 결합과 같은 최적화 방법론을 통해 모델 추론에서 대부분 더 나은 성능을 제공합니다.
 
@@ -34,40 +30,3 @@ Intel® Extension for PyTorch(IPEX)는 Transformers 계열 모델의 jit 모드�
 #### IPEX 설치: [[ipex-installation]]
 
 IPEX 배포 주기는 PyTorch를 따라서 이루어집니다. 자세한 정보는 [IPEX 설치 방법](https://intel.github.io/intel-extension-for-pytorch/)을 확인하세요.
-
-### JIT 모드 사용법 [[usage-of-jitmode]]
-평가 또는 예측을 위해 Trainer에서 JIT 모드를 사용하려면 Trainer의 명령 인수에 `jit_mode_eval`을 추가해야 합니다.
-
-<Tip warning={true}>
-
-PyTorch의 버전이 1.14.0 이상이라면, jit 모드는 jit.trace에서 dict 입력이 지원되므로, 모든 모델의 예측과 평가가 개선될 수 있습니다.
-
-PyTorch의 버전이 1.14.0 미만이라면, 질의 응답 모델과 같이 forward 매개변수의 순서가 jit.trace의 튜플 입력 순서와 일치하는 모델에 득이 될 수 있습니다. 텍스트 분류 모델과 같이 forward 매개변수 순서가 jit.trace의 튜플 입력 순서와 다른 경우, jit.trace가 실패하며 예외가 발생합니다. 이때 예외상황을 사용자에게 알리기 위해 Logging이 사용됩니다.
-
-</Tip>
-
-[Transformers 질의 응답](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)의 사용 사례 예시를 참조하세요.
-
-
-- CPU에서 jit 모드를 사용한 추론:
-<pre>python run_qa.py \
---model_name_or_path csarron/bert-base-uncased-squad-v1 \
---dataset_name squad \
---do_eval \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/ \
---no_cuda \
-<b>--jit_mode_eval </b></pre> 
-
-- CPU에서 IPEX와 함께 jit 모드를 사용한 추론:
-<pre>python run_qa.py \
---model_name_or_path csarron/bert-base-uncased-squad-v1 \
---dataset_name squad \
---do_eval \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/ \
---no_cuda \
-<b>--use_ipex \</b>
-<b>--jit_mode_eval</b></pre> 
