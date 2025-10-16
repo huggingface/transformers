@@ -15,10 +15,9 @@
 from typing import Optional, Union
 
 import torch
+from PIL import Image, ImageDraw
+from torchvision.transforms.v2 import functional as F
 
-from .image_processing_superglue import SuperGlueImageProcessorKwargs
-from .modeling_superglue import KeypointMatchingOutput
-from ... import is_vision_available
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -31,15 +30,9 @@ from ...image_utils import (
     is_valid_image,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
-
-if is_vision_available():
-    from PIL import Image, ImageDraw
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
+from ...utils import TensorType, auto_docstring
+from .image_processing_superglue import SuperGlueImageProcessorKwargs
+from .modeling_superglue import KeypointMatchingOutput
 
 
 def _is_valid_image(image):
@@ -47,32 +40,6 @@ def _is_valid_image(image):
         is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
     )
 
-def validate_and_format_image_pairs(images: ImageInput):
-    error_message = (
-        "Input images must be a one of the following :",
-        " - A pair of PIL images.",
-        " - A pair of 3D arrays.",
-        " - A list of pairs of PIL images.",
-        " - A list of pairs of 3D arrays.",
-    )
-
-    def _is_valid_image(image):
-        """images is a PIL Image or a 3D array."""
-        return is_pil_image(image) or (
-            is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
-        )
-
-    if isinstance(images, list):
-        if len(images) == 2 and all((_is_valid_image(image)) for image in images):
-            return images
-        if all(
-            isinstance(image_pair, list)
-            and len(image_pair) == 2
-            and all(_is_valid_image(image) for image in image_pair)
-            for image_pair in images
-        ):
-            return [image for image_pair in images for image in image_pair]
-    raise ValueError(error_message)
 
 def flatten_pair_images(images):
     # Handle the pair validation and flattening similar to slow processor
@@ -126,6 +93,7 @@ def convert_to_grayscale(
     if is_grayscale(image):
         return image
     return F.rgb_to_grayscale(image, num_output_channels=3)
+
 
 @auto_docstring
 class SuperGlueImageProcessorFast(BaseImageProcessorFast):
@@ -276,6 +244,7 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
             keypoints as well as the matching between them.
         """
         from ...image_utils import to_numpy_array
+        from .image_processing_efficientloftr import validate_and_format_image_pairs
 
         images = validate_and_format_image_pairs(images)
         images = [to_numpy_array(image) for image in images]
@@ -318,5 +287,6 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         g = int(255 * score)
         b = 0
         return r, g, b
+
 
 __all__ = ["SuperGlueImageProcessorFast"]

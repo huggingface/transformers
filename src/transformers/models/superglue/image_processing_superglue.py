@@ -39,6 +39,7 @@ from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import requires
 
+
 if is_torch_available():
     import torch
 
@@ -132,6 +133,7 @@ def validate_and_format_image_pairs(images: ImageInput):
             return [image for image_pair in images for image in image_pair]
     raise ValueError(error_message)
 
+
 class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_grayscale (`bool`, *optional*, defaults to `True`):
@@ -139,6 +141,7 @@ class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_grayscale: bool
+
 
 @requires(backends=("torch",))
 class SuperGlueImageProcessor(BaseImageProcessor):
