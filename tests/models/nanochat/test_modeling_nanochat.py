@@ -59,33 +59,34 @@ class NanoChatIntegrationTest(unittest.TestCase):
         model_id = "nanochat-students/nanochat-d20"
         model = NanoChatForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        
+
         # Simple test input - "Hello world"
         test_text = "Hello world"
         input_ids = tokenizer.encode(test_text, return_tensors="pt").to(model.device)
-        
+
         with torch.no_grad():
             outputs = model(input_ids)
             logits = outputs.logits.float().cpu()
-        
+
         # Basic shape checks
         self.assertEqual(logits.shape[0], 1)  # batch size
         self.assertEqual(logits.shape[1], input_ids.shape[1])  # sequence length
         self.assertEqual(logits.shape[2], model.config.vocab_size)  # vocab size 65536
-        
+
         # Check logits are not NaN or Inf
         self.assertFalse(torch.isnan(logits).any())
         self.assertFalse(torch.isinf(logits).any())
-        
+
         # Check expected mean logits (with tolerance for numerical variation)
         EXPECTED_MEAN = torch.tensor([[-6.6598, -7.8072]])
         torch.testing.assert_close(logits.mean(-1), EXPECTED_MEAN, rtol=1e-3, atol=1e-2)
-        
+
         # Check first 10 logits at position [0,0,:10]
         EXPECTED_SLICE = torch.tensor(
-            [-12.875, -13.0625, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -12.625, -4.21875])
+            [-12.875, -13.0625, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -12.625, -4.21875]
+        )
         torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=1e-2)
-        
+
         del model
         backend_empty_cache(torch_device)
         gc.collect()
@@ -96,21 +97,17 @@ class NanoChatIntegrationTest(unittest.TestCase):
         model_id = "nanochat-students/nanochat-d20"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = NanoChatForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
-        
+
         # Test generation with chat template
         prompt = "What is the capital of France?"
         conversation = [
             {"role": "user", "content": prompt},
         ]
-        
+
         inputs = tokenizer.apply_chat_template(
-            conversation,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt"
+            conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(model.device)
-        
+
         # Generate with greedy decoding for reproducibility
         with torch.no_grad():
             generated_ids = model.generate(
@@ -118,19 +115,19 @@ class NanoChatIntegrationTest(unittest.TestCase):
                 max_new_tokens=20,
                 do_sample=False,
             )
-        
+
         # Decode only the generated tokens
-        generated_tokens = generated_ids[0, inputs["input_ids"].shape[1]:]
+        generated_tokens = generated_ids[0, inputs["input_ids"].shape[1] :]
         generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-        
+
         # Check that text was generated
         self.assertGreater(len(generated_text), 0)
         self.assertGreater(len(generated_tokens), 0)
-        
+
         # The model should generate a reasonable response (with greedy decoding this is deterministic)
         # Expected: "The capital of France is Paris."
         self.assertIn("Paris", generated_text)
-        
+
         del model
         backend_empty_cache(torch_device)
         gc.collect()
@@ -141,39 +138,37 @@ class NanoChatIntegrationTest(unittest.TestCase):
         model_id = "karpathy/nanochat-d32"
         revision = "refs/pr/1"
         model = NanoChatForCausalLM.from_pretrained(
-            model_id, 
-            device_map="auto", 
-            torch_dtype=torch.bfloat16,
-            revision=revision
+            model_id, device_map="auto", torch_dtype=torch.bfloat16, revision=revision
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-        
+
         # Simple test input - "Hello world"
         test_text = "Hello world"
         input_ids = tokenizer.encode(test_text, return_tensors="pt").to(model.device)
-        
+
         with torch.no_grad():
             outputs = model(input_ids)
             logits = outputs.logits.float().cpu()
-        
+
         # Basic shape checks
         self.assertEqual(logits.shape[0], 1)  # batch size
         self.assertEqual(logits.shape[1], input_ids.shape[1])  # sequence length
         self.assertEqual(logits.shape[2], model.config.vocab_size)  # vocab size 65536
-        
+
         # Check logits are not NaN or Inf
         self.assertFalse(torch.isnan(logits).any())
         self.assertFalse(torch.isinf(logits).any())
-        
+
         # Check expected mean logits (with tolerance for numerical variation)
         EXPECTED_MEAN = torch.tensor([[-5.6796, -8.2629]])
         torch.testing.assert_close(logits.mean(-1), EXPECTED_MEAN, rtol=1e-3, atol=1e-2)
-        
+
         # Check first 10 logits at position [0,0,:10]
         EXPECTED_SLICE = torch.tensor(
-            [-12.4375, -13.1875, -12.875, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -11.9375, -1.6328])
+            [-12.4375, -13.1875, -12.875, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -11.9375, -1.6328]
+        )
         torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=1e-2)
-        
+
         del model
         backend_empty_cache(torch_device)
         gc.collect()
@@ -185,26 +180,19 @@ class NanoChatIntegrationTest(unittest.TestCase):
         revision = "refs/pr/1"
         tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
         model = NanoChatForCausalLM.from_pretrained(
-            model_id, 
-            device_map="auto", 
-            torch_dtype=torch.bfloat16,
-            revision=revision
+            model_id, device_map="auto", torch_dtype=torch.bfloat16, revision=revision
         )
-        
+
         # Test generation with chat template
         prompt = "What is the capital of France?"
         conversation = [
             {"role": "user", "content": prompt},
         ]
-        
+
         inputs = tokenizer.apply_chat_template(
-            conversation,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt"
+            conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(model.device)
-        
+
         # Generate with greedy decoding for reproducibility
         with torch.no_grad():
             generated_ids = model.generate(
@@ -212,19 +200,19 @@ class NanoChatIntegrationTest(unittest.TestCase):
                 max_new_tokens=20,
                 do_sample=False,
             )
-        
+
         # Decode only the generated tokens
-        generated_tokens = generated_ids[0, inputs["input_ids"].shape[1]:]
+        generated_tokens = generated_ids[0, inputs["input_ids"].shape[1] :]
         generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-        
+
         # Check that text was generated
         self.assertGreater(len(generated_text), 0)
         self.assertGreater(len(generated_tokens), 0)
-        
+
         # The model should generate a reasonable response (with greedy decoding this is deterministic)
         # Expected: "The capital of France is Paris."
         self.assertIn("Paris", generated_text)
-        
+
         del model
         backend_empty_cache(torch_device)
         gc.collect()
