@@ -603,7 +603,7 @@
         title: Jukebox
       - local: in_translation
         title: LED
-      - local: in_translation
+      - local: model_doc/lfm2
         title: LFM2
       - local: in_translation
         title: LFM2-VL
