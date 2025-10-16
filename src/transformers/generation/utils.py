@@ -2433,6 +2433,13 @@ class GenerationMixin(ContinuousMixin):
             # others are ignored
             if synced_gpus is not None:
                 logger.warning(f"synced_gpus is not ignored for continuous batching. Got {synced_gpus = }")
+            num_return_sequences = kwargs.get("num_return_sequences", 1)
+            num_beams = kwargs.get("num_beams", 1)
+            if num_return_sequences > 1 or num_beams > 1:  # FIXME: remove this once CB supports this (which is planned)
+                logger.warning(
+                    f"num_return_sequences and num_beams are not supported for continuous batching yet. "
+                    f"Got {num_return_sequences = } and {num_beams = }. "
+                )
 
             # switch to CB and signal it
             logger.warning(
