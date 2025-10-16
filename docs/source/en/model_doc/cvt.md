@@ -13,26 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-03-29 and added to Hugging Face Transformers on 2022-05-18.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2021-03-29 and added to Hugging Face Transformers on 2022-05-18 and contributed by [anugunj](https://huggingface.co/anugunj).*
 
 # Convolutional Vision Transformer (CvT)
 
-[Convolutional Vision Transformer (CvT)](https://huggingface.co/papers/2103.15808) is a model that combines the strengths of convolutional neural networks (CNNs) and Vision transformers for the computer vision tasks. It introduces convolutional layers into the vision transformer architecture, allowing it to capture local patterns in images while maintaining the global context provided by self-attention mechanisms.
-
-You can find all the CvT checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=cvt) organization.
-
-> [!TIP]
-> This model was contributed by [anujunj](https://huggingface.co/anugunj).
->
-> Click on the CvT models in the right sidebar for more examples of how to apply CvT to different computer vision tasks.
-
-The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
+[Convolutional vision Transformer (CvT)](https://huggingface.co/papers/2103.15808) enhances Vision Transformer (ViT) through the integration of convolutions, combining the strengths of both architectures. Key modifications include a hierarchical Transformer with a convolutional token embedding and a convolutional Transformer block with a convolutional projection. These enhancements introduce CNN properties like shift, scale, and distortion invariance while retaining Transformer benefits such as dynamic attention and global context. CvT achieves state-of-the-art performance on ImageNet-1k with fewer parameters and lower FLOPs, even when pretrained on larger datasets like ImageNet-22k. Notably, positional encoding can be omitted in CvT, simplifying the design for high-resolution vision tasks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,50 +26,36 @@ The example below demonstrates how to classify an image with [`Pipeline`] or the
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="image-classification",
-    model="microsoft/cvt-13",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="image-classification", model="microsoft/cvt-13", dtype="auto")
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
 import requests
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
-
-image_processor = AutoImageProcessor.from_pretrained("microsoft/cvt-13")
-model = AutoModelForImageClassification.from_pretrained(
-    "microsoft/cvt-13",
-    dtype=torch.float16,
-    device_map="auto"
-)
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to(model.device)
+
+image_processor = AutoImageProcessor.from_pretrained("microsoft/cvt-13")
+model = AutoModelForImageClassification.from_pretrained("microsoft/cvt-13", dtype="auto")
+
+inputs = image_processor(image, return_tensors="pt")
 
 with torch.no_grad():
-  logits = model(**inputs).logits
-predicted_class_id = logits.argmax(dim=-1).item()
+    logits = model(**inputs).logits
 
-class_labels = model.config.id2label
-predicted_class_label = class_labels[predicted_class_id]
-print(f"The predicted class label is: {predicted_class_label}")
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
 ```
 
 </hfoption>
 </hfoptions>
-
-## Resources
-
-Refer to this set of ViT [notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) for examples of inference and fine-tuning on custom datasets. Replace [`ViTFeatureExtractor`] and [`ViTForImageClassification`] in these notebooks with [`AutoImageProcessor`] and [`CvtForImageClassification`].
 
 ## CvtConfig
 
@@ -99,3 +70,4 @@ Refer to this set of ViT [notebooks](https://github.com/NielsRogge/Transformers-
 
 [[autodoc]] CvtForImageClassification
     - forward
+

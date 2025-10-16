@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -29,11 +28,6 @@ rendered properly in your Markdown viewer.
 
 The Arcee model is architecturally similar to Llama but uses `x * relu(x)` in MLP layers for improved gradient flow and is optimized for efficiency in both training and inference scenarios.
 
-> [!TIP]
-> The Arcee model supports extended context with RoPE scaling and all standard transformers features including Flash Attention 2, SDPA, gradient checkpointing, and quantization support.
-
-The example below demonstrates how to generate text with Arcee using [`Pipeline`] or the [`AutoModel`].
-
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
@@ -41,15 +35,8 @@ The example below demonstrates how to generate text with Arcee using [`Pipeline`
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="text-generation",
-    model="arcee-ai/AFM-4.5B",
-    dtype=torch.float16,
-    device=0
-)
-
-output = pipeline("The key innovation in Arcee is")
-print(output[0]["generated_text"])
+pipeline = pipeline(task="text-generation", model="arcee-ai/AFM-4.5B", dtype="auto")
+pipeline("Plants generate energy through a process known as  ")
 ```
 
 </hfoption>
@@ -57,16 +44,12 @@ print(output[0]["generated_text"])
 
 ```py
 import torch
-from transformers import AutoTokenizer, ArceeForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("arcee-ai/AFM-4.5B")
-model = ArceeForCausalLM.from_pretrained(
-    "arcee-ai/AFM-4.5B",
-    dtype=torch.float16,
-    device_map="auto"
-)
+model = ArceeForCausalLM.from_pretrained("arcee-ai/AFM-4.5B", dtype="auto")
 
-inputs = tokenizer("The key innovation in Arcee is", return_tensors="pt")
+inputs = tokenizer("Plants generate energy through a process known as  ", return_tensors="pt")
 with torch.no_grad():
     outputs = model.generate(**inputs, max_new_tokens=50)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))

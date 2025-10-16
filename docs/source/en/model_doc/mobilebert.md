@@ -13,23 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-04-06 and added to Hugging Face Transformers on 2020-11-16.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2020-04-06 and added to Hugging Face Transformers on 2020-11-16 and contributed by [vshampor](https://huggingface.co/vshampor).*
 
 # MobileBERT
 
-[MobileBERT](https://huggingface.co/papers/2004.02984) is a lightweight and efficient variant of BERT, specifically designed for resource-limited devices such as mobile phones. It retains BERT's architecture but significantly reduces model size and inference latency while maintaining strong performance on NLP tasks. MobileBERT achieves this through a bottleneck structure and carefully balanced self-attention and feedforward networks. The model is trained by knowledge transfer from a large BERT model with an inverted bottleneck structure.
-
-You can find the original MobileBERT checkpoint under the [Google](https://huggingface.co/google/mobilebert-uncased) organization.
-> [!TIP]
-> Click on the MobileBERT models in the right sidebar for more examples of how to apply MobileBERT to different language tasks.
-
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited Devices](https://huggingface.co/papers/2004.02984) is a bidirectional transformer model designed to compress and accelerate BERT for mobile devices. It maintains task-agnostic applicability through simple fine-tuning. MobileBERT uses bottleneck structures and balances self-attentions with feed-forward networks. Trained via knowledge transfer from an inverted-bottleneck BERT_LARGE teacher model, MobileBERT is 4.3x smaller and 5.5x faster than BERT_BASE. It achieves competitive results on GLUE with a GLUEscore of 77.7 and 62 ms latency on a Pixel 4 phone, and on SQuAD v1.1/v2.0 with dev F1 scores of 90.0/79.2.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -38,13 +26,8 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="google/mobilebert-uncased",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("The capital of France is [MASK].")
+pipeline = pipeline(task="fill-mask", model="google/mobilebert-uncased", dtype="auto")
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
 
 </hfoption>
@@ -54,40 +37,23 @@ pipeline("The capital of France is [MASK].")
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "google/mobilebert-uncased",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "google/mobilebert-uncased",
-    dtype=torch.float16,
-    device_map="auto",
-)
-inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("google/mobilebert-uncased", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "The capital of France is [MASK]." | transformers run --task fill-mask --model google/mobilebert-uncased --device 0
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- Inputs should be padded on the right because BERT uses absolute position embeddings.
+- Pad inputs on the right. MobileBERT uses absolute position embeddings.
 
 ## MobileBertConfig
 
@@ -144,3 +110,12 @@ echo -e "The capital of France is [MASK]." | transformers run --task fill-mask -
 
 [[autodoc]] MobileBertForQuestionAnswering
     - forward
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="fill-mask", model="google/mobilebert-uncased", dtype="auto")
+pipeline("The capital of France is [MASK].")
+```
+

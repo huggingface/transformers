@@ -8,7 +8,15 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-*This model was released on 2025-05-21 and added to Hugging Face Transformers on 2025-05-21.*
+*This model was released on 2025-05-21 and added to Hugging Face Transformers on 2025-05-21 and contributed by [DhiyaEddine](https://huggingface.co/DhiyaEddine), [ybelkada](https://huggingface.co/ybelkada), [JingweiZuo](https://huggingface.co/JingweiZuo), [IChahed](https://huggingface.co/IChahed), and [yellowvm](https://huggingface.co/yellowvm).*
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="tiiuae/falcon-h1-1.5b", dtype="auto")
+pipeline("The future of artificial intelligence is")
+```
 
 # FalconH1
 

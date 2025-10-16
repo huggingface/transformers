@@ -13,99 +13,65 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-12-01 and added to Hugging Face Transformers on 2023-12-13.*
+*This model was released on 2023-12-01 and added to Hugging Face Transformers on 2023-12-13 and contributed by [ybelkada](https://huggingface.co/ybelkada).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # VipLlava
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[VipLlava](https://huggingface.co/papers/2312.00784) introduces a novel multimodal model that enhances region-specific comprehension in vision-language tasks. It achieves this by allowing users to mark images with natural cues such as "red bounding boxes" or "pointed arrows" during training. This approach eliminates the need for complex region encodings and achieves state-of-the-art performance on benchmarks like Visual7W, PointQA, and Visual Commonsense Reasoning. Additionally, ViP-Bench is presented as a comprehensive benchmark to evaluate models' capabilities in understanding visual prompts across various dimensions.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="VipLlavaForConditionalGeneration">
 
-The VipLlava model was proposed in [Making Large Multimodal Models Understand Arbitrary Visual Prompts](https://huggingface.co/papers/2312.00784) by Mu Cai, Haotian Liu, Siva Karthik Mustikovela, Gregory P. Meyer, Yuning Chai, Dennis Park, Yong Jae Lee.
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, VipLlavaForConditionalGeneration
 
-VipLlava enhances the training protocol of Llava by marking images and interact with the model using natural cues like a "red bounding box" or "pointed arrow" during training.
+model = VipLlavaForConditionalGeneration.from_pretrained("llava-hf/vip-llava-7b-hf", dtype="auto")
+processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
-The abstract from the paper is the following:
+prompt = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n{}###Assistant:"
+question = "Can you please describe this image?"
+prompt = prompt.format(question)
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-*While existing large vision-language multimodal models focus on whole image understanding, there is a prominent gap in achieving region-specific comprehension. Current approaches that use textual coordinates or spatial encodings often fail to provide a user-friendly interface for visual prompting. To address this challenge, we introduce a novel multimodal model capable of decoding arbitrary visual prompts. This allows users to intuitively mark images and interact with the model using natural cues like a "red bounding box" or "pointed arrow". Our simple design directly overlays visual markers onto the RGB image, eliminating the need for complex region encodings, yet achieves state-of-the-art performance on region-understanding tasks like Visual7W, PointQA, and Visual Commonsense Reasoning benchmark. Furthermore, we present ViP-Bench, a comprehensive benchmark to assess the capability of models in understanding visual prompts across multiple dimensions, enabling future research in this domain. Code, data, and model are publicly available.*
+inputs = processor(text=text, images=image, return_tensors="pt").to(0, torch.float16)
+generate_ids = model.generate(**inputs, max_new_tokens=20)
+print(processor.decode(generate_ids[0][len(inputs["input_ids"][0]):], skip_special_tokens=True))
+```
 
-The original code can be found [here](https://github.com/mu-cai/ViP-LLaVA).
-
-This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada)
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- The architecture is similar than llava architecture except that the multi-modal projector takes a set of concatenated vision hidden states and has an additional layernorm layer on that module.
-
-- We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
-
-- Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
-
-> [!NOTE]
-> LLaVA models after release v4.46 will raise warnings about adding `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}` and `processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you.
-Adding these attributes means that LLaVA will try to infer the number of image tokens required per image and expand the text with as many `<image>` placeholders as there will be tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there will be failure when merging the embeddings.
-The attributes can be obtained from model config, as `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`. The `num_additional_image_tokens` should be `1` if the vision backbone adds a CLS token or `0` if nothing extra is added to the vision patches.
-
-- For better results, we recommend users to use the processor's `apply_chat_template()` method to format your prompt correctly. For that you need to construct a conversation history, passing in a plain string will not format your prompt. Each message in the conversation history for chat templates is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries, for "text" and "image" modalities, as follows:
-
-```python
-from transformers import AutoProcessor
-
-processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
-
-conversation = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": "What’s shown in this image?"},
-        ],
-    },
-    {
-        "role": "assistant",
-        "content": [{"type": "text", "text": "This image shows a red stop sign."},]
-    },
-    {
-
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "Describe the image in more details."},
-        ],
-    },
-]
-
-text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-
-# Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
-print(text_prompt)
->>> "###Human: <image>\nWhat’s shown in this image?###Assistant: This image shows a red stop sign.###Human: Describe the image in more details.###Assistant:"
-```
-
-- If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by VipLLaVa checkpoints:
-
-```bash
-A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt>###Assistant:
-```
-
-For multiple turns conversation:
-
-```bash
-A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt1>###Assistant: <answer1>###Human: <prompt2>###Assistant:
-```
+- Use `padding_side="left"` for batched generation to get more accurate results. Set `processor.tokenizer.padding_side = "left"` before generating.
+- The model doesn't explicitly train to process multiple images in the same prompt. While technically possible, you may get inaccurate results.
+- LLaVA models after release v4.46 raise warnings about adding `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}`, and `processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. Add these attributes to the processor if you own the model checkpoint, or open a PR if you don't.
+- Adding these attributes means LLaVA infers the number of image tokens required per image and expands text with `<image>` placeholders. Usually around 500 tokens per image, so ensure text isn't truncated to avoid embedding merge failures.
+- Get attributes from `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`. Set `num_additional_image_tokens` to 1 if the vision backbone adds a CLS token or 0 if nothing extra adds to the vision patches.
+- Use the processor's [`apply_chat_template`] method to format prompts correctly. Construct a conversation history instead of passing a plain string. Each message in the conversation history is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries for "text" and "image" modalities.
 
 ## VipLlavaConfig
 
 [[autodoc]] VipLlavaConfig
 
-## VipLlavaModel
-
-[[autodoc]] VipLlavaModel
-
 ## VipLlavaForConditionalGeneration
 
 [[autodoc]] VipLlavaForConditionalGeneration
     - forward
+
+## VipLlavaModel
+
+[[autodoc]] VipLlavaModel
+    - forward
+

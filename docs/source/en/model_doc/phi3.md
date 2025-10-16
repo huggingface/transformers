@@ -15,58 +15,52 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-04-22 and added to Hugging Face Transformers on 2024-04-24.*
 
-# Phi-3
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# Phi-3
 
-The Phi-3 model was proposed in [Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone](https://huggingface.co/papers/2404.14219) by Microsoft.
+[Phi-3](https://huggingface.co/papers/2404.14219) introduces phi-3-mini, a 3.8 billion parameter language model trained on 3.3 trillion tokens, achieving performance comparable to Mixtral 8x7B and GPT-3.5 on benchmarks like MMLU and MT-bench. The model's dataset includes heavily filtered web data and synthetic data, ensuring robustness, safety, and chat format alignment. Additionally, phi-3-small (7B parameters) and phi-3-medium (14B parameters) models, trained on 4.8T tokens, demonstrate higher capabilities with improved MMLU and MT-bench scores.
 
-### Summary
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The abstract from the Phi-3 paper is the following:
+```py
+import torch
+from transformers import pipeline
 
-We introduce phi-3-mini, a 3.8 billion parameter language model trained on 3.3 trillion tokens, whose overall performance, as measured by both academic benchmarks and internal testing, rivals that of models such as Mixtral 8x7B and GPT-3.5 (e.g., phi-3-mini achieves 69% on MMLU and 8.38 on MT-bench), despite being small enough to be deployed on a phone. The innovation lies entirely in our dataset for training, a scaled-up version of the one used for phi-2, composed of heavily filtered web data and synthetic data. The model is also further aligned for robustness, safety, and chat format. We also provide some initial parameter-scaling results with a 7B and 14B models trained for 4.8T tokens, called phi-3-small and phi-3-medium, both significantly more capable than phi-3-mini (e.g., respectively 75% and 78% on MMLU, and 8.7 and 8.9 on MT-bench).
+pipeline = pipeline(task="text-generation", model="microsoft/Phi-3-mini-4k-instruct", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-The original code for Phi-3 can be found [here](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct).
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
+model = AutoModelForCausalLM.from_pretrained("microsoft/Phi-3-mini-4k-instruct", dtype="auto",)
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- This model is very similar to `Llama` with the main difference of [`Phi3SuScaledRotaryEmbedding`] and [`Phi3YarnScaledRotaryEmbedding`], where they are used to extend the context of the rotary embeddings. The query, key and values are fused, and the MLP's up and gate projection layers are also fused.
-- The tokenizer used for this model is identical to the [`LlamaTokenizer`], with the exception of additional tokens.
-
-## How to use Phi-3
-
-<Tip warning={true}>
-
-Phi-3 has been integrated in the development version (4.40.0.dev) of `transformers`. Until the official version is released through `pip`, ensure that you are doing one of the following:
-
-* When loading the model, ensure that `trust_remote_code=True` is passed as an argument of the `from_pretrained()` function.
-
-* Update your local `transformers` to the development version: `pip uninstall -y transformers && pip install git+https://github.com/huggingface/transformers`. The previous command is an alternative to cloning and installing from the source.
-
-</Tip>
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> model = AutoModelForCausalLM.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
->>> tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
-
->>> messages = [{"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"}]
->>> inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
-
->>> outputs = model.generate(inputs, max_new_tokens=32)
->>> text = tokenizer.batch_decode(outputs)[0]
->>> print(text)
-<|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some creative ideas for incorporating both fruits
-```
+- This model is very similar to Llama. The main difference is [`Phi3SuScaledRotaryEmbedding`] and [`Phi3YarnScaledRotaryEmbedding`], which extend the context of rotary embeddings.
+- Query, key, and values are fused. The MLP's up and gate projection layers are also fused.
+- The tokenizer is identical to [`LlamaTokenizer`], except for additional tokens.
 
 ## Phi3Config
 
@@ -92,3 +86,4 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 
 [[autodoc]] Phi3ForTokenClassification
     - forward
+

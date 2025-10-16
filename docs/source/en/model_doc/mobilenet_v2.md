@@ -13,38 +13,20 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2018-01-13 and added to Hugging Face Transformers on 2022-11-14.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2018-01-13 and added to Hugging Face Transformers on 2022-11-14 and contributed by [Matthijs](https://huggingface.co/Matthijs).*
 
 # MobileNet V2
 
-[MobileNet V2](https://huggingface.co/papers/1801.04381) improves performance on mobile devices with a more efficient architecture. It uses inverted residual blocks and linear bottlenecks to start with a smaller representation of the data, expands it for processing, and shrinks it again to reduce the number of computations. The model also removes non-linearities to maintain accuracy despite its simplified design. Like [MobileNet V1](./mobilenet_v1), it uses depthwise separable convolutions for efficiency.
+[MobileNetV2: Inverted Residuals and Linear Bottlenecks](https://huggingface.co/papers/1801.04381) describes a new mobile architecture that enhances the performance of mobile models across various tasks and sizes. It introduces an inverted residual structure with thin bottleneck layers and lightweight depthwise convolutions. The model emphasizes the importance of removing non-linearities in narrow layers to preserve representational power. This design allows for decoupling the input/output domains from the transformation's expressiveness. Performance is evaluated on Imagenet classification, COCO object detection, and VOC image segmentation, with a focus on balancing accuracy, multiply-adds, and parameters.
 
-You can all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
-
-> [!TIP]
-> Click on the MobileNet V2 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
-
-The examples below demonstrate how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
-
-<hfoptions id="usage-img-class">
+<hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
+```py
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="image-classification",
-    model="google/mobilenet_v2_1.4_224",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="image-classification", model="google/mobilenet_v2_1.4_224", dtype="auto")
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
@@ -55,50 +37,39 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 import torch
 import requests
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
-
-image_processor = AutoImageProcessor.from_pretrained(
-    "google/mobilenet_v2_1.4_224",
-)
-model = AutoModelForImageClassification.from_pretrained(
-    "google/mobilenet_v2_1.4_224",
-)
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("google/mobilenet_v2_1.4_224")
+model = AutoModelForImageClassification.from_pretrained("google/mobilenet_v2_1.4_224", dtype="auto")
+
 inputs = image_processor(image, return_tensors="pt")
 
 with torch.no_grad():
-  logits = model(**inputs).logits
-predicted_class_id = logits.argmax(dim=-1).item()
+    logits = model(**inputs).logits
 
-class_labels = model.config.id2label
-predicted_class_label = class_labels[predicted_class_id]
-print(f"The predicted class label is: {predicted_class_label}")
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- Classification checkpoint names follow the pattern `mobilenet_v2_{depth_multiplier}_{resolution}`, like `mobilenet_v2_1.4_224`. `1.4` is the depth multiplier and `224` is the image resolution. Segmentation checkpoint names follow the pattern `deeplabv3_mobilenet_v2_{depth_multiplier}_{resolution}`.
-- While trained on images of a specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV2ImageProcessor`] handles the necessary preprocessing.
-- MobileNet is pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k), a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
-- The segmentation models use a [DeepLabV3+](https://huggingface.co/papers/1802.02611) head which is often pretrained on datasets like [PASCAL VOC](https://huggingface.co/datasets/merve/pascal-voc).
-- The original TensorFlow checkpoints determines the padding amount at inference because it depends on the input image size. To use the native PyTorch padding behavior, set `tf_padding=False` in [`MobileNetV2Config`].
+- Classification checkpoint names follow the pattern `mobilenet_v2_{depth_multiplier}_{resolution}`, like `mobilenet_v2_1.4_224`. 1.4 is the depth multiplier and 224 is the image resolution. Segmentation checkpoint names follow the pattern `deeplabv3_mobilenet_v2_{depth_multiplier}_{resolution}`.
+- While trained on images of specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV2ImageProcessor`] handles the necessary preprocessing.
+- MobileNet is pretrained on ImageNet-1k, a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
+- The segmentation models use a DeepLabV3+ head which is often pretrained on datasets like PASCAL VOC.
+- The original TensorFlow checkpoints determine the padding amount at inference because it depends on the input image size. Set `tf_padding=False` in [`MobileNetV2Config`] to use the native PyTorch padding behavior.
+- The Transformers implementation doesn't support the following features:
 
-    ```python
-    from transformers import MobileNetV2Config
-
-    config = MobileNetV2Config.from_pretrained("google/mobilenet_v2_1.4_224", tf_padding=True)
-    ```
-
-- The Transformers implementation does not support the following features.
-  - Uses global average pooling instead of the optional 7x7 average pooling with stride 2. For larger inputs, this gives a pooled output that is larger than a 1x1 pixel.
-  - `output_hidden_states=True` returns *all* intermediate hidden states. It is not possible to extract the output from specific layers for other downstream purposes.
-  - Does not include the quantized models from the original checkpoints because they include "FakeQuantization" operations to unquantize the weights.
-  - For segmentation models, the final convolution layer of the backbone is computed even though the DeepLabV3+ head doesn't use it.
+    - Uses global average pooling instead of the optional 7x7 average pooling with stride 2. For larger inputs, this gives a pooled output that's larger than a 1x1 pixel.
+    - `output_hidden_states=True` returns all intermediate hidden states. It's not possible to extract the output from specific layers for other downstream purposes.
+    - Doesn't include the quantized models from the original checkpoints because they include "FakeQuantization" operations to unquantize the weights.
+    - For segmentation models, the final convolution layer of the backbone is computed even though the DeepLabV3+ head doesn't use it.
 
 ## MobileNetV2Config
 

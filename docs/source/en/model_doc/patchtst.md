@@ -13,35 +13,37 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-11-27 and added to Hugging Face Transformers on 2023-11-13.*
+*This model was released on 2022-11-27 and added to Hugging Face Transformers on 2023-11-13 and contributed by [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), and [kashif](https://huggingface.co/kashif).*
 
 # PatchTST
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[https://huggingface.co/papers/2211.14730](PatchTST) proposes an efficient Transformer-based model for multivariate time series forecasting and self-supervised representation learning. The model segments time series into subseries-level patches, which are used as input tokens for the Transformer. Each channel, representing a single univariate time series, shares the same embedding and Transformer weights. This design retains local semantic information, reduces computation and memory usage, and allows the model to consider longer historical data. PatchTST significantly improves long-term forecasting accuracy compared to state-of-the-art Transformer-based models. Additionally, the model achieves excellent fine-tuning performance in self-supervised pre-training tasks and demonstrates superior forecasting accuracy when transferring pre-trained representations across datasets.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="PatchTSTForPrediction">
 
-The PatchTST model was proposed in [A Time Series is Worth 64 Words: Long-term Forecasting with Transformers](https://huggingface.co/papers/2211.14730) by Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong and Jayant Kalagnanam.
+```py
+import torch
+from huggingface_hub import hf_hub_download
+from transformers import PatchTSTConfig, PatchTSTForPrediction
 
-At a high level the model vectorizes time series into patches of a given size and encodes the resulting sequence of vectors via a Transformer that then outputs the prediction length forecast via an appropriate head. The model is illustrated in the following figure:
+file = hf_hub_download(
+    repo_id="hf-internal-testing/etth1-hourly-batch", filename="train-batch.pt", repo_type="dataset"
+)
+batch = torch.load(file)
 
-![model](https://github.com/namctin/transformers/assets/8100/150af169-29de-419a-8d98-eb78251c21fa)
+model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast", dtype="auto")
 
-The abstract from the paper is the following:
+outputs = model(past_values=batch["past_values"])
+prediction_outputs = outputs.prediction_outputs
+```
 
-*We propose an efficient design of Transformer-based models for multivariate time series forecasting and self-supervised representation learning. It is based on two key components: (i) segmentation of time series into subseries-level patches which are served as input tokens to Transformer; (ii) channel-independence where each channel contains a single univariate time series that shares the same embedding and Transformer weights across all the series. Patching design naturally has three-fold benefit: local semantic information is retained in the embedding; computation and memory usage of the attention maps are quadratically reduced given the same look-back window; and the model can attend longer history. Our channel-independent patch time series Transformer (PatchTST) can improve the long-term forecasting accuracy significantly when compared with that of SOTA Transformer-based models. We also apply our model to self-supervised pre-training tasks and attain excellent fine-tuning performance, which outperforms supervised training on large datasets. Transferring of masked pre-trained representation on one dataset to others also produces SOTA forecasting accuracy.*
-
-This model was contributed by [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), and [kashif](https://huggingface.co/kashif). The original code can be found [here](https://github.com/yuqinie98/PatchTST).
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-The model can also be used for time series classification and time series regression. See the respective [`PatchTSTForClassification`] and [`PatchTSTForRegression`] classes.
-
-## Resources
-
-- A blog post explaining PatchTST in depth can be found [here](https://huggingface.co/blog/patchtst). The blog can also be opened in Google Colab.
+- Use the model for time series classification and regression. See [`PatchTSTForTimeSeriesClassification`] and [`PatchTSTForRegression`] classes.
 
 ## PatchTSTConfig
 
@@ -71,3 +73,4 @@ The model can also be used for time series classification and time series regres
 
 [[autodoc]] PatchTSTForRegression
     - forward
+

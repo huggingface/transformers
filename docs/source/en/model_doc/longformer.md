@@ -1,4 +1,5 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
 
@@ -8,94 +9,55 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
--->
-*This model was released on 2020-04-10 and added to Hugging Face Transformers on 2020-11-16.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+-->
+*This model was released on 2020-04-10 and added to Hugging Face Transformers on 2020-11-16 and contributed by [beltagy](https://huggingface.co/beltagy).*
 
 # Longformer
 
-[Longformer](https://huggingface.co/papers/2004.05150) is a transformer model designed for processing long documents. The self-attention operation usually scales quadratically with sequence length, preventing transformers from processing longer sequences. The Longformer attention mechanism overcomes this by scaling linearly with sequence length. It combines local windowed attention with task-specific global attention, enabling efficient processing of documents with thousands of tokens.
-
-You can find all the original Longformer checkpoints under the [Ai2](https://huggingface.co/allenai?search_models=longformer) organization.
-
-> [!TIP]
-> Click on the Longformer models in the right sidebar for more examples of how to apply Longformer to different language tasks.
-
-The example below demonstrates how to fill the `<mask>` token with [`Pipeline`], [`AutoModel`] and from the command line.
+[Longformer: The Long-Document Transformer](https://huggingface.co/papers/2004.05150) introduces an attention mechanism that scales linearly with sequence length, enabling the processing of very long documents. This mechanism combines local windowed attention with task-specific global attention, replacing standard self-attention. Longformer achieves state-of-the-art results in character-level language modeling on text8 and enwik8. When pretrained and fine-tuned, it outperforms RoBERTa on long document tasks, setting new benchmarks on WikiHop and TriviaQA.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
+```py
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="allenai/longformer-base-4096",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("""San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee.
-Spencer, a fifth-year pro, will be placed on injured reserve soon after undergoing surgery Wednesday to repair the ligament. He injured his knee late in the 49ers’ road victory at Seattle on Sept. 14, and missed last week’s victory over Detroit.
-Tarell Brown and Donald Strickland will compete to replace Spencer with the 49ers, who kept 12 defensive backs on their 53-man roster to start the season. Brown, a second-year pro, got his first career interception last weekend while filling in for Strickland, who also sat out with a knee injury.""")
+pipeline = pipeline(task="fill-mask", model="allenai/longformer-base-4096", dtype="auto")
+pipeline("Plants are among the most <mask> and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet. Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts. In the presence of light, plants absorb carbon dioxide from the atmosphere through small pores in their leaves called stomata, and take in water from the soil through their root systems. These ingredients are then transformed into glucose, a type of sugar that serves as a source of chemical energy, and oxygen, which is released as a byproduct into the atmosphere. The glucose produced during photosynthesis is not just used immediately; plants also store it as starch or convert it into other organic compounds like cellulose, which is essential for building their cellular structure.")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```python
+```py
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
+model = AutoModelForMaskedLM.from_pretrained("allenai/longformer-base-4096", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
-model = AutoModelForMaskedLM.from_pretrained("allenai/longformer-base-4096")
 
-text = (
+text="""
+Plants are among the most <mask> and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
+Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts. In the presence of light, plants absorb carbon dioxide from the atmosphere through small pores in their leaves called stomata, and take in water from the soil through their root systems.
+These ingredients are then transformed into glucose, a type of sugar that serves as a source of chemical energy, and oxygen, which is released as a byproduct into the atmosphere. The glucose produced during photosynthesis is not just used immediately; plants also store it as starch or convert it into other organic compounds like cellulose, which is essential for building their cellular structure.
 """
-San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee.
-Spencer, a fifth-year pro, will be placed on injured reserve soon after undergoing surgery Wednesday to repair the ligament. He injured his knee late in the 49ers’ road victory at Seattle on Sept. 14, and missed last week’s victory over Detroit.
-Tarell Brown and Donald Strickland will compete to replace Spencer with the 49ers, who kept 12 defensive backs on their 53-man roster to start the season. Brown, a second-year pro, got his first career interception last weekend while filling in for Strickland, who also sat out with a knee injury.
-"""
-)
-
 input_ids = tokenizer([text], return_tensors="pt")["input_ids"]
 logits = model(input_ids).logits
-
-masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-probs = logits[0, masked_index].softmax(dim=0)
-values, predictions = probs.topk(5)
-tokenizer.decode(predictions).split()
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee." | transformers run --task fill-mask --model allenai/longformer-base-4096 --device 0
+print(tokenizer.decode(logits[0, (input_ids[0] == tokenizer.mask_token_id).nonzero().item()].argmax()))
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- Longformer is based on [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta) and doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. You only need to separate the segments with the separation token `</s>` or `tokenizer.sep_token`.
-- You can set which tokens can attend locally and which tokens attend globally with the `global_attention_mask` at inference (see this [example](https://huggingface.co/docs/transformers/en/model_doc/longformer#transformers.LongformerModel.forward.example) for more details). A value of `0` means a token attends locally and a value of `1` means a token attends globally.
-- [`LongformerForMaskedLM`] is trained like [`RobertaForMaskedLM`] and should be used as shown below.
-
-  ```py
-    input_ids = tokenizer.encode("This is a sentence from [MASK] training data", return_tensors="pt")
-    mlm_labels = tokenizer.encode("This is a sentence from the training data", return_tensors="pt")
-    loss = model(input_ids, labels=input_ids, masked_lm_labels=mlm_labels)[0]
-    ```
+- Longformer is based on RoBERTa and doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. Just separate segments with the separation token `</s>` or `tokenizer.sep_token`.
+- Set which tokens attend locally and which attend globally with the `global_attention_mask` at inference. A value of 0 means a token attends locally. A value of 1 means a token attends globally.
+- [`LongformerForMaskedLM`] is trained like [`RobertaForMaskedLM`] and should be similarly.
 
 ## LongformerConfig
 
@@ -124,6 +86,12 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 [[autodoc]] models.longformer.modeling_longformer.LongformerMultipleChoiceModelOutput
 
 [[autodoc]] models.longformer.modeling_longformer.LongformerTokenClassifierOutput
+
+] models.longformer.modeling_tf_longformer.TFLongformerBaseModelOutputWithPooling
+
+] models.longformer.modeling_tf_longformer.TFLongformerQuestionAnsweringModelOutput
+
+] models.longformer.modeling_tf_longformer.TFLongformerMultipleChoiceModelOutput
 
 ## LongformerModel
 
@@ -154,3 +122,4 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 
 [[autodoc]] LongformerForQuestionAnswering
     - forward
+

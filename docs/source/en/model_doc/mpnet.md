@@ -17,45 +17,43 @@ rendered properly in your Markdown viewer.
 
 # MPNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[MPNet: Masked and Permuted Pre-training for Language Understanding](https://huggingface.co/papers/2004.09297) proposes a novel pre-training method combining masked and permuted language modeling to enhance natural language understanding. This approach addresses the limitations of BERT, which neglects token dependencies, and XLNet, which lacks full position information. MPNet incorporates token dependencies through permuted language modeling and uses auxiliary position information to minimize discrepancies between pre-training and fine-tuning. Pre-trained on over 160GB of text corpora, MPNet outperforms BERT, XLNet, and RoBERTa on various downstream tasks such as GLUE and SQuAD.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The MPNet model was proposed in [MPNet: Masked and Permuted Pre-training for Language Understanding](https://huggingface.co/papers/2004.09297) by Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, Tie-Yan Liu.
+```py
+import torch
+from transformers import pipeline
 
-MPNet adopts a novel pre-training method, named masked and permuted language modeling, to inherit the advantages of
-masked language modeling and permuted language modeling for natural language understanding.
+pipeline = pipeline(task="fill-mask", model="microsoft/mpnet-base", dtype="auto")
+pipeline("Plants create <mask> through a process known as photosynthesis.")
+```
 
-The abstract from the paper is the following:
+</hfoption>
+<hfoption id="AutoModel">
 
-*BERT adopts masked language modeling (MLM) for pre-training and is one of the most successful pre-training models.
-Since BERT neglects dependency among predicted tokens, XLNet introduces permuted language modeling (PLM) for
-pre-training to address this problem. However, XLNet does not leverage the full position information of a sentence and
-thus suffers from position discrepancy between pre-training and fine-tuning. In this paper, we propose MPNet, a novel
-pre-training method that inherits the advantages of BERT and XLNet and avoids their limitations. MPNet leverages the
-dependency among predicted tokens through permuted language modeling (vs. MLM in BERT), and takes auxiliary position
-information as input to make the model see a full sentence and thus reducing the position discrepancy (vs. PLM in
-XLNet). We pre-train MPNet on a large-scale dataset (over 160GB text corpora) and fine-tune on a variety of
-down-streaming tasks (GLUE, SQuAD, etc). Experimental results show that MPNet outperforms MLM and PLM by a large
-margin, and achieves better results on these tasks compared with previous state-of-the-art pre-trained methods (e.g.,
-BERT, XLNet, RoBERTa) under the same model setting.*
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-The original code can be found [here](https://github.com/microsoft/MPNet).
+model = AutoModelForMaskedLM.from_pretrained("microsoft/mpnet-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/mpnet-base")
+
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-MPNet doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just
-separate your segments with the separation token `tokenizer.sep_token` (or `[sep]`).
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+- MPNet doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. Just separate segments with the separation token `tokenizer.sep_token` (or `[sep]`).
 
 ## MPNetConfig
 
@@ -102,3 +100,4 @@ separate your segments with the separation token `tokenizer.sep_token` (or `[sep
 
 [[autodoc]] MPNetForQuestionAnswering
     - forward
+

@@ -13,27 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-03-23 and added to Hugging Face Transformers on 2020-11-16.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2019-10-29 and added to Hugging Face Transformers on 2020-11-16 and contributed by [lysandre](https://huggingface.co/lysandre).*
 
 # ELECTRA
 
-[ELECTRA](https://huggingface.co/papers/2003.10555) modifies the pretraining objective of traditional masked language models like BERT. Instead of just masking tokens and asking the model to predict them, ELECTRA trains two models, a generator and a discriminator. The generator replaces some tokens with plausible alternatives and the discriminator (the model you'll actually use) learns to detect which tokens are original and which were replaced. This training approach is very efficient and scales to larger models while using considerably less compute.
-
-This approach is super efficient because ELECTRA learns from every single token in the input, not just the masked ones. That's why even the small ELECTRA models can match or outperform much larger models while using way less computing resources.
-
-You can find all the original ELECTRA checkpoints under the [ELECTRA](https://huggingface.co/collections/google/electra-release-64ff6e8b18830fabea30a1ab) release.
-
-> [!TIP]
-> Click on the right sidebar for more examples of how to use ELECTRA for different language tasks like sequence classification, token classification, and question answering.
-
-The example below demonstrates how to classify text with [`Pipeline`] or the [`AutoModel`] class.
+[ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators](https://huggingface.co/papers/1910.13461) proposes a novel pretraining method that uses two transformer models: a generator and a discriminator. The generator replaces tokens in a sequence with plausible alternatives, while the discriminator identifies which tokens were replaced. This approach, called replaced token detection, is more sample-efficient than masked language modeling (MLM) because it operates on all input tokens. Experiments show that ELECTRA outperforms BERT with the same resources, especially for smaller models, and performs comparably to RoBERTa and XLNet with less compute.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -42,13 +26,8 @@ The example below demonstrates how to classify text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 
-classifier = pipeline(
-    task="text-classification",
-    model="bhadresh-savani/electra-base-emotion",
-    dtype=torch.float16,
-    device=0
-)
-classifier("This restaurant has amazing food!")
+pipeline = pipeline("fill-mask", model="google/electra-small-generator", dtype="auto")
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
 
 </hfoption>
@@ -56,51 +35,28 @@ classifier("This restaurant has amazing food!")
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "bhadresh-savani/electra-base-emotion",
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "bhadresh-savani/electra-base-emotion",
-    dtype=torch.float16
-)
-inputs = tokenizer("ELECTRA is more efficient than BERT", return_tensors="pt")
+model = AutoModelForMaskedLM.from_pretrained("google/electra-small-generator", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/electra-small-generator")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    logits = outputs.logits
-    predicted_class_id = logits.argmax(dim=-1).item()
-    predicted_label = model.config.id2label[predicted_class_id]
-print(f"Predicted label: {predicted_label}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "This restaurant has amazing food." | transformers run --task text-classification --model bhadresh-savani/electra-base-emotion --device 0
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
+## Usage tips
 
-- ELECTRA consists of two transformer models, a generator (G) and a discriminator (D). For most downstream tasks, use the discriminator model (as indicated by `*-discriminator` in the name) rather than the generator.
-- ELECTRA comes in three sizes: small (14M parameters), base (110M parameters), and large (335M parameters).
-- ELECTRA can use a smaller embedding size than the hidden size for efficiency. When `embedding_size` is smaller than `hidden_size` in the configuration, a projection layer connects them.
-- When using batched inputs with padding, make sure to use attention masks to prevent the model from attending to padding tokens.
-
-    ```py
-    # Example of properly handling padding with attention masks
-    inputs = tokenizer(["Short text", "This is a much longer text that needs padding"],
-                    padding=True,
-                    return_tensors="pt")
-    outputs = model(**inputs)  # automatically uses the attention_mask
-    ```
-
-- When using the discriminator for a downstream task, you can load it into any of the ELECTRA model classes ([`ElectraForSequenceClassification`], [`ElectraForTokenClassification`], etc.).
+- ELECTRA has two transformer models: a generator (G) and a discriminator (D). Use the discriminator model (indicated by `*-discriminator` in the name) for most downstream tasks.
+- ELECTRA can use a smaller embedding size than the hidden size for efficiency. When `embedding_size` is smaller than `hidden_size`, a projection layer connects them.
+- Use attention masks with batched inputs that have padding. This prevents the model from attending to padding tokens.
+- Load the discriminator into any ELECTRA model class (`ElectraForSequenceClassification`, `ElectraForTokenClassification`, etc.) for downstream tasks.
 
 ## ElectraConfig
 
@@ -157,3 +113,4 @@ echo -e "This restaurant has amazing food." | transformers run --task text-class
 
 [[autodoc]] ElectraForQuestionAnswering
     - forward
+

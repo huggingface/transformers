@@ -13,29 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-06-02 and added to Hugging Face Transformers on 2025-04-28.*
+
+*This model was released on 2023-06-02 and added to Hugging Face Transformers on 2025-04-28 and contributed by [sushmanth](https://huggingface.co/sushmanth).*
 
 # SAM-HQ
 
-## Overview
-
-SAM-HQ (High-Quality Segment Anything Model) was proposed in [Segment Anything in High Quality](https://huggingface.co/papers/2306.01567) by Lei Ke, Mingqiao Ye, Martin Danelljan, Yifan Liu, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu.
-
-The model is an enhancement to the original SAM model that produces significantly higher quality segmentation masks while maintaining SAM's original promptable design, efficiency, and zero-shot generalizability.
-
-![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
-
-SAM-HQ introduces several key improvements over the original SAM model:
-
-1. High-Quality Output Token: A learnable token injected into SAM's mask decoder for higher quality mask prediction
-2. Global-local Feature Fusion: Combines features from different stages of the model for improved mask details
-3. Training Data: Uses a carefully curated dataset of 44K high-quality masks instead of SA-1B
-4. Efficiency: Adds only 0.5% additional parameters while significantly improving mask quality
-5. Zero-shot Capability: Maintains SAM's strong zero-shot performance while improving accuracy
-
-The abstract from the paper is the following:
-
-*The recent Segment Anything Model (SAM) represents a big leap in scaling up segmentation models, allowing for powerful zero-shot capabilities and flexible prompting. Despite being trained with 1.1 billion masks, SAM's mask prediction quality falls short in many cases, particularly when dealing with objects that have intricate structures. We propose HQ-SAM, equipping SAM with the ability to accurately segment any object, while maintaining SAM's original promptable design, efficiency, and zero-shot generalizability. Our careful design reuses and preserves the pre-trained model weights of SAM, while only introducing minimal additional parameters and computation. We design a learnable High-Quality Output Token, which is injected into SAM's mask decoder and is responsible for predicting the high-quality mask. Instead of only applying it on mask-decoder features, we first fuse them with early and final ViT features for improved mask details. To train our introduced learnable parameters, we compose a dataset of 44K fine-grained masks from several sources. HQ-SAM is only trained on the introduced dataset of 44k masks, which takes only 4 hours on 8 GPUs.*
+[SAM-HQ](https://huggingface.co/papers/2306.01567) enhances the original SAM model by producing higher quality segmentation masks, especially for intricate objects. It introduces a learnable High-Quality Output Token and global-local feature fusion to improve mask details. Trained on a dataset of 44K high-quality masks, SAM-HQ adds only 0.5% additional parameters while maintaining SAM's promptable design, efficiency, and zero-shot generalizability. The model predicts binary masks with accurate boundaries and handles thin structures better, and it supports multiple points for a single mask prediction.
 
 Tips:
 
@@ -49,6 +32,14 @@ Tips:
 
 This model was contributed by [sushmanth](https://huggingface.co/sushmanth).
 The original code can be found [here](https://github.com/SysCV/SAM-HQ).
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="image-segmentation", model="syscv-community/sam-hq-vit-base", dtype="auto")
+pipeline("path/to/image.png")
+```
 
 Below is an example on how to run mask generation given an image and a 2D point:
 
@@ -141,3 +132,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] SamHQModel
     - forward
+

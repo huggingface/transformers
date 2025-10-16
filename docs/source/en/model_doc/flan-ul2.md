@@ -17,42 +17,37 @@ rendered properly in your Markdown viewer.
 
 # FLAN-UL2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[FLAN-UL2](https://huggingface.co/papers/2210.11416) investigates instruction finetuning of language models, focusing on scaling task diversity, model size, and chain-of-thought data. The authors show that instruction finetuning substantially improves performance across model families (PaLM, T5, U-PaLM), prompting strategies (zero-shot, few-shot, CoT), and benchmarks (MMLU, BBH, TyDiQA, MGSM). Notably, Flan-PaLM 540B finetuned on 1.8K tasks surpasses PaLM 540B by 9.4% on average and achieves state-of-the-art results, including 75.2% on five-shot MMLU. Additionally, publicly released Flan-T5 checkpoints demonstrate strong few-shot abilities rivaling much larger models, underscoring instruction finetuning as a broadly effective method for enhancing pretrained language models.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-[Flan-UL2](https://www.yitay.net/blog/flan-ul2-20b) is an encoder decoder model based on the T5 architecture. It uses the same configuration as the [UL2](ul2) model released earlier last year.
-It was fine tuned using the "Flan" prompt tuning and dataset collection. Similar to `Flan-T5`,  one can directly use FLAN-UL2 weights without finetuning the model:
+```py
+import torch
+from transformers import pipeline
 
-According to the original blog here are the notable improvements:
-
-- The original UL2 model was only trained with receptive field of 512, which made it non-ideal for N-shot prompting where N is large.
-- The Flan-UL2 checkpoint uses a receptive field of 2048 which makes it more usable for few-shot in-context learning.
-- The original UL2 model also had mode switch tokens that was rather mandatory to get good performance. However, they were a little cumbersome as this requires often some changes during inference or finetuning. In this update/change, we continue training UL2 20B for an additional 100k steps (with small batch) to forget “mode tokens” before applying Flan instruction tuning. This Flan-UL2 checkpoint does not require mode tokens anymore.
-Google has released the following variants:
-
-The original checkpoints can be found [here](https://github.com/google-research/google-research/tree/master/ul2).
-
-## Running on low resource devices
-
-The model is pretty heavy (~40GB in half precision) so if you just want to run the model, make sure you load your model in 8bit, and use `device_map="auto"` to make sure  you don't have any OOM issue!
-
-```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
-
->>> inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")
->>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']
+pipeline = pipeline("text-generation", model="google/flan-ul2", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
-<Tip>
+</hfoption>
+<hfoption id="AutoModel">
 
-Refer to [T5's documentation page](t5) for API reference, tips, code examples and notebooks.
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-</Tip>
+model = AutoModelForCausalLM.from_pretrained("ggoogle/flan-ul2", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
+
+## Usage tips
+
+- The model is heavy (~40GB in half precision). Load the model in 8-bit and use `device_map="auto"` to avoid out-of-memory issues.

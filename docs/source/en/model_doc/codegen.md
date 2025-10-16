@@ -13,61 +13,40 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-03-25 and added to Hugging Face Transformers on 2022-06-24.*
+*This model was released on 2022-03-25 and added to Hugging Face Transformers on 2022-06-24 and contributed by [rooa](https://huggingface.co/rooa).*
 
 # CodeGen
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[CodeGen](https://huggingface.co/papers/2203.13474) is an autoregressive language model designed for program synthesis through a conversational paradigm. Trained on diverse datasets including The Pile, BigQuery, and BigPython, CodeGen addresses challenges in program synthesis by treating it as a sequence prediction problem where specifications are expressed in natural language. The model demonstrates conversational capabilities and outperforms OpenAI's Codex on the HumanEval benchmark. A multi-turn programming benchmark (MTPB) was developed to evaluate the model's conversational program synthesis abilities. 
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The CodeGen model was proposed in [A Conversational Paradigm for Program Synthesis](https://huggingface.co/papers/2203.13474) by Erik Nijkamp, Bo Pang, Hiroaki Hayashi, Lifu Tu, Huan Wang, Yingbo Zhou, Silvio Savarese, and Caiming Xiong.
+```py
+import torch
+from transformers import pipeline
 
-CodeGen is an autoregressive language model for program synthesis trained sequentially on [The Pile](https://pile.eleuther.ai/), BigQuery, and BigPython.
-
-The abstract from the paper is the following:
-
-*Program synthesis strives to generate a computer program as a solution to a given problem specification. We propose a conversational program synthesis approach via large language models, which addresses the challenges of searching over a vast program space and user intent specification faced in prior approaches. Our new approach casts the process of writing a specification and program as a multi-turn conversation between a user and a system. It treats program synthesis as a sequence prediction problem, in which the specification is expressed in natural language and the desired program is conditionally sampled. We train a family of large language models, called CodeGen, on natural language and programming language data. With weak supervision in the data and the scaling up of data size and model size, conversational capacities emerge from the simple autoregressive language modeling. To study the model behavior on conversational program synthesis, we develop a multi-turn programming benchmark (MTPB), where solving each problem requires multi-step synthesis via multi-turn conversation between the user and the model. Our findings show the emergence of conversational capabilities and the effectiveness of the proposed conversational program synthesis paradigm. In addition, our model CodeGen (with up to 16B parameters trained on TPU-v4) outperforms OpenAI's Codex on the HumanEval benchmark. We make the training library JaxFormer including checkpoints available as open source contribution: [this https URL](https://github.com/salesforce/codegen).*
-
-This model was contributed by [Hiroaki Hayashi](https://huggingface.co/rooa).
-The original code can be found [here](https://github.com/salesforce/codegen).
-
-## Checkpoint Naming
-
-* CodeGen model [checkpoints](https://huggingface.co/models?other=codegen) are available on different pre-training data with variable sizes.
-* The format is: `Salesforce/codegen-{size}-{data}`, where
-  * `size`: `350M`, `2B`, `6B`, `16B`
-  * `data`:
-    * `nl`: Pre-trained on the Pile
-    * `multi`: Initialized with `nl`, then further pre-trained on multiple programming languages data
-    * `mono`: Initialized with `multi`, then further pre-trained on Python data
-* For example, `Salesforce/codegen-350M-mono` offers a 350 million-parameter checkpoint pre-trained sequentially on the Pile, multiple programming languages, and Python.
-
-## Usage example
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> checkpoint = "Salesforce/codegen-350M-mono"
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-
->>> text = "def hello_world():"
-
->>> completion = model.generate(**tokenizer(text, return_tensors="pt"))
-
->>> print(tokenizer.decode(completion[0]))
-def hello_world():
-    print("Hello World")
-
-hello_world()
+pipeline = pipeline(task="text-generation", model="Salesforce/codegen-350M-mono", dtype="auto")
+pipeline("def fibonacci(n):")
 ```
 
-## Resources
+</hfoption>
+<hfoption id="AutoModel">
 
-- [Causal language modeling task guide](../tasks/language_modeling)
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("Salesforce/codegen-350M-mono", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
+
+inputs = tokenizer("def fibonacci(n):", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## CodeGenConfig
 
@@ -93,3 +72,4 @@ hello_world()
 
 [[autodoc]] CodeGenForCausalLM
     - forward
+

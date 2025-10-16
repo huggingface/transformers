@@ -13,85 +13,54 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-10-08 and added to Hugging Face Transformers on 2022-09-14.*
-
-<div style="float: right;">
- <div class="flex flex-wrap space-x-1">
-  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
- </div>
-</div>
+*This model was released on 2020-10-08 and added to Hugging Face Transformers on 2022-09-14 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # Deformable DETR
 
-[Deformable DETR](https://huggingface.co/papers/2010.04159) improves on the original [DETR](./detr) by using a deformable attention module. This mechanism selectively attends to a small set of key sampling points around a reference. It improves training speed and improves accuracy.
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/deformable_detr_architecture.png"
-alt="drawing" width="600"/>
-
-<small> Deformable DETR architecture. Taken from the <a href="https://huggingface.co/papers/2010.04159">original paper</a>.</small>
-
-You can find all the available Deformable DETR checkpoints under the [SenseTime](https://huggingface.co/SenseTime) organization.
-
-> [!TIP]
-> This model was contributed by [nielsr](https://huggingface.co/nielsr).
->
-> Click on the Deformable DETR models in the right sidebar for more examples of how to apply Deformable DETR to different object detection and segmentation tasks.
-
-The example below demonstrates how to perform object detection with the [`Pipeline`] and the [`AutoModel`] class.
+[Deformable DETR: Deformable Transformers for End-to-End Object Detection](https://huggingface.co/papers/2010.04159) addresses the slow convergence and limited feature spatial resolution issues of DETR by introducing a deformable attention module. This module focuses on a small set of key sampling points around a reference, enhancing performance, particularly for small objects, and reducing training time by a factor of ten. Experiments on the COCO benchmark confirm the effectiveness of this approach.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
-from transformers import pipeline
+```py
 import torch
+from transformers import pipeline
 
-pipeline = pipeline(
-    "object-detection", 
-    model="SenseTime/deformable-detr",
-    dtype=torch.float16,
-    device_map=0
-)
-
-pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
+pipeline = pipeline(task="object-detection", model="SenseTime/deformable-detr", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```python
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
-from PIL import Image
-import requests
+```py
 import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-model = AutoModelForObjectDetection.from_pretrained("SenseTime/deformable-detr")
+model = AutoModelForObjectDetection.from_pretrained("SenseTime/deformable-detr", dtype="auto")
 
-# prepare image for the model
 inputs = image_processor(images=image, return_tensors="pt")
-
-with torch.no_grad():
-    outputs = model(**inputs)
-
-results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]), threshold=0.3)
-
-for result in results:
-    for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
-        score, label = score.item(), label_id.item()
-        box = [round(i, 2) for i in box.tolist()]
-        print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+outputs = model(**inputs)
+target_sizes = torch.tensor([image.size[::-1]])
+results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+    0
+]
+for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+    box = [round(i, 2) for i in box.tolist()]
+    print(
+        f"Detected {model.config.id2label[label.item()]} with confidence "
+        f"{round(score.item(), 3)} at location {box}"
+    )
 ```
 
 </hfoption>
 </hfoptions>
-
-## Resources
-
-- Refer to this set of [notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Deformable-DETR) for inference and fine-tuning [`DeformableDetrForObjectDetection`] on a custom dataset.
 
 ## DeformableDetrImageProcessor
 
@@ -118,3 +87,4 @@ for result in results:
 
 [[autodoc]] DeformableDetrForObjectDetection
     - forward
+

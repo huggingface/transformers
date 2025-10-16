@@ -13,132 +13,68 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-09-27 and added to Hugging Face Transformers on 2025-01-10.*
+*This model was released on 2024-09-27 and added to Hugging Face Transformers on 2025-01-10 and contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Emu3
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Emu3: Next-Token Prediction is All You Need](https://huggingface.co/papers/2409.18869) is a multimodal LLM that employs vector quantization to tokenize images and videos into discrete tokens, which are then fused with text tokens for generation tasks. Emu3 excels in both image and text generation, outperforming models like SDXL and LLaVA-1.6, without relying on diffusion or compositional architectures. The model can also generate high-fidelity videos by predicting the next token in a video sequence, simplifying multimodal model designs by focusing on token prediction.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Emu3 model was proposed in [Emu3: Next-Token Prediction is All You Need](https://huggingface.co/papers/2409.18869) by Xinlong Wang, Xiaosong Zhang, Zhengxiong Luo, Quan Sun, Yufeng Cui, Jinsheng Wang, Fan Zhang, Yueze Wang, Zhen Li, Qiying Yu, Yingli Zhao, Yulong Ao, Xuebin Min, Tao Li, Boya Wu, Bo Zhao, Bowen Zhang, Liangdong Wang, Guang Liu, Zheqi He, Xi Yang, Jingjing Liu, Yonghua Lin, Tiejun Huang, Zhongyuan Wang.
-
-Emu3 is a multimodal LLM that uses vector quantization to tokenize images into discrete tokens. Discretized image tokens are later fused with text token ids for image and text generation. The model can additionally generate images by predicting image token ids.
-
-The abstract from the paper is the following:
-
-*While next-token prediction is considered a promising path towards artificial general intelligence, it has struggled to excel in multimodal tasks, which are still dominated by diffusion models (e.g., Stable Diffusion) and compositional approaches (e.g., CLIP combined with LLMs). In this paper, we introduce Emu3, a new suite of state-of-the-art multimodal models trained solely with next-token prediction. By tokenizing images, text, and videos into a discrete space, we train a single transformer from scratch on a mixture of multimodal sequences. Emu3 outperforms several well-established task-specific models in both generation and perception tasks, surpassing flagship models such as SDXL and LLaVA-1.6, while eliminating the need for diffusion or compositional architectures. Emu3 is also capable of generating high-fidelity video via predicting the next token in a video sequence. We simplify complex multimodal model designs by converging on a singular focus: tokens, unlocking great potential for scaling both during training and inference. Our results demonstrate that next-token prediction is a promising path towards building general multimodal intelligence beyond language. We open-source key techniques and models to support further research in this direction.*
-
-Tips:
-
-- We advise users to set `processor.tokenizer.padding_side = "left"` before batched generation as it leads to more accurate results.
-
-- Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
-
-- Emu3 has two different checkpoints for image-generation and text-generation, make sure to use the correct checkpoint when loading the model. To generate an image, it is advised to use `prefix_constraints` so that the generated tokens are sampled only from possible image tokens. See more below for usage examples.
-
-> [!TIP]
-> Emu3 implementation in Transformers uses a special image token to indicate where to merge image embeddings. The special image token isn't new and uses one of the reserved tokens: `<|extra_0|>`. You have to add `<image>` to your prompt in the place where the image should be embedded for correct generation.
-
-This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
-The original code can be found [here](https://github.com/baaivision/Emu3).
-
-## Usage example
-
-### Text generation inference
-
-Here's how to load the model and perform inference in half-precision (`torch.bfloat16`) to generate textual output from text or text and image inputs:
-
-```python
-from transformers import Emu3Processor, Emu3ForConditionalGeneration
+```py
 import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="image-text-to-text", model="BAAI/Emu3-Chat-hf", dtype="auto")
+messages = [
+    {"role": "user",
+     "content": [
+       {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        {"type": "text", "text": "What is shown in this image?<image>"},
+    ]},
+]
+pipeline(text=messages, max_new_tokens=300, return_full_text=False)
+```
+
+</hfoption>
+<hfoption id="Emu3ForConditionalGeneration">
+
+```py
+import torch
+import reqursts
 from PIL import Image
-import requests
+from transformers import Emu3Processor, Emu3ForConditionalGeneration
 
 processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16, device_map="auto")
+model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", dtype="auto")
 
-# prepare image and text prompt
-url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "What do you see in this image?<image>"
 
-inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor(images=image, text=prompt, return_tensors="pt").to(dtype=torch.bfloat16)
 
-# autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=50)
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-### Image generation inference
+</hfoption>
+</hfoptions>
 
-Emu3 can also generate images from textual input. Here is how you can do it:
+## Usage tips
 
-```python
-processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", dtype="bfloat16", device_map="auto", attn_implementation="flash_attention_2")
-
-
-inputs = processor(
-    text=["a portrait of young girl. masterpiece, film grained, best quality.", "a dog running under the rain"],
-    padding=True,
-    return_tensors="pt",
-    return_for_image_generation=True,
-)
-inputs = inputs.to(device=model.device, dtype=torch.bfloat16)
-
-neg_prompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry."
-neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device=model.device)
-
-image_sizes = inputs.pop("image_sizes")
-HEIGHT, WIDTH = image_sizes[0]
-VISUAL_TOKENS = model.vocabulary_mapping.image_tokens
-
-def prefix_allowed_tokens_fn(batch_id, input_ids):
-    height, width = HEIGHT, WIDTH
-    visual_tokens = VISUAL_TOKENS
-    image_wrapper_token_id = torch.tensor([processor.tokenizer.image_wrapper_token_id], device=model.device)
-    eoi_token_id = torch.tensor([processor.tokenizer.eoi_token_id], device=model.device)
-    eos_token_id = torch.tensor([processor.tokenizer.eos_token_id], device=model.device)
-    pad_token_id = torch.tensor([processor.tokenizer.pad_token_id], device=model.device)
-    eof_token_id = torch.tensor([processor.tokenizer.eof_token_id], device=model.device)
-    eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt")[0]
-
-    position = torch.nonzero(input_ids == image_wrapper_token_id, as_tuple=True)[0][0]
-    offset = input_ids.shape[0] - position
-    if offset % (width + 1) == 0:
-        return (eol_token_id, )
-    elif offset == (width + 1) * height + 1:
-        return (eof_token_id, )
-    elif offset == (width + 1) * height + 2:
-        return (eoi_token_id, )
-    elif offset == (width + 1) * height + 3:
-        return (eos_token_id, )
-    elif offset > (width + 1) * height + 3:
-        return (pad_token_id, )
-    else:
-        return visual_tokens
-
-
-out = model.generate(
-    **inputs,
-    max_new_tokens=50_000, # make sure to have enough tokens for one image
-    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-    return_dict_in_generate=True,
-    negative_prompt_ids=neg_inputs.input_ids, # indicate for Classifier-Free Guidance
-    negative_prompt_attention_mask=neg_inputs.attention_mask,
-)
-
-image = model.decode_image_tokens(out.sequences[:, inputs.input_ids.shape[1]: ], height=HEIGHT, width=WIDTH)
-images = processor.postprocess(list(image.float()), return_tensors="PIL.Image.Image") # internally we convert to np but it's not supported in bf16 precision
-for i, image in enumerate(images['pixel_values']):
-    image.save(f"result{i}.png")
-
-```
+- Set `processor.tokenizer.padding_side = "left"` before batched generation for more accurate results.
+- The model trains with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to format prompts correctly.
+- Emu3 has separate checkpoints for image generation and text generation. Use the correct checkpoint when loading the model. For image generation, use `prefix_constraints` to sample only from possible image tokens.
+- Emu3 uses a special image token to indicate where to merge image embeddings. The implementation uses the reserved token `<|extra_0|>` instead of creating a new one. Add `<image>` to your prompt where the image should be embedded for correct generation.
 
 ## Emu3Config
 
@@ -171,10 +107,6 @@ for i, image in enumerate(images['pixel_values']):
 [[autodoc]] Emu3TextModel
     - forward
 
-## Emu3Model
-
-[[autodoc]] Emu3Model
-
 ## Emu3ForCausalLM
 
 [[autodoc]] Emu3ForCausalLM
@@ -184,3 +116,9 @@ for i, image in enumerate(images['pixel_values']):
 
 [[autodoc]] Emu3ForConditionalGeneration
     - forward
+
+## Emu3Model
+
+[[autodoc]] Emu3Model
+    - forward
+

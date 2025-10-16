@@ -13,94 +13,41 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-05-12 and added to Hugging Face Transformers on 2023-02-10.*
+*This model was released on 2022-05-12 and added to Hugging Face Transformers on 2023-02-10 and contributed by [jvamvas](https://huggingface.co/jvamvas).*
 
 # X-MOD
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[X-MOD](https://huggingface.co/papers/2022.naacl-main.255) extends multilingual masked language models by incorporating language-specific modular components, known as language adapters, during pre-training. These adapters are frozen during fine-tuning. The model addresses the curse of multilinguality by increasing the model's capacity without increasing the number of trainable parameters per language. Experiments on natural language inference, named entity recognition, and question answering demonstrate that X-MOD reduces negative interference between languages and enhances both monolingual and cross-lingual performance. Additionally, it allows for the addition of new languages post-hoc without performance degradation.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-The X-MOD model was proposed in [Lifting the Curse of Multilinguality by Pre-training Modular Transformers](https://huggingface.co/papers/2205.06266) by Jonas Pfeiffer, Naman Goyal, Xi Lin, Xian Li, James Cross, Sebastian Riedel, and Mikel Artetxe.
-X-MOD extends multilingual masked language models like [XLM-R](xlm-roberta) to include language-specific modular components (*language adapters*) during pre-training. For fine-tuning, the language adapters in each transformer layer are frozen.
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
 
-The abstract from the paper is the following:
+tokenizer = AutoTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
+config = AutoConfig.from_pretrained("facebook/xmod-base")
+config.is_decoder = True
+model = AutoModelForCausalLM.from_pretrained("facebook/xmod-base", config=config, dtype="auto")
+model.set_default_language("en_XX")
 
-*Multilingual pre-trained models are known to suffer from the curse of multilinguality, which causes per-language performance to drop as they cover more languages. We address this issue by introducing language-specific modules, which allows us to grow the total capacity of the model, while keeping the total number of trainable parameters per language constant. In contrast with prior work that learns language-specific components post-hoc, we pre-train the modules of our Cross-lingual Modular (X-MOD) models from the start. Our experiments on natural language inference, named entity recognition and question answering show that our approach not only mitigates the negative interference between languages, but also enables positive transfer, resulting in improved monolingual and cross-lingual performance. Furthermore, our approach enables adding languages post-hoc with no measurable drop in performance, no longer limiting the model usage to the set of pre-trained languages.*
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs)
+generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(f"Generated text: {generated_text}")
+```
 
-This model was contributed by [jvamvas](https://huggingface.co/jvamvas).
-The original code can be found [here](https://github.com/facebookresearch/fairseq/tree/58cc6cca18f15e6d56e3f60c959fe4f878960a60/fairseq/models/xmod) and the original documentation is found [here](https://github.com/facebookresearch/fairseq/tree/58cc6cca18f15e6d56e3f60c959fe4f878960a60/examples/xmod).
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-Tips:
-
-- X-MOD is similar to [XLM-R](xlm-roberta), but a difference is that the input language needs to be specified so that the correct language adapter can be activated.
-- The main models – base and large – have adapters for 81 languages.
-
-## Adapter Usage
-
-### Input language
-
-There are two ways to specify the input language:
-
-1. By setting a default language before using the model:
-
-```python
-from transformers import XmodModel
-
-model = XmodModel.from_pretrained("facebook/xmod-base")
-model.set_default_language("en_XX")
-```
-
-2. By explicitly passing the index of the language adapter for each sample:
-
-```python
-import torch
-
-input_ids = torch.tensor(
-    [
-        [0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2],
-        [0, 1310, 49083, 443, 269, 71, 5486, 165, 60429, 660, 23, 2],
-    ]
-)
-lang_ids = torch.LongTensor(
-    [
-        0,  # en_XX
-        8,  # de_DE
-    ]
-)
-output = model(input_ids, lang_ids=lang_ids)
-```
-
-### Fine-tuning
-
-The paper recommends that the embedding layer and the language adapters are frozen during fine-tuning. A method for doing this is provided:
-
-```python
-model.freeze_embeddings_and_language_adapters()
-# Fine-tune the model ...
-```
-
-### Cross-lingual transfer
-
-After fine-tuning, zero-shot cross-lingual transfer can be tested by activating the language adapter of the target language:
-
-```python
-model.set_default_language("de_DE")
-# Evaluate the model on German examples ...
-```
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+- X-MOD is similar to XLM-R but requires specifying the input language to activate the correct language adapter.
+- The main models (base and large) have adapters for 81 languages.
+- Specify the input language in two ways: set a default language before using the model, or explicitly pass the language adapter index for each sample.
+- Freeze the embedding layer and language adapters during fine-tuning (recommended by the paper).
+- After fine-tuning, test zero-shot cross-lingual transfer by activating the target language adapter.
 
 ## XmodConfig
 
@@ -140,3 +87,4 @@ model.set_default_language("de_DE")
 
 [[autodoc]] XmodForQuestionAnswering
     - forward
+

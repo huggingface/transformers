@@ -13,73 +13,40 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-04-16 and added to Hugging Face Transformers on 2024-10-04.*
+*This model was released on 2024-05-26 and added to Hugging Face Transformers on 2024-10-04 and contributed by [pglo](https://huggingface.co/pglo).*
 
 # Zamba
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Zamba](https://huggingface.co/papers/2405.16712) is a 7B parameter hybrid model that combines a Mamba backbone with a lightweight shared attention module, achieving transformer-level benefits with fewer parameters. It is trained on 1 trillion tokens across two phases: broad web datasets followed by an annealing stage with high-quality instruct and synthetic data under rapid learning rate decay. This architecture enables faster inference and lower memory use compared to similarly sized transformers, while maintaining strong competitive performance. The model, along with all checkpoints from both training phases, is released as open source.
 
-[Zamba](https://huggingface.co/papers/2405.16712) ([blog post](https://www.zyphra.com/post/zamba)) is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model was contributed by [pglo](https://huggingface.co/pglo).
-
-## Model details
-
-Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https://github.com/state-spaces/mamba)) and transformer, and was trained using next-token prediction. Zamba uses a shared transformer layer after every 6 mamba blocks. It uses the [Mistral v0.1 tokenizer](https://huggingface.co/mistralai/Mistral-7B-v0.1). We came to this architecture after a series of ablations at small scales. Zamba-7B-v1 was pre-trained on 1T tokens of text and code data.
-
-<img src=https://github.com/user-attachments/assets/c2cff209-b901-483c-87aa-774b82a0769f width=30% height=40% />
-
-## Quick start
-
-### Presequities
-
-Zamba requires you use `transformers` version 4.46.0 or higher:
-
-```bash
-pip install transformers>=4.45.0
-```
-
-In order to run optimized Mamba implementations, you first need to install `mamba-ssm` and `causal-conv1d`:
-
-```bash
-pip install mamba-ssm causal-conv1d>=1.2.0
-```
-
-You also have to have the model on a CUDA device.
-
-You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly lower latencies. In order to do that, you'll need to specify `use_mamba_kernels=False` when loading the model.
-
-## Inference
-
-```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
+```py
 import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="Zyphra/Zamba-7B-v1", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba-7B-v1")
-model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba-7B-v1", device_map="auto", dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba-7B-v1", dtype="auto",)
 
-input_text = "A funny prompt would be "
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
-
-outputs = model.generate(**input_ids, max_new_tokens=100)
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
 print(tokenizer.decode(outputs[0]))
 ```
 
-## Model card
-
-The model cards can be found at:
-
-* [Zamba-7B](https://huggingface.co/Zyphra/Zamba-7B-v1)
-
-## Issues
-
-For issues with model output, or community discussion, please use the Hugging Face community [forum](https://huggingface.co/Zyphra/Zamba-7B-v1/discussions)
-
-## License
-
-The model weights are open-sourced via an Apache 2.0 license.
+</hfoption>
+</hfoptions>
 
 ## ZambaConfig
 

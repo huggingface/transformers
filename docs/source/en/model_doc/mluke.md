@@ -13,64 +13,47 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-10-15 and added to Hugging Face Transformers on 2021-12-07.*
+*This model was released on 2021-10-15 and added to Hugging Face Transformers on 2021-12-07 and contributed by [ryo0634](https://huggingface.co/ryo0634).*
 
 # mLUKE
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[mLUKE](https://huggingface.co/papers/2110.08151) extends XLM-RoBERTa by incorporating entity embeddings, enhancing its performance on cross-lingual tasks involving entities. Trained on 24 languages, mLUKE consistently outperforms word-based models in various transfer tasks. The model's ability to extract language-agnostic features through entity representations is highlighted, and it demonstrates superior performance in a multilingual cloze prompt task using the mLAMA dataset.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The mLUKE model was proposed in [mLUKE: The Power of Entity Representations in Multilingual Pretrained Language Models](https://huggingface.co/papers/2110.08151) by Ryokan Ri, Ikuya Yamada, and Yoshimasa Tsuruoka. It's a multilingual extension
-of the [LUKE model](https://huggingface.co/papers/2010.01057) trained on the basis of XLM-RoBERTa.
+```py
+import torch
+from transformers import pipeline
 
-It is based on XLM-RoBERTa and adds entity embeddings, which helps improve performance on various downstream tasks
-involving reasoning about entities such as named entity recognition, extractive question answering, relation
-classification, cloze-style knowledge completion.
-
-The abstract from the paper is the following:
-
-*Recent studies have shown that multilingual pretrained language models can be effectively improved with cross-lingual
-alignment information from Wikipedia entities. However, existing methods only exploit entity information in pretraining
-and do not explicitly use entities in downstream tasks. In this study, we explore the effectiveness of leveraging
-entity representations for downstream cross-lingual tasks. We train a multilingual language model with 24 languages
-with entity representations and show the model consistently outperforms word-based pretrained models in various
-cross-lingual transfer tasks. We also analyze the model and the key insight is that incorporating entity
-representations into the input allows us to extract more language-agnostic features. We also evaluate the model with a
-multilingual cloze prompt task with the mLAMA dataset. We show that entity-based prompt elicits correct factual
-knowledge more likely than using only word representations.*
-
-This model was contributed by [ryo0634](https://huggingface.co/ryo0634). The original code can be found [here](https://github.com/studio-ousia/luke).
-
-## Usage tips
-
-One can directly plug in the weights of mLUKE into a LUKE model, like so:
-
-```python
-from transformers import LukeModel
-
-model = LukeModel.from_pretrained("studio-ousia/mluke-base")
+pipeline = pipeline(task="fill-mask", model="studio-ousia/mluke-base", dtype="auto")
+pipeline("Plants create <mask> through a process known as photosynthesis.")
 ```
 
-Note that mLUKE has its own tokenizer, [`MLukeTokenizer`]. You can initialize it as follows:
+</hfoption>
+<hfoption id="AutoModel">
 
-```python
-from transformers import MLukeTokenizer
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/mluke-base")
+model = AutoModelForMaskedLM.from_pretrained("studio-ousia/mluke-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("studio-ousia/mluke-base")
+
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
-<Tip>
-
-As mLUKE's architecture is equivalent to that of LUKE, one can refer to [LUKE's documentation page](luke) for all
-tips, code examples and notebooks.
-
-</Tip>
+</hfoption>
+</hfoptions>
 
 ## MLukeTokenizer
 
 [[autodoc]] MLukeTokenizer
     - __call__
     - save_vocabulary
+
