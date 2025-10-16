@@ -19,7 +19,6 @@ import random
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -136,7 +135,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
-    def prepare_text_inputs(self, batch_size: Optional[int] = None, modalities: Optional[Union[str, list]] = None):
+    def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
         if isinstance(modalities, str):
             modalities = [modalities]
 
@@ -158,7 +157,7 @@ class ProcessorTesterMixin:
         ] * (batch_size - 2)
 
     @require_vision
-    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+    def prepare_image_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
         if batch_size is None:
             return prepare_image_inputs()[0]
@@ -167,7 +166,7 @@ class ProcessorTesterMixin:
         return prepare_image_inputs() * batch_size
 
     @require_vision
-    def prepare_video_inputs(self, batch_size: Optional[int] = None):
+    def prepare_video_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
         video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
         video_input = np.array(video_input)
@@ -175,7 +174,7 @@ class ProcessorTesterMixin:
             return video_input
         return [video_input] * batch_size
 
-    def prepare_audio_inputs(self, batch_size: Optional[int] = None):
+    def prepare_audio_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy audio."""
         raw_speech = floats_list((1, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
