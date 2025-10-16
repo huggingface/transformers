@@ -2432,7 +2432,9 @@ The commit description supports markdown synthax see:
 >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 ```
 """
-            commit_details = model.push_to_hub(tmp_repo.repo_id, create_pr=True, commit_description=COMMIT_DESCRIPTION)
+            commit_details = model.push_to_hub(
+                tmp_repo.repo_id, create_pr=True, token=self._token, commit_description=COMMIT_DESCRIPTION
+            )
             self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
 
     @unittest.skip(reason="This test is flaky")
