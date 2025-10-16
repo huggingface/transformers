@@ -738,6 +738,10 @@ class Trainer:
         self._train_batch_size = args.train_batch_size
         self._created_lr_scheduler = False
 
+        # Set use_cache for the model
+        if getattr(self.model, "config", None) is not None:
+            self.model.config.use_cache = self.args.use_cache
+
         # very last
         self._memory_tracker.stop_and_update_metrics()
 
