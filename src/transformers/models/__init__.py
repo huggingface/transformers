@@ -238,9 +238,9 @@ if TYPE_CHECKING:
     from .mt5 import *
     from .musicgen import *
     from .musicgen_melody import *
-    from .nanochat import *
     from .mvp import *
     from .myt5 import *
+    from .nanochat import *
     from .nemotron import *
     from .nllb import *
     from .nllb_moe import *

@@ -1,9 +1,11 @@
 import json
 import os
-from typing import Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Optional
 
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import HfHubHTTPError
+
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 
@@ -37,9 +39,7 @@ class NanoChatTokenizer(PreTrainedTokenizerFast):
         pad_token = pad_token or eos_token
 
         additional_special_tokens = [
-            token
-            for token in self._SPECIAL_TOKENS.values()
-            if token not in {bos_token, eos_token, pad_token}
+            token for token in self._SPECIAL_TOKENS.values() if token not in {bos_token, eos_token, pad_token}
         ]
 
         super().__init__(
@@ -53,9 +53,8 @@ class NanoChatTokenizer(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = tokenizer_file
-        self.special_token_ids: Dict[str, int] = {
-            name: self.convert_tokens_to_ids(token)
-            for name, token in self._SPECIAL_TOKENS.items()
+        self.special_token_ids: dict[str, int] = {
+            name: self.convert_tokens_to_ids(token) for name, token in self._SPECIAL_TOKENS.items()
         }
 
     @classmethod
@@ -128,43 +127,47 @@ class NanoChatTokenizer(PreTrainedTokenizerFast):
         max_length: Optional[int] = None,
         **kwargs,
     ):
-        messages = conversation["messages"] if isinstance(conversation, dict) and "messages" in conversation else conversation
+        messages = (
+            conversation["messages"] if isinstance(conversation, dict) and "messages" in conversation else conversation
+        )
         token_ids = self._render_conversation_ids(messages)
         if add_generation_prompt:
             token_ids.append(self.special_token_ids["assistant_start"])
         if tokenize:
             # Build output dictionary with input_ids and attention_mask
-            output = {
-                "input_ids": [token_ids],
-                "attention_mask": [[1] * len(token_ids)]
-            }
-            
+            output = {"input_ids": [token_ids], "attention_mask": [[1] * len(token_ids)]}
+
             # Convert to the requested tensor format
             if return_tensors == "pt":
                 import torch
+
                 from transformers.tokenization_utils_base import BatchEncoding
-                return BatchEncoding({
-                    "input_ids": torch.tensor(output["input_ids"], dtype=torch.long),
-                    "attention_mask": torch.tensor(output["attention_mask"], dtype=torch.long)
-                })
+
+                return BatchEncoding(
+                    {
+                        "input_ids": torch.tensor(output["input_ids"], dtype=torch.long),
+                        "attention_mask": torch.tensor(output["attention_mask"], dtype=torch.long),
+                    }
+                )
             elif return_tensors == "np":
                 import numpy as np
+
                 return {
                     "input_ids": np.array(output["input_ids"], dtype=np.int64),
-                    "attention_mask": np.array(output["attention_mask"], dtype=np.int64)
+                    "attention_mask": np.array(output["attention_mask"], dtype=np.int64),
                 }
             else:
                 return output
         return self.decode(token_ids, skip_special_tokens=False)
 
-    def _encode_text(self, text: str) -> List[int]:
+    def _encode_text(self, text: str) -> list[int]:
         return self.encode(text, add_special_tokens=False)
 
-    def _encode_assistant_content(self, content) -> List[int]:
+    def _encode_assistant_content(self, content) -> list[int]:
         if isinstance(content, str):
             return self._encode_text(content)
         if isinstance(content, list):
-            tokens: List[int] = []
+            tokens: list[int] = []
             for part in content:
                 part_type = part.get("type", "text")
                 text = part.get("text", "")
@@ -179,19 +182,19 @@ class NanoChatTokenizer(PreTrainedTokenizerFast):
             return tokens
         raise ValueError(f"Unsupported assistant content type: {type(content)}")
 
-    def _encode_block(self, start_token_id: int, content: str) -> List[int]:
+    def _encode_block(self, start_token_id: int, content: str) -> list[int]:
         tokens = [start_token_id]
         tokens.extend(self._encode_text(content))
         closing = {
             self.special_token_ids["python_start"]: self.special_token_ids["python_end"],
             self.special_token_ids["output_start"]: self.special_token_ids["output_end"],
-        }.get(start_token_id, None)
+        }.get(start_token_id)
         if closing is None:
             raise ValueError("Unknown block start token id")
         tokens.append(closing)
         return tokens
 
-    def _render_conversation_ids(self, conversation: Sequence[Dict[str, object]]) -> List[int]:
+    def _render_conversation_ids(self, conversation: Sequence[dict[str, object]]) -> list[int]:
         if not conversation:
             raise ValueError("Conversation must contain at least one message")
         messages = list(conversation)
@@ -202,7 +205,7 @@ class NanoChatTokenizer(PreTrainedTokenizerFast):
             merged["content"] = f"{messages[0]['content']}\n\n{messages[1]['content']}"
             messages = [merged] + messages[2:]
 
-        ids: List[int] = [self.special_token_ids["bos"]]
+        ids: list[int] = [self.special_token_ids["bos"]]
         for idx, message in enumerate(messages):
             expected_role = "user" if idx % 2 == 0 else "assistant"
             role = message.get("role")
@@ -220,6 +223,3 @@ class NanoChatTokenizer(PreTrainedTokenizerFast):
                 ids.extend(self._encode_assistant_content(content))
                 ids.append(self.special_token_ids["assistant_end"])
         return ids
-
-
-

@@ -1,5 +1,4 @@
 import argparse
-import json
 from collections import OrderedDict
 from pathlib import Path
 
@@ -48,7 +47,9 @@ def convert_checkpoint(source_dir: Path, dest_dir: Path) -> tuple[NanoChatConfig
     inferred_kv = infer_kv_heads(config, old_state)
     config.num_key_value_heads = inferred_kv
     if config.num_attention_heads % config.num_key_value_heads != 0:
-        LOGGER.info("Adjusting num_attention_heads from %s to %s", config.num_attention_heads, config.num_key_value_heads)
+        LOGGER.info(
+            "Adjusting num_attention_heads from %s to %s", config.num_attention_heads, config.num_key_value_heads
+        )
         config.num_attention_heads = config.num_key_value_heads
 
     new_state: OrderedDict[str, torch.Tensor] = OrderedDict()
@@ -87,8 +88,10 @@ def convert_checkpoint(source_dir: Path, dest_dir: Path) -> tuple[NanoChatConfig
     if tokenizer_pkl.exists():
         try:
             import pickle
+
             from transformers.integrations.tiktoken import convert_tiktoken_to_fast
-            with open(tokenizer_pkl, 'rb') as f:
+
+            with open(tokenizer_pkl, "rb") as f:
                 tok_pkl = pickle.load(f)
             convert_tiktoken_to_fast(tok_pkl, dest_dir)
             LOGGER.info("Converted tokenizer.pkl to HuggingFace format")
@@ -113,12 +116,12 @@ def run_test(dest_dir: Path, prompt: str, max_new_tokens: int) -> None:
     tokenizer = AutoTokenizer.from_pretrained(dest_dir)
     model = AutoModelForCausalLM.from_pretrained(dest_dir, torch_dtype=torch.bfloat16)
     model.eval()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
     with torch.no_grad():
         output = model.generate(**inputs, max_new_tokens=max_new_tokens)
-    generated = tokenizer.decode(output[0, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+    generated = tokenizer.decode(output[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
     LOGGER.info("Generated text: %s", generated)
 
 
@@ -134,7 +137,12 @@ def parse_args() -> argparse.Namespace:
 def main():
     args = parse_args()
     config, _ = convert_checkpoint(args.source, args.dest)
-    LOGGER.info("Converted checkpoint saved to %s (layers=%d kv_heads=%d)", args.dest, config.num_hidden_layers, config.num_key_value_heads)
+    LOGGER.info(
+        "Converted checkpoint saved to %s (layers=%d kv_heads=%d)",
+        args.dest,
+        config.num_hidden_layers,
+        config.num_key_value_heads,
+    )
     if args.test_prompt:
         run_test(args.dest, args.test_prompt, args.max_new_tokens)
 

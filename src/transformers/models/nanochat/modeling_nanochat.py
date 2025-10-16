@@ -41,16 +41,16 @@ def _apply_rotary_pos_emb(
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Custom implementation of Rotary Position Embedding. 
+    """Custom implementation of Rotary Position Embedding.
     Copied from [nanochat](https://github.com/karpathy/nanochat/blob/4346536ab2e57917ec543b20e88c4bdc47eda572/nanochat/gpt.py#L41)
     and modified to work with the shape of the query and key tensors.
-    
+
     Args:
         query: Query tensor of shape [batch, seq_len, num_heads, head_dim]
         key: Key tensor of shape [batch, seq_len, num_kv_heads, head_dim]
         cos: Cosine part of the rotary embedding of shape [1, seq_len, 1, head_dim//2]
         sin: Sine part of the rotary embedding of shape [1, seq_len, 1, head_dim//2]
-    
+
     Returns:
         Tuple of rotated query and key tensors of shape [batch, seq_len, num_heads, head_dim] and [batch, seq_len, num_kv_heads, head_dim]
     """
@@ -58,10 +58,10 @@ def _apply_rotary_pos_emb(
     d = query.shape[3] // 2
     q1, q2 = query[..., :d], query[..., d:]
     k1, k2 = key[..., :d], key[..., d:]
-    
+
     query_rot = torch.cat([q1 * cos + q2 * sin, q1 * (-sin) + q2 * cos], dim=-1)
     key_rot = torch.cat([k1 * cos + k2 * sin, k1 * (-sin) + k2 * cos], dim=-1)
-    
+
     return query_rot.to(query.dtype), key_rot.to(key.dtype)
 
 
@@ -71,7 +71,7 @@ def _repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     Args:
         hidden_states: Hidden states tensor of shape [batch, seq_len, num_kv_heads, head_dim]
         n_rep: Number of times to repeat the key and value tensors
-    
+
     Returns:
         Repeated key and value tensors of shape [batch, seq_len, num_kv_heads * n_rep, head_dim]
     """
@@ -94,7 +94,7 @@ def eager_attention_forward(
 ):
     """
     Eager attention implementation for NanoChat.
-    
+
     Args:
         module: The attention module
         query: Query states of shape [batch, num_heads, seq_len, head_dim]
@@ -107,32 +107,32 @@ def eager_attention_forward(
     # Handle GQA by repeating key/value heads
     key_states = _repeat_kv(key, module.num_key_value_groups)
     value_states = _repeat_kv(value, module.num_key_value_groups)
-    
+
     # Compute attention scores
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    
+
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
-    
+
     # Apply softmax and dropout
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    
+
     # Compute attention output
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
-    
+
     return attn_output, attn_weights
 
 
 class NanoChatAttention(nn.Module):
     """
     Multi-headed attention from NanoChat with custom RoPE and QK normalization.
-    
+
     Based on: https://github.com/karpathy/nanochat/blob/main/nanochat/gpt.py#L64
     """
-    
+
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -174,12 +174,12 @@ class NanoChatAttention(nn.Module):
         # Apply Rotary Embeddings to queries and keys to get relative positional encoding
         cos, sin = position_embeddings
         query_states, key_states = _apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        
+
         # Apply QK normalization (RMSNorm) - a key feature of NanoChat architecture
         # This helps stabilize training and is applied AFTER RoPE
         query_states = F.rms_norm(query_states, (query_states.size(-1),), eps=self.config.rms_norm_eps)
         key_states = F.rms_norm(key_states, (key_states.size(-1),), eps=self.config.rms_norm_eps)
-        
+
         # Transpose to make head dimension the batch dimension
         # Shape: [batch, num_heads, seq_len, head_dim]
         query_states = query_states.transpose(1, 2)
@@ -215,7 +215,7 @@ class NanoChatAttention(nn.Module):
 
 class NanoChatMLP(nn.Module):
     """MLP module for NanoChat with ReLU^2 activation."""
-    
+
     def __init__(self, config: NanoChatConfig):
         super().__init__()
         self.fc = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
@@ -230,7 +230,7 @@ class NanoChatMLP(nn.Module):
 
 class NanoChatDecoderLayer(GradientCheckpointingLayer):
     """NanoChat decoder layer with pre-norm architecture."""
-    
+
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -299,7 +299,9 @@ class NanoChatModel(NanoChatPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         # Rotary embeddings are cached for efficiency
         self.register_buffer("_rotary_cos", None, persistent=False)
         self.register_buffer("_rotary_sin", None, persistent=False)
@@ -307,9 +309,11 @@ class NanoChatModel(NanoChatPreTrainedModel):
 
         self.post_init()
 
-    def _precompute_rotary_embeddings(self, device: torch.device, dtype: torch.dtype) -> tuple[torch.Tensor, torch.Tensor]:
+    def _precompute_rotary_embeddings(
+        self, device: torch.device, dtype: torch.dtype
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Precompute rotary embeddings (RoPE) for all positions up to max_position_embeddings.
-        
+
         This implementation is specific to NanoChat and produces cos/sin tensors with shape
         [1, max_seq_len, 1, head_dim//2] instead of the standard full head_dim. so did not use `dynamic_rope_update` decorator.
         """
@@ -352,7 +356,7 @@ class NanoChatModel(NanoChatPreTrainedModel):
     ) -> BaseModelOutputWithPast:
         output_attentions = kwargs.get("output_attentions", False)
         output_hidden_states = kwargs.get("output_hidden_states", False)
-        
+
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -364,7 +368,9 @@ class NanoChatModel(NanoChatPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device)
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -384,16 +390,16 @@ class NanoChatModel(NanoChatPreTrainedModel):
         cos = cos[:, position_ids_to_use]
         sin = sin[:, position_ids_to_use]
 
-        hidden_states = inputs_embeds 
+        hidden_states = inputs_embeds
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
-        
+
         # Collect hidden states and attentions if requested
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-                
+
             hidden_states, self_attn_weights = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
@@ -404,14 +410,14 @@ class NanoChatModel(NanoChatPreTrainedModel):
                 position_embeddings=(cos, sin),
                 **kwargs,
             )
-            
+
             if output_attentions:
                 all_self_attns = all_self_attns + (self_attn_weights,)
 
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-        
+
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
@@ -425,6 +431,7 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
     """
     The NanoChat Model transformer with a language modeling head on top.
     """
+
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
@@ -489,6 +496,3 @@ __all__ = [
     "NanoChatModel",
     "NanoChatForCausalLM",
 ]
-
-
-
