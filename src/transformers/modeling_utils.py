@@ -4426,6 +4426,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "loaded from GGUF files."
                 )
 
+        if kernel_config is not None and not use_kernels:
+            raise ValueError(
+                "kernel_config is only supported when use_kernels is set to True, please set use_kernels to True or remove kernel_config."
+            )
+
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             variant=variant,
