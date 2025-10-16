@@ -2370,7 +2370,7 @@ class GenerationMixin(ContinuousMixin):
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
-        # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
+        # 0.a. If requested, load an arbitrary generation recipe from the Hub and run it instead
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
         if custom_generate is not None and isinstance(custom_generate, str):
@@ -2391,6 +2391,75 @@ class GenerationMixin(ContinuousMixin):
                 custom_generate, trust_remote_code=trust_remote_code, **kwargs
             )
             return custom_generate_function(model=self, **generate_arguments)
+
+        # 0.b. If requested, switched to continuous batching generation
+        if kwargs.get("cache_implementation") == "paged":
+            logger.warning(
+                "Detected cache_implementation=paged: switching to continuous batching. You should consider using "
+                "generate_batch directly instead."
+            )
+
+            # generate_batch expects a list of lists of ints, so we create it from the inputs or input_ids
+            inputs = inputs if inputs is not None else kwargs.get("input_ids")
+            if inputs is None:
+                raise ValueError("inputs or input_ids must be provided for CB generation.")
+
+            if inputs.dim() == 1:
+                inputs = inputs.unsqueeze(0).tolist()
+            elif inputs.dim() == 2:
+                inputs = inputs.tolist()
+            else:
+                raise ValueError(f"inputs must be a 1D or 2D tensor, got {inputs.dim() = }")
+
+            # some arguments are not supported for continuous batching
+            if stopping_criteria is not None:
+                raise NotImplementedError(
+                    f"stopping_criteria is not supported for continuous batching. Got {stopping_criteria = }"
+                )
+            if prefix_allowed_tokens_fn is not None:
+                raise NotImplementedError(
+                    f"prefix_allowed_tokens_fn is not supported for continuous batching. Got {prefix_allowed_tokens_fn = }"
+                )
+            if assistant_model is not None:
+                raise NotImplementedError(
+                    f"assistant_model is not supported for continuous batching. Got {assistant_model = }"
+                )
+            if streamer is not None:  # TODO: actualy this could be supported
+                raise NotImplementedError(f"streaming is not supported for continuous batching. Got {streamer = }")
+            if negative_prompt_ids is not None:
+                raise NotImplementedError(
+                    f"negative_prompt_ids is not supported for continuous batching. Got {negative_prompt_ids = }"
+                )
+            if negative_prompt_attention_mask is not None:
+                raise NotImplementedError(
+                    f"negative_prompt_attention_mask is not supported for continuous batching. Got {negative_prompt_attention_mask = }"
+                )
+
+            # others are ignored
+            if synced_gpus is not None:
+                logger.warning(f"synced_gpus is not ignored for continuous batching. Got {synced_gpus = }")
+            num_return_sequences = kwargs.get("num_return_sequences", 1)
+            num_beams = kwargs.get("num_beams", 1)
+            if num_return_sequences > 1 or num_beams > 1:  # FIXME: remove this once CB supports it (which is planned)
+                logger.warning(
+                    f"num_return_sequences and num_beams are not supported for continuous batching yet. "
+                    f"Got {num_return_sequences = } and {num_beams = }. "
+                )
+
+            # switch to CB
+            outputs = self.generate_batch(
+                inputs=inputs,
+                generation_config=self._prepare_generation_config(generation_config, use_model_defaults, **kwargs)[0],
+                **kwargs,
+            )
+            sequences = [
+                outputs[f"req_{i}"].prompt_ids + outputs[f"req_{i}"].generated_tokens for i in range(len(outputs))
+            ]
+
+            # To use the same indexing (outputs[0]) as the regular generate method, we unsqueeze the tensor
+            sequences_as_tensor = torch.tensor(sequences, dtype=torch.long, device=self.device)
+            sequences_as_tensor = sequences_as_tensor.unsqueeze(0)
+            return sequences_as_tensor
 
         # 1. Handle kwargs, `generation_config`, validate them and obtain generation mode
         generation_mode_kwargs = self._extract_generation_mode_kwargs(
