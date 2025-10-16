@@ -130,20 +130,20 @@ jobs:
       - name: Check failed tests
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_${{ inputs.job }}/new_failures.json --output_file new_failures_with_bad_commit_${{ matrix.run_idx }}.json
+        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_${{ inputs.job }}/new_failures.json --output_file new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
 
       - name: Show results
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
         run: |
-          ls -l new_failures_with_bad_commit.json
-          cat new_failures_with_bad_commit.json
+          ls -l new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
+          cat new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: new_failures_with_bad_commit
-          path: new_failures_with_bad_commit_.json
+          name: new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}
+          path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
 
   process_new_failures_with_commit_info:
     name: "process bad commit reports"
@@ -155,15 +155,15 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: new_failures_with_bad_commit*
-          path: /transformers/new_failures_with_bad_commit
+          pattern: new_failures_with_bad_commit_${{ inputs.job }}*
+          path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}
           merge-multiple: true
 
       - name: Check files
         working-directory: /transformers
         run: |
           ls -la /transformers
-          ls -la /transformers/new_failures_with_bad_commit
+          ls -la /transformers/new_failures_with_bad_commit_${{ inputs.job }}
 
 
 #      - name: Process report
