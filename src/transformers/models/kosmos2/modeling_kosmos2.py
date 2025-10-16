@@ -680,6 +680,7 @@ class KosmosTextAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.is_causal = True
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(

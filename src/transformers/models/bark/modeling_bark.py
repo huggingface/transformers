@@ -57,6 +57,7 @@ from .generation_configuration_bark import (
 
 
 if is_flash_attn_available():
+    from ...integrations.flash_attention import get_target_dtype
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -78,6 +79,7 @@ class BarkSelfAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.embed_dim // self.num_heads
+        self.config = config
 
         if config.hidden_size % config.num_heads != 0:
             raise ValueError(
@@ -228,6 +230,8 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
 
+        target_dtype = get_target_dtype(query, self)  # if the query is in float32, this is the dtype to cast to for FA
+
         attn_output = _flash_attention_forward(
             query,
             key,
@@ -237,6 +241,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             dropout=self.dropout if self.training else 0.0,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
+            target_dtype=target_dtype,
         )
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)

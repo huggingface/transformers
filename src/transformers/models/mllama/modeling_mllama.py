@@ -522,6 +522,7 @@ class MllamaTextSelfAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
 
         self.layer_idx = layer_idx
+        self.is_causal = True
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
