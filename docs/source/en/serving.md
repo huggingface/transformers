@@ -380,7 +380,7 @@ CB is opt-in and currently applies to chat completions.
 ```sh
 transformers serve \
   --continuous-batching
-  --attn_implementation sdpa_paged
+  --attn_implementation "sdpa"
 ```
 
 ### Performance tips
@@ -390,11 +390,10 @@ transformers serve \
 ```sh
 transformers serve \
   --continuous_batching \
-  --attn_implementation paged_attention
+  --attn_implementation "flash_attention_2"
 ```
 
 > [!TIP]
-> If you choose `paged_attention`, you must install `flash-attn` separately: `pip install flash-attn --no-build-isolation`
 
 - `--dtype {bfloat16|float16}` typically improve throughput and memory use vs. `float32`
 
