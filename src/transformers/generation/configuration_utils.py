@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
-STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static", "paged")
+STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static")
 DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "dynamic_full", "offloaded", "quantized")
 # All the following are redundant and deprecated, but kept for BC
 DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
@@ -556,10 +556,13 @@ class GenerationConfig(PushToHubMixin):
                 "`model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
             )
         # 1.2. Cache attributes
-        if self.cache_implementation is not None and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS:
+        # "paged" re-routes to continuous batching and so it is a valid cache implementation. But we do not want to test
+        # it with the `generate` as the other would be, so we we cannot add it to ALL_CACHE_IMPLEMENTATIONS
+        valid_cache_implementations = ALL_CACHE_IMPLEMENTATIONS + ("paged",)
+        if self.cache_implementation is not None and self.cache_implementation not in valid_cache_implementations:
             raise ValueError(
                 f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
-                f"{ALL_CACHE_IMPLEMENTATIONS}"
+                f"{valid_cache_implementations}"
             )
         # 1.3. Performance attributes
         if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
