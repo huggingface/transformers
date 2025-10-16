@@ -13,11 +13,7 @@ class NanoChatConfig(PretrainedConfig):
 
     model_type = "nanochat"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {
-        "hidden_size": "n_embd",
-        "num_hidden_layers": "n_layer",
-        "num_attention_heads": "n_head",
-    }
+
 
     def __init__(
         self,
@@ -43,19 +39,6 @@ class NanoChatConfig(PretrainedConfig):
         pad_token_id: int = 1,
         **kwargs,
     ):
-        legacy_hidden_size = kwargs.pop("n_embd", None)
-        legacy_num_layers = kwargs.pop("n_layer", None)
-        legacy_num_heads = kwargs.pop("n_head", None)
-        legacy_num_kv_heads = kwargs.pop("n_kv_head", None)
-
-        if legacy_hidden_size is not None:
-            hidden_size = legacy_hidden_size
-        if legacy_num_layers is not None:
-            num_hidden_layers = legacy_num_layers
-        if legacy_num_heads is not None:
-            num_attention_heads = legacy_num_heads
-        if legacy_num_kv_heads is not None:
-            num_key_value_heads = legacy_num_kv_heads
 
         super().__init__(
             bos_token_id=bos_token_id,
