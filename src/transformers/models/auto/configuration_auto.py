@@ -282,6 +282,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("musicgen", "MusicgenConfig"),
         ("musicgen_melody", "MusicgenMelodyConfig"),
         ("mvp", "MvpConfig"),
+        ("nanochat", "NanoChatConfig"),
         ("nat", "NatConfig"),
         ("nemotron", "NemotronConfig"),
         ("nezha", "NezhaConfig"),
@@ -460,7 +461,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
         ("zoedepth", "ZoeDepthConfig"),
-        ("nanochat", "NanoChatConfig"),
     ]
 )
 
@@ -739,6 +739,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("musicgen_melody", "MusicGen Melody"),
         ("mvp", "MVP"),
         ("myt5", "myt5"),
+        ("nanochat", "NanoChat"),
         ("nat", "NAT"),
         ("nemotron", "Nemotron"),
         ("nezha", "Nezha"),
@@ -927,7 +928,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("zamba", "Zamba"),
         ("zamba2", "Zamba2"),
         ("zoedepth", "ZoeDepth"),
-        ("nanochat", "NanoChat"),
     ]
 )
 

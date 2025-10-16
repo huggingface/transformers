@@ -282,6 +282,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("musicgen", "MusicgenModel"),
         ("musicgen_melody", "MusicgenMelodyModel"),
         ("mvp", "MvpModel"),
+        ("nanochat", "NanoChatModel"),
         ("nat", "NatModel"),
         ("nemotron", "NemotronModel"),
         ("nezha", "NezhaModel"),
@@ -438,7 +439,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
-        ("nanochat", "NanoChatModel"),
     ]
 )
 
@@ -499,6 +499,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("mpt", "MptForCausalLM"),
         ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
+        ("nanochat", "NanoChatForCausalLM"),
         ("nezha", "NezhaForPreTraining"),
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
@@ -533,7 +534,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetLMHeadModel"),
         ("xlstm", "xLSTMForCausalLM"),
         ("xmod", "XmodForMaskedLM"),
-        ("nanochat", "NanoChatForCausalLM"),
     ]
 )
 
@@ -677,13 +677,13 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("glm4", "GLM4ForCausalLM"),
         ("glm4_moe", "GLM4MoeForCausalLM"),
         ("got_ocr2", "GotOcr2ForCausalLM"),
-        ("gpt2", "GPT2LMHeadModel"),
         ("gpt-bigcode", "GPTBigCodeForCausalLM"),
+        ("gpt2", "GPT2LMHeadModel"),
         ("gpt_neo", "GPTNeoForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseForCausalLM"),
-        ("gptj", "GPTJForCausalLM"),
         ("gpt_oss", "GptOssForCausalLM"),
+        ("gptj", "GPTJForCausalLM"),
         ("granite", "GraniteForCausalLM"),
         ("granite_moe", "GraniteMoeForCausalLM"),
         ("granite_moe_hybrid", "GraniteMoeHybridForCausalLM"),
@@ -716,6 +716,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mt5", "MT5ForConditionalGeneration"),
         ("musicgen", "MusicgenForConditionalGeneration"),
         ("mvp", "MvpForCausalLM"),
+        ("nanochat", "NanoChatForCausalLM"),
         ("nemotron", "NemotronForCausalLM"),
         ("olmo", "OlmoForCausalLM"),
         ("olmo2", "Olmo2ForCausalLM"),
@@ -765,7 +766,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
-        ("nanochat", "NanoChatForCausalLM"),
     ]
 )
 
@@ -1447,8 +1447,8 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("arcee", "ArceeForTokenClassification"),
         ("bart", "BartForTokenClassification"),
         ("barthez", "BARThezForTokenClassification"),
-        ("bekas", "BekasForTokenClassification"),
         ("beit", "BeitForTokenClassification"),
+        ("bekas", "BekasForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
         ("biogpt", "BioGptForTokenClassification"),
@@ -1529,13 +1529,13 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("t5", "T5ForTokenClassification"),
         ("t5gemma", "T5GemmaForTokenClassification"),
         ("umt5", "UMT5ForTokenClassification"),
+        ("xclip", "XCLIPForTokenClassification"),
         ("xlm", "XLMForTokenClassification"),
         ("xlm-roberta", "XLMRobertaForTokenClassification"),
         ("xlm-roberta-xl", "XLMRobertaXLForTokenClassification"),
         ("xlnet", "XLNetForTokenClassification"),
         ("xmod", "XmodForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
-        ("xclip", "XCLIPForTokenClassification"),
     ]
 )
 
