@@ -18,23 +18,30 @@ limitations under the License.
 
 ## Table of Contents
 
-- [Automatic Speech Recognition with CTC](#connectionist-temporal-classification)
-	- [Single GPU example](#single-gpu-ctc)
-	- [Multi GPU example](#multi-gpu-ctc)
-	- [Examples](#examples-ctc)
-		- [TIMIT](#timit-ctc)
-		- [Librispeech](#librispeech-ctc)
-		- [Common Voice](#common-voice-ctc)
-		- [Multilingual Librispeech](#multilingual-librispeech-ctc)
-- [Automatic Speech Recognition with CTC and Adapter Layers](#connectionist-temporal-classification-with-adapters)
-	- [Massive Multilingual Speech (MMS)](#mms-model)
-	- [Examples](#examples-ctc-adapter)
-		- [Common Voice](#common-voice-ctc-adapter)
-- [Automatic Speech Recognition with Sequence-to-Sequence](#sequence-to-sequence)
-	- [Whisper Model](#whisper-model)
-	- [Speech-Encoder-Decoder Model](#warm-started-speech-encoder-decoder-model)
-	- [Examples](#examples-seq2seq)
-		- [Librispeech](#librispeech-seq2seq)
+- [Automatic Speech Recognition Examples](#automatic-speech-recognition-examples)
+	- [Table of Contents](#table-of-contents)
+	- [Connectionist Temporal Classification](#connectionist-temporal-classification)
+		- [Single GPU CTC](#single-gpu-ctc)
+		- [Multi GPU CTC](#multi-gpu-ctc)
+		- [Multi GPU CTC with Dataset Streaming](#multi-gpu-ctc-with-dataset-streaming)
+		- [Examples CTC](#examples-ctc)
+			- [TIMIT CTC](#timit-ctc)
+			- [Librispeech CTC](#librispeech-ctc)
+			- [Common Voice CTC](#common-voice-ctc)
+			- [Multilingual Librispeech CTC](#multilingual-librispeech-ctc)
+	- [Connectionist Temporal Classification With Adapters](#connectionist-temporal-classification-with-adapters)
+		- [MMS Model](#mms-model)
+		- [Examples CTC Adapter](#examples-ctc-adapter)
+			- [Common Voice CTC Adapter](#common-voice-ctc-adapter)
+	- [Sequence to Sequence](#sequence-to-sequence)
+		- [Whisper Model](#whisper-model)
+			- [Single GPU Whisper Training](#single-gpu-whisper-training)
+			- [Multi GPU Whisper Training](#multi-gpu-whisper-training)
+		- [Warm-Started Speech-Encoder-Decoder Model](#warm-started-speech-encoder-decoder-model)
+			- [Single GPU Seq2Seq](#single-gpu-seq2seq)
+			- [Multi GPU Seq2Seq](#multi-gpu-seq2seq)
+		- [Examples Seq2Seq](#examples-seq2seq)
+			- [Librispeech Seq2Seq](#librispeech-seq2seq)
 
 ## Connectionist Temporal Classification
 
@@ -389,8 +396,7 @@ python run_speech_recognition_seq2seq.py \
 	--fp16 \
 	--do_train \
 	--do_eval \
-	--predict_with_generate \
-	--use_auth_token
+	--predict_with_generate
 ```
 On a single V100, training should take approximately 8 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 
@@ -429,8 +435,7 @@ torchrun \
 	--fp16 \
 	--do_train \
 	--do_eval \
-	--predict_with_generate \
-	--use_auth_token
+	--predict_with_generate
 ```
 On two V100s, training should take approximately 4 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 

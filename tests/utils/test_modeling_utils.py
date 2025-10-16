@@ -295,9 +295,7 @@ if is_torch_available():
                     hub.TRANSFORMERS_CACHE = tmpdir
                     # First offline load should fail
                     try:
-                        AutoModelForImageClassification.from_pretrained(
-                            TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None
-                        )
+                        AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
@@ -310,9 +308,7 @@ if is_torch_available():
 
                     LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
 
-                    AutoModelForImageClassification.from_pretrained(
-                        TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None
-                    )
+                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
             finally:
                 # Tear down: reset env as it was before calling this test
                 hub._is_offline_mode = offlfine_env
@@ -340,7 +336,7 @@ if is_torch_available():
                     hub.TRANSFORMERS_CACHE = tmpdir
                     try:
                         AutoModelForImageClassification.from_pretrained(
-                            TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None, local_files_only=True
+                            TINY_IMAGE_CLASSIF, revision="main", local_files_only=True
                         )
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
@@ -354,7 +350,7 @@ if is_torch_available():
                     LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
 
                     AutoModelForImageClassification.from_pretrained(
-                        TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None, local_files_only=True
+                        TINY_IMAGE_CLASSIF, revision="main", local_files_only=True
                     )
             finally:
                 # Tear down: reset env as it was before calling this test
@@ -2436,9 +2432,7 @@ The commit description supports markdown synthax see:
 >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 ```
 """
-            commit_details = model.push_to_hub(
-                tmp_repo.repo_id, use_auth_token=self._token, create_pr=True, commit_description=COMMIT_DESCRIPTION
-            )
+            commit_details = model.push_to_hub(tmp_repo.repo_id, create_pr=True, commit_description=COMMIT_DESCRIPTION)
             self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
 
     @unittest.skip(reason="This test is flaky")
