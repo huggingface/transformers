@@ -557,7 +557,7 @@ def _infer_parameter_dtype(
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
     if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
         # dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
-        if hf_quantizer is not None:
+        if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, param_name):
             casting_dtype = model.config._pre_quantization_dtype
         else:
             casting_dtype = old_param.dtype
