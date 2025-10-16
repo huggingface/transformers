@@ -2393,8 +2393,7 @@ class GenerationMixin(ContinuousMixin):
             return custom_generate_function(model=self, **generate_arguments)
 
         # 0.b. If requested, switched to continuous batching generation
-        if kwargs.get("cache_implementation") == "paged_cache":
-
+        if kwargs.get("cache_implementation") == "paged":
             # generate_batch expects a list of lists of ints, so we create it from the inputs or input_ids
             inputs = inputs if inputs is not None else kwargs.get("input_ids")
             if inputs is None:
@@ -2436,12 +2435,23 @@ class GenerationMixin(ContinuousMixin):
                 logger.warning(f"synced_gpus is not ignored for continuous batching. Got {synced_gpus = }")
 
             # switch to CB and signal it
-            logger.warning("Detected cache_implementation=paged_cache, switching to continuous batching.")
-            return self.generate_batch(
+            logger.warning(
+                "Detected cache_implementation=paged: switching to continuous batching. You should consider using "
+                "generate_batch directly instead."
+            )
+            outputs = self.generate_batch(
                 inputs=inputs,
                 generation_config=self._prepare_generation_config(generation_config, use_model_defaults, **kwargs)[0],
                 **kwargs,
             )
+            sequences = [
+                outputs[f"req_{i}"].prompt_ids + outputs[f"req_{i}"].generated_tokens for i in range(len(outputs))
+            ]
+
+            # To use the same indexing (outputs[0]) as the regular generate method, we unsqueeze the tensor
+            sequences_as_tensor = torch.tensor(sequences, dtype=torch.long, device=self.device)
+            sequences_as_tensor = sequences_as_tensor.unsqueeze(0)
+            return sequences_as_tensor
 
         # 1. Handle kwargs, `generation_config`, validate them and obtain generation mode
         generation_mode_kwargs = self._extract_generation_mode_kwargs(
