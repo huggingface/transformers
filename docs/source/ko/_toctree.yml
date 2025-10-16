@@ -461,7 +461,7 @@
         title: BertJapanese
       - local: model_doc/bertweet
         title: BERTweet
-      - local: in_translation
+      - local: model_doc/big_bird
         title: BigBird
       - local: in_translation
         title: BigBirdPegasus
@@ -485,7 +485,7 @@
         title: CANINE
       - local: model_doc/codegen
         title: CodeGen
-      - local: in_translation
+      - local: model_doc/code_llama
         title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
@@ -603,7 +603,7 @@
         title: Jukebox
       - local: in_translation
         title: LED
-      - local: in_translation
+      - local: model_doc/lfm2
         title: LFM2
       - local: in_translation
         title: LFM2-VL
@@ -883,6 +883,8 @@
         title: SegFormer
       - local: in_translation
         title: SegGpt
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality (SAM-HQ)
       - local: in_translation
         title: SuperGlue
       - local: in_translation
@@ -1099,7 +1101,7 @@
         title: LayoutXLM
       - local: in_translation
         title: LiLT
-      - local: in_translation
+      - local: model_doc/llama4
         title: Llama4
       - local: in_translation
         title: Llava
