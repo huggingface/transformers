@@ -58,7 +58,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("moshi", "EncodecFeatureExtractor"),
         ("musicgen", "EncodecFeatureExtractor"),
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
-        ("parakeet", "ParakeetFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
