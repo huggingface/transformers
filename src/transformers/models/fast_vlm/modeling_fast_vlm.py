@@ -18,13 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
 from torch import nn
-from torch.nn.functional import adaptive_avg_pool2d
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -40,17 +38,8 @@ from .configuration_fast_vlm import FastVlmConfig
 class FastVlmMultiModalProjector(nn.Module):
     def __init__(self, config: FastVlmConfig):
         super().__init__()
-        if isinstance(config.vision_feature_layer, int):
-            layers = [config.vision_feature_layer]
-        else:
-            layers = config.vision_feature_layer
-        #  different layers have different hidden sizes that are concatenated
-        total_hidden_size = 0
-        for layer in layers:
-            total_hidden_size += config.vision_config.hidden_size // (2 ** (-layer - 1))
-
         self.linear_1 = nn.Linear(
-            total_hidden_size,
+            config.vision_config.hidden_size,
             config.text_config.hidden_size,
             bias=config.multimodal_projector_bias,
         )
@@ -144,7 +133,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
                The tensors corresponding to the input images.
             vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index/indices of the layer to select the vision feature. Must be negative.
+                The index/indices of the layer to select the vision feature. Only -1 supported.
             vision_feature_select_strategy (`str`, *optional*):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Only "full" supported.
@@ -161,28 +150,10 @@ class FastVlmModel(FastVlmPreTrainedModel):
         )
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        # this is not memory-efficient at all
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava
-        desired_shape = math.isqrt(self.config.image_seq_length)
-        if isinstance(vision_feature_layer, int):
-            if vision_feature_layer == -1:
-                selected_image_feature = image_outputs.last_hidden_state
-            else:
-                selected_image_feature = image_outputs.hidden_states[vision_feature_layer + 1]
-            selected_image_feature = adaptive_avg_pool2d(selected_image_feature, (desired_shape, desired_shape))
-        else:
-            hs_pool = []
-            for layer_idx in vision_feature_layer:
-                if layer_idx == -1:
-                    partial_image_feature = image_outputs.last_hidden_state
-                else:
-                    partial_image_feature = image_outputs.hidden_states[layer_idx + 1]
-                partial_image_feature = adaptive_avg_pool2d(partial_image_feature, (desired_shape, desired_shape))
-                hs_pool.append(partial_image_feature)
-            selected_image_feature = torch.cat(hs_pool, dim=-3)
-
+        selected_image_feature = image_outputs.last_hidden_state
         selected_image_feature = selected_image_feature.flatten(2).permute(0, 2, 1)
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = list(image_features)
@@ -234,7 +205,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
 
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
-            corresponding indices will be concatenated to form the vision features. Must be negative.
+            corresponding indices will be concatenated to form the vision features. Only -1 supported.
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -398,7 +369,7 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
 
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
-            corresponding indices will be concatenated to form the vision features. Must be negative.
+            corresponding indices will be concatenated to form the vision features. Only -1 supported.
 
         Example:
 
