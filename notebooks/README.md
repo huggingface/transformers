@@ -100,7 +100,7 @@ You can open any page of the documentation as a notebook in Colab (there is a bu
 
 ### Optimum notebooks
 
-🤗  [Optimum](https://github.com/huggingface/optimum) is an extension of 🤗 Transformers, providing a set of performance optimization tools enabling maximum efficiency to train and run models on targeted hardwares.
+🤗  [Optimum](https://github.com/huggingface/optimum) is an extension of 🤗 Transformers, providing a set of performance optimization tools enabling maximum efficiency to train and run models on targeted hardware.
 
 | Notebook     |      Description      |   |   |
 |:----------|:-------------|:-------------|------:|
