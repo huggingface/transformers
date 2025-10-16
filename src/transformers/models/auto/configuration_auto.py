@@ -139,6 +139,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("encodec", "EncodecConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("eomt", "EomtConfig"),
+        ("eomt_dinov3", "EomtDinov3Config"),
         ("ernie", "ErnieConfig"),
         ("ernie4_5", "Ernie4_5Config"),
         ("ernie4_5_moe", "Ernie4_5_MoeConfig"),
@@ -581,6 +582,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("encodec", "EnCodec"),
         ("encoder-decoder", "Encoder decoder"),
         ("eomt", "EoMT"),
+        ("eomt_dinov3", "EoMT-DINOv3"),
         ("ernie", "ERNIE"),
         ("ernie4_5", "Ernie4_5"),
         ("ernie4_5_moe", "Ernie4_5_MoE"),
@@ -1143,7 +1145,7 @@ class _LazyLoadAllMappings(OrderedDict[str, str]):
 
 
 def _get_class_name(model_class: Union[str, list[str]]):
-    if isinstance(model_class, (list, tuple)):
+    if isinstance(model_class, list | tuple):
         return " or ".join([f"[`{c}`]" for c in model_class if c is not None])
     return f"[`{model_class}`]"
 
