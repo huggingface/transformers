@@ -251,6 +251,7 @@ class UdopPatchEmbeddings(nn.Module):
 class UdopPreTrainedModel(PreTrainedModel):
     config: UdopConfig
     base_model_prefix = "transformer"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
     _can_compile_fullgraph = False

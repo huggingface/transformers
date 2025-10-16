@@ -1019,6 +1019,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     """
 )
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, GenerationMixin):
+    input_modalities = ["audio", "text"]
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
 

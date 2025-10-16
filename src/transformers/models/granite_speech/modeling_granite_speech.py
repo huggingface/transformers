@@ -281,6 +281,7 @@ class GraniteSpeechCTCEncoder(nn.Module):
 @auto_docstring
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
     config: GraniteSpeechConfig
+    input_modalities = ["audio", "text"]
 
     _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
     _supports_sdpa = True

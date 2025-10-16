@@ -554,6 +554,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
 class MLCDVisionModel(MLCDPreTrainedModel):
     config: MLCDVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["MLCDEncoderLayer"]
 
     def __init__(self, config: MLCDVisionConfig):

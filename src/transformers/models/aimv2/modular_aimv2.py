@@ -437,6 +437,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
 
     config: Aimv2Config
     base_model_prefix = "aimv2"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Aimv2EncoderLayer",

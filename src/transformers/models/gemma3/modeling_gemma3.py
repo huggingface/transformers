@@ -426,6 +426,7 @@ class Gemma3PreTrainedModel(PreTrainedModel):
         "hidden_states": Gemma3DecoderLayer,
         "attentions": Gemma3Attention,
     }
+    input_modalities = ["image", "text"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -452,6 +453,7 @@ def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, in
 @auto_docstring
 class Gemma3TextModel(Gemma3PreTrainedModel):
     config: Gemma3TextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -1335,6 +1337,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
     """
 
     config: Gemma3TextConfig
+    input_modalities = "text"
 
 
 __all__ = [

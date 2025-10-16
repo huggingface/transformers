@@ -420,6 +420,7 @@ class CLIPEncoderLayer(GradientCheckpointingLayer):
 class CLIPPreTrainedModel(PreTrainedModel):
     config: CLIPConfig
     base_model_prefix = "clip"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -662,6 +663,7 @@ class CLIPTextTransformer(nn.Module):
 )
 class CLIPTextModel(CLIPPreTrainedModel):
     config: CLIPTextConfig
+    input_modalities = "text"
 
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
     _supports_flash_attn = False  # mask creation only accounts for sdpa/eager
@@ -769,6 +771,7 @@ class CLIPVisionTransformer(nn.Module):
 class CLIPVisionModel(CLIPPreTrainedModel):
     config: CLIPVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["CLIPEncoderLayer"]
 
     def __init__(self, config: CLIPVisionConfig):
@@ -1029,6 +1032,7 @@ class CLIPModel(CLIPPreTrainedModel):
 @auto_docstring
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     config: CLIPTextConfig
+    input_modalities = "text"
 
     _supports_flash_attn = False
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
@@ -1099,6 +1103,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
 class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     config: CLIPVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
@@ -1169,6 +1174,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
 )
 class CLIPForImageClassification(CLIPPreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: CLIPConfig) -> None:
         super().__init__(config)

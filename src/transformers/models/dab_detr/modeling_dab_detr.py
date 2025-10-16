@@ -812,6 +812,7 @@ class DabDetrPreTrainedModel(PreTrainedModel):
     config: DabDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]
 
     def _init_weights(self, module):

@@ -418,6 +418,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     config: ParakeetCTCConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ParakeetEncoderBlock"]
     _supports_flat_attention_mask = True

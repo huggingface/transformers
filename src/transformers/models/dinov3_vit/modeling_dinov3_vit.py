@@ -435,6 +435,7 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
     config: DINOv3ViTConfig
     base_model_prefix = "dinov3_vit"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DINOv3ViTLayer"]
     _supports_sdpa = True

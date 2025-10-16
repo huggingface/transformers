@@ -460,6 +460,7 @@ class MoonshinePreTrainedModel(PreTrainedModel):
     config: MoonshineConfig
     base_model_prefix = "model"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoonshineEncoderLayer", "MoonshineDecoderLayer"]
     _supports_flash_attn = True

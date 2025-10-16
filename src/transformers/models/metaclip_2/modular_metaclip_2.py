@@ -223,6 +223,7 @@ class MetaClip2MLP(CLIPMLP):
 class MetaClip2PreTrainedModel(PreTrainedModel):
     config: MetaClip2Config
     base_model_prefix = "metaclip_2"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True

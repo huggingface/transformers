@@ -374,14 +374,11 @@ class VideoLlama3VisionEncoderLayer(SiglipEncoderLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input to the layer of shape `(seq_len, embed_dim)`.
-            cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
-                The cumulative sequence lengths of each image or video feature.
-            position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
-                The cosine and sine position embeddings for vision attention.
+        r"""
+        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
+            The cumulative sequence lengths of each image or video feature.
+        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
+            The cosine and sine position embeddings for vision attention.
         """
         residual = hidden_states
 
@@ -441,6 +438,7 @@ class VideoLlama3PreTrainedModel(Qwen2VLPreTrainedModel):
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _can_record_outputs = {
         "hidden_states": VideoLlama3VisionEncoderLayer,
         "attentions": VideoLlama3VisionAttention,

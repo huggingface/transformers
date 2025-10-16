@@ -236,6 +236,7 @@ class ConvNextPreTrainedModel(PreTrainedModel):
     config: ConvNextConfig
     base_model_prefix = "convnext"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["ConvNextLayer"]
     _can_record_outputs = {}  # hidden states are collected explicitly
 

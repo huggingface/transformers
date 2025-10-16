@@ -398,6 +398,7 @@ class PixtralPreTrainedModel(PreTrainedModel):
     config: PixtralVisionConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
