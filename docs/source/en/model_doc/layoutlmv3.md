@@ -58,6 +58,15 @@ print(f"\nPredicted answer: '{predicted_answer}' (tokens {predicted_start_idx}-{
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- LayoutLMv3 data processing differs from LayoutLMv2 in two key ways:
+
+    - Images require resizing and normalization with channels in regular RGB format. LayoutLMv2 normalizes images internally and expects BGR format channels.
+    - Text uses byte-pair encoding (BPE) instead of WordPiece tokenization.
+
+- Use [`LayoutLMv3Processor`] to prepare data for the model. It combines [`LayoutLMv3ImageProcessor`] for image modality and [`LayoutLMv3Tokenizer`] or [`LayoutLMv3TokenizerFast`] for text modality.
+
 ## LayoutLMv3Config
 
 [[autodoc]] LayoutLMv3Config

@@ -43,6 +43,10 @@ print(output)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- GIT implements GPT-2 architecture with additional conditioning on `pixel_values`.
+
 ## GitVisionConfig
 
 [[autodoc]] GitVisionConfig

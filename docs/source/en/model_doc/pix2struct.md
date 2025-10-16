@@ -44,6 +44,12 @@ print(generated_text)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Pix2Struct fine-tunes on various tasks and datasets. These include image captioning, visual question answering (VQA) with different inputs (books, charts, science diagrams), and UI component captioning. Find the complete list in Table 1 of the paper.
+- Use models for the specific tasks they were fine-tuned on. For UI captioning, use the model fine-tuned on the UI dataset. For image captioning, use the model fine-tuned on the natural images captioning dataset.
+- For conditional text captioning, set `add_special_tokens=False` in the processor.
+
 ## Pix2StructConfig
 
 [[autodoc]] Pix2StructConfig

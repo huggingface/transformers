@@ -49,6 +49,10 @@ for i, (label, prob) in enumerate(zip(text_labels, probs[0])):
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Set `output_segmentation=True` in [`GroupViTModel.forward`] to get segmentation logits for input texts.
+
 ## GroupViTConfig
 
 [[autodoc]] GroupViTConfig

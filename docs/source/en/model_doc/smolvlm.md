@@ -62,6 +62,13 @@ print(generated_texts)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Input images process by upsampling (if resizing is enabled) or at their original resolution. Resizing behavior depends on `do_resize` and `size` parameters.
+- Don't upsample videos.
+- Set `do_resize=True` to resize images so the longest edge becomes 4512 pixels by default. Customize resizing by passing a dictionary to the `size` parameter. For example, `{"longest_edge": 4512}` is the default.
+- The `max_image_size` parameter controls the size of each square patch the image decomposes into. Default is 512 pixels but adjusts as needed. After resizing, the image processor decomposes images into square patches based on `max_image_size`.
+
 ## SmolVLMConfig
 
 [[autodoc]] SmolVLMConfig

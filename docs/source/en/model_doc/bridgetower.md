@@ -52,6 +52,14 @@ print(f"\nBest matching text: '{best_text}' with score: {scores[best_text]:.4f}"
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`BridgeTowerProcessor`] wraps [`RobertaTokenizer`] and [`BridgeTowerImageProcessor`] into a single instance to encode text and prepare images.
+- BridgeTower uses [`RobertaTokenizer`] to generate text embeddings and OpenAI's CLIP/ViT model to compute visual embeddings.
+- Pre-trained checkpoints for BridgeTower-base and BridgeTower masked language modeling and image-text matching are available.
+- See Table 5 for BridgeTower's performance on image retrieval and other downstream tasks.
+- This model requires PyTorch 1.10 or higher.
+
 ## BridgeTowerConfig
 
 [[autodoc]] BridgeTowerConfig

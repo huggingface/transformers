@@ -98,6 +98,13 @@ print(f"Predicted answer: {predicted_answer_idx}")
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- The fine-tuned detector and weights aren't provided in this repository but are available in the research projects. Load the states directly into the detector.
+- Text input concatenates in front of visual embeddings in the embedding layer. Text must be bound by `[CLS]` and `[SEP]` tokens.
+- Set segment IDs appropriately for text and visual parts.
+- Use [`BertTokenizer`] to encode text and implement a custom detector/image processor to get visual embeddings.
+
 ## VisualBertConfig
 
 [[autodoc]] VisualBertConfig

@@ -48,6 +48,12 @@ print(processor.tokenizer.decode(predicted_answer_tokens))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Plug LayoutXLM weights directly into a LayoutLMv2 model.
+- LayoutXLM uses its own tokenizer based on [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`].
+- Use [`LayoutXLMProcessor`] to prepare data for the model. It applies [`LayoutLMv2ImageProcessor`] and [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`] in sequence.
+
 ## LayoutXLMTokenizer
 
 [[autodoc]] LayoutXLMTokenizer

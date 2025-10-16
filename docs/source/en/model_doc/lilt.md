@@ -49,6 +49,13 @@ print(tokenizer.decode(predict_answer_tokens))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Combine the Language-Independent Layout Transformer with a new RoBERTa checkpoint from the Hub using this [guide](https://github.com/jpwang/lilt). The script stores `config.json` and `pytorch_model.bin` files locally.
+- Use the token vocabulary that corresponds to the RoBERTa checkpoint you combined with the Layout Transformer when preparing data.
+- The `lilt-roberta-en-base` model uses the same vocabulary as LayoutLMv3. Use [`LayoutLMv3TokenizerFast`] to prepare data for this model.
+- Use [`LayoutXLMTokenizerFast`] for models that share vocabulary with LayoutXLM.
+
 ## LiltConfig
 
 [[autodoc]] LiltConfig

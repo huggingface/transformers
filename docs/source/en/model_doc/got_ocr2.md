@@ -46,6 +46,15 @@ processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_to
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- GOT-OCR2 handles plain document OCR, scene text OCR, formatted document OCR, tables, charts, mathematical formulas, geometric shapes, molecular formulas, and sheet music. The model outputs plain text that processes further with packages like `pdftex`, `mathpix`, `matplotlib`, `tikz`, `verovio`, or `pyecharts`.
+- GOT-OCR2 generates formatted text like markdown or LaTeX.
+- Process multiple pages at once for text with formatting across pages. GOT's multi-page OCR feature processes multiple pages simultaneously and outputs continuous text.
+- GOT supports 1024×1024 input resolution, sufficient for most OCR tasks like scene OCR or A4-sized PDF pages. For horizontally stitched two-page PDFs or unusual aspect ratios, GOT crops images into patches, processes them simultaneously, and merges results for better accuracy.
+- GOT supports interactive OCR where users specify regions by coordinates or bounding box colors.
+- Process plain text outputs further with packages like `pdftex`, `mathpix`, `matplotlib`, `tikz`, `verovio`, or `pyecharts` to render desired formats.
+
 ## GotOcr2Config
 
 [[autodoc]] GotOcr2Config

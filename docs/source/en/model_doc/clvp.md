@@ -43,6 +43,13 @@ outputs = model(**processor_output)
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- CLVP is an integral part of the Tortoise TTS model.
+- CLVP compares different generated speech candidates with provided text. The best speech tokens forward to the diffusion model.
+- Use [`ClvpModelForConditionalGeneration.generate`] for Tortoise usage.
+- CLVP expects audio sampled at 22.05 kHz, unlike other audio models that expect 16 kHz.
+
 ## ClvpConfig
 
 [[autodoc]] ClvpConfig

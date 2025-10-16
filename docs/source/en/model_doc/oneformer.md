@@ -67,6 +67,14 @@ plt.show()
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- OneFormer requires two inputs during inference: image and task token.
+- During training, OneFormer only uses panoptic annotations.
+- For distributed training across multiple nodes, update the `get_num_masks` function inside the `OneFormerLoss` class in `modeling_oneformer.py`. Set this to the average number of target masks across all nodes, as shown in the [original implementation](https://github.com/SHI-Labs/OneFormer/blob/main/oneformer/modeling/oneformer.py#L1000).
+- Use [`OneFormerProcessor`] to prepare input images and task inputs for the model, plus optional targets. [`OneFormerProcessor`] wraps [`OneFormerImageProcessor`] and [`CLIPTokenizer`] into a single instance to prepare images and encode task inputs.
+- Get final segmentation by calling [`post_process_semantic_segmentation`], [`post_process_instance_segmentation`], or [`post_process_panoptic_segmentation`] depending on the task. All three tasks work with [`OneFormerForUniversalSegmentation`] output. Panoptic segmentation accepts an optional `label_ids_to_fuse` argument to fuse instances of target objects (e.g., sky) together.
+
 ## OneFormer specific outputs
 
 [[autodoc]] models.oneformer.modeling_oneformer.OneFormerModelOutput

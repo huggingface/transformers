@@ -41,6 +41,15 @@ print(processor.batch_decode(predicted_ids, skip_special_tokens=True)[0])
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- [`UdopForConditionalGeneration`] expects `input_ids` and `bbox` (bounding boxes/2D positions of input tokens). Get these from external OCR engines like Google's Tesseract (Python wrapper available). Each bounding box uses `(x0, y0, x1, y1)` format where `(x0, y0)` is the upper left corner and `(x1, y1)` is the lower right corner. Normalize bounding boxes to a 0-1000 scale first.
+- Use [`UdopProcessor`] to prepare images and text for the model. This handles everything automatically. By default, this class uses the Tesseract engine to extract words and boxes (coordinates) from documents. Its functionality matches [`LayoutLMv3Processor`], so it supports `apply_ocr=False` for your own OCR engine or `apply_ocr=True` for the default OCR engine. See the LayoutLMv2 usage guide for all possible use cases (functionality is identical).
+- For custom OCR engines, Azure's Read API works well and supports line segments. Segment position embeddings typically improve performance.
+- Use the [`generate`] method at inference time to autoregressively generate text from document images.
+- The model pre-trains on both self-supervised and supervised objectives. Use various task prefixes (prompts) from pre-training to test out-of-the-box capabilities. For example, prompt with "Question answering. What is the date?" since "Question answering." is the task prefix used during pre-training for DocVQA. See the paper (Table 1) for all task prefixes.
+- Fine-tune [`UdopEncoderModel`], the encoder-only part of UDOP (similar to LayoutLMv3-like Transformer encoder). For discriminative tasks, add a linear classifier on top and fine-tune on labeled datasets.
+
 ## UdopConfig
 
 [[autodoc]] UdopConfig

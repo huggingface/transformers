@@ -62,6 +62,13 @@ print(processor.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use `padding_side="left"` for batched generation to get more accurate results. Set `processor.tokenizer.padding_side = "left"` before generating.
+- Chameleon was tuned for safety alignment. If the model refuses to answer, ask more concrete questions instead of open questions.
+- Chameleon generates in chat format, so generated text always represents the "assistant's turn". Enable text completion generation by passing `return_for_text_completion=True` when calling the processor.
+- Chameleon uses a special image token to indicate where to merge image embeddings. The implementation uses the reserved token `<reserved08707>` instead of creating a new one. Add `<image>` to your prompt where the image should be embedded for correct generation.
+
 ## ChameleonConfig
 
 [[autodoc]] ChameleonConfig

@@ -52,6 +52,15 @@ print(processor.decode(generate_ids[0][len(inputs["input_ids"][0]):], skip_speci
 </hfoption>
 </hfoptions>
 
+## Usage tips
+
+- Use `padding_side="left"` for batched generation to get more accurate results. Set `processor.tokenizer.padding_side = "left"` before generating.
+- The model doesn't explicitly train to process multiple images in the same prompt. While technically possible, you may get inaccurate results.
+- LLaVA models after release v4.46 raise warnings about adding `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}`, and `processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. Add these attributes to the processor if you own the model checkpoint, or open a PR if you don't.
+- Adding these attributes means LLaVA infers the number of image tokens required per image and expands text with `<image>` placeholders. Usually around 500 tokens per image, so ensure text isn't truncated to avoid embedding merge failures.
+- Get attributes from `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`. Set `num_additional_image_tokens` to 1 if the vision backbone adds a CLS token or 0 if nothing extra adds to the vision patches.
+- Use the processor's [`apply_chat_template`] method to format prompts correctly. Construct a conversation history instead of passing a plain string. Each message in the conversation history is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries for "text" and "image" modalities.
+
 ## VipLlavaConfig
 
 [[autodoc]] VipLlavaConfig
