@@ -4430,6 +4430,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "loaded from GGUF files."
                 )
 
+        if kernel_config is not None and not use_kernels:
+            logger.warning_once(
+                "A kernel_config was provided but use_kernels is False; setting use_kernels=True automatically. To suppress this warning, explicitly set use_kernels to True."
+            )
+            use_kernels = True
+
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             variant=variant,
