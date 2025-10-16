@@ -244,7 +244,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
 
 class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
-    output_modalities = "text"
+    output_modalities = ("text",)
     _can_compile_fullgraph = True
 
     def __init__(self, config: DeepseekVLConfig):

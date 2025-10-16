@@ -1575,7 +1575,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
 class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["decoder.model.embed_tokens.weight", "decoder.lm_head.weight"]
     config: MoshiConfig
-    output_modalities = ["audio", "text"]
+    output_modalities = ("audio", "text")
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

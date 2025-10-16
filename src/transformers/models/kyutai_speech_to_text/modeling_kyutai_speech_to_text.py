@@ -1065,7 +1065,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["codec_model"]
-    output_modalities = ["audio", "text"]
+    output_modalities = ("audio", "text")
 
     def __init__(self, config):
         super().__init__(config)

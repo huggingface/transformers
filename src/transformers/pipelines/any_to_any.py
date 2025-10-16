@@ -214,6 +214,11 @@ class AnyToAnyPipeline(Pipeline):
             raise ValueError(
                 f"`generation_mode` can be only one of the `text`, `audio`, `image` but got generation_mode[={generation_mode}]"
             )
+        elif generation_mode is not None and generation_mode not in self.model.output_modalities:
+            raise ValueError(
+                f"`generation_mode={generation_mode}` is not supported for {self.model.__class__.__name__}. "
+                f"The model can only output the following modalities: {self.model.output_modalities}"
+            )
 
         if return_type is not None:
             postprocess_params["return_type"] = return_type
