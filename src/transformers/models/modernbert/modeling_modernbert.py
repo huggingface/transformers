@@ -44,7 +44,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
-from .configuration_modernbert import ModernBertConfig, ModernBertTextConfig
+from .configuration_modernbert import ModernBertConfig
 
 
 if is_flash_attn_2_available():
@@ -270,7 +270,7 @@ class ModernBertRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[ModernBertTextConfig] = None,
+        config: Optional[ModernBertConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
         layer_type: Optional[str] = None,

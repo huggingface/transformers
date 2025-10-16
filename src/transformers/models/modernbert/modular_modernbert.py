@@ -528,6 +528,15 @@ class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: ModernBertConfig, device=None):
         super().__init__(config, device)
 
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[ModernBertConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
+
 
 def eager_attention_forward(
     module: "ModernBertAttention",

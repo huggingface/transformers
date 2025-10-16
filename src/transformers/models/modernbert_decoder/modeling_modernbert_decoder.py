@@ -38,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
-from .configuration_modernbert_decoder import ModernBertDecoderConfig, ModernBertDecoderTextConfig
+from .configuration_modernbert_decoder import ModernBertDecoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -122,7 +122,7 @@ class ModernBertDecoderRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[ModernBertDecoderTextConfig] = None,
+        config: Optional[ModernBertDecoderConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
         layer_type: Optional[str] = None,
