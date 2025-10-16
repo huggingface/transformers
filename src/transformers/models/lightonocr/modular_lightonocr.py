@@ -93,6 +93,7 @@ class LightOnOCRConfig(PretrainedConfig):
         self,
         spatial_merge_size: int = 2,
         image_token_index: int = 151655,
+        tie_word_embeddings=True,
         vision_config: Optional[dict[str, Any]] = {
             "attention_dropout": 0,
             "head_dim": 64,
@@ -143,12 +144,42 @@ class LightOnOCRConfig(PretrainedConfig):
         else:
             self.text_config = LightOnOCRTextConfig(**text_config)
 
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
     @property
     def vocab_size(self):
         """Get vocab size from text config for generation."""
-        return self._text_config.vocab_size
+        return self.text_config.vocab_size
+
+    @property
+    def hidden_size(self):
+        """Get hidden size from text config."""
+        return self.text_config.hidden_size
+
+    @hidden_size.setter
+    def hidden_size(self, value):
+        """Set hidden size in text config."""
+        self.text_config.hidden_size = value
+
+    @property
+    def num_attention_heads(self):
+        """Get num attention heads from text config."""
+        return self.text_config.num_attention_heads
+
+    @num_attention_heads.setter
+    def num_attention_heads(self, value):
+        """Set num attention heads in text config."""
+        self.text_config.num_attention_heads = value
+
+    @property
+    def num_hidden_layers(self):
+        """Get num hidden layers from text config."""
+        return self.text_config.num_hidden_layers
+
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value):
+        """Set num hidden layers in text config."""
+        self.text_config.num_hidden_layers = value
 
     def to_dict(self):
         """Serialize config to dict."""
@@ -463,7 +494,7 @@ class LightOnOCRTextRotaryEmbedding(Qwen3RotaryEmbedding):
     """
 )
 class LightOnOCRText(Qwen3Model):
-    pass
+    config_class = LightOnOCRTextConfig
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -595,7 +626,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, projected_visual)
 
         # Returns hidden states only
-        return self.language_model(inputs_embeds=inputs_embeds, **kwargs)
+        return self.language_model(input_ids=None, inputs_embeds=inputs_embeds, **kwargs)
 
 
 class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMixin):
