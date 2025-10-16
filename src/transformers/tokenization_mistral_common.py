@@ -1773,9 +1773,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         if kwargs and not set(kwargs.keys()).issubset(
             {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "_from_auto"}
         ):
-            raise ValueError(
-                f"Kwargs {list(set_kwargs - ignore_subset)} are not supported by `MistralCommonTokenizer.from_pretrained`."
-            )
+            raise ValueError(f"Some kwargs in {kwargs} are not supported by `MistralCommonTokenizer.from_pretrained`.")
 
         if not os.path.isdir(pretrained_model_name_or_path):
             tokenizer_path = download_tokenizer_from_hf_hub(

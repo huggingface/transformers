@@ -42,6 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, check_torch_load_is_safe, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.hub import cached_file
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from .configuration_qwen2_5_omni import (
@@ -3777,7 +3778,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         return model
 
     @torch.no_grad()
-    @deprecate_kwarg("return_audio", version="v5", new_name="generation_mode")
+    @deprecate_kwarg("return_audio", version="v5.2", new_name="generation_mode")
     # TODO: raushan, defaults should be saved in generation config
     def generate(
         self,

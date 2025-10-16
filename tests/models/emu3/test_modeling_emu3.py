@@ -331,7 +331,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         if is_torch_available()
         else {}
     )
-    pipeline_model_mapping = {}
 
     fx_compatible = False
 
