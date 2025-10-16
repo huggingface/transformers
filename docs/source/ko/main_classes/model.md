@@ -46,7 +46,3 @@ rendered properly in your Markdown viewer.
 ## 허브에 저장하기
 
 [[autodoc]] utils.PushToHubMixin
-
-## 공유된 체크포인트
-
-[[autodoc]] modeling_utils.load_sharded_checkpoint

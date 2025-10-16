@@ -784,6 +784,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         is_decoder: Optional[bool] = True,
         reduction: Optional[str] = "mean",
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states (`torch.FloatTensor`, *optional*): Sequence of
@@ -827,8 +828,10 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        hidden_states = outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        prediction_scores = self.cls(hidden_states[:, slice_indices, :])
 
         if return_logits:
             return prediction_scores[:, :-1, :].contiguous()
