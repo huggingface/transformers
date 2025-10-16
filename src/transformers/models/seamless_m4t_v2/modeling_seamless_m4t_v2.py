@@ -1489,6 +1489,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TSpeechEncoder with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2SpeechEncoder(SeamlessM4Tv2PreTrainedModel):
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: SeamlessM4Tv2Config):
         super().__init__(config)
@@ -2478,6 +2479,7 @@ class SeamlessM4Tv2HifiGan(nn.Module):
 class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
     config: SeamlessM4Tv2Config
     main_input_name = "input_embeds"
+    input_modalities = "audio"
     _no_split_modules = []
 
     def __init__(self, config):
@@ -2912,6 +2914,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     """
 )
 class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    input_modalities = "audio"
     _keys_to_ignore_on_load_missing = ["text_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
@@ -3181,6 +3184,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     """
 )
 class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    output_modalities = "audio"
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
 
@@ -3542,6 +3546,8 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     """
 )
 class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    input_modalities = "audio"
+    output_modalities = "audio"
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
@@ -3910,6 +3916,8 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
     """
 )
 class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    input_modalities = ["audio", "text"]
+    output_modalities = ["audio", "text"]
     _tied_weights_keys = [
         "lm_head.weight",
         "text_encoder.embed_tokens.weight",

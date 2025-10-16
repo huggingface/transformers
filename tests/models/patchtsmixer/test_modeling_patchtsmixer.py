@@ -18,7 +18,6 @@ import itertools
 import random
 import tempfile
 import unittest
-from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -87,17 +86,17 @@ class PatchTSMixerModelTester:
         masked_loss: bool = False,
         mask_mode: str = "mask_before_encoder",
         channel_consistent_masking: bool = True,
-        scaling: Optional[Union[str, bool]] = "std",
+        scaling: str | bool | None = "std",
         # Head related
         head_dropout: float = 0.2,
         # forecast related
         prediction_length: int = 16,
-        out_channels: Optional[int] = None,
+        out_channels: int | None = None,
         # Classification/regression related
         # num_labels: int = 3,
         num_targets: int = 3,
-        output_range: Optional[list] = None,
-        head_aggregation: Optional[str] = None,
+        output_range: list | None = None,
+        head_aggregation: str | None = None,
         # Trainer related
         batch_size=13,
         is_training=True,

@@ -680,6 +680,7 @@ class KosmosTextAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.is_causal = True
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -1112,6 +1113,7 @@ class Kosmos2TextTransformer(nn.Module):
 @auto_docstring
 class Kosmos2PreTrainedModel(PreTrainedModel):
     config: Kosmos2Config
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2VisionEncoderLayer", "Kosmos2TextBlock"]
     _supports_attention_backend = True
@@ -1174,6 +1176,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):
     config: Kosmos2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2,self.vision_model->self.model
     def __init__(self, config: Kosmos2VisionConfig):
@@ -1206,6 +1209,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
 
 class Kosmos2TextModel(Kosmos2PreTrainedModel):
     config: Kosmos2TextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Kosmos2TextConfig):
         super().__init__(config)
