@@ -883,6 +883,8 @@
         title: SegFormer
       - local: in_translation
         title: SegGpt
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality (SAM-HQ)
       - local: in_translation
         title: SuperGlue
       - local: in_translation
