@@ -214,41 +214,41 @@ class TestTensorParallel(TestCasePlus):
                     assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
                     del non_tp_tensor, tp_tensor
 
-        def test_custom_tp_plan(self):
-            script_to_run = textwrap.dedent(
-                rf"""
-                import os
-                import torch
-                from torch.distributed.tensor import DTensor
-                from transformers import AutoModelForCausalLM
+    def test_custom_tp_plan(self):
+        script_to_run = textwrap.dedent(
+            rf"""
+            import os
+            import torch
+            from torch.distributed.tensor import DTensor
+            from transformers import AutoModelForCausalLM
 
-                rank = int(os.environ["RANK"])
+            rank = int(os.environ["RANK"])
 
-                model_id = "JackFram/llama-68m"
-                # only shard attentions, but not mlps
-                tp_plan = {
-                    "model.layers.*.self_attn.q_proj": "colwise",
-                    "model.layers.*.self_attn.k_proj": "colwise",
-                    "model.layers.*.self_attn.v_proj": "colwise",
-                    "model.layers.*.self_attn.o_proj": "rowwise",
-                }
+            model_id = "JackFram/llama-68m"
+            # only shard attentions, but not mlps
+            tp_plan = {
+                "model.layers.*.self_attn.q_proj": "colwise",
+                "model.layers.*.self_attn.k_proj": "colwise",
+                "model.layers.*.self_attn.v_proj": "colwise",
+                "model.layers.*.self_attn.o_proj": "rowwise",
+            }
 
-                # Use custom tp_plan directly in from_pretrained
-                model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
+            # Use custom tp_plan directly in from_pretrained
+            model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
 
-                # Check we can generate with the tp_plan
-                inputs = torch.randint(100, 200, (1, 10), device=rank)
-                out = model.generate(inputs, max_new_tokens=10, do_sample=False)
+            # Check we can generate with the tp_plan
+            inputs = torch.randint(100, 200, (1, 10), device=rank)
+            out = model.generate(inputs, max_new_tokens=10, do_sample=False)
 
-                # Check only the attentions are sharded
-                for name, param in model.named_parameters():
-                    if re.match(r"\.self_attn\.(q|k|v|o)_proj\.", name):
-                        assert isinstance(param, DTensor)
-                    else:
-                        assert not isinstance(param, DTensor)
-                """
-            )
-            torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
+            # Check only the attentions are sharded
+            for name, param in model.named_parameters():
+                if re.match(r"\.self_attn\.(q|k|v|o)_proj\.", name):
+                    assert isinstance(param, DTensor)
+                else:
+                    assert not isinstance(param, DTensor)
+            """
+        )
+        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
 
 
 class TestTensorParallelProperties(TestCasePlus):
