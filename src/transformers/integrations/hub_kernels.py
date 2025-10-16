@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
 
 
