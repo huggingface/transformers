@@ -15,7 +15,6 @@
 """Mixtral model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...core_model_loading import Fuse, MergeModuleList, WeightConversion, ConversionType
 from ...utils import logging
 
 

@@ -18,11 +18,12 @@ from __future__ import annotations
 
 import math
 import operator
+from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import reduce
 from typing import Any, Optional, Union
-from abc import abstractmethod
+
 import torch
 
 
@@ -317,14 +318,18 @@ class WeightConversion:
     This will also allow us to write quantization as WeightConversion("weight", ["weight_blocks", "weight_scales"], Fp8Quantize)
     potentially with filtering?
 
-    YES because we can check nn.Module.name in the global context -> Augment the mapping with WeightConversion
+    YES because we can check nn.
     And sharding written as WeightConversion("weight", operations = Shard)?
     This way we explicit the full operations
+
+    The operation can be "instantiated" this way we pass potential arguments.
     """
 
     source_keys: Union[str, list[str]]
     target_keys: Optional[Union[str, list[str]]] = None
-    operations: Optional[Union[type[ConversionOps], list[type[ConversionOps]]]] = None
+    operations: Optional[
+        Union[Union[type[ConversionOps], ConversionOps], list[Union[type[ConversionOps], ConversionOps]]]
+    ] = None
 
 
 def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_config):

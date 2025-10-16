@@ -76,7 +76,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return dtype
 
     # TODO: make this into a `ConversionType` ops -> potentially requires all weights on all ranks
-    # depending on the layer type (moe -> no if ep) 
+    # depending on the layer type (moe -> no if ep)
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -184,8 +184,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
-    # TODO: similarly, just as we have a weight weight remapping we 
-    # need to have a cleaner way to remap the quantized keys. 
+    # TODO: similarly, just as we have a weight weight remapping we
+    # need to have a cleaner way to remap the quantized keys.
     # 1. A SINGLE normal_key -> quantized keys used for ckpt renaming and for TP_plan as well
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:
