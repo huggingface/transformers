@@ -356,6 +356,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     config: ViTMSNConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViTMSNAttention", "ViTMSNSdpaAttention"]
     _supports_sdpa = True

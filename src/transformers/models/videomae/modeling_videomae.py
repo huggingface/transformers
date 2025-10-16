@@ -380,6 +380,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     config: VideoMAEConfig
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
+    input_modalities = "video"
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoMAEEmbeddings", "VideoMAELayer"]
     _supports_sdpa = True
