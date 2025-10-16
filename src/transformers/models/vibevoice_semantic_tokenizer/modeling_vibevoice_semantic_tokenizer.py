@@ -144,7 +144,7 @@ class VibeVoiceTokenizerStreamingCache:
 
 
 class StreamingConv1d(nn.Module):
-    """Conv1d with built-in handling of streaming, causal padding, and normalization."""
+    """Conv1d with built-in handling of streaming and causal padding."""
 
     def __init__(
         self,
@@ -160,17 +160,8 @@ class StreamingConv1d(nn.Module):
         self.conv = nn.Conv1d(
             in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias
         )
-
-        # Store configuration
-        self.kernel_size = kernel_size
-        self.stride = stride
-
-        # For streaming mode (causal convolution), need to maintain kernel_size - 1 samples as context
-        # to check use which context_size is more suitable
-        self.context_size = (kernel_size - 1) * dilation - (stride - 1)
-
-        # For non-streaming mode, calculate padding
-        self.padding_total = (kernel_size - 1) * dilation - (stride - 1)
+        # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L263C28-L263C72
+        self.causal_padding = (kernel_size - 1) * dilation - (stride - 1)
 
         # Create a unique layer ID for cache management
         self._layer_id = None
@@ -184,13 +175,11 @@ class StreamingConv1d(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        cache: Optional[VibeVoiceTokenizerStreamingCache] = None,
-        sample_indices: Optional[torch.Tensor] = None,
+        cache: VibeVoiceTokenizerStreamingCache,
+        sample_indices: torch.Tensor,
     ) -> torch.Tensor:
         """
         Forward pass with optional streaming support via cache.
-
-        TODO: better handling of streaming and non-streaming
 
         Args:
             x: Input tensor [batch_size, channels, time]
@@ -202,33 +191,21 @@ class StreamingConv1d(nn.Module):
         """
         batch_size, channels, _ = x.shape
 
-        # Non-streaming mode
-        if cache is None:
-            # Compute extra padding for stride alignment
-            n_frames = (x.shape[-1] - self.kernel_size + self.padding_total) / self.stride + 1
-            ideal_length = (math.ceil(n_frames) - 1) * self.stride + (self.kernel_size - self.padding_total)
-            extra_padding = ideal_length - x.shape[-1]
-            x = F.pad(x, (self.padding_total, extra_padding), mode="constant", value=0)
-            return self.conv(x)
-
-        # Streaming mode
-        if sample_indices is None:
-            raise ValueError("sample_indices must be provided for streaming mode")
         if len(sample_indices) != batch_size:
             raise ValueError("sample_indices must match batch size")
 
         # Get cached context or initialize with zeros
         cached_states = cache.get(self.layer_id, sample_indices)
         if cached_states is None:
-            cached_states = torch.zeros(batch_size, channels, self.context_size, device=x.device, dtype=x.dtype)
+            cached_states = torch.zeros(batch_size, channels, self.causal_padding, device=x.device, dtype=x.dtype)
 
         # Concatenate context with input and apply convolution
-        input_with_context = torch.cat([cached_states, x], dim=2) if self.context_size > 0 else x
+        input_with_context = torch.cat([cached_states, x], dim=2) if self.causal_padding > 0 else x
         output = self.conv(input_with_context)
 
-        # Update cache with the last context_size samples
-        if self.context_size > 0:
-            new_cache = input_with_context[:, :, -self.context_size:]
+        # Update cache with the last causal_padding samples
+        if self.causal_padding > 0:
+            new_cache = input_with_context[:, :, -self.causal_padding:]
             cache.set(self.layer_id, sample_indices, new_cache)
 
         return output
@@ -241,18 +218,11 @@ class ConvNext1dLayer(nn.Module):
     For reference, original 2D `ConvNextLayer`:
     https://github.com/huggingface/transformers/blob/e20df45bf676d80bdddb9757eeeafe6c0c81ecfa/src/transformers/models/convnext/modeling_convnext.py#L120
     """
-    def __init__(self, config, hidden_size, drop_path=0.0):
+    def __init__(self, config, hidden_size, drop_path=0.0, dilation=1, stride=1):
         super().__init__()
 
         self.norm = RMSNorm(hidden_size, eps=config.rms_norm_eps)
         self.ffn_norm = RMSNorm(hidden_size, eps=config.rms_norm_eps)
-        self.mixer = StreamingConv1d(
-            in_channels=hidden_size,
-            out_channels=hidden_size,
-            kernel_size=config.kernel_size,
-            groups=hidden_size,
-            bias=config.bias,
-        )
         self.ffn = VibeVoiceEncoderFeedForward(config, hidden_size)
         if config.layer_scale_init_value > 0:
             self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones((hidden_size)), requires_grad=True)
@@ -269,10 +239,23 @@ class ConvNext1dLayer(nn.Module):
             raise NotImplementedError("DropPath is not implemented.")
         self.drop_path = nn.Identity()
 
+        self.mixer = nn.Conv1d(
+            in_channels=hidden_size,
+            out_channels=hidden_size,
+            kernel_size=config.kernel_size,
+            groups=hidden_size,
+            bias=config.bias,
+            dilation=dilation,
+            stride=stride
+        )
+        # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L266
+        self.causal_padding = (config.kernel_size - 1) * dilation - (stride - 1)
+
     def forward(self, x):
-        # mixer
         residual = x
         x = self.norm(x.transpose(1, 2)).transpose(1, 2)
+        # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L382
+        x = F.pad(x, (self.causal_padding, 0))
         x = self.mixer(x)
         if self.gamma is not None:
             x = x * self.gamma.unsqueeze(-1)
@@ -339,8 +322,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
         for i in range(len(config.depths)):
             in_ch = config.n_filters * (2**i)
             stage = nn.ModuleList([
-                ConvNext1dLayer(config, hidden_size=in_ch)
-                for _ in range(config.depths[i])
+                ConvNext1dLayer(config, hidden_size=in_ch) for _ in range(config.depths[i])
             ])
             self.stages.append(stage)
 
@@ -351,7 +333,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
             bias=config.bias,
         )
 
-    def forward(self, x, cache=None, sample_indices=None):
+    def forward(self, x, cache, sample_indices):
         for i, downsample_layer in enumerate(self.downsample_layers):
             x = downsample_layer(x, cache=cache, sample_indices=sample_indices)
             for block in self.stages[i]:

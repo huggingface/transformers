@@ -23,10 +23,6 @@ from transformers import VibeVoiceConfig, VibeVoiceModel, VibeVoiceAcousticToken
 def update_state_dict_for_hf_model(state_dict):
     """
     Update the state_dict to match the HuggingFace model structure.
-    
-    Changes:
-    - Remove .conv layer nesting: 'layer.conv.conv.weight' -> 'layer.conv.weight'
-    - This is needed because the HF model now has simplified SConv1d structure
     """
     updated_state_dict = {}
     
@@ -36,14 +32,15 @@ def update_state_dict_for_hf_model(state_dict):
         # Handle conv.conv -> conv mapping for semantic tokenizer SConv1d layers only
         # This removes one level of .conv nesting
         if "semantic_tokenizer" in key: # TODO remove when acoustic tokeniezer also updated!
-            if ".conv.conv." in key:
-                new_key = new_key.replace(".conv.conv.", ".conv.")
             # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
             if "downsample_layers." in key and ".0.conv." in key:
                 new_key = new_key.replace(".0.conv.", ".conv.")
-            # Handle Block1D mixer Convlayer -> SConv1d direct usage: mixer.conv.conv -> mixer.conv
-            if "mixer.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.", "mixer.conv.")
+            # Handle ConvNext1DLayer mixer simplification: mixer.conv.conv.conv.* -> mixer.*
+            if "mixer.conv.conv.conv." in key:
+                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
+            # Handle general conv.conv -> conv mapping (after mixer handling to avoid conflicts)
+            elif ".conv.conv." in key:
+                new_key = new_key.replace(".conv.conv.", ".conv.")
 
         updated_state_dict[new_key] = value
     
