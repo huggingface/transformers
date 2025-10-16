@@ -1101,7 +1101,7 @@
         title: LayoutXLM
       - local: in_translation
         title: LiLT
-      - local: in_translation
+      - local: model_doc/llama4
         title: Llama4
       - local: in_translation
         title: Llava
