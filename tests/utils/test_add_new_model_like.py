@@ -19,8 +19,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-import transformers.commands.add_new_model_like
-from transformers.commands.add_new_model_like import ModelInfos, create_new_model_like
+from transformers.cli.add_new_model_like import ModelInfos, _add_new_model_like_internal
 from transformers.testing_utils import require_torch
 
 
@@ -36,7 +35,8 @@ class TestAddNewModelLike(unittest.TestCase):
         """
         Create a temporary repo with the same structure as Transformers, with just 2 models.
         """
-        cls.FAKE_REPO = tempfile.TemporaryDirectory().name
+        cls.tmp_dir = tempfile.TemporaryDirectory()
+        cls.FAKE_REPO = cls.tmp_dir.name
         os.makedirs(os.path.join(cls.FAKE_REPO, "src", "transformers", "models"), exist_ok=True)
         os.makedirs(os.path.join(cls.FAKE_REPO, "tests", "models"), exist_ok=True)
         os.makedirs(os.path.join(cls.FAKE_REPO, "docs", "source", "en", "model_doc"), exist_ok=True)
@@ -64,12 +64,6 @@ class TestAddNewModelLike(unittest.TestCase):
                 doc_src = os.path.join(REPO_PATH, "docs", "source", "en", "model_doc", f"{model}.md")
                 shutil.copy(doc_src, doc_src.replace(REPO_PATH, cls.FAKE_REPO))
 
-        # Replace the globals
-        cls.ORIGINAL_REPO = transformers.commands.add_new_model_like.REPO_PATH
-        cls.ORIGINAL_TRANSFORMERS_REPO = transformers.commands.add_new_model_like.TRANSFORMERS_PATH
-        transformers.commands.add_new_model_like.REPO_PATH = Path(cls.FAKE_REPO)
-        transformers.commands.add_new_model_like.TRANSFORMERS_PATH = Path(cls.FAKE_REPO) / "src" / "transformers"
-
         # For convenience
         cls.MODEL_PATH = os.path.join(cls.FAKE_REPO, "src", "transformers", "models")
         cls.TESTS_MODEL_PATH = os.path.join(cls.FAKE_REPO, "tests", "models")
@@ -77,9 +71,7 @@ class TestAddNewModelLike(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        transformers.commands.add_new_model_like.REPO_PATH = cls.ORIGINAL_REPO
-        transformers.commands.add_new_model_like.TRANSFORMERS_PATH = cls.ORIGINAL_TRANSFORMERS_REPO
-        del cls.FAKE_REPO
+        cls.tmp_dir.cleanup()
 
     def assertFileIsEqual(self, text: str, filepath: str):
         with open(filepath, "r") as f:
@@ -105,7 +97,8 @@ class TestAddNewModelLike(unittest.TestCase):
             ("processing_llama.py", False),
         )
         # Run the command
-        create_new_model_like(
+        _add_new_model_like_internal(
+            repo_path=Path(self.FAKE_REPO),
             old_model_infos=ModelInfos("llama"),
             new_lowercase_name="my_test",
             new_model_paper_name="MyTest",
@@ -385,7 +378,8 @@ class TestAddNewModelLike(unittest.TestCase):
             ("processing_phi4_multimodal.py", True),
         )
         # Run the command
-        create_new_model_like(
+        _add_new_model_like_internal(
+            repo_path=Path(self.FAKE_REPO),
             old_model_infos=ModelInfos("phi4_multimodal"),
             new_lowercase_name="my_test2",
             new_model_paper_name="MyTest2",

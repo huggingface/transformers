@@ -337,8 +337,6 @@ class AlbertModelIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        from transformers.integrations.executorch import TorchExportableModuleForEncoderOnlyLM
-
         distilbert_model = "albert/albert-base-v2"
         device = "cpu"
         attn_implementation = "sdpa"
@@ -365,15 +363,13 @@ class AlbertModelIntegrationTest(unittest.TestCase):
             ["capital", "capitol", "comune", "arrondissement", "bastille"],
         )
 
-        exportable_module = TorchExportableModuleForEncoderOnlyLM(model)
-        exported_program = exportable_module.export(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
             strict=True,
         )
 
-        result = exported_program.module().forward(
-            input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
-        )
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
         ep_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
         self.assertEqual(eg_predicted_mask, ep_predicted_mask)
