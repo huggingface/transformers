@@ -34,6 +34,7 @@ We are super happy to make this code community-powered, and would love to see ho
 - static cache is not supported (this should be just a generation config issue / config shape issues)
 
 ### Usage tips
+
 The model uses Multi-head Latent Attention (MLA) and DeepSeekMoE architectures for efficient inference and cost-effective training. It employs an auxiliary-loss-free strategy for load balancing and multi-token prediction training objective. The model can be used for various language tasks after being pre-trained on 14.8 trillion tokens and going through Supervised Fine-Tuning and Reinforcement Learning stages.
 
 You can run the model in `FP8` automatically, using 2 nodes of 8 H100 should be more than enough!
@@ -64,7 +65,7 @@ print(time.time()-start)
 
 This generated:
 
-``````
+``````text
 <｜Assistant｜><think>
 Okay, the user wants to demonstrate how chat templating works. Let me break down what that means. Chat templating is about structuring the conversation data, especially for models that need specific input formats. Maybe they're referring to something like how messages are formatted with roles (user, assistant, system) in APIs like OpenAI.
 
@@ -138,7 +139,7 @@ Applying the template to our `messages` list would produce:
 
 This tells the model:  
 1. The conversation history (user/assistant turns).  
-2. The model’s turn to generate a response (`<|assistant|>` at the end).  
+2. The model's turn to generate a response (`<|assistant|>` at the end).  
 
 ---
 

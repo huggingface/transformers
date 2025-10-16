@@ -22,7 +22,6 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -193,23 +192,6 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="TVPModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # override as the `logit_scale` parameter initialization is different for TVP
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # params are randomly initialized.
-                    self.assertAlmostEqual(
-                        param.data.mean().item(),
-                        0.0,
-                        delta=1.0,
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     @require_timm
     def test_backbone_selection(self):

@@ -20,7 +20,7 @@ jobs:
     with:
       job: run_models_gpu
       slack_report_channel: "#amd-hf-ci"
-      runner_scale_set: amd-mi325-ci
+      runner_group: amd-mi325
       docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi325
       report_repo_id: optimum-amd/transformers_daily_ci
@@ -33,7 +33,7 @@ jobs:
     with:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#amd-hf-ci"
-      runner_scale_set: amd-mi325-ci
+      runner_group: amd-mi325
       docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi325
       report_repo_id: optimum-amd/transformers_daily_ci
@@ -46,7 +46,7 @@ jobs:
     with:
       job: run_examples_gpu
       slack_report_channel: "#amd-hf-ci"
-      runner_scale_set: amd-mi325-ci
+      runner_group: amd-mi325
       docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi325
       report_repo_id: optimum-amd/transformers_daily_ci
@@ -59,7 +59,7 @@ jobs:
     with:
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#amd-hf-ci"
-      runner_scale_set: amd-mi325-ci
+      runner_group: amd-mi325
       docker: huggingface/transformers-pytorch-deepspeed-amd-gpu
       ci_event: Scheduled CI (AMD) - mi325
       report_repo_id: optimum-amd/transformers_daily_ci

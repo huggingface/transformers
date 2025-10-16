@@ -187,7 +187,7 @@ class BatchFeature(UserDict):
             [`BatchFeature`]: The same instance after modification.
         """
         requires_backends(self, ["torch"])
-        import torch  # noqa
+        import torch
 
         device = kwargs.get("device")
         non_blocking = kwargs.get("non_blocking", False)
@@ -221,7 +221,7 @@ class BatchFeature(UserDict):
 
 class FeatureExtractionMixin(PushToHubMixin):
     """
-    This is a feature extraction mixin used to provide saving/loading functionality for sequential and image feature
+    This is a feature extraction mixin used to provide saving/loading functionality for sequential and audio feature
     extractors.
     """
 
@@ -275,9 +275,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -433,7 +430,6 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         subfolder = kwargs.pop("subfolder", None)
         token = kwargs.pop("token", None)
@@ -487,7 +483,6 @@ class FeatureExtractionMixin(PushToHubMixin):
                             cache_dir=cache_dir,
                             force_download=force_download,
                             proxies=proxies,
-                            resume_download=resume_download,
                             local_files_only=local_files_only,
                             subfolder=subfolder,
                             token=token,
@@ -517,7 +512,10 @@ class FeatureExtractionMixin(PushToHubMixin):
             with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
-            feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
+            if "audio_processor" in feature_extractor_dict:
+                feature_extractor_dict = feature_extractor_dict["audio_processor"]
+            else:
+                feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
 
         except json.JSONDecodeError:
             raise OSError(

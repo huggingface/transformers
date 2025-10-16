@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import pickle
 import shutil
 import tempfile
 import unittest
@@ -292,17 +291,6 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             revision="6eb30c03ab6a9e2cdef4d523024909ec815ddb75",
             padding=False,
         )
-
-    def test_picklable(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = CodeLlamaTokenizer(f.name, keep_accents=True)
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
-
-    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
-    def test_pickle_subword_regularization_tokenizer(self):
-        pass
 
     @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_subword_regularization_tokenizer(self):

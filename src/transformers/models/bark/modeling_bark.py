@@ -57,6 +57,7 @@ from .generation_configuration_bark import (
 
 
 if is_flash_attn_available():
+    from ...integrations.flash_attention import get_target_dtype
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -78,6 +79,7 @@ class BarkSelfAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.embed_dim // self.num_heads
+        self.config = config
 
         if config.hidden_size % config.num_heads != 0:
             raise ValueError(
@@ -118,7 +120,7 @@ class BarkSelfAttention(nn.Module):
 
         return tensor
 
-    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+    def _attn(self, query, key, value, attention_mask=None):
         # unlike GPTNeo's SelfAttention, divide by the square root of the dimension of the query and the key
         attn_weights = torch.matmul(query, key.transpose(-1, -2)) * (1.0 / math.sqrt(self.head_dim))
 
@@ -139,10 +141,6 @@ class BarkSelfAttention(nn.Module):
         attn_weights = attn_weights.to(value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
         # (batch, num_heads, seq_len, seq_len) x (batch, num_heads, seq_len, attn_head_size)
         # -> (batch, num_heads, seq_len, attn_head_size)
         attn_output = torch.matmul(attn_weights, value)
@@ -154,7 +152,6 @@ class BarkSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         past_key_values=None,
-        head_mask=None,
         use_cache=False,
         output_attentions=False,
         cache_position=None,
@@ -169,7 +166,7 @@ class BarkSelfAttention(nn.Module):
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
 
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        attn_output, attn_weights = self._attn(query, key, value, attention_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)
@@ -217,7 +214,6 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         hidden_states,
         attention_mask=None,
         past_key_values=None,
-        head_mask=None,
         use_cache=False,
         output_attentions=False,
         cache_position=None,
@@ -234,6 +230,8 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
 
+        target_dtype = get_target_dtype(query, self)  # if the query is in float32, this is the dtype to cast to for FA
+
         attn_output = _flash_attention_forward(
             query,
             key,
@@ -243,6 +241,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             dropout=self.dropout if self.training else 0.0,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
+            target_dtype=target_dtype,
         )
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
@@ -298,7 +297,6 @@ class BarkBlock(GradientCheckpointingLayer):
         hidden_states,
         past_key_values=None,
         attention_mask=None,
-        head_mask=None,
         use_cache=False,
         output_attentions=False,
         cache_position=None,
@@ -309,7 +307,6 @@ class BarkBlock(GradientCheckpointingLayer):
             intermediary_hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -438,7 +435,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         input_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -497,13 +493,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
@@ -525,12 +514,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                 # from_seq_length is 1 to easily broadcast
                 attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x num_heads x N x N
-        # head_mask has shape num_layers x batch x num_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
-
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
 
@@ -545,7 +528,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                 hidden_states,
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
-                head_mask=head_mask[i],
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
@@ -1071,7 +1053,6 @@ class BarkFineModel(BarkPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         input_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1143,8 +1124,6 @@ class BarkFineModel(BarkPreTrainedModel):
                 # from_seq_length is 1 to easily broadcast
                 attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
 
-        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
-
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
 
@@ -1158,7 +1137,6 @@ class BarkFineModel(BarkPreTrainedModel):
             outputs = block(
                 hidden_states,
                 attention_mask=attention_mask,
-                head_mask=head_mask[i],
                 output_attentions=output_attentions,
             )
 

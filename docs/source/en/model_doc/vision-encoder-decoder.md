@@ -39,7 +39,7 @@ for more information).
 An example application is image captioning, in which the encoder is used to encode the image, after which an autoregressive language model generates
 the caption. Another example is optical character recognition. Refer to [TrOCR](trocr), which is an instance of [`VisionEncoderDecoderModel`].
 
-## Randomly initializing `VisionEncoderDecoderModel` from model configurations.
+## Randomly initializing `VisionEncoderDecoderModel` from model configurations
 
 [`VisionEncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`ViTModel`] configuration for the encoder
 and the default [`BertForCausalLM`] configuration for the decoder.
@@ -54,7 +54,7 @@ and the default [`BertForCausalLM`] configuration for the decoder.
 >>> model = VisionEncoderDecoderModel(config=config)
 ```
 
-## Initialising `VisionEncoderDecoderModel` from a pretrained encoder and a pretrained decoder.
+## Initialising `VisionEncoderDecoderModel` from a pretrained encoder and a pretrained decoder
 
 [`VisionEncoderDecoderModel`] can be initialized from a pretrained encoder checkpoint and a pretrained decoder checkpoint. Note that any pretrained Transformer-based vision model, *e.g.* [Swin](swin), can serve as the encoder and both pretrained auto-encoding models, *e.g.* BERT, pretrained causal language models, *e.g.* GPT2, as well as the pretrained decoder part of sequence-to-sequence models, *e.g.* decoder of BART, can be used as the decoder.
 Depending on which architecture you choose as the decoder, the cross-attention layers might be randomly initialized.
@@ -69,7 +69,7 @@ To do so, the `VisionEncoderDecoderModel` class provides a [`VisionEncoderDecode
 ... )
 ```
 
-## Loading an existing `VisionEncoderDecoderModel` checkpoint and perform inference.
+## Loading an existing `VisionEncoderDecoderModel` checkpoint and perform inference
 
 To load fine-tuned checkpoints of the `VisionEncoderDecoderModel` class, [`VisionEncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
 

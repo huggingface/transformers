@@ -180,9 +180,8 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else {}
     )
     _is_composite = True
-    test_pruning = False
+
     test_torchscript = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Ovis2VisionText2TextModelTester(self)

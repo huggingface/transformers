@@ -144,8 +144,6 @@ class Qwen2AudioForConditionalGenerationModelTest(
 
     all_model_classes = (Qwen2AudioForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"any-to-any": Qwen2AudioForConditionalGeneration} if is_torch_available() else {}
-    test_pruning = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):

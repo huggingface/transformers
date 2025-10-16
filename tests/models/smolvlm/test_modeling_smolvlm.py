@@ -170,9 +170,8 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SmolVLMModel,) if is_torch_available() else ()
     fx_compatible = False
     test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = SmolVLMVisionText2TextModelTester(self)
@@ -343,9 +342,8 @@ class SmolVLMForConditionalGenerationModelTest(
         else ()
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_head_masking = False
     test_torchscript = False
 
     def setUp(self):

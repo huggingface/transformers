@@ -27,9 +27,11 @@ rendered properly in your Markdown viewer.
 
 [Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/), developed by Meta, introduces a new auto-regressive Mixture-of-Experts (MoE) architecture.
 This generation includes two models:
+
 - The highly capable Llama 4 Maverick with 17B active parameters out of ~400B total, with 128 experts.
 - The efficient Llama 4 Scout also  has 17B active parameters out of ~109B total, using just 16 experts.
 -
+
 Both models leverage early fusion for native multimodality, enabling them to process text and image inputs.
 Maverick and Scout are both trained on up to 40 trillion tokens on data encompassing 200 languages
 (with specific fine-tuning support for 12 languages including Arabic, Spanish, German, and Hindi).
@@ -203,7 +205,8 @@ We will work to enable running with `device_map="auto"` and flex-attention witho
 tensor-parallel in the future.
 
 ```py
-from transformers import Llama4ForConditionalGeneration, AutoTokenizer, infer_device
+from transformers import Llama4ForConditionalGeneration, AutoTokenizer
+from accelerate import Accelerator
 import torch
 import time
 
@@ -226,7 +229,7 @@ messages = [
 ]
 input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-device = infer_device()
+device = Accelerator().device
 torch_device_module = getattr(torch, device, torch.cuda)
 torch_device_module.synchronize()
 start = time.time()
@@ -421,24 +424,19 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 ## Llama4ForConditionalGeneration
 
 [[autodoc]] Llama4ForConditionalGeneration
-- forward
+    - forward
 
 ## Llama4ForCausalLM
 
 [[autodoc]] Llama4ForCausalLM
-- forward
+    - forward
 
 ## Llama4TextModel
 
 [[autodoc]] Llama4TextModel
-- forward
-
-## Llama4ForCausalLM
-
-[[autodoc]] Llama4ForCausalLM
-- forward
+    - forward
 
 ## Llama4VisionModel
 
 [[autodoc]] Llama4VisionModel
-- forward
+    - forward

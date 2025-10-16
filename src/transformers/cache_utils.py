@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import torch
 
-from .configuration_utils import PretrainedConfig
+from .configuration_utils import PreTrainedConfig
 from .utils import (
     is_hqq_available,
     is_quanto_greater,
@@ -176,6 +176,11 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         super().__init__()
         self.sliding_window = sliding_window
         self.cumulative_length = 0
+        self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
+
+    def lazy_initialization(self, key_states: torch.Tensor) -> None:
+        super().lazy_initialization(key_states)
+        self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
 
     def update(
         self,
@@ -395,7 +400,12 @@ class StaticSlidingWindowLayer(StaticLayer):
         if not self.is_initialized:
             self.lazy_initialization(key_states)
 
-        cache_position = cache_kwargs.get("cache_position")
+        # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
+        # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
+        cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
+        cache_position = (
+            cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
+        )
 
         cumulative_length = self.cumulative_length
         is_full = cumulative_length >= self.max_cache_len
@@ -790,7 +800,7 @@ class Cache:
         for layer in self.layers:
             layer.lazy_initialization(fake_keys_tensor)
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cache for the given layer."""
         if layer_idx >= len(self.layers):
             return 0
@@ -873,26 +883,6 @@ class Cache:
         """Return whether the layers of the cache are sliding window"""
         return [getattr(layer, "is_sliding", False) for layer in self.layers]
 
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
-        sequence length.
-        """
-        if layer_idx < len(self.layers):
-            return self.layers[layer_idx].keys, self.layers[layer_idx].values
-        else:
-            raise KeyError(
-                f"Cache only has {len(self.layers)} layers, attempted to access layer with index {layer_idx}"
-            )
-
-    def __iter__(self):
-        """
-        Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
-        keys and values
-        """
-        for layer_idx in range(len(self)):
-            yield (self.layers[layer_idx].keys, self.layers[layer_idx].values)
-
     def __len__(self):
         """
         This value corresponds to the number of layers in the model.
@@ -918,7 +908,7 @@ class DynamicCache(Cache):
             `map(gather_map, zip(*caches))`, i.e. each item in the iterable contains the key and value states
             for a layer gathered across replicas by torch.distributed (shape=[global batch size, num_heads, seq_len, head_dim]).
             Note: it needs to be the 1st arg as well to work correctly
-        config (`PretrainedConfig`, *optional*):
+        config (`PreTrainedConfig`, *optional*):
             The config of the model for which this Cache will be used. If passed, it will be used to check for sliding
             or hybrid layer structure, greatly reducing the memory requirement of the cached tensors to
             `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
@@ -947,25 +937,27 @@ class DynamicCache(Cache):
 
     def __init__(
         self,
-        ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None,
-        config: Optional[PretrainedConfig] = None,
+        ddp_cache_data: Optional[Iterable[tuple[Optional[torch.Tensor], ...]]] = None,
+        config: Optional[PreTrainedConfig] = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = False,
     ):
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
-            config = config.get_text_config(decoder=True)
-            sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
-            layer_types = getattr(config, "layer_types", None)
+            decoder_config = config.get_text_config(decoder=True)
+            sliding_window = getattr(decoder_config, "sliding_window", None) or getattr(
+                decoder_config, "attention_chunk_size", None
+            )
+            layer_types = getattr(decoder_config, "layer_types", None)
             if layer_types is None:
                 layer_types = [
                     "sliding_attention" if sliding_window is not None else "full_attention"
-                    for _ in range(config.num_hidden_layers)
+                    for _ in range(decoder_config.num_hidden_layers)
                 ]
             # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-            if hasattr(config, "num_kv_shared_layers"):
-                layer_types = layer_types[: -config.num_kv_shared_layers]
+            if hasattr(decoder_config, "num_kv_shared_layers"):
+                layer_types = layer_types[: -decoder_config.num_kv_shared_layers]
 
             for layer_type in layer_types:
                 # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
@@ -978,12 +970,21 @@ class DynamicCache(Cache):
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
             # Init all the layers with the data
-            for layer_idx, (key_states, value_states) in enumerate(ddp_cache_data):
-                # If the config was not passed above, initialize a DynamicLayer for each entry of the ddp_data
+            for layer_idx, kv_and_optional_sliding in enumerate(ddp_cache_data):
+                # If the config was not passed above, initialize a new cache layer for each entry of the ddp_data
                 if config is None:
-                    layers.append(DynamicLayer())
+                    # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
+                    # contain a third element, which is an optional sliding window tensor.
+                    sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
+                    # If there is a sliding window tensor, use it to initialize the layer
+                    if sliding_window_tensor is not None:
+                        # Since the same layer is dispatched across replicas, sliding_window is the same for all
+                        sliding_window = sliding_window_tensor[0].item()
+                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
+                    else:
+                        layers.append(DynamicLayer())
                 # Update the layer with the data
-                _, _ = layers[layer_idx].update(key_states, value_states)
+                _, _ = layers[layer_idx].update(kv_and_optional_sliding[0], kv_and_optional_sliding[1])
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:
@@ -995,30 +996,9 @@ class DynamicCache(Cache):
         else:
             super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Converts the `Cache` instance into the its equivalent in the legacy cache format. Used for
-        backward compatibility.
-        """
-        legacy_cache = ()
+    def __iter__(self):
         for layer in self.layers:
-            legacy_cache += ((layer.keys, layer.values),)
-        return legacy_cache
-
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: tuple[tuple[torch.Tensor, torch.Tensor]]) -> "DynamicCache":
-        """
-        Converts a cache in the legacy cache format into an equivalent `Cache`. Used for
-        backward compatibility.
-        """
-        cache = cls()
-        if past_key_values is None:
-            logger.warning_once("past_key_values should not be None in from_legacy_cache()")
-        if past_key_values is not None:
-            for layer_idx in range(len(past_key_values)):
-                key_states, value_states = past_key_values[layer_idx]
-                cache.update(key_states, value_states, layer_idx)
-        return cache
+            yield layer.keys, layer.values, getattr(layer, "_sliding_window_tensor", None)
 
 
 class StaticCache(Cache):
@@ -1029,7 +1009,7 @@ class StaticCache(Cache):
     See `Cache` for details on common methods that are implemented by all cache classes.
 
     Args:
-        config (`PretrainedConfig`):
+        config (`PreTrainedConfig`):
             The config of the model for which this Cache will be used. It will be used to check for sliding
             or hybrid layer structure, and initialize each layer accordingly.
         max_cache_len (`int`):
@@ -1063,7 +1043,7 @@ class StaticCache(Cache):
     # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         max_cache_len: int,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
@@ -1117,7 +1097,7 @@ class QuantizedCache(Cache):
     Args:
         backend (`str`):
             The quantization backend to use. One of `("quanto", "hqq").
-        config (`PretrainedConfig`):
+        config (`PreTrainedConfig`):
             The config of the model for which this Cache will be used.
         nbits (`int`, *optional*, defaults to 4):
             The number of bits for quantization.
@@ -1134,7 +1114,7 @@ class QuantizedCache(Cache):
     def __init__(
         self,
         backend: str,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         nbits: int = 4,
         axis_key: int = 0,
         axis_value: int = 0,
@@ -1190,17 +1170,21 @@ class EncoderDecoderCache(Cache):
     """
 
     def __init__(self, *caches) -> None:
-        # For dp and ddp support, if only one argument is passed, it should be an iterable of tuples of tensors
+        # For dp and ddp support, if only one argument is passed, it should be an iterable of DynamicCache ddp data
         if len(caches) == 1:
-            self.self_attention_cache = DynamicCache()
-            self.cross_attention_cache = DynamicCache()
-            # Populate cache from the iterable
-            for layer_idx, key_value_states in enumerate(caches[0]):
-                key_states, value_states = key_value_states[:2]
-                self.self_attention_cache.update(key_states, value_states, layer_idx)
-                if len(key_value_states) > 2:
-                    key_states, value_states = key_value_states[2:]
-                    self.cross_attention_cache.update(key_states, value_states, layer_idx)
+            self_attention_cache_data, cross_attention_cache_data = [], []
+            for combined_cache_data in caches[0]:
+                if len(combined_cache_data) == 6:  # two tuple of style (self_attn_k, self_attn_v, self_attn_sliding)
+                    self_attention_cache_data.append(combined_cache_data[:3])
+                    cross_attention_cache_data.append(combined_cache_data[3:])
+                # To support old DDP-style init, we handle the case where the tuple has no sliding window tensor
+                elif len(combined_cache_data) == 4:  # two tuple of style (self_attn_k, self_attn_v)
+                    self_attention_cache_data.append(combined_cache_data[:2])
+                    cross_attention_cache_data.append(combined_cache_data[2:])
+                else:
+                    raise ValueError(f"Expected {len(combined_cache_data) = } to be 4 or 6.\n{combined_cache_data = }")
+            self.self_attention_cache = DynamicCache(self_attention_cache_data)
+            self.cross_attention_cache = DynamicCache(cross_attention_cache_data)
         # Otherwise, we should get two arguments, a self-attention cache and a cross-attention cache
         elif len(caches) == 2:
             if not isinstance(caches[0], Cache) or not isinstance(caches[1], Cache):
@@ -1215,39 +1199,16 @@ class EncoderDecoderCache(Cache):
         for layer_idx in range(len(self.cross_attention_cache)):
             self.is_updated[layer_idx] = bool(self.cross_attention_cache.get_seq_length(layer_idx) > 0)
 
+    def __iter__(self):
+        """Returns tuples of style (self_attn_k, self_attn_v, self_attn_sliding, cross_attn_k, cross_attn_v, cross_attn_sliding)"""
+        for self_attention_layer, cross_attention_layer in zip(self.self_attention_cache, self.cross_attention_cache):
+            yield self_attention_layer + cross_attention_layer
+
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(self_attention_cache={self.self_attention_cache}, cross_attention_cache="
             f"{self.cross_attention_cache})"
         )
-
-    def __iter__(self):
-        """
-        Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
-        keys and values
-        """
-        for layer_idx in range(len(self)):
-            yield (
-                self.self_attention_cache.layers[layer_idx].keys,
-                self.self_attention_cache.layers[layer_idx].values,
-                self.cross_attention_cache.layers[layer_idx].keys,
-                self.cross_attention_cache.layers[layer_idx].values,
-            )
-
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
-        sequence length.
-        """
-        if layer_idx < len(self):
-            return (
-                self.self_attention_cache.layers[layer_idx].keys,
-                self.self_attention_cache.layers[layer_idx].values,
-                self.cross_attention_cache.layers[layer_idx].keys,
-                self.cross_attention_cache.layers[layer_idx].values,
-            )
-        else:
-            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
 
     def __len__(self):
         """
@@ -1256,37 +1217,7 @@ class EncoderDecoderCache(Cache):
         """
         return len(self.self_attention_cache)
 
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor]]:
-        """Converts the `EncoderDecoderCache` instance into its equivalent in the legacy cache format."""
-        legacy_cache = ()
-        if len(self.cross_attention_cache) > 0:
-            for self_attn, cross_attn in zip(
-                self.self_attention_cache.to_legacy_cache(), self.cross_attention_cache.to_legacy_cache()
-            ):
-                legacy_cache += (self_attn + cross_attn,)
-        else:
-            legacy_cache = self.self_attention_cache.to_legacy_cache()
-        return legacy_cache
-
-    @classmethod
-    def from_legacy_cache(
-        cls, past_key_values: Optional[Iterable[tuple[torch.FloatTensor, ...]]]
-    ) -> "EncoderDecoderCache":
-        """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
-        cache = cls(DynamicCache(), DynamicCache())
-        if past_key_values is None:
-            logger.warning_once("past_key_values should not be None in from_legacy_cache()")
-        else:
-            for layer_idx, key_value_states in enumerate(past_key_values):
-                key_states, value_states = key_value_states[:2]
-                cache.self_attention_cache.update(key_states, value_states, layer_idx)
-                if len(key_value_states) > 2:
-                    key_states, value_states = key_value_states[2:]
-                    cache.cross_attention_cache.update(key_states, value_states, layer_idx)
-                    cache.is_updated[layer_idx] = True
-        return cache
-
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         return self.self_attention_cache.get_seq_length(layer_idx)
 
@@ -1306,7 +1237,7 @@ class EncoderDecoderCache(Cache):
             isinstance(self.self_attention_cache, DynamicCache)
             and isinstance(self.cross_attention_cache, DynamicCache)
         ):
-            raise ValueError(
+            raise TypeError(
                 f"`{method}` is only defined for dynamic cache, got {self.self_attention_cache.__str__()} for the self "
                 f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
             )
@@ -1393,7 +1324,7 @@ class OffloadedCache(DynamicCache):
 
 
 class OffloadedStaticCache(StaticCache):
-    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
+    def __init__(self, config: PreTrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
             "`OffloadedStaticCache` is deprecated and will be removed in version v4.59 "
             "Use `StaticCache(..., offloading=True)` instead"
@@ -1402,7 +1333,7 @@ class OffloadedStaticCache(StaticCache):
 
 
 class SlidingWindowCache(StaticCache):
-    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
+    def __init__(self, config: PreTrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
             "`SlidingWindowCache` is deprecated and will be removed in version v4.59 "
             "Use `StaticCache(...)` instead which will correctly infer the type of each layer."
@@ -1411,7 +1342,7 @@ class SlidingWindowCache(StaticCache):
 
 
 class HybridCache(StaticCache):
-    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
+    def __init__(self, config: PreTrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
             "`HybridCache` is deprecated and will be removed in version v4.59 "
             "Use `StaticCache(...)` instead which will correctly infer the type of each layer."
@@ -1420,7 +1351,7 @@ class HybridCache(StaticCache):
 
 
 class HybridChunkedCache(StaticCache):
-    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
+    def __init__(self, config: PreTrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
             "`HybridChunkedCache` is deprecated and will be removed in version v4.59 "
             "Use `StaticCache(...)` instead which will correctly infer the type of each layer."
@@ -1429,7 +1360,7 @@ class HybridChunkedCache(StaticCache):
 
 
 class OffloadedHybridCache(StaticCache):
-    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
+    def __init__(self, config: PreTrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
             "`OffloadedHybridCache` is deprecated and will be removed in version v4.59 "
             "Use `StaticCache(..., offload=True)` instead which will correctly infer the type of each layer."
@@ -1440,7 +1371,7 @@ class OffloadedHybridCache(StaticCache):
 class QuantoQuantizedCache(QuantizedCache):
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         nbits: int = 4,
         axis_key: int = 0,
         axis_value: int = 0,
@@ -1457,7 +1388,7 @@ class QuantoQuantizedCache(QuantizedCache):
 class HQQQuantizedCache(QuantizedCache):
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         nbits: int = 4,
         axis_key: int = 0,
         axis_value: int = 0,
@@ -1469,18 +1400,3 @@ class HQQQuantizedCache(QuantizedCache):
             "Use `QuantizedCache(backend='hqq', ...)` instead."
         )
         super().__init__("hqq", config, nbits, axis_key, axis_value, q_group_size, residual_length)
-
-
-class SinkCache(Cache):
-    """
-    It is now a `custom_generate` repository on the Hub: https://huggingface.co/transformers-community/sink_cache.
-    See [these docs](https://huggingface.co/docs/transformers/generation_strategies#custom-decoding-methods) for
-    general `custom_generate`usage.
-    """
-
-    # TODO (joao, manuel): Remove this class in v4.59.0
-    def __init__(self, **kwargs) -> None:
-        raise NotImplementedError(
-            "`SinkCache` has been moved as a `custom_generate` repository on the Hub: "
-            "https://huggingface.co/transformers-community/sink_cache. See the repository for usage examples."
-        )

@@ -23,7 +23,8 @@ import os
 import random
 import sys
 import warnings
-from typing import Any, Callable, Literal, Optional, Union
+from collections.abc import Callable
+from typing import Any, Literal, Optional, Union
 
 import torch
 import torch.utils._pytree as pytree
@@ -35,7 +36,7 @@ from torch.fx.proxy import ParameterProxy
 
 from .. import logging
 from ..cache_utils import Cache, DynamicCache, StaticCache
-from ..modeling_utils import PretrainedConfig, PreTrainedModel
+from ..modeling_utils import PreTrainedConfig, PreTrainedModel
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -75,7 +76,7 @@ _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE
 
 
 def _generate_supported_model_class_names(
-    model_name: type[PretrainedConfig],
+    model_name: type[PreTrainedConfig],
     supported_tasks: Optional[Union[str, list[str]]] = None,
 ) -> list[str]:
     task_mapping = {
@@ -776,9 +777,9 @@ class HFProxyableClassMeta(type):
         attrs: dict[str, Any],
         proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
     ):
-        cls = super().__new__(cls, name, bases, attrs)
-        for attr_name in dir(cls):
-            attr = getattr(cls, attr_name, None)
+        instance = super().__new__(cls, name, bases, attrs)
+        for attr_name in dir(instance):
+            attr = getattr(instance, attr_name, None)
             if attr is None:
                 continue
             if attr_name == "__init__":
@@ -792,8 +793,8 @@ class HFProxyableClassMeta(type):
             else:
                 op_type = None
             if op_type is not None:
-                setattr(cls, attr_name, create_wrapper(attr, op_type, proxy_factory_fn=proxy_factory_fn))
-        return cls
+                setattr(instance, attr_name, create_wrapper(attr, op_type, proxy_factory_fn=proxy_factory_fn))
+        return instance
 
 
 def gen_constructor_wrapper(target: Callable) -> tuple[Callable, Callable]:

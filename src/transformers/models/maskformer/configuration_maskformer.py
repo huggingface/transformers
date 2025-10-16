@@ -16,10 +16,10 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..detr import DetrConfig
 from ..swin import SwinConfig
 
@@ -27,7 +27,7 @@ from ..swin import SwinConfig
 logger = logging.get_logger(__name__)
 
 
-class MaskFormerConfig(PretrainedConfig):
+class MaskFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormerModel`]. It is used to instantiate a
     MaskFormer model according to the specified arguments, defining the model architecture. Instantiating a
@@ -35,8 +35,8 @@ class MaskFormerConfig(PretrainedConfig):
     [facebook/maskformer-swin-base-ade](https://huggingface.co/facebook/maskformer-swin-base-ade) architecture trained
     on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Currently, MaskFormer only supports the [Swin Transformer](swin) as backbone.
 
@@ -103,6 +103,7 @@ class MaskFormerConfig(PretrainedConfig):
     """
 
     model_type = "maskformer"
+    sub_configs = {"backbone_config": AutoConfig, "decoder_config": AutoConfig}
     attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["resnet", "swin"]
     decoders_supported = ["detr"]
@@ -199,37 +200,6 @@ class MaskFormerConfig(PretrainedConfig):
         self.use_timm_backbone = use_timm_backbone
         self.backbone_kwargs = backbone_kwargs
         super().__init__(**kwargs)
-
-    @property
-    def sub_configs(self):
-        sub_configs = {}
-        if self.backbone_config is not None and self.backbone_config != {}:
-            sub_configs["backbone_config"] = type(self.backbone_config)
-        if self.decoder_config is not None and self.decoder_config != {}:
-            sub_configs["decoder_config"] = type(self.decoder_config)
-        return sub_configs
-
-    @classmethod
-    def from_backbone_and_decoder_configs(
-        cls, backbone_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
-    ):
-        """Instantiate a [`MaskFormerConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
-        configuration.
-
-            Args:
-                backbone_config ([`PretrainedConfig`]):
-                    The backbone configuration.
-                decoder_config ([`PretrainedConfig`]):
-                    The transformer decoder configuration to use.
-
-            Returns:
-                [`MaskFormerConfig`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config,
-            decoder_config=decoder_config,
-            **kwargs,
-        )
 
 
 __all__ = ["MaskFormerConfig"]

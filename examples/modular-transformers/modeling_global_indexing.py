@@ -4,7 +4,8 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_global_indexing.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 from torch import nn
@@ -14,7 +15,6 @@ from transformers.modeling_utils import AttentionInterface
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_global_indexing import GlobalIndexingConfig
 
 
@@ -126,7 +126,6 @@ class GlobalIndexingAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

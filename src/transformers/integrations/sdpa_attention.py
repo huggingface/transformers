@@ -2,7 +2,7 @@ from typing import Optional
 
 import torch
 
-from ..utils import is_torch_xpu_available, logging
+from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
 
@@ -12,6 +12,7 @@ logger = logging.get_logger(__name__)
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
+_is_torch_npu_available = is_torch_npu_available()
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -28,7 +29,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 def use_gqa_in_sdpa(attention_mask: Optional[torch.Tensor], key: torch.Tensor) -> bool:
     # GQA can only be used under the following conditions
-    # 1.cuda
+    # 1.cuda or Ascend NPU
     #   - torch version >= 2.5
     #   - attention_mask is None (otherwise it will fall back to the math kernel)
     #   - key is not a torch.fx.Proxy (otherwise it will fail with a tracing error)
@@ -51,9 +52,9 @@ def sdpa_attention_forward(
     is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    if kwargs.get("output_attentions", False) or kwargs.get("head_mask") is not None:
+    if kwargs.get("output_attentions", False):
         logger.warning_once(
-            "`sdpa` attention does not support `output_attentions=True` or `head_mask`."
+            "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
     sdpa_kwargs = {}
@@ -79,6 +80,14 @@ def sdpa_attention_forward(
     # We convert it to a bool for the SDPA kernel that only accepts bools.
     if torch.jit.is_tracing() and isinstance(is_causal, torch.Tensor):
         is_causal = is_causal.item()
+
+    # When `is_causal = False` and the `attention_mask` is not of boolean type, the Ascend NPU's SDPA interface cannot utilize the FlashAttentionScore operator，
+    # and falls back to small-operator concatenation. To invoke the FlashAttentionScore, the attention_mask must be converted to boolean type.
+    # This adaptation ensures the `attention_mask` meets the requirement for using FlashAttentionScore.
+    if _is_torch_npu_available:
+        if attention_mask is not None and attention_mask.dtype != torch.bool:
+            # Convert to boolean type, making sdpa to force call FlashAttentionScore to improve performance.
+            attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
