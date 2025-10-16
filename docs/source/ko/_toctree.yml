@@ -461,7 +461,7 @@
         title: BertJapanese
       - local: model_doc/bertweet
         title: BERTweet
-      - local: in_translation
+      - local: model_doc/big_bird
         title: BigBird
       - local: in_translation
         title: BigBirdPegasus
