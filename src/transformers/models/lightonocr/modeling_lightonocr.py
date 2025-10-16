@@ -93,7 +93,7 @@ class LightOnOCRPatchMerger(nn.Module):
         return image_features
 
 
-class LightOnOCRMultiModalProjector(nn.Module):
+class LightOnOCRVisionProjector(nn.Module):
     def __init__(self, config: LightOnOCRConfig):
         super().__init__()
         self.config = config
@@ -121,7 +121,7 @@ class LightOnOCRPreTrainedModel(PreTrainedModel):
     config_class = LightOnOCRConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LightOnOCRMultiModalProjector", "LightOnOCRPatchMerger"]
+    _no_split_modules = ["LightOnOCRVisionProjector", "LightOnOCRPatchMerger"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -945,7 +945,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
 
         self.vision_encoder = LightOnOCRVision(config.vision_config)
 
-        self.multi_modal_projector = LightOnOCRMultiModalProjector(config)
+        self.vision_projection = LightOnOCRVisionProjector(config)
 
         self.language_model = LightOnOCRText(config.text_config)
 
@@ -960,7 +960,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
     def get_image_features(self, pixel_values: torch.Tensor, image_sizes: list[tuple[int, int]]):
         visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
 
-        image_features = self.multi_modal_projector(visual_features.squeeze(0), image_sizes)
+        image_features = self.vision_projection(visual_features.squeeze(0), image_sizes)
 
         return image_features
 
@@ -983,7 +983,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
             if pixel_values is not None:
                 # Process image through the vision encoder
                 visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
-                projected_visual = self.multi_modal_projector(visual_features.squeeze(0), image_sizes)
+                projected_visual = self.vision_projection(visual_features.squeeze(0), image_sizes)
 
                 # Convert to same dtype
                 projected_visual = projected_visual.to(inputs_embeds.dtype)
@@ -1084,7 +1084,7 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
             # Process image through the vision encoder
             visual_features = self.model.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
             # Apply vision projection based on config
-            projected_visual = self.model.multi_modal_projector(visual_features.squeeze(0), image_sizes)
+            projected_visual = self.model.vision_projection(visual_features.squeeze(0), image_sizes)
 
             # Get text embeddings
             token_embeddings = self.model.language_model.get_input_embeddings()(input_ids)
