@@ -230,7 +230,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         else:
             # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
             # there is only 1 type of layers, so export will use `StaticCache` by default.
-            logging.info(
+            logger.info(
                 "Using `StaticCache` for export as `layer_types` is not specified or `sliding_window` is `null` in the config."
             )
             self.model = TorchExportableModuleWithStaticCache(model, batch_size, max_cache_len, device)
@@ -325,7 +325,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             model_device = self.model.model.device
         else:
             model_device = "cpu"
-            logging.warning(
+            logger.warning(
                 "TorchExportableModuleForDecoderOnlyLM.export Can't infer device from the model. Set to CPU by default."
             )
 
@@ -801,11 +801,11 @@ def convert_and_export_with_cache(
             )
         else:
             if dynamic_shapes is not None:
-                logging.warning(
+                logger.warning(
                     "Dynamic shapes spec will be ignored by convert_and_export_with_cache for torch < 2.6.0."
                 )
             if strict is not None:
-                logging.warning("The strict flag will be ignored by convert_and_export_with_cache for torch < 2.6.0.")
+                logger.warning("The strict flag will be ignored by convert_and_export_with_cache for torch < 2.6.0.")
             # We have to keep this path for BC.
             #
             # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
@@ -1095,7 +1095,7 @@ def _get_cache_dict(cache: DynamicCache):
         raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
 
     if not is_torch_greater_or_equal_than_2_6:
-        logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
+        logger.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
 
     return {
         "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
