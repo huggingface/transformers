@@ -2394,7 +2394,12 @@ class GenerationMixin(ContinuousMixin):
 
         # 0.b. If requested, switched to continuous batching generation
         if kwargs.get("cache_implementation") == "paged_cache":
-            # generate_batch expects a list of lists of ints
+
+            # generate_batch expects a list of lists of ints, so we create it from the inputs or input_ids
+            inputs = inputs if inputs is not None else kwargs.get("input_ids")
+            if inputs is None:
+                raise ValueError("inputs or input_ids must be provided for CB generation.")
+
             if inputs.dim() == 1:
                 inputs = inputs.unsqueeze(0).tolist()
             elif inputs.dim() == 2:
