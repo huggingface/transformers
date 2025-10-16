@@ -28,7 +28,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from .configuration_nanochat import NanoChatConfig
 
 
@@ -41,6 +41,19 @@ def _apply_rotary_pos_emb(
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Custom implementation of Rotary Position Embedding. 
+    Copied from [nanochat](https://github.com/karpathy/nanochat/blob/4346536ab2e57917ec543b20e88c4bdc47eda572/nanochat/gpt.py#L41)
+    and modified to work with the shape of the query and key tensors.
+    
+    Args:
+        query: Query tensor of shape [batch, seq_len, num_heads, head_dim]
+        key: Key tensor of shape [batch, seq_len, num_kv_heads, head_dim]
+        cos: Cosine part of the rotary embedding of shape [1, seq_len, 1, head_dim//2]
+        sin: Sine part of the rotary embedding of shape [1, seq_len, 1, head_dim//2]
+    
+    Returns:
+        Tuple of rotated query and key tensors of shape [batch, seq_len, num_heads, head_dim] and [batch, seq_len, num_kv_heads, head_dim]
+    """
     # Expects query/key as [B, T, H, D] and cos/sin as [1, T, 1, D//2]
     d = query.shape[3] // 2
     q1, q2 = query[..., :d], query[..., d:]
@@ -52,12 +65,16 @@ def _apply_rotary_pos_emb(
     return query_rot.to(query.dtype), key_rot.to(key.dtype)
 
 
-def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-    x1, x2 = x.split(x.size(-1) // 2, dim=-1)
-    return torch.cat((-x2, x1), dim=-1)
-
-
 def _repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """Repeats the key and value tensors n_rep times.
+    Copied from [nanochat](https://github.com/karpathy/nanochat/blob/4346536ab2e57917ec543b20e88c4bdc47eda572/nanochat/gpt.py#L52)
+    Args:
+        hidden_states: Hidden states tensor of shape [batch, seq_len, num_kv_heads, head_dim]
+        n_rep: Number of times to repeat the key and value tensors
+    
+    Returns:
+        Repeated key and value tensors of shape [batch, seq_len, num_kv_heads * n_rep, head_dim]
+    """
     batch, num_key_value_heads, seq_len, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
@@ -110,6 +127,12 @@ def eager_attention_forward(
 
 
 class NanoChatAttention(nn.Module):
+    """
+    Multi-headed attention from NanoChat with custom RoPE and QK normalization.
+    
+    Based on: https://github.com/karpathy/nanochat/blob/main/nanochat/gpt.py#L64
+    """
+    
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -142,25 +165,28 @@ class NanoChatAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # Project to Q, K, V and reshape to [batch, seq_len, num_heads, head_dim]
+        # Project the input to get queries, keys, and values
+        # Shape: [batch, seq_len, num_heads, head_dim]
         query_states = self.q_proj(hidden_states).view(batch, seq_len, self.num_heads, self.head_dim)
         key_states = self.k_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
         value_states = self.v_proj(hidden_states).view(batch, seq_len, self.num_kv_heads, self.head_dim)
 
-        # Apply RoPE
+        # Apply Rotary Embeddings to queries and keys to get relative positional encoding
         cos, sin = position_embeddings
         query_states, key_states = _apply_rotary_pos_emb(query_states, key_states, cos, sin)
         
-        # Apply RMSNorm to Q and K (model-specific feature)
+        # Apply QK normalization (RMSNorm) - a key feature of NanoChat architecture
+        # This helps stabilize training and is applied AFTER RoPE
         query_states = F.rms_norm(query_states, (query_states.size(-1),), eps=self.config.rms_norm_eps)
         key_states = F.rms_norm(key_states, (key_states.size(-1),), eps=self.config.rms_norm_eps)
         
-        # Transpose to [batch, num_heads, seq_len, head_dim]
+        # Transpose to make head dimension the batch dimension
+        # Shape: [batch, num_heads, seq_len, head_dim]
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        # Update cache
+        # Apply KV cache: insert current k,v into cache, get the full view so far
         if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -188,6 +214,8 @@ class NanoChatAttention(nn.Module):
 
 
 class NanoChatMLP(nn.Module):
+    """MLP module for NanoChat with ReLU^2 activation."""
+    
     def __init__(self, config: NanoChatConfig):
         super().__init__()
         self.fc = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
@@ -201,6 +229,8 @@ class NanoChatMLP(nn.Module):
 
 
 class NanoChatDecoderLayer(GradientCheckpointingLayer):
+    """NanoChat decoder layer with pre-norm architecture."""
+    
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -237,6 +267,7 @@ class NanoChatDecoderLayer(GradientCheckpointingLayer):
         return hidden_states, self_attn_weights
 
 
+@auto_docstring
 class NanoChatPreTrainedModel(PreTrainedModel):
     config_class = NanoChatConfig
     base_model_prefix = "model"
@@ -260,6 +291,7 @@ class NanoChatPreTrainedModel(PreTrainedModel):
                 )
 
 
+@auto_docstring
 class NanoChatModel(NanoChatPreTrainedModel):
     def __init__(self, config: NanoChatConfig):
         super().__init__(config)
@@ -268,6 +300,7 @@ class NanoChatModel(NanoChatPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        # Rotary embeddings are cached for efficiency
         self.register_buffer("_rotary_cos", None, persistent=False)
         self.register_buffer("_rotary_sin", None, persistent=False)
         self.gradient_checkpointing = False
@@ -275,16 +308,27 @@ class NanoChatModel(NanoChatPreTrainedModel):
         self.post_init()
 
     def _precompute_rotary_embeddings(self, device: torch.device, dtype: torch.dtype) -> tuple[torch.Tensor, torch.Tensor]:
+        """Precompute rotary embeddings (RoPE) for all positions up to max_position_embeddings.
+        
+        This implementation is specific to NanoChat and produces cos/sin tensors with shape
+        [1, max_seq_len, 1, head_dim//2] instead of the standard full head_dim. so did not use `dynamic_rope_update` decorator.
+        """
+        # Return cached embeddings if they exist and match device/dtype
         if self._rotary_cos is not None and self._rotary_cos.device == device and self._rotary_cos.dtype == dtype:
             return self._rotary_cos, self._rotary_sin
 
         head_dim = self.config.hidden_size // self.config.num_attention_heads
+        # Stride the time steps (positions)
         positions = torch.arange(self.config.max_position_embeddings, device=device, dtype=torch.float32)
+        # Stride the channels (only even channels, head_dim//2 frequencies)
         freqs = torch.arange(0, head_dim, 2, dtype=torch.float32, device=device)
         inv_freq = 1.0 / (self.config.rope_theta ** (freqs / head_dim))
+        # Calculate the rotation frequencies at each (time, channel) pair
         angles = torch.einsum("i,j->ij", positions, inv_freq)
-        cos = angles.cos()[None, :, None, :]
-        sin = angles.sin()[None, :, None, :]
+        # Compute cos and sin, add batch and head dims for broadcasting
+        cos = angles.cos()[None, :, None, :]  # [1, seq_len, 1, head_dim//2]
+        sin = angles.sin()[None, :, None, :]  # [1, seq_len, 1, head_dim//2]
+        # Cache the embeddings
         self._rotary_cos = cos.to(dtype=dtype)
         self._rotary_sin = sin.to(dtype=dtype)
         return self._rotary_cos, self._rotary_sin
@@ -340,13 +384,12 @@ class NanoChatModel(NanoChatPreTrainedModel):
         cos = cos[:, position_ids_to_use]
         sin = sin[:, position_ids_to_use]
 
-        hidden_states = inputs_embeds
+        hidden_states = inputs_embeds 
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
         
         # Collect hidden states and attentions if requested
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -366,8 +409,6 @@ class NanoChatModel(NanoChatPreTrainedModel):
                 all_self_attns = all_self_attns + (self_attn_weights,)
 
         hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
-        
-        # Add final hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
         
@@ -379,7 +420,11 @@ class NanoChatModel(NanoChatPreTrainedModel):
         )
 
 
+@auto_docstring
 class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
+    """
+    The NanoChat Model transformer with a language modeling head on top.
+    """
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
@@ -422,7 +467,6 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-
         if self.config.logits_soft_cap is not None:
             cap = self.config.logits_soft_cap
             logits = cap * torch.tanh(logits / cap)
