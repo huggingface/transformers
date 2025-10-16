@@ -130,8 +130,6 @@ class LightOnOCRConfig(PretrainedConfig):
         },
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.spatial_merge_size = spatial_merge_size
         self.image_token_id = image_token_index
 
@@ -144,6 +142,8 @@ class LightOnOCRConfig(PretrainedConfig):
             self.text_config = LightOnOCRTextConfig()
         else:
             self.text_config = LightOnOCRTextConfig(**text_config)
+
+        super().__init__(**kwargs, tie_word_embeddings=False)
 
     @property
     def vocab_size(self):
@@ -389,6 +389,9 @@ class LightOnOCRPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+
     def _init_weights(self, module):
         # Determine which component this module belongs to by checking the module path
         module_name = None
@@ -462,6 +465,12 @@ class LightOnOCRTextRotaryEmbedding(Qwen3RotaryEmbedding):
 class LightOnOCRText(Qwen3Model):
     pass
 
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
 
 # Vision model components - explicitly renamed from Pixtral
 class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
@@ -519,6 +528,12 @@ class LightOnOCRVision(PixtralVisionModel):
 
 
 class LightOnOCRModel(LightOnOCRPreTrainedModel):
+    base_model_prefix = ""
+    _checkpoint_conversion_mapping = {}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
+    config: LightOnOCRConfig
+
     def __init__(self, config: LightOnOCRConfig):
         super().__init__(config)
 
@@ -542,6 +557,12 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         image_features = self.vision_projection(visual_features.squeeze(0), image_sizes)
 
         return image_features
+
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
 
     def forward(
         self,
@@ -578,8 +599,9 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
 
 
 class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMixin):
+    _checkpoint_conversion_mapping = {}
     config_class = LightOnOCRConfig
-    _supports_attention_backend = True
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: LightOnOCRConfig):
         super().__init__(config)
@@ -709,6 +731,14 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
         model_kwargs["image_sizes"] = None
 
         return model_kwargs
+
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_encoder(self):
+        return self.model.vision_encoder
 
 
 __all__ = [
