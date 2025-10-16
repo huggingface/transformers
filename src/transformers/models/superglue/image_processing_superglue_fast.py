@@ -244,7 +244,7 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
             keypoints as well as the matching between them.
         """
         from ...image_utils import to_numpy_array
-        from .image_processing_efficientloftr import validate_and_format_image_pairs
+        from .image_processing_superglue import validate_and_format_image_pairs
 
         images = validate_and_format_image_pairs(images)
         images = [to_numpy_array(image) for image in images]
