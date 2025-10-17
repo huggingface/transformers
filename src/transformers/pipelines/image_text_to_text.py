@@ -15,7 +15,7 @@
 
 import enum
 from collections.abc import Iterable
-from typing import Any, Optional, Union, overload
+from typing import Any, Union, overload
 
 from ..generation import GenerationConfig
 from ..processing_utils import ProcessingKwargs, Unpack
@@ -56,7 +56,7 @@ class Chat:
     actually a batch of samples rather than messages in the same conversation."""
 
     def __init__(
-        self, messages: dict, images: Optional[Union[str, list[str], "Image.Image", list["Image.Image"]]] = None
+        self, messages: dict, images: Union[str, list[str], "Image.Image", list["Image.Image"]] | None = None
     ):
         for message in messages:
             if not ("role" in message and "content" in message):
@@ -66,9 +66,7 @@ class Chat:
         self.messages = messages
 
 
-def add_images_to_messages(
-    messages: dict, images: Optional[Union[str, list[str], "Image.Image", list["Image.Image"]]]
-):
+def add_images_to_messages(messages: dict, images: Union[str, list[str], "Image.Image", list["Image.Image"]] | None):
     """
     Retrieve and combine images from the chat and the images passed as input.
     """
@@ -261,35 +259,28 @@ class ImageTextToTextPipeline(Pipeline):
     @overload
     def __call__(
         self,
-        image: Optional[Union[str, "Image.Image"]] = None,
-        text: Optional[str] = None,
+        image: Union[str, "Image.Image"] | None = None,
+        text: str | None = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
         self,
-        image: Optional[Union[list[str], list["Image.Image"]]] = None,
-        text: Optional[list[str]] = None,
+        image: list[str] | list["Image.Image"] | None = None,
+        text: list[str] | None = None,
         **kwargs: Any,
     ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        images: Optional[
-            Union[
-                str,
-                list[str],
-                list[list[str]],
-                "Image.Image",
-                list["Image.Image"],
-                list[list["Image.Image"]],
-                list[dict],
-            ]
-        ] = None,
-        text: Optional[Union[str, list[str], list[dict]]] = None,
+        images: Union[
+            str, list[str], list[list[str]], "Image.Image", list["Image.Image"], list[list["Image.Image"]], list[dict]
+        ]
+        | None = None,
+        text: str | list[str] | list[dict] | None = None,
         **kwargs,
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Generate a text given text and the image(s) passed as inputs.
 

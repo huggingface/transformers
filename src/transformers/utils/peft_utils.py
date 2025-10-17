@@ -13,7 +13,6 @@
 # limitations under the License.
 import importlib
 import os
-from typing import Optional, Union
 
 from packaging import version
 
@@ -28,15 +27,15 @@ ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 
 def find_adapter_config_file(
     model_id: str,
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     subfolder: str = "",
-    _commit_hash: Optional[str] = None,
-) -> Optional[str]:
+    _commit_hash: str | None = None,
+) -> str | None:
     r"""
     Simply checks if the model stored on the Hub or locally is an adapter model or not, return the path of the adapter
     config file if it is, None otherwise.
