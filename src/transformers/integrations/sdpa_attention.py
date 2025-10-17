@@ -74,7 +74,7 @@ def sdpa_attention_forward(
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
 
     # SDPA's Flash Attention (and cuDNN) kernels rely on the `is_causal` flag. However, there are certain conditions:
-    # - Not in decoding phase (== full attention)
+    # - Not in decoding phase (otherwise we want full attention on the single query token)
     # - Attention mask is not to be provided (even if it is a causal pattern)
     # - Internally, we marked this as compatible with causal, i.e. it is a decoder attention type
     #
