@@ -26,7 +26,7 @@ Models with structured outputs pose a challenge for chat templating, because the
 can be appended to the chat. For a concrete example, let's say we ask [GPT-OSS](https://huggingface.co/openai/gpt-oss-120b)
 what the weather is like, and it thinks and decides to call a tool. Here's what the raw model output might look like:
 
-```
+```txt
 <|start|><|assistant|><|channel|>analysis<|message|>The user asks: "What is the weather like in SF?" We need to get the location of the user? The user explicitly asks about SF (San Francisco).
 So we need to get the current weather in San Francisco, CA. We need to call get_current_weather function. But we need to call function to get weather data.
 So we should call get_current_weather with location "San Francisco, CA". Let's do that.
