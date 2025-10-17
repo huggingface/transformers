@@ -87,16 +87,17 @@ class FastVlmVisionText2TextModelTester:
             "global_pool": "avg",
             "model_args": {
                 "inference_mode": True,
-                "layers":(2, 2),
+                "layers": (2, 2),
                 "embed_dims": (8, 16),
-                "mlp_ratios":(4, 4),
+                "mlp_ratios": (4, 4),
                 "se_downsamples": (False, False),
                 "downsamples": (False, True),
                 "pos_embs": (None, None),
-                "token_mixers":("repmixer", "repmixer"),
+                "token_mixers": ("repmixer", "repmixer"),
                 "lkc_use_act": True,
-                "stem_use_scale_branch": False}
+                "stem_use_scale_branch": False,
             },
+        },
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -157,7 +158,7 @@ class FastVlmVisionText2TextModelTester:
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
-    
+
 
 @require_torch
 class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -271,7 +272,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20)
         expected_decoded_texts = """
 user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\nWhen visiting this place, you should be cautious about the following:\n\n1. Water safety:
-""" # fmt: skip
+"""  # fmt: skip
 
         EXPECTED_DECODED_TEXT = expected_decoded_texts[1:-1]
 
@@ -302,9 +303,9 @@ user\n\nWhat are the things I should be cautious about when I visit this place?\
         output = model.generate(**inputs, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
-            "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this place, you should be cautious of the following:\n\n1. **Weather Conditions**:", 
+            "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this place, you should be cautious of the following:\n\n1. **Weather Conditions**:",
             "user\n\nWhat is this?\nassistant\nThe image depicts two cats lying on a pink surface, which appears to be a couch or"
-        ] # fmt: skip
+        ]  # fmt: skip
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),

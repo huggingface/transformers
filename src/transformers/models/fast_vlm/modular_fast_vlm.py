@@ -46,7 +46,7 @@ class FastVlmConfig(LlavaConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
             The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 151646):
+        image_token_id (`int`, *optional*, defaults to 151646):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
@@ -100,7 +100,7 @@ class FastVlmConfig(LlavaConfig):
             raise ValueError(
                 f"Unexpected select feature strategy: {vision_feature_select_strategy}. Only 'full' is supported in FastVLM."
             )
-        
+
         if vision_feature_layer != -1:
             raise ValueError(
                 f"Unexpected vision feature layer: {vision_feature_select_strategy}. Only -1 is supported in FastVLM."
