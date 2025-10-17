@@ -57,24 +57,6 @@ except (ImportError, AttributeError):
     torch_profile = None
 
 
-"""
-For mixtral, the fp8 quantizer should add the "quantization" op.
-
-Quantizer says wether we need all weights or not.
-
-TP probably does not need?
-
-
-model.layers.0.block_sparse_moe.experts.1.w1.input_scale	[]
-model.layers.0.block_sparse_moe.experts.1.w1.weight	[14 336, 4 096]
-model.layers.0.block_sparse_moe.experts.1.w1.weight_scale	[]
-model.layers.0.block_sparse_moe.experts.1.w2.input_scale	[]
-model.layers.0.block_sparse_moe.experts.1.w2.weight	[4 096, 14 336]
-model.layers.0.block_sparse_moe.experts.1.w2.weight_scale	[]
-model.layers.0.block_sparse_moe.experts.1.w3.input_scale	[]
-model.layers.0.block_sparse_moe.experts.1.w3.weight	[14 336, 4 096]
-model.layers.0.block_sparse_moe.experts.1.w3.weight_scale	[]
-"""
 
 
 class ConversionOps:
@@ -131,51 +113,6 @@ class ConversionOps:
       +
       "model.layers.0.mlp.up_proj.scales"
     ---------------------------------------------------------------------------------
-
-
-
-    ALWAYS TP FIRST !!! If we compute we compute fast locally -> communicate async.
-    The set of operations that we need to support is actually not that big:
-
-    https://github.com/cchen1436/NeMo/blob/eb5426e6d00b0d0225442d4b8ced1185dbc9a2ff/nemo/lightning/io/state.py#L511
-    I am taking a bit of inspiration from this, as it looks fairly similar appart from not having embedded quantization
-    and the TP sharding.
-
-    rename region
-    -------------------
-        collect region
-        --------------
-            here we have a list of un-materialized weights! (merge module list, or fuse. Any "cat" operation will give us a list.
-
-            BUT IF WE TP 0.w1[rank], 0.w3[rank] then we need to slice the tensor and not the list of tensors!
-
-            which we always TP first (shard) then we apply the ops (merging)
-            TP REGION
-            ---------
-                Materialize only the correct shards
-                Concat, Chunk. If you need to split a layer into 2 here, then each split is potentially quantizable
-
-                    Quantization region
-                    -------------------
-                     Can produce 2 "weights" from 1 (blocks and scales)
-            Based on quant_layout, we might need to all reduce the scales -> the quantization op tells us to do it or not
-            ---------
-            torch.distributed.all_reduce(max_abs, op=torch.distributed.ReduceOp.MAX, group=tp_group)
-        ----------------
-    -------------------------
-    Say we want to quantize:
-
-
-
-
-    We are probably gonna be reading from left to right -> FuseGateUp and MergeModuleList and FuseQkv are prob the only
-    ops we currently need. With potentially RotateQkv.
-
-
-
-    3. a. If not quantization, or can be quantized independently (EP or som quantization) -> Shard
-    3. b. If needs full tensor for quantize: materialize the tensor on cpu, quantize -> Shard
-    4.
     """
 
     # Reusable scratch buffer to avoid reallocations.

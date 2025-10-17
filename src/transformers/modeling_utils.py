@@ -1079,34 +1079,6 @@ def _get_resolved_checkpoint_files(
     return checkpoint_files, sharded_metadata
 
 
-def _sort_conversion_ops(ops):
-    if ops is None:
-        return None
-    if isinstance(ops, (list, tuple)):
-        ops_list = list(ops)
-    else:
-        ops_list = [ops]
-
-    tp_ops, mid_ops, quant_ops = [], [], []
-    for op in ops_list:
-        op_cls = op if isinstance(op, type) else op.__class__
-        if issubclass(op_cls, Shard):
-            tp_ops.append(op)
-        elif issubclass(op_cls, QuantizationOp):
-            quant_ops.append(op)
-        else:
-            mid_ops.append(op)
-    ordered = tp_ops + mid_ops + quant_ops
-    return ordered
-
-def _clone_weight_conversions(conversions: Sequence[WeightConversion]):
-    cloned: list[WeightConversion] = []
-    for conversion in conversions:
-        ordered_ops = _sort_conversion_ops(conversion.operations)
-        cloned.append(WeightConversion(conversion.source_keys, conversion.target_keys, ordered_ops))
-    return cloned
-
-
 def _get_dtype(
     cls,
     dtype: Optional[Union[str, torch.dtype, dict]],
