@@ -188,6 +188,10 @@ jobs:
         run: |
           cp /transformers/new_failures_with_bad_commit_${{ inputs.job }}/new_failures_with_bad_commit_${{ inputs.job }}_1.json new_failures_with_bad_commit.json
 
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+
       - name: Process report
         shell: bash
         working-directory: /transformers
