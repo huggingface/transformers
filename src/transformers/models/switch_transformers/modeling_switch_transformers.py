@@ -230,7 +230,6 @@ class SwitchTransformersLayerFF(nn.Module):
     def forward(self, hidden_states, **kwargs):
         forwarded_states = self.layer_norm(hidden_states)
         forwarded_states = self.mlp(forwarded_states)
-        forwarded_states = forwarded_states
         output = hidden_states + self.dropout(forwarded_states)
         return output
 

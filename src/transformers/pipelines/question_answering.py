@@ -86,10 +86,10 @@ def decode_spans(
 
 
 def select_starts_ends(
-    start,
-    end,
-    p_mask,
-    attention_mask,
+    start: np.ndarray,
+    end: np.ndarray,
+    p_mask: np.ndarray,
+    attention_mask: np.ndarray,
     min_null_score=1000000,
     top_k=1,
     handle_impossible_answer=False,
