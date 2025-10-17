@@ -106,3 +106,8 @@ Refer to [T5's documentation page](t5) for more tips, code examples and notebook
 
 [[autodoc]] UMT5ForQuestionAnswering
     - forward
+
+## UMT5EncoderForSequenceClassification
+
+[[autodoc]] UMT5EncoderForSequenceClassification
+    - forward
