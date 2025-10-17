@@ -37,7 +37,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     is_torch_flex_attn_available,
-    is_torch_fx_proxy,
     is_torchdynamo_compiling,
     logging,
 )
@@ -392,15 +391,9 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
                 " to the pad_token_id. See SwitchTransformers docs for more information"
             )
 
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
             raise ValueError("self.model.config.pad_token_id has to be defined.")

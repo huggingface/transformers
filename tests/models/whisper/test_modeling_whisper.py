@@ -362,7 +362,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False
 
     test_missing_keys = False
     # Needs higher percentages after model tester's vocab_size is changed to 200 (PR #21222)
@@ -3235,7 +3234,6 @@ class WhisperEncoderModelTester:
 class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
     is_encoder_decoder = False
-    fx_compatible = False
 
     test_missing_keys = False
 
@@ -3503,8 +3501,6 @@ class WhisperStandaloneDecoderModelTester:
 @require_torch
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
-    fx_comptatible = False
-
     is_encoder_decoder = False
     test_missing_keys = False
 
