@@ -67,7 +67,7 @@ elif result.returncode != 0:
         exit(0)
     else:
         print(f"pytest gets unknown error: {{result.stderr}}")
-        exit(-1)
+        exit(1)
 
 print(f"pytest runs successfully.")
 exit(0)
@@ -115,19 +115,19 @@ def find_bad_commit(target_test, start_commit, end_commit):
     # check if `end_commit` fails the test
     failed_before = is_bad_commit(target_test, end_commit)
     if failed_before:
-        return None
+        return None, f"flaky: test passed in the previous run (commit: {end_commit}) but failed (on the same commit) during the check of the current run."
 
     # if there is no new commit (e.g. 2 different CI runs on the same commit):
     #   - failed once on `start_commit` but passed on `end_commit`, which are the same commit --> flaky (or something change externally) --> don't report
     if start_commit == end_commit:
-        return None
+        return None, f"flaky: test fails on the current CI run but passed in the previous run which is running on the same commit {end_commit}."
 
     # Now, we are (almost) sure `target_test` is not failing at `end_commit`
     # check if `start_commit` fail the test
     failed_now = is_bad_commit(target_test, start_commit)
     if not failed_now:
         # failed on CI run, but not reproducible here --> don't report
-        return None
+        return None, f"flaky: test fails on the current CI run (commit: {start_commit}) but passes during the check."
 
     create_script(target_test=target_test)
 
@@ -152,7 +152,7 @@ git bisect run python3 target_script.py
     if "error: bisect run failed" in result.stderr:
         error_msg = f"Error when running git bisect:\nbash error: {result.stderr}\nbash output:\n{result.stdout}\nset `bad_commit` to `None`."
         print(error_msg)
-        return None
+        return None, "git bisect failed"
 
     pattern = r"(.+) is the first bad commit"
     commits = re.findall(pattern, result.stdout)
@@ -164,7 +164,7 @@ git bisect run python3 target_script.py
     print(f"Between `start_commit` {start_commit} and `end_commit` {end_commit}")
     print(f"bad_commit: {bad_commit}\n")
 
-    return bad_commit
+    return bad_commit, "git bisect find the bad commit."
 
 
 def get_commit_info(commit):
@@ -218,9 +218,9 @@ if __name__ == "__main__":
         raise ValueError("Exactly one argument `test` or `file` must be specified.")
 
     if args.test is not None:
-        commit = find_bad_commit(target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit)
+        commit, status = find_bad_commit(target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit)
         with open(args.output_file, "w", encoding="UTF-8") as fp:
-            fp.write(f"{args.test}\n{commit}")
+            fp.write(f"{args.test}\n{commit}\n{status}")
     elif os.path.isfile(args.file):
         with open(args.file, "r", encoding="UTF-8") as fp:
             reports = json.load(fp)
@@ -232,8 +232,8 @@ if __name__ == "__main__":
 
             failed_tests_with_bad_commits = []
             for test in failed_tests:
-                commit = find_bad_commit(target_test=test, start_commit=args.start_commit, end_commit=args.end_commit)
-                info = {"test": test, "commit": commit}
+                commit, status = find_bad_commit(target_test=test, start_commit=args.start_commit, end_commit=args.end_commit)
+                info = {"test": test, "commit": commit, "status": status}
 
                 if commit in commit_info_cache:
                     commit_info = commit_info_cache[commit]
