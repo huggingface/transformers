@@ -138,7 +138,7 @@
     - local: perf_train_cpu_many
       title: 다중 CPU에서 학습하기
     - local: perf_train_gpu_many
-      title: 다중 GPU에서 학습 진행하기
+      title: 병렬화 방법
     title: 분산 학습(Distributed training)
   - sections:
     - local: perf_train_gpu_one
