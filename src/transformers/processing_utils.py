@@ -101,10 +101,8 @@ class _LazyAutoProcessorMapping(dict):
     _MAPPING_NAMES = {
         "image_processor": ("transformers.models.auto.image_processing_auto", "AutoImageProcessor"),
         "video_processor": ("transformers.models.auto.video_processing_auto", "AutoVideoProcessor"),
-        "feature_extractor": (
-            "transformers.models.auto.feature_extraction_auto",
-            "AutoFeatureExtractor",
-        ),
+        "feature_extractor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
+        "audio_processor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
         "tokenizer": ("transformers.models.auto.tokenization_auto", "AutoTokenizer"),
     }
 
@@ -124,8 +122,9 @@ class _LazyAutoProcessorMapping(dict):
 
 MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
 
-AUTO_TO_BASE_CLASS_MAPPING = {
+MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": "DacModel",
+    "audio_processor": "FeatureExtractionMixin",
     "tokenizer": "PreTrainedTokenizerBase",
     "feature_extractor": "FeatureExtractionMixin",
     "image_processor": "ImageProcessingMixin",
@@ -664,9 +663,9 @@ class ProcessorMixin(PushToHubMixin):
         mismatch between expected and actual class, an error is raise. Otherwise, the proper retrieved class
         is returned.
         """
-        if argument_name not in AUTO_TO_BASE_CLASS_MAPPING and "tokenizer" in argument_name:
+        if argument_name not in MODALITY_TO_BASE_CLASS_MAPPING and "tokenizer" in argument_name:
             argument_name = "tokenizer"
-        class_name = AUTO_TO_BASE_CLASS_MAPPING.get(argument_name)
+        class_name = MODALITY_TO_BASE_CLASS_MAPPING.get(argument_name)
         if isinstance(class_name, tuple):
             proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
         else:

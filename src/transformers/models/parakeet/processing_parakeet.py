@@ -39,6 +39,9 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class ParakeetProcessor(ProcessorMixin):
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
+
     def __call__(
         self,
         audio: AudioInput,

@@ -363,7 +363,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("kosmos-2.5", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
-        ("kyutai_speech_to_text", (None, "PretrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("kyutai_speech_to_text", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
@@ -1209,7 +1209,7 @@ class AutoTokenizer:
                 The configuration corresponding to the model to register.
             slow_tokenizer_class ([`PretrainedTokenizer`], *optional*):
                 The slow tokenizer to register.
-            fast_tokenizer_class ([`PretrainedTokenizerFast`], *optional*):
+            fast_tokenizer_class ([`PreTrainedTokenizerFast`], *optional*):
                 The fast tokenizer to register.
         """
         if slow_tokenizer_class is None and fast_tokenizer_class is None:

@@ -36,5 +36,8 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
 
     valid_processor_kwargs = KyutaiSpeechToTextProcessorKwargs
 
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
+
 
 __all__ = ["KyutaiSpeechToTextProcessor"]
