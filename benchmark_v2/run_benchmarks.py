@@ -125,12 +125,18 @@ if __name__ == "__main__":
         args.branch_name,
         args.commit_id,
         args.commit_message,
-        dataset_id=args.push_result_to_dataset,
     )
-    results = runner.run_benchmarks(
+    timestamp, results = runner.run_benchmarks(
         args.model_id,
         benchmark_configs,
         args.num_tokens_to_profile,
         pretty_print_summary=True,
     )
-    # runner.save_results(args.model_id, results)
+
+    dataset_id = args.push_result_to_dataset
+    if dataset_id is not None and len(results) > 0:
+        runner.push_results_to_hub(
+            dataset_id,
+            results,
+            timestamp,
+        )

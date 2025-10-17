@@ -158,7 +158,6 @@ class BenchmarkRunner:
         branch_name: str | None = None,
         commit_id: str | None = None,
         commit_message: str | None = None,
-        dataset_id: str | None = None,
     ) -> None:
         # Those stay constant for the whole run
         self.logger = logger
@@ -168,7 +167,6 @@ class BenchmarkRunner:
         self.branch_name = branch_name
         self.commit_id = get_git_revision() if commit_id is None else commit_id
         self.commit_message = commit_message
-        self.dataset_id = dataset_id
         os.makedirs(self.output_dir, exist_ok=True)
         self.profile_dir = None
         # Attributes that are reset for each model
@@ -331,7 +329,7 @@ class BenchmarkRunner:
         benchmark_configs: list[BenchmarkConfig],
         num_tokens_to_profile: int = 0,
         pretty_print_summary: bool = True,
-    ) -> dict[str, Any]:
+    ) -> tuple[str, dict[str, Any]]:
         """Run multiple benchmarks for the given model ID and list of benchmark configs."""
         all_results = {}
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -385,48 +383,7 @@ class BenchmarkRunner:
                 result["measurements"].pprint(batch_size=result["config"].batch_size, tabs=1)
             print("=" * 100)
 
-        if PUSH_TO_HUB_TOKEN is None and self.dataset_id is not None:
-            raise ValueError(
-                "PUSH_TO_HUB_TOKEN is not set, cannot push results to the Hub. When setting dataset_id, please also set the PUSH_TO_HUB_TOKEN environment variable."
-            )
-
-        n_results = len(all_results)
-        if self.dataset_id is not None and n_results > 0:
-            from datasets import Dataset
-            from huggingface_hub import HfApi
-
-            self.logger.info(f"Pushing {n_results} results to: {self.dataset_id}")
-            rows = []
-            for cfg_hash, entry in all_results.items():
-                row = {
-                    "benchmark_config_hash": cfg_hash,
-                    "config": entry["config"].to_dict(),
-                    "measurements": entry["measurements"].to_dict(),
-                    "metadata": entry["metadata"].to_dict(),
-                }
-                rows.append(row)
-
-            ds = Dataset.from_list(rows)
-            with tempfile.TemporaryDirectory() as tmp:
-                jsonl_path = os.path.join(tmp, "data.jsonl")
-                with open(jsonl_path, "w") as f:
-                    for ex in ds:
-                        f.write(json.dumps(ex, ensure_ascii=False) + "\n")
-
-                api = HfApi()
-                # NOTE: we expect the repository to already exist
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
-                file_name = f"benchmark_run_{timestamp}.jsonl"
-                api.upload_file(
-                    path_or_fileobj=jsonl_path,
-                    path_in_repo=file_name,
-                    repo_id=self.dataset_id,
-                    repo_type="dataset",
-                    token=PUSH_TO_HUB_TOKEN,
-                )
-            self.logger.info(f"Succesfully uploaded results to: {self.dataset_id}")
-
-        return all_results
+        return (timestamp, all_results)
 
     def save_results(self, model_name: str, results: dict, timestamp: str = "") -> str:
         """Save benchmark results to JSON file."""
@@ -455,3 +412,46 @@ class BenchmarkRunner:
 
         self.logger.info(f"Results saved to {filepath}")
         return filepath
+
+    def push_results_to_hub(self, dataset_id: str, results: dict[Any, Any], timestamp: str) -> None:
+        if PUSH_TO_HUB_TOKEN is None:
+            raise ValueError(
+                "PUSH_TO_HUB_TOKEN is not set, cannot push results to the Hub. When setting dataset_id, please also set the PUSH_TO_HUB_TOKEN environment variable."
+            )
+
+        from datasets import Dataset
+        from huggingface_hub import HfApi
+
+        n_results = len(results)
+        self.logger.info(f"Pushing {n_results} results to: {dataset_id}")
+        rows = []
+        for cfg_hash, entry in results.items():
+            row = {
+                "benchmark_config_hash": cfg_hash,
+                "config": entry["config"].to_dict(),
+                "measurements": entry["measurements"].to_dict(),
+                "metadata": entry["metadata"].to_dict(),
+            }
+            rows.append(row)
+
+        ds = Dataset.from_list(rows)
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonl_path = os.path.join(tmp, "data.jsonl")
+            with open(jsonl_path, "w") as f:
+                json_lines = []
+                for ex in ds:
+                    json_lines.append(json.dumps(ex, ensure_ascii=False))
+                f.write("\n".join(json_lines))
+
+            api = HfApi()
+            # NOTE: we expect the repository to already exist
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
+            file_name = f"benchmark_run_{timestamp}.jsonl"
+            api.upload_file(
+                path_or_fileobj=jsonl_path,
+                path_in_repo=file_name,
+                repo_id=dataset_id,
+                repo_type="dataset",
+                token=PUSH_TO_HUB_TOKEN,
+            )
+        self.logger.info(f"Succesfully uploaded results to: {dataset_id}")
