@@ -1186,7 +1186,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
                 return
             module = getattr(module, sub_key)
 
-        self._tie_or_clone_weights(module, self.shared)
+        self._tie_embedding_weights(module, self.shared)
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
@@ -1638,8 +1638,8 @@ class LongT5Model(LongT5PreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1806,8 +1806,8 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1984,7 +1984,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder

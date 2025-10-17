@@ -601,7 +601,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     _torch_compile_train_attn_implementation = "eager"
 
     # won't fix
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = T5GemmaModelTester(self)
@@ -1456,7 +1455,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
 
     # won't fix
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = T5GemmaEncoderOnlyModelTester(self)
