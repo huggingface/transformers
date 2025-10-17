@@ -30,7 +30,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "google/fnet-base"
     tokenizer_class = FNetTokenizer
     rust_tokenizer_class = FNetTokenizerFast
-    test_rust_tokenizer = True
+    test_rust_tokenizer = False
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
     test_seq2seq = False

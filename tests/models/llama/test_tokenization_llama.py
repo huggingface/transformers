@@ -1,6 +1,5 @@
 import tempfile
 import unittest
-import tempfile
 
 from tests.test_tokenization_common import TokenizerTesterMixin
 from transformers import AutoTokenizer

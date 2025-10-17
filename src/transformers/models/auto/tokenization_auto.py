@@ -70,7 +70,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             "albert",
             (
                 "AlbertTokenizer" if is_sentencepiece_available() else None,
-                "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                "AlbertTokenizer" if is_tokenizers_available() else None,
             ),
         ),
         ("align", ("BertTokenizer" if is_tokenizers_available() else None, None)),
@@ -83,7 +83,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             "barthez",
             (
                 "BarthezTokenizer" if is_sentencepiece_available() else None,
-                "BarthezTokenizerFast" if is_tokenizers_available() else None,
+                "BarthezTokenizer" if is_tokenizers_available() else None,
             ),
         ),
         ("bartpho", ("BartphoTokenizer", None)),
@@ -95,13 +95,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             "big_bird",
             (
                 "BigBirdTokenizer" if is_sentencepiece_available() else None,
-                "BigBirdTokenizerFast" if is_tokenizers_available() else None,
+                "BigBirdTokenizer" if is_tokenizers_available() else None,
             ),
         ),
         ("bigbird_pegasus", ("PegasusTokenizer", "PegasusTokenizerFast" if is_tokenizers_available() else None)),
         ("biogpt", ("BioGptTokenizer", None)),
         ("bitnet", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
-        ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
+        ("blenderbot", ("BlenderbotTokenizer" if is_tokenizers_available() else None, None)),
         ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
         ("blip", ("BertTokenizer" if is_tokenizers_available() else None, None)),
         ("blip-2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -113,8 +113,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         (
             "camembert",
             (
-                "CamembertTokenizer" if is_sentencepiece_available() else None,
-                "CamembertTokenizerFast" if is_tokenizers_available() else None,
+                "CamembertTokenizer" if is_tokenizers_available() else None,
+                None,
             ),
         ),
         ("canine", ("CanineTokenizer", None)),
@@ -133,15 +133,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         (
             "clip",
             (
-                "CLIPTokenizer",
-                "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                "CLIPTokenizer" if is_tokenizers_available() else None,
+                None,
             ),
         ),
         (
             "clipseg",
             (
-                "CLIPTokenizer",
-                "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                "CLIPTokenizer" if is_tokenizers_available() else None,
+                None,
             ),
         ),
         ("clvp", ("ClvpTokenizer", None)),
@@ -725,14 +725,14 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             "xlm-roberta",
             (
                 "XLMRobertaTokenizer" if is_sentencepiece_available() else None,
-                "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+                "XLMRobertaTokenizer" if is_tokenizers_available() else None,
             ),
         ),
         (
             "xlm-roberta-xl",
             (
                 "XLMRobertaTokenizer" if is_sentencepiece_available() else None,
-                "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+                "XLMRobertaTokenizer" if is_tokenizers_available() else None,
             ),
         ),
         (
@@ -754,7 +754,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             "yoso",
             (
                 "AlbertTokenizer" if is_sentencepiece_available() else None,
-                "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                "AlbertTokenizer" if is_tokenizers_available() else None,
             ),
         ),
         (

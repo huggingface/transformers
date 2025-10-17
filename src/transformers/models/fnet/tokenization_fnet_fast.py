@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI, Google Brain and the HuggingFace Inc. team.
+# Copyright 2018 Google AI, Google Brain and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for FNet model."""
+"""Tokenization classes for ALBERT model."""
 
 import os
 from shutil import copyfile
@@ -23,11 +23,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 
 
-if is_sentencepiece_available():
-    from .tokenization_fnet import FNetTokenizer
-else:
-    FNetTokenizer = None
-
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
@@ -35,10 +30,9 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 SPIECE_UNDERLINE = "▁"
 
 
-class FNetTokenizerFast(PreTrainedTokenizerFast):
+class FnetTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" FNetTokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
-    [`AlbertTokenizerFast`]. Based on
+    Construct a "fast" ALBERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on
     [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models). This
     tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods
@@ -47,12 +41,25 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
         vocab_file (`str`):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        do_lower_case (`bool`, *optional*, defaults to `False`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
         remove_space (`bool`, *optional*, defaults to `True`):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
-        keep_accents (`bool`, *optional*, defaults to `True`):
+        keep_accents (`bool`, *optional*, defaults to `False`):
             Whether or not to keep accents when tokenizing.
+        bos_token (`str`, *optional*, defaults to `"[CLS]"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+
+            <Tip>
+
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the `cls_token`.
+
+            </Tip>
+
+        eos_token (`str`, *optional*, defaults to `"[SEP]"`):
+            The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
+            that is used for the end of sequence. The token used is the `sep_token`.
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -71,16 +78,17 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    model_input_names = ["input_ids", "token_type_ids"]
-    slow_tokenizer_class = FNetTokenizer
+    slow_tokenizer_class = None
 
     def __init__(
         self,
         vocab_file=None,
         tokenizer_file=None,
-        do_lower_case=False,
+        do_lower_case=True,
         remove_space=True,
-        keep_accents=True,
+        keep_accents=False,
+        bos_token="[CLS]",
+        eos_token="[SEP]",
         unk_token="<unk>",
         sep_token="[SEP]",
         pad_token="<pad>",
@@ -90,9 +98,11 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
     ):
         # Mask token behave like a normal word, i.e. include the space before it and
         # is included in the raw text, there should be a match in a non-normalized sentence.
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         super().__init__(
             vocab_file,
@@ -100,6 +110,8 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
             do_lower_case=do_lower_case,
             remove_space=remove_space,
             keep_accents=keep_accents,
+            bos_token=bos_token,
+            eos_token=eos_token,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -118,7 +130,7 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An FNet sequence has the following format:
+        adding special tokens. An ALBERT sequence has the following format:
 
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
@@ -139,6 +151,12 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -152,4 +170,4 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
         return (out_vocab_file,)
 
 
-__all__ = ["FNetTokenizerFast"]
+__all__ = ["FnetTokenizerFast"]
