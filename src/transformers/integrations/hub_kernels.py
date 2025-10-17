@@ -11,11 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib.metadata
 import re
 from collections.abc import Callable
 from functools import partial
 from types import ModuleType
 from typing import Optional, Union
+
+from packaging import version as pkg_version
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from ..utils import logging
@@ -215,7 +218,7 @@ def load_and_register_attn_kernel(attn_implementation: str, attention_wrapper: O
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev)
+        kernel = get_kernel_wrapper(repo_id, revision=rev)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
@@ -239,10 +242,8 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] 
         mapping[kernel_name] = None
         return None
     if _kernels_available:
-        from kernels import get_kernel
-
         try:
-            kernel = get_kernel(_HUB_KERNEL_MAPPING[kernel_name])
+            kernel = get_kernel_wrapper(_HUB_KERNEL_MAPPING[kernel_name])
             mapping[kernel_name] = kernel
         except FileNotFoundError:
             mapping[kernel_name] = None
@@ -274,10 +275,24 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] 
     return mapping[kernel_name]
 
 
+def get_kernel_wrapper(kernel_name: str, revision: Optional[str] = None, version: Optional[str] = None) -> ModuleType:
+    from .. import __version__
+    user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
+    if _kernels_available:
+        kernels_version = importlib.metadata.version("kernels")
+        if pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
+            return get_kernel(kernel_name, revision=revision, version=version, user_agent=user_agent)
+        else:
+            return get_kernel(kernel_name, revision=revision)
+    else:
+        raise ImportError("kernels is not installed, please install it with `pip install kernels`")
+
+
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
     "register_kernel_mapping",
     "replace_kernel_forward_from_hub",
     "lazy_load_kernel",
+    "get_kernel_wrapper",
 ]

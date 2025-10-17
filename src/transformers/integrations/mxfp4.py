@@ -470,10 +470,10 @@ def replace_with_mxfp4_linear(
     if quantization_config.dequantize:
         return model
     else:
-        from kernels import get_kernel
+        from .hub_kernels import get_kernel_wrapper
 
         global triton_kernels_hub
-        triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+        triton_kernels_hub = get_kernel_wrapper("kernels-community/triton_kernels")
 
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
 
