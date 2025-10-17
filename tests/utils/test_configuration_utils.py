@@ -37,7 +37,6 @@ config_common_kwargs = {
     "return_dict": False,
     "output_hidden_states": True,
     "output_attentions": True,
-    "torchscript": True,
     "dtype": "float16",
     "max_length": 50,
     "min_length": 3,

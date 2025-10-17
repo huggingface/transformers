@@ -2238,6 +2238,8 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
 
 class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
+    input_modalities = "audio"
+
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig):
         super().__init__(config)
         self.total_upsample = np.prod(config.upsample_rates + config.upsampling_ratios)
@@ -2300,6 +2302,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
 class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
     config_class = Qwen3OmniMoeConfig
+    output_modalities = ["text", "audio"]
 
     def __init__(self, config: Qwen3OmniMoeConfig):
         super().__init__(config)

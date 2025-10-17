@@ -169,10 +169,6 @@ def eager_attention_forward(
     # seem a bit unusual, but is taken from the original Transformer paper.
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    # Mask heads if we want to
-    if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
-
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -934,6 +930,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     config: VJEPA2Config
     base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
+    input_modalities = "video"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "VJEPA2Layer",

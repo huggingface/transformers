@@ -170,7 +170,6 @@ class BloomModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = BloomModelTester
     fx_compatible = True
     test_missing_keys = False
-    test_torchscript = True  # torch.autograd functions seems not to be supported
 
     def test_bloom_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

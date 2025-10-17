@@ -495,7 +495,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):

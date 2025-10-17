@@ -52,6 +52,7 @@ if is_torch_flex_attn_available():
 
 
 if is_flash_attn_available():
+    from ...integrations.flash_attention import get_target_dtype
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -495,6 +496,8 @@ class StableLmFlashAttention2(StableLmAttention):
 
         dropout_rate = self.attention_dropout.p if self.training else 0.0
 
+        target_dtype = get_target_dtype(query_states, self)
+
         attn_output = _flash_attention_forward(
             query_states,
             key_states,
@@ -505,6 +508,7 @@ class StableLmFlashAttention2(StableLmAttention):
             dropout=dropout_rate,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
+            target_dtype=target_dtype,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()

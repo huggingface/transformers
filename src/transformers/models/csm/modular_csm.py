@@ -124,6 +124,7 @@ class CsmDecoderLayer(LlamaDecoderLayer):
 class CsmPreTrainedModel(PreTrainedModel):
     config: CsmConfig
     base_model_prefix = "model"
+    input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["CsmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -442,7 +443,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
     def _tie_weights(self):
         if self.config.tie_codebooks_embeddings:
-            self._tie_or_clone_weights(
+            self._tie_embedding_weights(
                 self.backbone_model.embed_tokens.embed_audio_tokens,
                 self.depth_decoder.model.embed_tokens,
             )

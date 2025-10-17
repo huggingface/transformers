@@ -79,6 +79,7 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
     - forward
 
 ## InstructBlipVideoModel
+
 [[autodoc]] InstructBlipVideoModel
     - forward
 

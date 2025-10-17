@@ -84,6 +84,8 @@
       title: Transformers로 채팅하기
     - local: chat_templating
       title: 챗봇 템플릿 익히기
+    - local: chat_extras
+      title: Tools 와 RAG
     - local: in_translation
       title: (번역중) Multimodal templates
     - local: in_translation
@@ -210,8 +212,6 @@
     title: ONNX로 내보내기
   - local: executorch
     title: ExecuTorch
-  - local: torchscript
-    title: TorchScript로 내보내기
   title: 배포환경에 내보내기
 - isExpanded: false
   sections:
@@ -459,7 +459,7 @@
         title: BertJapanese
       - local: model_doc/bertweet
         title: BERTweet
-      - local: in_translation
+      - local: model_doc/big_bird
         title: BigBird
       - local: in_translation
         title: BigBirdPegasus
@@ -483,7 +483,7 @@
         title: CANINE
       - local: model_doc/codegen
         title: CodeGen
-      - local: in_translation
+      - local: model_doc/code_llama
         title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
@@ -601,7 +601,7 @@
         title: Jukebox
       - local: in_translation
         title: LED
-      - local: in_translation
+      - local: model_doc/lfm2
         title: LFM2
       - local: in_translation
         title: LFM2-VL
@@ -881,6 +881,8 @@
         title: SegFormer
       - local: in_translation
         title: SegGpt
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality (SAM-HQ)
       - local: in_translation
         title: SuperGlue
       - local: in_translation
@@ -1097,7 +1099,7 @@
         title: LayoutXLM
       - local: in_translation
         title: LiLT
-      - local: in_translation
+      - local: model_doc/llama4
         title: Llama4
       - local: in_translation
         title: Llava
