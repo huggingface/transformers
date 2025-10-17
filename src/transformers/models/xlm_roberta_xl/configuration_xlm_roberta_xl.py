@@ -109,11 +109,13 @@ class XLMRobertaXLConfig(PreTrainedConfig):
         classifier_dropout=None,
         is_decoder=False,
         add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
