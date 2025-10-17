@@ -164,14 +164,16 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def test_from_pretrained_dynamic_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
-            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor")
+            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor_updated")
         # If remote code is disabled, we can't load this config.
         with self.assertRaises(ValueError):
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=False
+                "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=False
             )
 
-        processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor", trust_remote_code=True)
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=True
+        )
         self.assertTrue(processor.special_attribute_present)
         self.assertEqual(processor.__class__.__name__, "NewProcessor")
 
@@ -186,7 +188,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             # Test we can also load the slow version
             new_processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
+                "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=True, use_fast=False
             )
             new_tokenizer = new_processor.tokenizer
             self.assertTrue(new_tokenizer.special_attribute_present)
@@ -239,10 +241,14 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         class NewTokenizer(BertTokenizer):
             special_attribute_present = False
 
+            def __init__(self, feature_extractor, tokenizer):
+                super().__init__(feature_extractor, tokenizer)
+
         class NewProcessor(ProcessorMixin):
-            feature_extractor_class = "AutoFeatureExtractor"
-            tokenizer_class = "AutoTokenizer"
             special_attribute_present = False
+
+            def __init__(self, feature_extractor, tokenizer):
+                super().__init__(feature_extractor, tokenizer)
 
         try:
             AutoConfig.register("custom", CustomConfig)
@@ -250,7 +256,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             AutoTokenizer.register(CustomConfig, slow_tokenizer_class=NewTokenizer)
             AutoProcessor.register(CustomConfig, NewProcessor)
             # If remote code is not set, the default is to use local classes.
-            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor")
+            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor_updated")
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertFalse(processor.special_attribute_present)
             self.assertFalse(processor.feature_extractor.special_attribute_present)
@@ -258,7 +264,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             # If remote code is disabled, we load the local ones.
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=False
+                "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=False
             )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertFalse(processor.special_attribute_present)
@@ -267,7 +273,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             # If remote is enabled, we load from the Hub.
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=True
+                "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=True
             )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertTrue(processor.special_attribute_present)
@@ -294,9 +300,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             pass
 
         class NewProcessor(ProcessorMixin):
-            feature_extractor_class = "AutoFeatureExtractor"
-            tokenizer_class = "AutoTokenizer"
-
             def __init__(self, feature_extractor, tokenizer, processor_attr_1=1, processor_attr_2=True):
                 super().__init__(feature_extractor, tokenizer)
 
@@ -310,7 +313,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             AutoProcessor.register(CustomConfig, NewProcessor)
             # If remote code is not set, the default is to use local classes.
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", processor_attr_2=False
+                "hf-internal-testing/test_dynamic_processor_updated", processor_attr_2=False
             )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertEqual(processor.processor_attr_1, 1)
@@ -335,9 +338,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             pass
 
         class NewProcessor(ProcessorMixin):
-            feature_extractor_class = "NewFeatureExtractor"
-            tokenizer_class = "NewTokenizer"
-
             def __init__(self, feature_extractor, tokenizer):
                 super().__init__(feature_extractor, tokenizer)
 
@@ -348,7 +348,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             AutoProcessor.register(CustomConfig, NewProcessor)
             # If remote code is not set, the default is to use local classes.
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor",
+                "hf-internal-testing/test_dynamic_processor_updated",
             )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
         finally:
