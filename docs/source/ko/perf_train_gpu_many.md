@@ -47,7 +47,7 @@ rendered properly in your Markdown viewer.
 
 [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html)은 *하나의 머신*에서 여러 GPU를 활용한 분산 학습을 지원합니다. 동작 방식은 다음과 같습니다.
 
-1. 기본 GPU인 `GPU 0`이 배치 데이터를 읽고 이를 여러 미니 배치로 나누어 다른 GPU로 전송합니다.
+1. 기본 GPU인 `GPU 0`이 배치 데이터를 읽고 이를 여러개의 작은 배치로 나누어 다른 GPU로 전송합니다.
 2. 최신 모델이 `GPU 0`에서 다른 GPU로 복제됩니다.
 3. 각 GPU에서 `forward` 패스가 수행되고 그 결과가 `GPU 0`으로 전송되어 손실을 계산합니다.
 4. 계산된 손실이 `GPU 0`에서 다른 GPU로 분배되어 `backward` 연산을 수행합니다.
