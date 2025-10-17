@@ -1487,7 +1487,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     output_modalities = ["image", "text"]
     _tied_weights_keys = ["lm_head.weight"]
     _checkpoint_conversion_mapping = {

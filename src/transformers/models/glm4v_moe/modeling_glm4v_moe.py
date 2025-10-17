@@ -530,7 +530,7 @@ class Glm4vMoeTextDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Glm4vMoePreTrainedModel(PreTrainedModel):
     config: Glm4vMoeConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -1081,7 +1081,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
 
 @auto_docstring
 class Glm4vMoeModel(Glm4vMoePreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
