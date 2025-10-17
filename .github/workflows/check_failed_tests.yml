@@ -47,6 +47,8 @@ jobs:
         run_idx: [1]
     runs-on:
       group: aws-g5-4xlarge-cache
+    outputs:
+      process: ${{ steps.check_file.outputs.process }}
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -57,14 +59,17 @@ jobs:
           path: /transformers/ci_results_${{ inputs.job }}
 
       - name: Check file
+        id: check_file
         working-directory: /transformers
         run: |
           if [ -f ci_results_${{ inputs.job }}/new_failures.json ]; then
             echo "`ci_results_${{ inputs.job }}/new_failures.json` exists, continue ..."
             echo "process=true" >> $GITHUB_ENV
+            echo "process=true" >> $GITHUB_OUTPUT
           else
             echo "`ci_results_${{ inputs.job }}/new_failures.json` doesn't exist, abort."
             echo "process=false" >> $GITHUB_ENV
+            echo "process=false" >> $GITHUB_OUTPUT
           fi
 
       - uses: actions/download-artifact@v4
@@ -150,7 +155,8 @@ jobs:
 
   process_new_failures_with_commit_info:
     name: "process bad commit reports"
-    needs: [check_new_failures]
+    needs: check_new_failures
+    if: needs.check_new_failures.outputs.process == 'true'
     runs-on:
       group: aws-g5-4xlarge-cache
     container:
