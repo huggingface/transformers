@@ -236,8 +236,6 @@ _VARIANTS = {
     ),
 }
 
-_TEXT_ONLY_VARIANTS = (_VARIANT_EMBEDDINGGEMMA, _VARIANT_GEMMA_3_270M, _VARIANT_GEMMA_3_1B)
-
 # ==== Flags ====
 
 _CHECKPOINT_PATH = flags.DEFINE_string(
@@ -249,6 +247,15 @@ _CHECKPOINT_PATH = flags.DEFINE_string(
 
 _INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
     name="include_chat_template", default=False, help="If true, will save the default chat template with the tokenizer"
+)
+
+_INCLUDE_VISION_ENCODER = flags.DEFINE_bool(
+    name="include_vision_encoder",
+    default=True,
+    help=(
+        "If true, the model will expect vision weights in the checkpoint at `checkpoint_path` an if not found loading"
+        " the weights will throw a `RuntimeError`."
+    ),
 )
 
 _OUTPUT_PATH = flags.DEFINE_string(
@@ -407,7 +414,7 @@ def convert_transformer_weights(
             # Tied to language_model.lm_head.weight, assigned at the end.
             converted_paths = ["language_model.model.embed_tokens.weight"]
 
-            if _VARIANT.value not in _TEXT_ONLY_VARIANTS:
+            if _INCLUDE_VISION_ENCODER.value:
                 # Gemma3 model doesn't have image soft token in input and output embeddings, resize to avoid bugs we had with Mllama
                 pre_expansion_embeddings = weights
                 mu = np.mean(pre_expansion_embeddings, axis=0)
@@ -416,12 +423,12 @@ def convert_transformer_weights(
                 weights = np.vstack([pre_expansion_embeddings, new_embeddings])
 
             converted_weights = [weights]
-        elif _VARIANT.value in _TEXT_ONLY_VARIANTS or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
+        elif not _INCLUDE_VISION_ENCODER.value or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
             return zip([], [])
         else:
             raise ValueError(f"Unexpected member, {prop}, in Embedder.")
     elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
-        if _VARIANT.value in _TEXT_ONLY_VARIANTS:
+        if not _INCLUDE_VISION_ENCODER.value:
             return zip([], [])
 
         if path.endswith("/mm_input_projection"):
@@ -522,15 +529,16 @@ def convert(
 
     for paths, value in orbax_tree_flat:
         if paths[0].startswith("SigLiPFromPatches_"):
-            if config.vision_config is None:
+            if not _INCLUDE_VISION_ENCODER.value:
                 continue
 
             path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
             update_tree(path, weights, config.vision_config.dtype)
         else:
             for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
-                if variant in _TEXT_ONLY_VARIANTS:
+                if not _INCLUDE_VISION_ENCODER.value:
                     path = path[len("language_model.") :]
+
                 if variant == _VARIANT_EMBEDDINGGEMMA:
                     path = path[len("model.") :]
 
@@ -538,7 +546,8 @@ def convert(
 
     if variant == _VARIANT_EMBEDDINGGEMMA:
         return hf_tree, [weight[1].T for weight in orbax_tree_flat[: _NUM_LINEAR_LAYERS.value]]
-    elif config.vision_config is None:
+
+    if not _INCLUDE_VISION_ENCODER.value:
         hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
     else:
         hf_tree["language_model.lm_head.weight"] = hf_tree["language_model.model.embed_tokens.weight"]
@@ -555,10 +564,10 @@ def main(*args):
     config = _VARIANTS[variant]
     config.text_config.dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
 
-    if variant in _TEXT_ONLY_VARIANTS:
-        config.vision_config = None
-    else:
+    if _INCLUDE_VISION_ENCODER.value:
         config.vision_config.dtype = getattr(torch, _VISION_DTYPE.value)
+    else:
+        config.vision_config = None
 
     if _INCLUDE_CHAT_TEMPLATE.value:
         # Chat template is included for instruction tuned models, which treat
@@ -577,10 +586,10 @@ def main(*args):
     with accelerate.init_empty_weights():
         if variant == _VARIANT_EMBEDDINGGEMMA:
             model = Gemma3TextModel(config=config.text_config)
-        elif variant in _TEXT_ONLY_VARIANTS:
-            model = Gemma3ForCausalLM(config=config.text_config)
-        else:
+        elif _INCLUDE_VISION_ENCODER.value:
             model = Gemma3ForConditionalGeneration(config)
+        else:
+            model = Gemma3ForCausalLM(config=config.text_config)
 
     model.load_state_dict(state_tree, assign=True, strict=True)
     logging.info(
@@ -613,7 +622,7 @@ def main(*args):
     tokenizer.save_pretrained(output_path)
     logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
 
-    if variant not in _TEXT_ONLY_VARIANTS:
+    if _INCLUDE_VISION_ENCODER.value:
         image_processor = Gemma3ImageProcessor(
             image_seq_length=256,
             image_mean=(0.5,) * 3,
