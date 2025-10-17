@@ -128,6 +128,7 @@ class DebertaV2Config(PreTrainedConfig):
         pooler_dropout=0,
         pooler_hidden_act="gelu",
         legacy=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -147,6 +148,7 @@ class DebertaV2Config(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.position_biased_input = position_biased_input
 
         # Backwards compatibility

@@ -112,6 +112,7 @@ class VisualBertConfig(PreTrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -119,6 +120,7 @@ class VisualBertConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

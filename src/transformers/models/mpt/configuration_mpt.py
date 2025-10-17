@@ -197,6 +197,7 @@ class MptConfig(PreTrainedConfig):
         norm_type: str = "low_precision_layernorm",
         use_cache: bool = False,
         initializer_range=0.02,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if attn_config is None:
@@ -223,6 +224,7 @@ class MptConfig(PreTrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

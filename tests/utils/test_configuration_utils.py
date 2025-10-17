@@ -39,11 +39,6 @@ config_common_kwargs = {
     "output_attentions": True,
     "torchscript": True,
     "dtype": "float16",
-    "tie_word_embeddings": False,
-    "is_decoder": True,
-    "cross_attention_hidden_size": 128,
-    "add_cross_attention": True,
-    "tie_encoder_decoder": True,
     "max_length": 50,
     "min_length": 3,
     "do_sample": True,
@@ -68,20 +63,11 @@ config_common_kwargs = {
     "forced_eos_token_id": 3,
     "remove_invalid_values": True,
     "architectures": ["BertModel"],
-    "finetuning_task": "translation",
     "id2label": {0: "label"},
     "label2id": {"label": "0"},
-    "tokenizer_class": "BertTokenizerFast",
-    "prefix": "prefix",
-    "bos_token_id": 6,
-    "pad_token_id": 7,
-    "eos_token_id": 8,
-    "sep_token_id": 9,
-    "decoder_start_token_id": 10,
     "exponential_decay_length_penalty": (5, 1.01),
     "suppress_tokens": [0, 1],
     "begin_suppress_tokens": 2,
-    "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
 
@@ -180,6 +166,7 @@ class ConfigTestUtils(unittest.TestCase):
     def test_config_common_kwargs_is_complete(self):
         base_config = PreTrainedConfig()
         missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
+        print(missing_keys)
         # If this part of the test fails, you have arguments to add in config_common_kwargs above.
         self.assertListEqual(
             missing_keys,

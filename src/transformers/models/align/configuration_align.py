@@ -99,6 +99,8 @@ class AlignTextConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         use_cache=True,
         is_decoder=False,
         **kwargs,
@@ -120,6 +122,8 @@ class AlignTextConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
 
 class AlignVisionConfig(PreTrainedConfig):
