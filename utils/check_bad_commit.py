@@ -170,7 +170,7 @@ git bisect run python3 target_script.py
     print(f"Between `start_commit` {start_commit} and `end_commit` {end_commit}")
     print(f"bad_commit: {bad_commit}\n")
 
-    return bad_commit, "git bisect find the bad commit."
+    return bad_commit, "git bisect found the bad commit."
 
 
 def get_commit_info(commit):
