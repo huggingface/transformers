@@ -30,7 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import is_torchdynamo_compiling
+from ...utils.import_utils import is_tracing
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
@@ -362,8 +362,7 @@ class RecurrentGemmaRglru(nn.Module):
         # Apply gamma normalization to the input. We need to clip the derivatives of
         # `sqrt` in order to prevent NaNs during training in bfloat16. TODO a bit annoying
         multiplier = 1
-        tracing = isinstance(activations, torch.fx.Proxy) or is_torchdynamo_compiling()
-        if not torch.jit.is_tracing() and not tracing:
+        if not is_tracing(activations):
             multiplier = SqrtBoundDerivative.apply(1 - a_square)
         multiplier = reset + ~reset * multiplier
         normalized_x = gated_inputs * multiplier.type(activations.dtype)
