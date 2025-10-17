@@ -56,6 +56,21 @@ class NanoChatRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
+class NanoChatRMSNorm(nn.Module):
+    """
+    NanoChatRMSNorm is equivalent to LlamaRMSNorm but without learnable weights.
+    """
+
+    def __init__(self, hidden_size, eps=1e-6):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        return F.rms_norm(hidden_states, (self.hidden_size,), eps=self.variance_epsilon)
+
+
+
 class NanoChatAttention(LlamaAttention):
     """
     Multi-headed attention from NanoChat with custom QK normalization.
@@ -146,16 +161,15 @@ class NanoChatMLP(nn.Module):
 class NanoChatDecoderLayer(LlamaDecoderLayer):
     """
     NanoChat decoder layer with pre-norm architecture.
-    Uses functional RMSNorm instead of module-based norm layers.
     """
 
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = NanoChatAttention(config, layer_idx)
         self.mlp = NanoChatMLP(config)
-        # Remove norm layers as NanoChat uses functional RMSNorm
-        del self.input_layernorm
-        del self.post_attention_layernorm
+        # Replace Llama's norm layers with NanoChat's weight-less norm
+        self.input_layernorm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -169,7 +183,7 @@ class NanoChatDecoderLayer(LlamaDecoderLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -183,7 +197,7 @@ class NanoChatDecoderLayer(LlamaDecoderLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
@@ -225,7 +239,7 @@ class NanoChatPreTrainedModel(LlamaPreTrainedModel):
 class NanoChatModel(LlamaModel):
     """
     NanoChat model that inherits from LlamaModel but uses NanoChat-specific layers
-    and functional RMSNorm instead of module-based normalization.
+    and RMSNorm without learnable weights.
     """
 
     def __init__(self, config: NanoChatConfig):
@@ -238,8 +252,8 @@ class NanoChatModel(LlamaModel):
         self.layers = nn.ModuleList(
             [NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.norm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = NanoChatRotaryEmbedding(config=config)
-        # Remove the norm layer as NanoChat uses functional RMSNorm
         self.gradient_checkpointing = False
 
         self.post_init()
@@ -285,8 +299,7 @@ class NanoChatModel(LlamaModel):
             position_ids=position_ids,
         )
 
-        # NanoChat-specific: Apply RMSNorm to embeddings
-        hidden_states = F.rms_norm(inputs_embeds, (inputs_embeds.size(-1),), eps=self.config.rms_norm_eps)
+        hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -300,8 +313,7 @@ class NanoChatModel(LlamaModel):
                 **kwargs,
             )
 
-        # NanoChat-specific: Apply final RMSNorm
-        hidden_states = F.rms_norm(hidden_states, (hidden_states.size(-1),), eps=self.config.rms_norm_eps)
+        hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
