@@ -277,6 +277,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] 
 
 def get_kernel_wrapper(kernel_name: str, revision: Optional[str] = None, version: Optional[str] = None) -> ModuleType:
     from .. import __version__
+
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
     if _kernels_available:
         kernels_version = importlib.metadata.version("kernels")
