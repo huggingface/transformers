@@ -404,8 +404,6 @@ class DistilBertModelIntegrationTest(unittest.TestCase):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        from transformers.integrations.executorch import TorchExportableModuleForEncoderOnlyLM
-
         distilbert_model = "distilbert-base-uncased"
         device = "cpu"
         attn_implementation = "sdpa"
@@ -432,15 +430,13 @@ class DistilBertModelIntegrationTest(unittest.TestCase):
             ["capital", "birthplace", "northernmost", "centre", "southernmost"],
         )
 
-        exportable_module = TorchExportableModuleForEncoderOnlyLM(model)
-        exported_program = exportable_module.export(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
             strict=True,
         )
 
-        result = exported_program.module().forward(
-            input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
-        )
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
         exported_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
         self.assertEqual(eager_predicted_mask, exported_predicted_mask)
