@@ -369,7 +369,7 @@ class ParakeetTDTJointModelTester:
             result = model(enc, pred)
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, config.hidden_size, self.output_seq_length)
+            result.last_hidden_state.shape, (self.batch_size, config.vocab_size + 1 + len(config.durations))
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -394,7 +394,7 @@ class ParakeetTDTJointModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ParakeetTDTJointModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ParakeetTDTJointConfig, has_text_modality=False, common_properties=['hidden_size','num_hidden_layers'])
+        self.config_tester = ConfigTester(self, config_class=ParakeetTDTJointConfig, has_text_modality=False, common_properties=['hidden_size'])
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -403,44 +403,13 @@ class ParakeetTDTJointModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-#    def test_hidden_states_output(self):
-#        def check_hidden_states_output(inputs_dict, config, model_class):
-#            model = model_class(copy.deepcopy(config))
-#            model.to(torch_device)
-#            model.eval()
-#
-#            with torch.no_grad():
-#                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-#
-#            hidden_states = outputs.hidden_states
-#
-#            expected_num_layers = getattr(
-#                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-#            )
-#            self.assertEqual(hidden_states.shape[1], expected_num_layers)
-#
-#            if hasattr(self.model_tester, "encoder_seq_length"):
-#                seq_length = self.model_tester.encoder_seq_length
-#                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
-#                    seq_length = seq_length * self.model_tester.chunk_length
-#            else:
-#                seq_length = self.model_tester.seq_length
-#
-#
-#        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-#
-#        for model_class in self.all_model_classes:
-#            inputs_dict["output_hidden_states"] = True
-#            check_hidden_states_output(inputs_dict, config, model_class)
-#
-#            # check that output_hidden_states also work using config
-#            del inputs_dict["output_hidden_states"]
-#            config.output_hidden_states = True
-#            for k in config.sub_configs:
-#                if getattr(config, k) is not None:
-#                    getattr(config, k).output_hidden_states = True
-#
-#            check_hidden_states_output(inputs_dict, config, model_class)
+    @unittest.skip(reason="this class doesn't have hidden states.")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="this class doesn't have hidden states.")
+    def test_hidden_states_output(self):
+        pass
 
 #    @unittest.skip(reason="this class only returns the last hidden state not prior ones, and there is no gradient on last hidden state w.r.t output.")
 #    def test_retain_grad_hidden_states_attentions(self):
