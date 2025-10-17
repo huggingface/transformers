@@ -58,10 +58,13 @@ if f"FAILED {target_test}" in result.stdout:
 elif result.returncode != 0:
     if "ERROR: file or directory not found: " in result.stderr:
         print("test file or directory not found in this commit")
-        exit(125)
+        # git bisect treats exit code 125 as `test not found`. But this causes it not be able to make the conclusion
+        # if a test is added between the `good commit` (exclusive) and `bad commit` (inclusive) (in git bisect terminology).
+        # So we return 0 here in order to allow the process being able to identify the first commit that fails the test.
+        exit(0)
     elif "ERROR: not found: " in result.stderr:
         print("test not found in this commit")
-        exit(125)
+        exit(0)
     else:
         print(f"pytest gets unknown error: {{result.stderr}}")
         exit(-1)
@@ -94,7 +97,7 @@ def is_bad_commit(target_test, commit):
     # Restore to original commit
     repo.git.checkout(original_head)
 
-    return result.returncode not in [0, 125]
+    return result.returncode != 0
 
 
 def find_bad_commit(target_test, start_commit, end_commit):
