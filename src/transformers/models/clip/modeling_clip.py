@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
+from ...masking_utils import create_causal_mask, create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -319,9 +319,10 @@ class CLIPAttention(nn.Module):
         values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
         # CLIP text model uses both `causal_attention_mask` and `attention_mask`
         # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
-        if "flash" in self.config._attn_implementation:
-            self.is_causal = causal_attention_mask is not None
+        if "flash" in self.config._attn_implementation or "sdpa" in self.config._attn_implementation:
+            is_causal = True
         else:
+            is_causal = self.is_causal
             if attention_mask is not None and causal_attention_mask is not None:
                 attention_mask = attention_mask + causal_attention_mask
             elif causal_attention_mask is not None:
@@ -337,7 +338,7 @@ class CLIPAttention(nn.Module):
             keys,
             values,
             attention_mask,
-            is_causal=self.is_causal,
+            is_causal=is_causal,
             scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout,
             output_attentions=output_attentions,
@@ -605,15 +606,26 @@ class CLIPTextTransformer(nn.Module):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         # CLIP's text model uses causal mask, prepare it here.
-        # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = _create_4d_causal_attention_mask(
-            input_shape, hidden_states.dtype, device=hidden_states.device
+
+        cache_position = torch.arange(
+            hidden_states.shape[1], device=hidden_states.device
         )
 
-        # expand attention_mask
-        if attention_mask is not None and "flash" not in self.config._attn_implementation:
-            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+        causal_attention_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+        
+        if attention_mask is not None:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=attention_mask,
+            )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
