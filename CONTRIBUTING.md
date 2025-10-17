@@ -83,7 +83,7 @@ transformers env
 You can also run the same command from the root of the repository:
 
 ```bash
-python src/transformers/commands/transformers_cli.py env
+python src/transformers/cli/transformers.py env
 ```
 
 ### Do you want a new feature?
