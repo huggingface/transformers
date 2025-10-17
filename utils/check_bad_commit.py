@@ -94,7 +94,7 @@ def is_bad_commit(target_test, commit):
     # Restore to original commit
     repo.git.checkout(original_head)
 
-    return result.returncode != 0
+    return result.returncode not in [0, 125]
 
 
 def find_bad_commit(target_test, start_commit, end_commit):
