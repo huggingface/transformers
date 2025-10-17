@@ -600,10 +600,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip(reason="Test failing,  @RocketNight is looking into it")
-    def test_tf_from_pt_safetensors(self):
-        pass
-
 
 @require_torch
 @require_torchaudio
