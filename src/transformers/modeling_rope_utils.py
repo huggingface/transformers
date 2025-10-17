@@ -14,7 +14,7 @@
 
 import math
 from functools import wraps
-from typing import Optional
+from typing import Optional, TypedDict, Union
 
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_available, logging
@@ -25,6 +25,57 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+
+
+def standardize_rope_params(config, rope_theta: Optional[Union[float, dict[str, float]]] = None):
+    """
+    Helper to standardize the config's rope params field by ensuring the params are defined for each
+    later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
+    """
+    rope_parameters = getattr(config, "rope_parameters", None)
+    layer_types = getattr(config, "layer_types", None)
+    if rope_theta is None:
+        rope_theta = getattr(config, "rope_theta", None)
+
+    # Case 1: one RoPE theat = one RoPE param per model without nesting
+    if not isinstance(rope_theta, dict):
+        if rope_parameters is None:
+            rope_parameters = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
+            rope_theta = rope_parameters.get("rope_theta") or rope_theta
+            rope_parameters.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        config.rope_parameters = rope_parameters
+
+    # Case 2: different RoPE for each layer as nested dict
+    else:
+        rope_parameters_per_layer_type = {}
+        for layer_type in layer_types:
+            if rope_parameters is None:
+                rope_parameters_per_layer_type[layer_type] = {
+                    "rope_type": "default",
+                    "rope_theta": rope_theta[layer_type],
+                }
+            else:
+                is_field_in_new_format = any(layer_type in rope_parameters for layer_type in layer_types)
+                if not is_field_in_new_format:
+                    curr_rope_type = rope_parameters.get("rope_type", rope_parameters.get("type"))
+                    rope_parameters_per_layer_type[layer_type] = {
+                        **rope_parameters,
+                        "rope_type": curr_rope_type,
+                        "rope_theta": rope_theta[layer_type],
+                    }
+                else:
+                    curr_rope_type = rope_parameters[layer_type].get(
+                        "rope_type", rope_parameters[layer_type].get("type")
+                    )
+                    rope_parameters_per_layer_type[layer_type] = {
+                        **rope_parameters[layer_type],
+                        "rope_type": curr_rope_type,
+                        "rope_theta": rope_theta[layer_type],
+                    }
+            config.rope_parameters = rope_parameters_per_layer_type
 
 
 def dynamic_rope_update(rope_forward):
@@ -40,102 +91,95 @@ def dynamic_rope_update(rope_forward):
         The decorated forward pass.
     """
 
-    def longrope_frequency_update(self, position_ids, device):
+    def longrope_frequency_update(self, position_ids, device, layer_type=None):
         """Longrope uses long factor if sequence is larger than original pretraining length, short otherwise."""
         seq_len = torch.max(position_ids) + 1
-        if hasattr(self.config, "original_max_position_embeddings"):
-            original_max_position_embeddings = self.config.original_max_position_embeddings
+        original_max_position_embeddings = getattr(
+            self.config, "original_max_position_embeddings", self.config.max_position_embeddings
+        )
+        if layer_type is None:
+            rope_type = self.rope_type
+            original_inv_freq = self.original_inv_freq
+            prefix = ""
         else:
-            original_max_position_embeddings = self.config.max_position_embeddings
+            rope_type = self.rope_type[layer_type]
+            original_inv_freq = getattr(self, f"{layer_type}_original_inv_freq")
+            prefix = f"{layer_type}_"
+
         if seq_len > original_max_position_embeddings:
-            if not hasattr(self, "long_inv_freq"):
-                self.long_inv_freq, _ = self.rope_init_fn(
-                    self.config, device, seq_len=original_max_position_embeddings + 1
+            if not hasattr(self, f"{layer_type}_long_inv_freq"):
+                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+                long_inv_freq, _ = rope_init_fn(
+                    self.config,
+                    device,
+                    seq_len=original_max_position_embeddings + 1,
+                    layer_type=layer_type,
                 )
-            self.register_buffer("inv_freq", self.long_inv_freq, persistent=False)
+            self.register_buffer(f"{prefix}inv_freq", long_inv_freq, persistent=False)
+            setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
         else:
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            original_inv_freq = original_inv_freq.to(device)
+            self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
+            setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
 
-    def dynamic_frequency_update(self, position_ids, device):
+    def dynamic_frequency_update(self, position_ids, device, layer_type=None):
         """
         dynamic RoPE layers should recompute `inv_freq` in the following situations:
         1 - growing beyond the cached sequence length (allow scaling)
         2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
         """
         seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
+        if layer_type is None:
+            rope_type = self.rope_type
+            max_seq_len_cached = self.max_seq_len_cached
+            original_inv_freq = self.original_inv_freq
+            prefix = ""
+        else:
+            rope_type = self.rope_type[layer_type]
+            max_seq_len_cached = getattr(self, f"{layer_type}_max_seq_len_cached", self.max_seq_len_cached)
+            original_inv_freq = getattr(self, f"{layer_type}_original_inv_freq")
+            prefix = f"{layer_type}_"
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if seq_len > max_seq_len_cached:  # growth
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            inv_freq, self.attention_scaling = rope_init_fn(
+                self.config,
+                device,
+                seq_len=seq_len,
+                layer_type=layer_type,
+            )
+            # TODO joao: may break with compilation
+            self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
+            setattr(self, f"{layer_type}_max_seq_len_cached", seq_len)
+
+        if seq_len < self.original_max_seq_len and max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
+            original_inv_freq = original_inv_freq.to(device)
+            self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
+            setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
+            setattr(self, f"{layer_type}_max_seq_len_cached", self.original_max_seq_len)
 
     @wraps(rope_forward)
-    def wrapper(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            dynamic_frequency_update(self, position_ids, device=x.device)
-        elif self.rope_type == "longrope":
-            longrope_frequency_update(self, position_ids, device=x.device)
-        return rope_forward(self, x, position_ids)
+    def wrapper(self, x, position_ids, layer_type=None):
+        rope_type = self.rope_type if layer_type is None else self.rope_type[layer_type]
+        kwargs = {"layer_type": layer_type} if layer_type is not None else {}
+        if "dynamic" in rope_type:
+            dynamic_frequency_update(self, position_ids, device=x.device, **kwargs)
+        elif rope_type == "longrope":
+            longrope_frequency_update(self, position_ids, device=x.device, **kwargs)
+        return rope_forward(self, x, position_ids, **kwargs)
 
     return wrapper
-
-
-def _compute_default_rope_parameters(
-    config: Optional[PreTrainedConfig] = None,
-    device: Optional["torch.device"] = None,
-    seq_len: Optional[int] = None,
-) -> tuple["torch.Tensor", float]:
-    """
-    Computes the inverse frequencies according to the original RoPE implementation
-    Args:
-        config ([`~transformers.PreTrainedConfig`]):
-            The model configuration. This function assumes that the config will provide at least the following
-            properties:
-
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
-            *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
-            *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
-
-            Additionally, this function will make use of the following properties if they are found in the config:
-
-            *   head_dim (`int`, *optional*): The size of the key-value heads in the model. If None, this value will be
-                derived as hidden_size // num_attention_heads.
-            *   partial_rotary_factor (`float`, *optional*): If less than 1.0, inverse frequencies will be returned for
-                the first fraction of the head_dim. Defaults to 1.0.
-        device (`torch.device`):
-            The device to use for initialization of the inverse frequencies.
-        seq_len (`int`, *optional*):
-            The current sequence length. Unused for this type of RoPE.
-
-    Returns:
-        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-    """
-    base = config.rope_theta
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
-    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-    dim = int(head_dim * partial_rotary_factor)
-
-    attention_factor = 1.0  # Unused in this type of RoPE
-
-    # Compute the inverse frequencies
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
-    return inv_freq, attention_factor
 
 
 def _compute_linear_scaling_rope_parameters(
     config: Optional[PreTrainedConfig] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
+    layer_type: Optional[str] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
@@ -163,10 +207,20 @@ def _compute_linear_scaling_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
-    factor = config.rope_scaling["factor"]
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+    standardize_rope_params(config)
+    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
+    factor = rope_parameters_dict["factor"]
 
     # Gets the default RoPE parameters
-    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len)
+    base = rope_parameters_dict["rope_theta"]
+    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    dim = int(head_dim * partial_rotary_factor)
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    # Compute the inverse frequencies
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
 
     # Then applies linear scaling to the frequencies.
     # NOTE: originally, scaling was applied to the position_ids. However, we get `embs = inv_freq @ position_ids`, so
@@ -179,6 +233,7 @@ def _compute_dynamic_ntk_parameters(
     config: Optional[PreTrainedConfig] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
+    layer_type: Optional[str] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
@@ -193,7 +248,7 @@ def _compute_dynamic_ntk_parameters(
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The default sequence length used to update the dynamic RoPE at
                 inference time
-            *   rope_scaling (`dict[str, float]`): The standard RoPE scaling parameters, from which `factor`
+            *   rope_parameters (`dict[str, float]`): The standard RoPE scaling parameters, from which `factor`
                 will be accessed. The value of `factor` is used to determine the new base frequency, along with the
                 current sequence length (seq_len), the maximum positional embeddings (max_position_embeddings), and the
                 computed dimensionality (dim) of the rotary embeddings. If seq_len <= max_position_embeddings, this
@@ -216,14 +271,17 @@ def _compute_dynamic_ntk_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
-    # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
-    base = config.rope_theta
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    # TODO (joao): use the new `original_max_position_embeddings` from rope_parameters
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+    standardize_rope_params(config)
+    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
+
+    base = rope_parameters_dict["rope_theta"]
+    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
     max_position_embeddings = config.max_position_embeddings
-    factor = config.rope_scaling["factor"]
-
+    factor = rope_parameters_dict["factor"]
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # seq_len: default to max_position_embeddings, e.g. at init time
@@ -244,7 +302,10 @@ def _compute_dynamic_ntk_parameters(
 
 
 def _compute_yarn_parameters(
-    config: PreTrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: PreTrainedConfig,
+    device: "torch.device",
+    seq_len: Optional[int] = None,
+    layer_type: Optional[str] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
@@ -259,7 +320,7 @@ def _compute_yarn_parameters(
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
-            *   rope_scaling (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
+            *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
                 keys will be accessed:
                 *   `attention_factor` (`float`, *optional*): The scaling factor to be applied to the computed cos/sin.
                     If None, the value is inferred from `factor`, `mscale`, and `mscale_all_dim` as avaialble.
@@ -298,18 +359,28 @@ def _compute_yarn_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+    standardize_rope_params(config)
+    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
-    base = config.rope_theta
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    base = rope_parameters_dict["rope_theta"]
+    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
-    factor = config.rope_scaling["factor"]
-    attention_factor = config.rope_scaling.get("attention_factor")
-    mscale = config.rope_scaling.get("mscale")
-    mscale_all_dim = config.rope_scaling.get("mscale_all_dim")
-    original_max_position_embeddings = (
-        config.rope_scaling.get("original_max_position_embeddings") or config.max_position_embeddings
-    )
+
+    factor = rope_parameters_dict["factor"]
+    attention_factor = rope_parameters_dict.get("attention_factor")
+    mscale = rope_parameters_dict.get("mscale")
+    mscale_all_dim = rope_parameters_dict.get("mscale_all_dim")
+
+    # NOTE: DeekSeek-V3 (and potentially other models) modify `max_position_embeddings` and have a
+    # `original_max_position_embeddings` field containing the pretrained value. They use the ratio between these two
+    # values to compute the default attention scaling factor, instead of using `factor`.
+    if "original_max_position_embeddings" in rope_parameters_dict:
+        original_max_position_embeddings = rope_parameters_dict["original_max_position_embeddings"]
+        factor = config.max_position_embeddings / original_max_position_embeddings
+    else:
+        original_max_position_embeddings = config.max_position_embeddings
 
     def get_mscale(scale, mscale=1):
         if scale <= 1:
@@ -324,9 +395,9 @@ def _compute_yarn_parameters(
             attention_factor = get_mscale(factor)
 
     # Optional config options
-    # beta_fast/beta_slow: as suggested in the paper, default to 32 and 1 respectively
-    beta_fast = config.rope_scaling.get("beta_fast") or 32
-    beta_slow = config.rope_scaling.get("beta_slow") or 1
+    # beta_fast/beta_slow: as suggested in the paper, default to 32/1 (correspondingly)
+    beta_fast = rope_parameters_dict.get("beta_fast") or 32
+    beta_slow = rope_parameters_dict.get("beta_slow") or 1
 
     # Compute the inverse frequencies
     def find_correction_dim(num_rotations, dim, base, max_position_embeddings):
@@ -356,7 +427,7 @@ def _compute_yarn_parameters(
     inv_freq_extrapolation = 1.0 / pos_freqs
     inv_freq_interpolation = 1.0 / (factor * pos_freqs)
 
-    truncate = config.rope_scaling.get("truncate", True)
+    truncate = config.rope_parameters.get("truncate", True)
     low, high = find_correction_range(beta_fast, beta_slow, dim, base, original_max_position_embeddings, truncate)
 
     # Get n-dimensional rotational scaling corrected for extrapolation
@@ -369,7 +440,10 @@ def _compute_yarn_parameters(
 
 
 def _compute_longrope_parameters(
-    config: PreTrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: PreTrainedConfig,
+    device: "torch.device",
+    seq_len: Optional[int] = None,
+    layer_type: Optional[str] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with LongRoPE scaling. Please refer to the
@@ -386,7 +460,7 @@ def _compute_longrope_parameters(
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
             *   original_max_position_embeddings (`int`, *optional*): The original max position embeddings used during
                 pretraining. If not provided, defaults to `max_position_embeddings`.
-            *   rope_scaling (`dict[str, float]`): The standard RoPE scaling parameters, from which the following keys
+            *   rope_parameters (`dict[str, float]`): The standard RoPE scaling parameters, from which the following keys
                 will be accessed:
                 *   `attention_factor` (`float`, *optional*): The scaling factor to be applied on the attention
                     computation. If unspecified, it defaults to value recommended by the implementation, inferred from
@@ -414,15 +488,20 @@ def _compute_longrope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
-    # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
-    base = config.rope_theta
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    # TODO (joao): use the new `original_max_position_embeddings` from rope_parameters
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+    standardize_rope_params(config)
+    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
+
+    base = rope_parameters_dict["rope_theta"]
+    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
-    long_factor = config.rope_scaling["long_factor"]
-    short_factor = config.rope_scaling["short_factor"]
-    factor = config.rope_scaling.get("factor")
-    attention_factor = config.rope_scaling.get("attention_factor")
+
+    long_factor = rope_parameters_dict["long_factor"]
+    short_factor = rope_parameters_dict["short_factor"]
+    factor = rope_parameters_dict.get("factor")
+    attention_factor = rope_parameters_dict.get("attention_factor")
 
     # NOTE: Phi3 (and potentially other models) modify `max_position_embeddings` and have a
     # `original_max_position_embeddings` field containing the pretrained value. They use the ratio between these two
@@ -451,7 +530,10 @@ def _compute_longrope_parameters(
 
 
 def _compute_llama3_parameters(
-    config: PreTrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: PreTrainedConfig,
+    device: "torch.device",
+    seq_len: Optional[int] = None,
+    layer_type: Optional[str] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies for llama 3.1.
@@ -464,7 +546,7 @@ def _compute_llama3_parameters(
             *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
-            *   rope_scaling (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
+            *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
                 keys will be accessed:
                 *   `factor` (`float`, *optional*): The scaling factor applied to the inverse frequencies when 1) the
                     wavelength is greater than `low_freq_wavelen` prior to smoothing, and 2) to all inverse frequencies
@@ -491,13 +573,24 @@ def _compute_llama3_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
-    # Gets the default RoPE parameters
-    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len)
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+    standardize_rope_params(config)
+    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
-    factor = config.rope_scaling["factor"]  # `8` in the original implementation
-    low_freq_factor = config.rope_scaling["low_freq_factor"]  # `1` in the original implementation
-    high_freq_factor = config.rope_scaling["high_freq_factor"]  # `4` in the original implementation
-    old_context_len = config.rope_scaling["original_max_position_embeddings"]  # `8192` in the original implementation
+    # Gets the default RoPE parameters
+    base = rope_parameters_dict["rope_theta"]
+    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    dim = int(head_dim * partial_rotary_factor)
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    # Compute the inverse frequencies
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+
+    factor = rope_parameters_dict["factor"]  # `8` in the original implementation
+    low_freq_factor = rope_parameters_dict["low_freq_factor"]  # `1` in the original implementation
+    high_freq_factor = rope_parameters_dict["high_freq_factor"]  # `4` in the original implementation
+    old_context_len = rope_parameters_dict["original_max_position_embeddings"]  # `8192` in the original implementation
 
     low_freq_wavelen = old_context_len / low_freq_factor
     high_freq_wavelen = old_context_len / high_freq_factor
@@ -516,10 +609,9 @@ def _compute_llama3_parameters(
 
 
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
-# from the model config. You can append new {'rope_type': callable} pairs to this dictionary to enable custom RoPE
+# from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
 ROPE_INIT_FUNCTIONS = {
-    "default": _compute_default_rope_parameters,
     "linear": _compute_linear_scaling_rope_parameters,
     "dynamic": _compute_dynamic_ntk_parameters,
     "yarn": _compute_yarn_parameters,
@@ -535,7 +627,7 @@ def _check_received_keys(
     optional_keys: Optional[set] = None,
     ignore_keys: Optional[set] = None,
 ):
-    """Compare the received keys in `config.rope_scaling` against the expected and optional keys"""
+    """Compare the received keys in `config.rope_parameters` against the expected and optional keys"""
     # BC: "rope_type" was originally "type" -- let's check for "rope_type" when "type" is present
     if "type" in received_keys:
         received_keys -= {"type"}
@@ -547,54 +639,57 @@ def _check_received_keys(
 
     missing_keys = required_keys - received_keys
     if missing_keys:
-        raise KeyError(f"Missing required keys in `rope_scaling` for 'rope_type'='{rope_type}': {missing_keys}")
+        raise KeyError(f"Missing required keys in `rope_parameters` for 'rope_type'='{rope_type}': {missing_keys}")
 
     if optional_keys is not None:
         unused_keys = received_keys - required_keys - optional_keys
     else:
         unused_keys = received_keys - required_keys
     if unused_keys:
-        logger.warning(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
+        logger.warning(f"Unrecognized keys in `rope_parameters` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
-def _validate_default_rope_parameters(config: PreTrainedConfig, ignore_keys: Optional[set] = None):
-    rope_scaling = config.rope_scaling
-    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
-    required_keys = {"rope_type"}
-    received_keys = set(rope_scaling.keys())
+def _validate_default_rope_parameters(
+    rope_parameters: dict, config: Optional[PreTrainedConfig] = None, ignore_keys: Optional[set] = None
+):
+    required_keys = {"rope_type", "rope_theta"}
+    received_keys = set(rope_parameters.keys())
+    rope_type = rope_parameters["rope_type"]
     _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
 
-def _validate_linear_scaling_rope_parameters(config: PreTrainedConfig, ignore_keys: Optional[set] = None):
-    rope_scaling = config.rope_scaling
-    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
-    required_keys = {"rope_type", "factor"}
-    received_keys = set(rope_scaling.keys())
+def _validate_linear_scaling_rope_parameters(
+    rope_parameters: dict, config: Optional[PreTrainedConfig] = None, ignore_keys: Optional[set] = None
+):
+    required_keys = {"rope_type", "factor", "rope_theta"}
+    received_keys = set(rope_parameters.keys())
+    rope_type = rope_parameters["rope_type"]
     _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
-    factor = rope_scaling["factor"]
+    factor = rope_parameters["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
-        logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+        logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
 
-def _validate_dynamic_scaling_rope_parameters(config: PreTrainedConfig, ignore_keys: Optional[set] = None):
-    rope_scaling = config.rope_scaling
-    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
-    required_keys = {"rope_type", "factor"}
+def _validate_dynamic_scaling_rope_parameters(
+    rope_parameters: dict, config: Optional[PreTrainedConfig] = None, ignore_keys: Optional[set] = None
+):
     # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
     optional_keys = {"original_max_position_embeddings"}
-    received_keys = set(rope_scaling.keys())
+    required_keys = {"rope_type", "factor"}
+    received_keys = set(rope_parameters.keys())
+    rope_type = rope_parameters["rope_type"]
     _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
-    factor = rope_scaling["factor"]
+    factor = rope_parameters["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
-        logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+        logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
 
-def _validate_yarn_parameters(config: PreTrainedConfig, ignore_keys: Optional[set] = None):
-    rope_scaling = config.rope_scaling
-    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
-    required_keys = {"rope_type", "factor"}
+def _validate_yarn_parameters(
+    rope_parameters: dict, config: Optional[PreTrainedConfig] = None, ignore_keys: Optional[set] = None
+):
+    required_keys = {"rope_type", "factor", "rope_theta"}
     optional_keys = {
         "attention_factor",
         "beta_fast",
@@ -602,143 +697,148 @@ def _validate_yarn_parameters(config: PreTrainedConfig, ignore_keys: Optional[se
         "original_max_position_embeddings",
         "mscale",
         "mscale_all_dim",
-        "truncate",
     }
-    received_keys = set(rope_scaling.keys())
+    received_keys = set(rope_parameters.keys())
+    rope_type = rope_parameters["rope_type"]
     _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
-    factor = rope_scaling["factor"]
+    factor = rope_parameters["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
-        logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+        logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
-    attention_factor = rope_scaling.get("attention_factor")
+    attention_factor = rope_parameters.get("attention_factor")
     if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0):
         logger.warning(
-            f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+            f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
         )
-    beta_fast = rope_scaling.get("beta_fast")
+    beta_fast = rope_parameters.get("beta_fast")
     if beta_fast is not None and not isinstance(beta_fast, float):
-        logger.warning(f"`rope_scaling`'s beta_fast field must be a float, got {beta_fast}")
-    beta_slow = rope_scaling.get("beta_slow")
+        logger.warning(f"`rope_parameters`'s beta_fast field must be a float, got {beta_fast}")
+    beta_slow = rope_parameters.get("beta_slow")
     if beta_slow is not None and not isinstance(beta_slow, float):
-        logger.warning(f"`rope_scaling`'s beta_slow field must be a float, got {beta_slow}")
+        logger.warning(f"`rope_parameters`'s beta_slow field must be a float, got {beta_slow}")
 
     if (beta_fast or 32) < (beta_slow or 1):
         logger.warning(
-            f"`rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={beta_fast} "
+            f"`rope_parameters`'s beta_fast field must be greater than beta_slow, got beta_fast={beta_fast} "
             f"(defaults to 32 if None) and beta_slow={beta_slow} (defaults to 1 if None)"
         )
 
-    # Models should set `config.rope_scaling["original_max_position_embeddings"]` to their original (pre-yarn) context
+    # Models should set `config.rope_parameters["original_max_position_embeddings"]` to their original (pre-yarn) context
     # length, with `config.max_position_embeddings` corresponding to their post-yarn context length.
     # However, for BC purposes, we allow the former to be unset.
-    original_max_position_embeddings = config.rope_scaling.get("original_max_position_embeddings")
+    original_max_position_embeddings = config.rope_parameters.get("original_max_position_embeddings")
     if original_max_position_embeddings is not None:
         # Double-check: `factor` should be the ratio between the pre-yarn and post-yarn context lengths.
         implicit_factor = config.max_position_embeddings / original_max_position_embeddings
         if implicit_factor != factor:
             logger.warning_once(
-                f"The explicitly set RoPE scaling factor (config.rope_scaling['factor'] = {factor}) does not match "
+                f"The explicitly set RoPE scaling factor (config.rope_parameters['factor'] = {factor}) does not match "
                 "the ratio implicitly set by other parameters (implicit factor = "
                 "post-yarn context length / pre-yarn context length = "
-                "config.max_position_embeddings / config.rope_scaling['original_max_position_embeddings'] = "
+                "config.max_position_embeddings / config.rope_parameters['original_max_position_embeddings'] = "
                 f"{implicit_factor}). Using the explicit factor ({factor}) in YaRN. This may cause unexpected "
                 "behaviour in model usage, please correct the 'max_position_embeddings' fields in the model config."
             )
-    # No `config.rope_scaling["original_max_position_embeddings"]`. Is `config.max_position_embeddings` the
+    # No `config.rope_parameters["original_max_position_embeddings"]`. Is `config.max_position_embeddings` the
     # pre-yarn or the post-yarn context length?
     # BC: we assume it is the pre-yarn context length.
     else:
         logger.warning_once(
-            "config.rope_scaling['original_max_position_embeddings'], the pre-yarn context length, is unset. We will "
+            "config.rope_parameters['original_max_position_embeddings'], the pre-yarn context length, is unset. We will "
             "**assume** config.max_position_embeddings holds the pre-yarn context length. Some use cases may expect "
             "config.max_position_embeddings to hold the post-yarn context length (pre-yarn context length * "
             "factor) -- we recommend updating both fields for optimal downstream model usage."
         )
 
 
-def _validate_longrope_parameters(config: PreTrainedConfig, ignore_keys: Optional[set] = None):
-    rope_scaling = config.rope_scaling
-    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
-    required_keys = {"rope_type", "short_factor", "long_factor"}
+def _validate_longrope_parameters(rope_parameters: dict, config: PreTrainedConfig, ignore_keys: Optional[set] = None):
+    required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta"}
     # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
     optional_keys = {"attention_factor", "factor", "original_max_position_embeddings"}
-    received_keys = set(rope_scaling.keys())
+    received_keys = set(rope_parameters.keys())
+    rope_type = rope_parameters["rope_type"]
     _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
     partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
 
-    short_factor = rope_scaling.get("short_factor")
+    short_factor = rope_parameters.get("short_factor")
     if not isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor):
-        logger.warning(f"`rope_scaling`'s short_factor field must be a list of numbers, got {short_factor}")
+        logger.warning(f"`rope_parameters`'s short_factor field must be a list of numbers, got {short_factor}")
     if len(short_factor) != dim // 2:
-        logger.warning(f"`rope_scaling`'s short_factor field must have length {dim // 2}, got {len(short_factor)}")
+        logger.warning(f"`rope_parameters`'s short_factor field must have length {dim // 2}, got {len(short_factor)}")
 
-    long_factor = rope_scaling.get("long_factor")
+    long_factor = rope_parameters.get("long_factor")
     if not isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor):
-        logger.warning(f"`rope_scaling`'s long_factor field must be a list of numbers, got {long_factor}")
+        logger.warning(f"`rope_parameters`'s long_factor field must be a list of numbers, got {long_factor}")
     if len(long_factor) != dim // 2:
-        logger.warning(f"`rope_scaling`'s long_factor field must have length {dim // 2}, got {len(long_factor)}")
+        logger.warning(f"`rope_parameters`'s long_factor field must have length {dim // 2}, got {len(long_factor)}")
 
     # Handle Phi3 divergence: prefer the use of `attention_factor` and/or `factor` over
-    # `original_max_position_embeddings` to compute internal variables. The latter lives outside `rope_scaling` and is
+    # `original_max_position_embeddings` to compute internal variables. The latter lives outside `rope_parameters` and is
     # unique to longrope (= undesirable)
     if hasattr(config, "original_max_position_embeddings"):
         logger.warning_once(
             "This model has set a `original_max_position_embeddings` field, to be used together with "
-            "`max_position_embeddings` to determine a scaling factor. Please set the `factor` field of `rope_scaling`"
+            "`max_position_embeddings` to determine a scaling factor. Please set the `factor` field of `rope_parameters`"
             "with this ratio instead -- we recommend the use of this field over `original_max_position_embeddings`, "
             "as it is compatible with most model architectures."
         )
     else:
-        factor = rope_scaling.get("factor")
+        factor = rope_parameters.get("factor")
         if factor is None:
-            logger.warning("Missing required keys in `rope_scaling`: 'factor'")
+            logger.warning("Missing required keys in `rope_parameters`: 'factor'")
         elif not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
-        attention_factor = rope_scaling.get("attention_factor")
+        attention_factor = rope_parameters.get("attention_factor")
         if attention_factor is not None:
             if not isinstance(attention_factor, float) or attention_factor < 0.0:
                 logger.warning(
-                    f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+                    f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
                 )
 
 
-def _validate_llama3_parameters(config: PreTrainedConfig, ignore_keys: Optional[set] = None):
-    rope_scaling = config.rope_scaling
-    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
-    required_keys = {"rope_type", "factor", "original_max_position_embeddings", "low_freq_factor", "high_freq_factor"}
-    received_keys = set(rope_scaling.keys())
+def _validate_llama3_parameters(rope_parameters: dict, config: PreTrainedConfig, ignore_keys: Optional[set] = None):
+    required_keys = {
+        "rope_type",
+        "factor",
+        "original_max_position_embeddings",
+        "low_freq_factor",
+        "high_freq_factor",
+        "rope_theta",
+    }
+    rope_type = rope_parameters["rope_type"]
+    received_keys = set(rope_parameters.keys())
     _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
-    factor = rope_scaling["factor"]
+    factor = rope_parameters["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
-        logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+        logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
-    low_freq_factor = rope_scaling["low_freq_factor"]
-    high_freq_factor = rope_scaling["high_freq_factor"]
+    low_freq_factor = rope_parameters["low_freq_factor"]
+    high_freq_factor = rope_parameters["high_freq_factor"]
     if low_freq_factor is None or not isinstance(low_freq_factor, float):
-        logger.warning(f"`rope_scaling`'s low_freq_factor field must be a float, got {low_freq_factor}")
+        logger.warning(f"`rope_parameters`'s low_freq_factor field must be a float, got {low_freq_factor}")
     if high_freq_factor is None or not isinstance(high_freq_factor, float):
-        logger.warning(f"`rope_scaling`'s high_freq_factor field must be a float, got {high_freq_factor}")
+        logger.warning(f"`rope_parameters`'s high_freq_factor field must be a float, got {high_freq_factor}")
     if high_freq_factor <= low_freq_factor:
         logger.warning(
-            "`rope_scaling`'s high_freq_factor field must be greater than low_freq_factor, got high_freq_factor="
+            "`rope_parameters`'s high_freq_factor field must be greater than low_freq_factor, got high_freq_factor="
             f"{high_freq_factor} and low_freq_factor={low_freq_factor}"
         )
 
-    original_max_position_embeddings = rope_scaling["original_max_position_embeddings"]
+    original_max_position_embeddings = rope_parameters["original_max_position_embeddings"]
     if original_max_position_embeddings is None or not isinstance(original_max_position_embeddings, int):
         logger.warning(
-            "`rope_scaling`'s original_max_position_embeddings field must be an integer, got "
+            "`rope_parameters`'s original_max_position_embeddings field must be an integer, got "
             f"{original_max_position_embeddings}"
         )
     if original_max_position_embeddings >= config.max_position_embeddings:
         logger.warning(
-            "`rope_scaling`'s original_max_position_embeddings field must be less than max_position_embeddings, got "
+            "`rope_parameters`'s original_max_position_embeddings field must be less than max_position_embeddings, got "
             f"{original_max_position_embeddings} and max_position_embeddings={config.max_position_embeddings}"
         )
 
@@ -758,16 +858,80 @@ def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] 
     """
     Validate the RoPE config arguments, given a `PreTrainedConfig` object
     """
-    rope_scaling = getattr(config, "rope_scaling", None)  # not a default parameter in `PreTrainedConfig`
-    if rope_scaling is None:
+    rope_parameters_dict = getattr(config, "rope_parameters", None)  # not a default parameter in `PreTrainedConfig`
+    if rope_parameters_dict is None:
         return
 
-    # BC: "rope_type" was originally "type"
-    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", "default"))
-    validation_fn = ROPE_VALIDATION_FUNCTIONS.get(rope_type)
-    if validation_fn is not None:
-        validation_fn(config, ignore_keys=ignore_keys)
+    if getattr(config, "layer_types", None) is not None and all(
+        key in config.layer_types for key in rope_parameters_dict.keys()
+    ):
+        pass
     else:
-        logger.warning(
-            f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
-        )
+        rope_parameters_dict = {"full_attention": rope_parameters_dict}
+
+    for rope_parameters in rope_parameters_dict.values():
+        rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
+        validation_fn = ROPE_VALIDATION_FUNCTIONS.get(rope_type)
+
+        rope_parameters["rope_type"] = rope_type
+        # BC: "rope_theta" was originally saved in config
+        rope_parameters["rope_theta"] = rope_parameters.get("rope_theta", getattr(config, "rope_theta", None))
+
+        if validation_fn is not None:
+            validation_fn(rope_parameters, config=config, ignore_keys=ignore_keys)
+        else:
+            logger.warning(
+                f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
+            )
+
+
+class RopeParameters(TypedDict):
+    """
+    Args:
+        rope_theta (`float`):
+            The base period of the RoPE embeddings.
+        rope_type (`str`, *optional*, defaults to "default"):
+            The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+            'llama3'], with 'default' being the original RoPE implementation.
+        factor (`float`, *optional*):
+            Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+            most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+            original maximum pre-trained length.
+        original_max_position_embeddings (`int`, *optional*):
+            Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+            pretraining.
+        attention_factor (`float`, *optional*):
+            Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+            computation. If unspecified, it defaults to value recommended by the implementation, using the
+            `factor` field to infer the suggested value.
+        beta_fast (`float`, *optional*):
+            Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+            ramp function. If unspecified, it defaults to 32.
+        beta_slow (`float`, *optional*):
+            Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+            ramp function. If unspecified, it defaults to 1.
+        short_factor (`list[float]`, *optional*):
+            Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+            `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+            size divided by the number of attention heads divided by 2
+        long_factor (`list[float]`, *optional*):
+            Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+            `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+            size divided by the number of attention heads divided by 2
+        low_freq_factor (`float`, *optional*):
+            Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+        high_freq_factor (`float`, *optional*):
+            Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+    """
+
+    rope_theta: float
+    rope_type: Optional[str]
+    factor: Optional[float]
+    original_max_position_embeddings: Optional[int]
+    attention_factor: Optional[float]
+    beta_fast: Optional[float]
+    beta_slow: Optional[float]
+    short_factor: Optional[list[float]]
+    long_factor: Optional[list[float]]
+    low_freq_factor: Optional[float]
+    high_freq_factor: Optional[float]

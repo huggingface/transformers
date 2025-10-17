@@ -27,9 +27,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    logging,
-)
+from ...utils import logging
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
@@ -234,6 +232,7 @@ class Zamba2Attention(ZambaAttention):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Zamba2HybridDynamicCache] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -837,6 +836,7 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         position_embeddings: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -866,6 +866,7 @@ class Zamba2HybridLayer(ZambaHybridLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             position_embeddings=position_embeddings,
+            position_ids=position_ids,
         )
 
         transformer_hidden_states = layer_outputs[0]
@@ -1069,12 +1070,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
-
-        # create position embeddings to be shared across the decoder layers
-        if self.config.use_mem_rope:
-            position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        else:
-            position_embeddings = None
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1095,6 +1091,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                     output_attentions,
                     use_cache,
                     position_embeddings,
+                    position_ids,
                 )
             else:
                 layer_outputs = layer(
@@ -1107,6 +1104,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     position_embeddings=position_embeddings,
+                    position_ids=position_ids,
                 )
             hidden_states = layer_outputs[0]
 
