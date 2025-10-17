@@ -88,16 +88,16 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     import torch
     from PIL import Image
     import requests
-    
+
     processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
     model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
-    
+
     # SuperGlue requires pairs of images
     images = [image1, image2]
     inputs = processor(images, return_tensors="pt")
     with torch.inference_mode():
         outputs = model(**inputs)
-    
+
     # Extract matching information
     keypoints0 = outputs.keypoints0  # Keypoints in first image
     keypoints1 = outputs.keypoints1  # Keypoints in second image
@@ -112,7 +112,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     # Process outputs for visualization
     image_sizes = [[(image.height, image.width) for image in images]]
     processed_outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
-    
+
     for i, output in enumerate(processed_outputs):
         print(f"For the image pair {i}")
         for keypoint0, keypoint1, matching_score in zip(
@@ -143,6 +143,13 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 ## SuperGlueImageProcessor
 
 [[autodoc]] SuperGlueImageProcessor
+    - preprocess
+    - post_process_keypoint_matching
+    - visualize_keypoint_matching
+
+## SuperGlueImageProcessorFast
+
+[[autodoc]] SuperGlueImageProcessorFast
     - preprocess
     - post_process_keypoint_matching
     - visualize_keypoint_matching

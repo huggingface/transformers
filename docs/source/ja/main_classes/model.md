@@ -127,7 +127,3 @@ Pytorch の設計により、この機能は浮動小数点 dtype でのみ使�
 ## Pushing to the Hub
 
 [[autodoc]] utils.PushToHubMixin
-
-## Sharded checkpoints
-
-[[autodoc]] modeling_utils.load_sharded_checkpoint

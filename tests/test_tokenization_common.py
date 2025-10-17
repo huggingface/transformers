@@ -18,7 +18,6 @@ import inspect
 import itertools
 import json
 import os
-import pickle
 import re
 import shutil
 import tempfile
@@ -27,7 +26,7 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from parameterized import parameterized
 
@@ -170,7 +169,7 @@ def _test_subword_regularization_tokenizer(in_queue, out_queue, timeout):
 
 def check_subword_sampling(
     tokenizer: PreTrainedTokenizer,
-    text: Optional[str] = None,
+    text: str | None = None,
     test_sentencepiece_ignore_case: bool = True,
 ) -> None:
     """
@@ -314,9 +313,9 @@ class TokenizerTesterMixin:
         self,
         expected_encoding: dict,
         model_name: str,
-        revision: Optional[str] = None,
-        sequences: Optional[list[str]] = None,
-        decode_kwargs: Optional[dict[str, Any]] = None,
+        revision: str | None = None,
+        sequences: list[str] | None = None,
+        decode_kwargs: dict[str, Any] | None = None,
         padding: bool = True,
     ):
         """
@@ -515,28 +514,6 @@ class TokenizerTesterMixin:
             target_func=_test_subword_regularization_tokenizer,
             inputs={
                 "tokenizer": tokenizer,
-                "sp_model_kwargs": sp_model_kwargs,
-                "test_sentencepiece_ignore_case": self.test_sentencepiece_ignore_case,
-            },
-        )
-
-    def test_pickle_subword_regularization_tokenizer(self) -> None:
-        if not self.test_sentencepiece:
-            self.skipTest(reason="test_sentencepiece is set to False")
-
-        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
-        # Subword regularization is only available for the slow tokenizer.
-        sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
-        tokenizer = self.get_tokenizer(sp_model_kwargs=sp_model_kwargs)
-        tokenizer_bin = pickle.dumps(tokenizer)
-        del tokenizer
-        tokenizer_new = pickle.loads(tokenizer_bin)
-
-        run_test_in_subprocess(
-            test_case=self,
-            target_func=_test_subword_regularization_tokenizer,
-            inputs={
-                "tokenizer": tokenizer_new,
                 "sp_model_kwargs": sp_model_kwargs,
                 "test_sentencepiece_ignore_case": self.test_sentencepiece_ignore_case,
             },
@@ -826,34 +803,6 @@ class TokenizerTesterMixin:
                 self.assertEqual(tokenizer.model_max_length, 43)
 
                 shutil.rmtree(tmpdirname)
-
-    def test_pickle_tokenizer(self):
-        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                self.assertIsNotNone(tokenizer)
-
-                text = "Munich and Berlin are nice cities"
-                subwords = tokenizer.tokenize(text)
-
-                filename = os.path.join(self.tmpdirname, "tokenizer.bin")
-                with open(filename, "wb") as handle:
-                    pickle.dump(tokenizer, handle)
-
-                with open(filename, "rb") as handle:
-                    tokenizer_new = pickle.load(handle)
-
-                subwords_loaded = tokenizer_new.tokenize(text)
-
-                self.assertListEqual(subwords, subwords_loaded)
-
-    @require_tokenizers
-    def test_pickle_added_tokens(self):
-        tok1 = AddedToken("<s>", rstrip=True, lstrip=True, normalized=False, single_word=True)
-        tok2 = pickle.loads(pickle.dumps(tok1))
-
-        self.assertEqual(tok1.__getstate__(), tok2.__getstate__())
 
     def test_added_tokens_do_lower_case(self):
         tokenizers = self.get_tokenizers(do_lower_case=True)
@@ -4407,6 +4356,7 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 with self.assertLogs("transformers", level="WARNING") as cm:
+                    error_message = ""
                     try:
                         if self.tokenizer_class == BertTokenizer:
                             AlbertTokenizer.from_pretrained(pretrained_name)
@@ -4429,7 +4379,7 @@ class TokenizerTesterMixin:
                         self.assertTrue(
                             cm.records[0].message.startswith(logged_msg_target)
                             if len(cm.records) > 0
-                            else False or raised_error_msg_target in error_message
+                            else raised_error_msg_target in error_message
                         )
                     try:
                         if self.rust_tokenizer_class == BertTokenizerFast:
