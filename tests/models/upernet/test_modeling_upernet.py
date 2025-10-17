@@ -152,7 +152,6 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     has_attentions = False
     test_torch_exportable = True
     test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"

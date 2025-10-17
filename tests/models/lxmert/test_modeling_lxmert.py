@@ -531,8 +531,6 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     fx_compatible = True
 
-    test_torchscript = False
-
     # overwrite function because qa models takes different input label shape
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

@@ -275,7 +275,6 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     has_attentions = False
 
-    test_torchscript = False
     fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
