@@ -10,7 +10,6 @@
 # an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 # specific language governing permissions and limitations under the License.
 
-import logging
 from collections.abc import Callable
 from typing import Optional
 
@@ -36,6 +35,10 @@ from ..pytorch_utils import (
     is_torch_greater_or_equal_than_2_3,
     is_torch_greater_or_equal_than_2_6,
 )
+from ..utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class TorchExportableModuleForVLM:
@@ -227,13 +230,13 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         else:
             # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
             # there is only 1 type of layers, so export will use `StaticCache` by default.
-            logging.info(
+            logger.info(
                 "Using `StaticCache` for export as `layer_types` is not specified or `sliding_window` is `null` in the config."
             )
             self.model = TorchExportableModuleWithStaticCache(model, batch_size, max_cache_len, device)
         # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
         ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
-        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_attention_forward_for_export)
         self.model.model.config._attn_implementation = "sdpa_without_vmap"
 
     def forward(
@@ -322,7 +325,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             model_device = self.model.model.device
         else:
             model_device = "cpu"
-            logging.warning(
+            logger.warning(
                 "TorchExportableModuleForDecoderOnlyLM.export Can't infer device from the model. Set to CPU by default."
             )
 
@@ -772,7 +775,7 @@ def convert_and_export_with_cache(
 
     # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
     ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
-    ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+    ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_attention_forward_for_export)
     model.config._attn_implementation = "sdpa_without_vmap"
 
     with torch.no_grad():
@@ -798,11 +801,11 @@ def convert_and_export_with_cache(
             )
         else:
             if dynamic_shapes is not None:
-                logging.warning(
+                logger.warning(
                     "Dynamic shapes spec will be ignored by convert_and_export_with_cache for torch < 2.6.0."
                 )
             if strict is not None:
-                logging.warning("The strict flag will be ignored by convert_and_export_with_cache for torch < 2.6.0.")
+                logger.warning("The strict flag will be ignored by convert_and_export_with_cache for torch < 2.6.0.")
             # We have to keep this path for BC.
             #
             # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
@@ -1040,7 +1043,7 @@ def export_with_dynamic_cache(
 
     # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
     ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
-    ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+    ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_attention_forward_for_export)
     model.config._attn_implementation = "sdpa_without_vmap"
 
     register_dynamic_cache_export_support()
@@ -1092,7 +1095,7 @@ def _get_cache_dict(cache: DynamicCache):
         raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
 
     if not is_torch_greater_or_equal_than_2_6:
-        logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
+        logger.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
 
     return {
         "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
@@ -1200,3 +1203,54 @@ def sdpa_mask_without_vmap(
     if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
         causal_mask |= torch.all(~causal_mask, dim=-1, keepdim=True)
     return causal_mask
+
+
+def sdpa_attention_forward_for_export(
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    is_causal: Optional[bool] = None,
+    **kwargs,
+) -> tuple[torch.Tensor, None]:
+    # This is same as sdpa_attention_forward but simplified and added torch._check
+    # torch.export dynamic shapes support
+    if kwargs.get("output_attentions", False):
+        logger.warning_once(
+            "`sdpa` attention does not support `output_attentions=True`."
+            " Please set your attention to `eager` if you want any of these features."
+        )
+    sdpa_kwargs = {}
+    if hasattr(module, "num_key_value_groups"):
+        # Always use enable_gqa for grouped query attention which is supported by torch.export
+        sdpa_kwargs = {"enable_gqa": True}
+
+    if attention_mask is not None and attention_mask.ndim == 4:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        # torch._check used to inform torch.export of the shape relationship
+        torch._check(attention_mask.shape[-1] == key.shape[-2])
+
+    # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+    # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+    # Note that it is important to check first for the shape, otherwise compile will fail with `argument 'is_causal' must be bool, not SymBool`
+    if is_causal is None:
+        # The last condition is for encoder (decoder) models which specify this by passing their own `is_causal` flag
+        # This is mainly due to those models having mixed implementations for encoder, decoder, and encoder-decoder attns
+        is_causal = query.shape[2] > 1 and attention_mask is None and getattr(module, "is_causal", True)
+
+    attn_output = torch.nn.functional.scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        attn_mask=attention_mask,
+        dropout_p=dropout,
+        scale=scaling,
+        is_causal=is_causal,
+        **sdpa_kwargs,
+    )
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, None
