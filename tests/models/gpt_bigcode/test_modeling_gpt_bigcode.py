@@ -393,7 +393,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
     test_missing_keys = False
 
     multi_query = True

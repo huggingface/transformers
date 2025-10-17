@@ -169,7 +169,6 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
-    fx_compatible = False
 
     _is_composite = True
 

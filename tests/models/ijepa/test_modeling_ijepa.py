@@ -200,8 +200,7 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"image-feature-extraction": IJepaModel, "image-classification": IJepaForImageClassification}
         if is_torch_available()
         else {}
-    )
-    fx_compatible = False  # broken by output recording refactor
+    )  # broken by output recording refactor
 
     test_resize_embeddings = False
     test_torch_exportable = True

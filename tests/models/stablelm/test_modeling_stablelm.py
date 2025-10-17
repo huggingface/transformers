@@ -45,8 +45,7 @@ class StableLmModelTester(CausalLMModelTester):
 
 
 @require_torch
-class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+class StableLmModelTest(CausalLMModelTest, unittest.TestCase):  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = StableLmModelTester
 
 

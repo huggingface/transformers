@@ -121,12 +121,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
-    from transformers.cache_utils import DynamicCache
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
-
-from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
-
 
 if is_deepspeed_available():
     import deepspeed
@@ -565,7 +561,6 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
 class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
-    fx_compatible = False
     test_resize_embeddings = True
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
@@ -1356,177 +1351,6 @@ class ModelTesterMixin:
         # torch 1.8 has no `_clear_class_state` in `torch.jit._state`
         if hasattr(torch.jit._state, "_clear_class_state"):
             torch.jit._state._clear_class_state()
-
-    def test_torch_fx(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torch_fx_tracing(config, inputs_dict)
-
-    def test_torch_fx_output_loss(self):
-        if self.all_model_classes[0].__name__ == "BloomModel":
-            self.skipTest(reason="Bloom currently has issues, @michaelbenayoun")
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
-
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not self.fx_compatible:
-            self.skipTest(f"The model type {config.model_type} is not compatible with torch.fx")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.return_dict = False
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
-
-            # We may want to test several inputs (various shapes, etc.).
-            inputs_to_test = [inputs]
-
-            if model.config.is_encoder_decoder:
-                model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                labels = inputs.get("labels", None)
-                input_names = [
-                    "attention_mask",
-                    "decoder_attention_mask",
-                    "decoder_input_ids",
-                    "input_features",
-                    "input_ids",
-                    "input_values",
-                ]
-                if labels is not None:
-                    input_names.append("labels")
-            else:
-                input_names = [
-                    "attention_mask",
-                    "bbox",
-                    "input_features",
-                    "input_ids",
-                    "input_values",
-                    "inputs_embeds",
-                    "pixel_values",
-                    "pixel_values_videos",
-                    "token_type_ids",
-                    "visual_feats",
-                    "visual_pos",
-                    "noise",
-                ]
-
-                labels = inputs.get("labels", None)
-                start_positions = inputs.get("start_positions", None)
-                end_positions = inputs.get("end_positions", None)
-                if labels is not None:
-                    input_names.append("labels")
-                if start_positions is not None:
-                    input_names.append("start_positions")
-                if end_positions is not None:
-                    input_names.append("end_positions")
-
-                if model.config.model_type in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
-                    input_names.append("past_key_values")
-
-                    # Generally model_tester.prepare_config_and_inputs_for_common seem not to generate past key values inputs.
-                    if "past_key_values" not in inputs:
-                        batch_size = inputs[next(iter(inputs))].shape[0]
-                        num_heads = model.config.num_attention_heads
-                        head_dim = model.config.hidden_size // model.config.num_attention_heads
-
-                        cache_shape = (batch_size, num_heads, 0, head_dim)
-                        empty_pkv = DynamicCache(config=model.config)
-
-                        cache_length = 9
-                        cache_shape = (batch_size, num_heads, cache_length, head_dim)
-                        non_empty_pkv = tuple(
-                            (
-                                None,
-                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                            )
-                            for i in range(model.config.num_hidden_layers)
-                        )
-                        non_empty_pkv = DynamicCache(non_empty_pkv)
-
-                        inps = copy.deepcopy(inputs_to_test[0])
-
-                        inputs_to_test[0]["past_key_values"] = empty_pkv
-
-                        inps["past_key_values"] = non_empty_pkv
-                        inputs_to_test.append(inps)
-
-                        past_mask = torch.ones(batch_size, cache_length, device=torch_device, dtype=torch.float)
-                        inputs_to_test[1]["attention_mask"] = torch.cat(
-                            (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
-                        )
-
-                forward_parameters = inspect.signature(model.forward).parameters
-                if "input_ids" in forward_parameters and "inputs_embeds" in forward_parameters:
-                    inps = copy.deepcopy(inputs_to_test[0])
-
-                    embedding_size = (
-                        model.config.embedding_size
-                        if getattr(model.config, "embedding_size", None) is not None
-                        and model.config.model_type != "megatron-bert"
-                        else model.config.hidden_size
-                    )
-
-                    if (
-                        model.config.model_type in MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES
-                        and model.__class__.__name__
-                        == MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES[model.config.model_type]
-                    ):
-                        batch_size, num_choices, sequence_length = inputs["input_ids"].shape
-                        shape = (batch_size, num_choices, sequence_length, embedding_size)
-                    elif inps["input_ids"].ndim == 2:
-                        batch_size, sequence_length = inputs["input_ids"].shape
-                        shape = (batch_size, sequence_length, embedding_size)
-                    else:
-                        self.skipTest("Unknown case")
-
-                    del inps["input_ids"]
-                    inps["inputs_embeds"] = torch.rand(shape, dtype=torch.float, device=torch_device)
-                    inputs_to_test.append(inps)
-
-            for inps in inputs_to_test:
-                filtered_inputs = {k: v for (k, v) in inps.items() if k in input_names}
-                input_names_to_trace = list(filtered_inputs.keys())
-
-                if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
-                    not hasattr(model.config, "problem_type") or model.config.problem_type is None
-                ):
-                    model.config.problem_type = "single_label_classification"
-
-                model.config.use_cache = "past_key_values" in input_names_to_trace
-
-                traced_model = symbolic_trace(model, input_names_to_trace)
-
-                with torch.no_grad():
-                    traced_output = traced_model(**filtered_inputs)
-                    model_output = model(**filtered_inputs)
-
-                def flatten_output(output):
-                    flatten = []
-                    for x in output:
-                        if isinstance(x, (tuple, list)):
-                            flatten += flatten_output(x)
-                        elif not isinstance(x, torch.Tensor):
-                            continue
-                        else:
-                            flatten.append(x)
-                    return flatten
-
-                model_output = flatten_output(model_output)
-                traced_output = flatten_output(traced_output)
-                num_outputs = len(model_output)
-
-                for i in range(num_outputs):
-                    self.assertTrue(
-                        torch.allclose(model_output[i], traced_output[i]),
-                        f"traced {i}th output doesn't match model {i}th output for {model_class}",
-                    )
-
-                # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
-                # (Even with this call, there are still memory leak by ~0.04MB)
-                self.clear_torch_jit_class_registry()
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

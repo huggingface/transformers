@@ -242,8 +242,7 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         }
         if is_torch_available()
         else {}
-    )
-    fx_compatible = False  # Cannot support if `can_return_tuple`
+    )  # Cannot support if `can_return_tuple`
 
     def setUp(self):
         self.model_tester = LayoutLMModelTester(self)

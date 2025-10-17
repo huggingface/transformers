@@ -230,8 +230,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
-    fx_compatible = False  # Fix me Michael
+    is_encoder_decoder = True  # Fix me Michael
 
     test_missing_keys = False
 

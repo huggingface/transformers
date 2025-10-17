@@ -200,7 +200,6 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = True
 

@@ -130,7 +130,6 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (AlignVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
     has_attentions = False
@@ -333,7 +332,6 @@ class AlignTextModelTester:
 @require_torch
 class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (AlignTextModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = AlignTextModelTester(self)
@@ -437,7 +435,6 @@ class AlignModelTester:
 class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AlignModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AlignModel} if is_torch_available() else {}
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
