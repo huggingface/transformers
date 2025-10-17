@@ -84,7 +84,13 @@ input_ids = tokenizer.apply_chat_template(
 outputs = model.generate(input_ids, max_new_tokens=1024)[0, input_ids.shape[1]:]
 out_text = tokenizer.decode(outputs)
 parsed = tokenizer.parse_response(out_text)
-print(parsed)
+print(parsed.keys())
+```
+
+And you should get:
+
+```text
+dict_keys(['thinking', 'content'])
 ```
 
 And that's all you need to start using response parsing! `parse_response` should return a complete message dict that is ready to be appended to the chat history. 
