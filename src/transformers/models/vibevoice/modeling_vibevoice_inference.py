@@ -13,7 +13,6 @@ from .modeling_vibevoice import VibeVoiceModel, VibeVoicePreTrainedModel
 
 # TODO import from this folder?
 from ..vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerStreamingCache
-from ..vibevoice_semantic_tokenizer import VibeVoiceSemanticTokenizerStreamingCache
 
 
 logger = logging.get_logger(__name__)
@@ -349,7 +348,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         )
 
         acoustic_cache = VibeVoiceAcousticTokenizerStreamingCache()
-        semantic_cache = VibeVoiceSemanticTokenizerStreamingCache()
+        semantic_cache = None
 
         batch_size = input_ids.shape[0]
         device = input_ids.device
@@ -491,7 +490,8 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             if diffusion_end_indices.numel() > 0:
                 # Clear tokenizer caches for samples that reached speech end
                 acoustic_cache.set_to_zero(diffusion_end_indices)
-                semantic_cache.set_to_zero(diffusion_end_indices)
+                if semantic_cache is not None:
+                    semantic_cache.set_to_zero(diffusion_end_indices)
 
             # speech_begin
             diffusion_start_indices = torch.arange(batch_size, device=device)[~finished_tags & (next_tokens == generation_config.speech_start_id)]
@@ -604,11 +604,14 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                     audio_streamer.put(audio_chunk, diffusion_indices)
 
                 # Encode audio to semantic features using semantic streaming cache
-                semantic_features = self.model.semantic_tokenizer.encode(
+                semantic_outputs = self.model.semantic_tokenizer.encode(
                     audio_chunk,
-                    cache=semantic_cache,  # Use semantic-specific cache
+                    past_conv_values=semantic_cache,  # Use semantic-specific cache
                     sample_indices=diffusion_indices,
-                ).latents  # semantic tokenizer has no VAE.
+                    use_cache=True
+                )
+                semantic_features = semantic_outputs.latents
+                semantic_cache = semantic_outputs.past_conv_values
 
                 # Combine acoustic and semantic features for next input
                 acoustic_embed = self.model.acoustic_connector(speech_latent)
