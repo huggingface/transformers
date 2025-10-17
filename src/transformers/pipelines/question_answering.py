@@ -2,7 +2,7 @@ import inspect
 import types
 import warnings
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -259,7 +259,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         self,
         model: "PreTrainedModel",
         tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
+        modelcard: ModelCard | None = None,
         task: str = "",
         **kwargs,
     ):
@@ -275,9 +275,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         self.check_model_type(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES)
 
     @staticmethod
-    def create_sample(
-        question: Union[str, list[str]], context: Union[str, list[str]]
-    ) -> Union[SquadExample, list[SquadExample]]:
+    def create_sample(question: str | list[str], context: str | list[str]) -> SquadExample | list[SquadExample]:
         """
         QuestionAnsweringPipeline leverages the [`SquadExample`] internally. This helper method encapsulate all the
         logic for converting question(s) and context(s) to [`SquadExample`].
@@ -619,7 +617,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             return answers[0]
         return answers
 
-    def get_answer(self, answers: list[dict], target: str) -> Optional[dict]:
+    def get_answer(self, answers: list[dict], target: str) -> dict | None:
         for answer in answers:
             if answer["answer"].lower() == target.lower():
                 return answer
@@ -643,7 +641,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_index = enc.offsets[e][1]
         return start_index, end_index
 
-    def span_to_answer(self, text: str, start: int, end: int) -> dict[str, Union[str, int]]:
+    def span_to_answer(self, text: str, start: int, end: int) -> dict[str, str | int]:
         """
         When decoding from token probabilities, this method maps token indexes to actual word in the initial context.
 
