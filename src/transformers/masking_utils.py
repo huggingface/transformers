@@ -789,11 +789,9 @@ def _preprocess_mask_arguments(
         # 1. Rely on input directly
         if attention_mask is None:
             kv_length, kv_offset = input_embeds.shape[1], 0
-        # 2. Rely on the mask instead - this is more reliable especially during special cases like
-        # prefix tuning in PEFT
+        # 2. Rely on the mask instead - needed for special cases like prefix tuning in PEFT
         else:
-            kv_offset = 0
-            kv_length = attention_mask.shape[1] if attention_mask.ndim == 2 else attention_mask.shape[-1]
+            kv_length, kv_offset = attention_mask.shape[-1], 0
 
     # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None,
     # and we don't have past_key_values, i.e. generally a training setup)
