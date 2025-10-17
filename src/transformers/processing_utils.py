@@ -1508,6 +1508,7 @@ class ProcessorMixin(PushToHubMixin):
                 sub_processor_type = "tokenizer"
             if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
+                print("kwargs: ", kwargs)
                 args.append(auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
 
         return args

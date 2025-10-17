@@ -241,9 +241,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         class NewTokenizer(BertTokenizer):
             special_attribute_present = False
 
-            def __init__(self, feature_extractor, tokenizer):
-                super().__init__(feature_extractor, tokenizer)
-
         class NewProcessor(ProcessorMixin):
             special_attribute_present = False
 
