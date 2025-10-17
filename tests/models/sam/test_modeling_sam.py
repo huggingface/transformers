@@ -161,7 +161,6 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -516,7 +515,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     _is_composite = True
 
     # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working

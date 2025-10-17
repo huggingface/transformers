@@ -297,10 +297,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="model weights aren't tied in FSMT.")
-    def test_tie_model_weights(self):
-        pass
-
     @unittest.skip(reason="TODO: Decoder embeddings cannot be resized at the moment")
     def test_resize_embeddings_untied(self):
         pass

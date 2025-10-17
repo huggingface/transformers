@@ -203,21 +203,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
-    def test_torchscript_simple(self):
-        pass
-
 
 @require_torch
 class SpeechT5ForSpeechToTextTester:
@@ -943,22 +928,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_simple(self):
-        # disabled because this model doesn't have decoder_input_ids
-        pass
-
     @unittest.skip(reason="training is not supported yet")
     def test_training(self):
         pass
@@ -1616,21 +1585,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load(self):
         pass
 
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_simple(self):
-        pass
-
     @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
         pass
@@ -1739,7 +1693,6 @@ class SpeechT5HifiGanTester:
 @require_torch
 class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5HifiGan,) if is_torch_available() else ()
-    test_torchscript = False
 
     test_resize_embeddings = False
     test_resize_position_embeddings = False

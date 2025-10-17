@@ -508,7 +508,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     fx_compatible = False
 
-    test_torchscript = True
     test_resize_embeddings = True
     is_encoder_decoder = True
 
@@ -1001,7 +1000,6 @@ class LongT5EncoderOnlyModelTester:
 class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (LongT5EncoderModel,) if is_torch_available() else ()
 
-    test_torchscript = True
     test_resize_embeddings = False
 
     def setUp(self):

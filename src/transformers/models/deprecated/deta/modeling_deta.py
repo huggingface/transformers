@@ -1837,11 +1837,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         aux_loss = [
             {"logits": logits, "pred_boxes": pred_boxes}
             for logits, pred_boxes in zip(outputs_class.transpose(0, 1)[:-1], outputs_coord.transpose(0, 1)[:-1])
@@ -2444,20 +2440,6 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-# from https://github.com/facebookresearch/detectron2/blob/cbbc1ce26473cb2a5cc8f58e8ada9ae14cb41052/detectron2/layers/wrappers.py#L100
-def nonzero_tuple(x):
-    """
-    A 'as_tuple=True' version of torch.nonzero to support torchscript. because of
-    https://github.com/pytorch/pytorch/issues/38718
-    """
-    if torch.jit.is_scripting():
-        if x.dim() == 0:
-            return x.unsqueeze(0).nonzero().unbind(1)
-        return x.nonzero().unbind(1)
-    else:
-        return x.nonzero(as_tuple=True)
-
-
 # from https://github.com/facebookresearch/detectron2/blob/9921a2caa585d4fa66c4b534b6fab6e74d89b582/detectron2/modeling/matcher.py#L9
 class DetaMatcher:
     """
@@ -2496,7 +2478,6 @@ class DetaMatcher:
             raise ValueError("Thresholds should be positive")
         thresholds.insert(0, -float("inf"))
         thresholds.append(float("inf"))
-        # Currently torchscript does not support all + generator
         if not all(low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])):
             raise ValueError("Thresholds should be sorted.")
         if not all(l in [-1, 0, 1] for l in labels):
@@ -2561,7 +2542,9 @@ class DetaMatcher:
         # Find the highest quality match available, even if it is low, including ties.
         # Note that the matches qualities must be positive due to the use of
         # `torch.nonzero`.
-        _, pred_inds_with_highest_quality = nonzero_tuple(match_quality_matrix == highest_quality_foreach_gt[:, None])
+        _, pred_inds_with_highest_quality = (match_quality_matrix == highest_quality_foreach_gt[:, None]).nonzero(
+            as_tuple=True
+        )
         # If an anchor was labeled positive only due to a low-quality match
         # with gt_A, but it has larger overlap with gt_B, it's matched index will still be gt_B.
         # This follows the implementation in Detectron, and is found to have no significant impact.
@@ -2593,8 +2576,8 @@ def subsample_labels(labels: torch.Tensor, num_samples: int, positive_fraction: 
         pos_idx, neg_idx (Tensor):
             1D vector of indices. The total length of both is `num_samples` or fewer.
     """
-    positive = nonzero_tuple((labels != -1) & (labels != bg_label))[0]
-    negative = nonzero_tuple(labels == bg_label)[0]
+    positive = ((labels != -1) & (labels != bg_label)).nonzero(as_tuple=True)[0]
+    negative = (labels == bg_label).nonzero(as_tuple=True)[0]
 
     num_pos = int(num_samples * positive_fraction)
     # protect against not enough positive examples

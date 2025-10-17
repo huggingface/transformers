@@ -419,8 +419,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else {}
     )
 
-    test_torchscript = False
-
     def setUp(self):
         self.model_tester = Wav2Vec2BertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Wav2Vec2BertConfig, hidden_size=37)

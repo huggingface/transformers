@@ -237,7 +237,6 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):

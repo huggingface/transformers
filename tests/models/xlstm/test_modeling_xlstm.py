@@ -151,7 +151,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     all_generative_model_classes = (xLSTMForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # xLSTM does not support attentions
     fx_compatible = False
-    test_torchscript = False
 
     pipeline_model_mapping = (
         {"feature-extraction": xLSTMModel, "text-generation": xLSTMForCausalLM} if is_torch_available() else {}

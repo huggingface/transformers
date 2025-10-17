@@ -614,7 +614,6 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_torchscript = False
     test_resize_embeddings = True
 
     # TODO: Fix the failed tests

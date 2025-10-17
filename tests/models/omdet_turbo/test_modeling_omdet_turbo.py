@@ -232,22 +232,6 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_output_hidden_states(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_simple(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
     def test_resize_tokens_embeddings(self):
         # rewrite as OmDet-Turbo does not have "input_ids" and "decoder_input_ids"
         (

@@ -145,10 +145,6 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="TimmWrapper doesn't support output_attentions=True.")
-    def test_torchscript_output_attentions(self):
-        pass
-
     @unittest.skip(reason="TimmWrapper doesn't support this.")
     def test_retain_grad_hidden_states_attentions(self):
         pass

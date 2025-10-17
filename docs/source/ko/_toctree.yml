@@ -212,8 +212,6 @@
     title: ONNX로 내보내기
   - local: executorch
     title: ExecuTorch
-  - local: torchscript
-    title: TorchScript로 내보내기
   title: 배포환경에 내보내기
 - isExpanded: false
   sections:

@@ -222,7 +222,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     is_encoder_decoder = False
 
     test_missing_keys = False
-    test_torchscript = False
     test_inputs_embeds = False
 
     test_resize_embeddings = True

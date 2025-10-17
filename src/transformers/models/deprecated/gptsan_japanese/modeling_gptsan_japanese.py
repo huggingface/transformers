@@ -866,8 +866,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         self.model = GPTSanJapaneseModel(config)
         self.register_buffer("final_logits_bias", torch.zeros([1, config.vocab_size]))
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-        if not self.config.torchscript:
-            self.lm_head.weight = self.model.embed_tokens.weight
+        self.lm_head.weight = self.model.embed_tokens.weight
 
     def forward(
         self,

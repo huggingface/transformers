@@ -262,7 +262,6 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
 
     test_missing_keys = False
     test_torch_exportable = True

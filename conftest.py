@@ -58,7 +58,6 @@ NOT_DEVICE_TESTS = {
     "test_model_get_set_embeddings",
     "test_model_main_input_name",
     "test_correct_missing_keys",
-    "test_tie_model_weights",
     "test_can_use_safetensors",
     "test_load_save_without_tied_weights",
     "test_tied_weights_keys",

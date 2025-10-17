@@ -1069,7 +1069,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
 
     def tie_weights(self):
         super().tie_weights()
-        self._tie_or_clone_weights(self.entity_predictions.decoder, self.luke.entity_embeddings.entity_embeddings)
+        self._tie_embedding_weights(self.entity_predictions.decoder, self.luke.entity_embeddings.entity_embeddings)
 
     def get_output_embeddings(self):
         return self.lm_head.decoder

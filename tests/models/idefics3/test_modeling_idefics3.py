@@ -168,7 +168,6 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Idefics3Model,) if is_torch_available() else ()
     fx_compatible = False
-    test_torchscript = False
 
     test_resize_embeddings = True
 
@@ -337,7 +336,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     fx_compatible = False
 
     test_resize_embeddings = True
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)

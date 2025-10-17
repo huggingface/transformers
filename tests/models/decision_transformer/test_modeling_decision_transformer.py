@@ -137,7 +137,6 @@ class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     test_hidden_states_output = False
     test_inputs_embeds = False
     test_gradient_checkpointing = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = DecisionTransformerModelTester(self)

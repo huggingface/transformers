@@ -236,8 +236,6 @@ class ModernBertModelTester:
 
 @require_torch
 class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torchscript = False
-
     all_model_classes = (
         (
             ModernBertModel,

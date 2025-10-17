@@ -162,7 +162,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     has_attentions = False
 
     def setUp(self):

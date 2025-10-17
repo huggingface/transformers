@@ -182,7 +182,6 @@ class Aimv2VisionModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Aimv2VisionModelTester(self)
@@ -312,7 +311,6 @@ class Aimv2TextModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Aimv2TextModelTester(self)
@@ -392,7 +390,6 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     fx_compatible = False
 
-    test_torchscript = False
     test_resize_embeddings = False
     test_attention_outputs = False
     _is_composite = True

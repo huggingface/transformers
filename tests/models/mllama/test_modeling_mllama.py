@@ -279,7 +279,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     )
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
 
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):

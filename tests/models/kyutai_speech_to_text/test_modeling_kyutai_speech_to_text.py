@@ -297,10 +297,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         pass
 
     @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
-    def test_tie_model_weights(self):
-        pass
-
-    @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
     def test_resize_embeddings_untied(self):
         pass
 

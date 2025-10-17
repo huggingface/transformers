@@ -227,8 +227,6 @@
     title: ONNX
   - local: executorch
     title: ExecuTorch
-  - local: torchscript
-    title: TorchScript
   title: Export to production
 - isExpanded: false
   sections:

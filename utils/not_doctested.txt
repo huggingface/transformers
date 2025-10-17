@@ -305,7 +305,6 @@ docs/source/en/tasks/visual_question_answering.md
 docs/source/en/tasks/zero_shot_image_classification.md
 docs/source/en/tasks/zero_shot_object_detection.md
 docs/source/en/tokenizer_summary.md
-docs/source/en/torchscript.md
 docs/source/en/training.md
 docs/source/en/troubleshooting.md
 src/transformers/activations.py
