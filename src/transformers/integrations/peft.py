@@ -197,9 +197,9 @@ class PeftAdapterMixin:
                 Additional keyword arguments passed along to the `from_pretrained` method of the adapter config and
                 `find_adapter_config_file` method.
         """
-        from peft import PeftType
-
         check_peft_version(min_version=MIN_PEFT_VERSION)
+
+        from peft import PeftType
 
         if hotswap == "auto":
             # if user called model.enable_peft_hotswap and this is not the first adapter, enable hotswap
