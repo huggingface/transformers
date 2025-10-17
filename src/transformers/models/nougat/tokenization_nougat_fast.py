@@ -23,9 +23,7 @@ from typing import Optional, Union
 
 import numpy as np
 
-from transformers.tokenization_utils_base import INIT_TOKENIZER_DOCSTRING
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
-from transformers.utils import add_end_docstrings
 
 from ...utils import is_levenshtein_available, is_nltk_available, logging, requires_backends
 
@@ -38,16 +36,6 @@ if is_nltk_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-INIT_TOKENIZER_DOCSTRING += """
-        tokenizer_object ([`tokenizers.Tokenizer`]):
-            A [`tokenizers.Tokenizer`] object from 🤗 tokenizers to instantiate from. See [Using tokenizers from 🤗
-            tokenizers](../fast_tokenizers) for more information.
-        tokenizer_file ([`str`]):
-            A path to a local JSON file representing a previously serialized [`tokenizers.Tokenizer`] object from 🤗
-            tokenizers.
-"""
 
 
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
@@ -358,7 +346,6 @@ def remove_slice_from_lines(lines, clean_text, slice) -> str:
     return to_delete.strip()
 
 
-@add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class NougatTokenizerFast(PreTrainedTokenizerFast):
     """
     Fast tokenizer for Nougat (backed by HuggingFace tokenizers library).
