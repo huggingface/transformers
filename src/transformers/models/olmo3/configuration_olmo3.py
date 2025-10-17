@@ -161,7 +161,6 @@ class Olmo3Config(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-
         self.tie_word_embeddings = tie_word_embeddings
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id

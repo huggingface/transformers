@@ -186,10 +186,9 @@ class Glm4MoeConfig(PreTrainedConfig):
         first_k_dense_replace: Optional[int] = 1,
         norm_topk_prob: Optional[bool] = True,
         use_qk_norm: Optional[bool] = False,
-        bod_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         pad_token_id: Optional[int] = None,
-        tie_word_embeddings: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size

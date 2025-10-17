@@ -75,6 +75,8 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            Beginning of sequence token id.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -116,13 +118,13 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
         initializer_factor=1.0,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=0,
         use_cache=True,
         is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-
+        self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.is_decoder = is_decoder
         self.vocab_size = vocab_size
