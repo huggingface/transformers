@@ -41,7 +41,10 @@ env:
 
 jobs:
   check_new_failures:
-    name: " "
+    name: "Find commits for new failing tests"
+    strategy:
+      matrix:
+        run_idx: [1]
     runs-on:
       group: aws-g5-4xlarge-cache
     container:
@@ -118,6 +121,10 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Install pytest-flakefinder
+        if: ${{ env.process == 'true' }}
+        run: python3 -m pip install pytest-flakefinder
+
       - name: Show installed libraries and their versions
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
@@ -126,20 +133,50 @@ jobs:
       - name: Check failed tests
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_${{ inputs.job }}/new_failures.json --output_file new_failures_with_bad_commit.json
+        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_${{ inputs.job }}/new_failures.json --output_file new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
 
       - name: Show results
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
         run: |
-          ls -l new_failures_with_bad_commit.json
-          cat new_failures_with_bad_commit.json
+          ls -l new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
+          cat new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
 
-      - name: Checkout back
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}
+          path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
+
+  process_new_failures_with_commit_info:
+    name: "process bad commit reports"
+    needs: [check_new_failures]
+    runs-on:
+      group: aws-g5-4xlarge-cache
+    container:
+      image: ${{ inputs.docker }}
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: new_failures_with_bad_commit_${{ inputs.job }}*
+          path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}
+          merge-multiple: true
+
+      - name: Check files
+        working-directory: /transformers
+        run: |
+          ls -la /transformers
+          ls -la /transformers/new_failures_with_bad_commit_${{ inputs.job }}
+
+      # Currently, we only run with a single runner by using `run_idx: [1]`. We might try to run with multiple runners
+      # to further reduce the false positive caused by flaky tests, which requires further processing to merge reports.
+      - name: Merge files
+        shell: bash
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
         run: |
-          git checkout ${{ inputs.start_sha }}
+          cp /transformers/new_failures_with_bad_commit_${{ inputs.job }}/new_failures_with_bad_commit_${{ inputs.job }}_1.json new_failures_with_bad_commit.json
 
       - name: Process report
         shell: bash
