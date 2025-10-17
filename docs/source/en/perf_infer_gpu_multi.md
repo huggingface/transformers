@@ -95,7 +95,7 @@ tp_plan = {
 }
 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", dtype="auto", tp_plan=tp_plan)
-print(model._tp_plan)
+print(model.tp_plan)
 ```
 
 </hfoption>
