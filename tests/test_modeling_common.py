@@ -1344,14 +1344,6 @@ class ModelTesterMixin:
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
-    # This is copied from `torch/testing/_internal/jit_utils.py::clear_class_registry`
-    def clear_torch_jit_class_registry(self):
-        torch._C._jit_clear_class_registry()
-        torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
-        # torch 1.8 has no `_clear_class_state` in `torch.jit._state`
-        if hasattr(torch.jit._state, "_clear_class_state"):
-            torch.jit._state._clear_class_state()
-
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
