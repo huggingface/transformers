@@ -66,6 +66,10 @@ class SqueezeBertConfig(PreTrainedConfig):
 
         pad_token_id (`int`, *optional*, defaults to 0):
             The ID of the token in the word embedding to use as padding.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         embedding_size (`int`, *optional*, defaults to 768):
             The dimension of the word embedding vectors.
 
@@ -81,6 +85,11 @@ class SqueezeBertConfig(PreTrainedConfig):
             The number of groups in the second feed forward network layer.
         output_groups (`int`, *optional*, defaults to 4):
             The number of groups in the third feed forward network layer.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 

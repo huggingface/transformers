@@ -78,6 +78,10 @@ class FunnelConfig(PreTrainedConfig):
             sequence length that is not a multiple of 2.
         pool_q_only (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "funnel"

@@ -105,11 +105,20 @@ class GPT2Config(PreTrainedConfig):
             Id of the beginning of sentence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 50256):
             Id of the end of sentence token in the vocabulary.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
         scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
             Whether to additionally scale attention weights by `1 / layer_idx + 1`.
         reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 

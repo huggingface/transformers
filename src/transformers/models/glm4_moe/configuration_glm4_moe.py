@@ -132,6 +132,12 @@ class Glm4MoeConfig(PreTrainedConfig):
             Whether to normalize the topk probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to use query-key normalization in the attention
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
 

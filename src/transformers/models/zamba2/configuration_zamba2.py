@@ -108,6 +108,8 @@ class Zamba2Config(PreTrainedConfig):
             The id of the "end-of-sequence" token.
         use_long_context (`bool`, *optional*, defaults to `False`):
             Activates the context-extended version of Zamba by modifying RoPE.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     ```python
     >>> from transformers import Zamba2Model, Zamba2Config
     >>> # Initializing a Zamba2-2.7B style configuration

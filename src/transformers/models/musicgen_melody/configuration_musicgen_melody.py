@@ -75,6 +75,11 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
         bos_token_id (`int`, *optional*, defaults to 2048): The id of the *beginning-of-sequence* token.
         eos_token_id (`int`, *optional*): The id of the *end-of-sequence* token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`): Whether to tie word embeddings with the text encoder.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
     """
 
     model_type = "musicgen_melody_decoder"

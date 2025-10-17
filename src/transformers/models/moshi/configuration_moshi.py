@@ -76,6 +76,12 @@ class MoshiDepthConfig(PreTrainedConfig):
             The number of audio codebooks for each audio channels.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
                 - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
@@ -209,6 +215,12 @@ class MoshiConfig(PreTrainedConfig):
             The number of audio codebooks for each audio channels.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
                 - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that

@@ -87,6 +87,8 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 48000):
             Beginning of stream token id for text tokens.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         codec_config (`PreTrainedConfig`, *optional*):
             Configuration for the codec.
         kwargs (*optional*):

@@ -75,6 +75,9 @@ class CanineConfig(PreTrainedConfig):
         local_transformer_stride (`int`, *optional*, defaults to 128):
             The stride of the local attention of the first shallow Transformer encoder. Defaults to 128 for good
             TPU/XLA memory alignment.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
 
     Example:
 

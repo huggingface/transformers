@@ -80,6 +80,13 @@ class UdopConfig(PreTrainedConfig):
             The patch size used by the vision encoder.
         num_channels (`int`, *optional*, defaults to 3):
             The number of channels in the input images.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "udop"

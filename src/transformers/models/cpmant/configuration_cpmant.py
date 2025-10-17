@@ -64,6 +64,8 @@ class CpmAntConfig(PreTrainedConfig):
             The type of segment.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use cache.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 

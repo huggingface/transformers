@@ -130,6 +130,8 @@ class VitsConfig(PreTrainedConfig):
             How random the duration prediction is. Larger values create more variation in the predicted durations.
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the output audio waveform is digitalized expressed in hertz (Hz).
+        pad_token_id (`int`, *optional*):
+            Padding token id.
 
     Example:
 

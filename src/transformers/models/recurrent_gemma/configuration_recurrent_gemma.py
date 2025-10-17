@@ -82,6 +82,8 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         num_key_value_heads (`16`, *optional*, defaults to 16): Number of key value heads to use GQA.
         attention_bias (`bool`, *optional*, defaults to `False`): whether or not the linear q,k,v of the Attention layer should have bias
         w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 

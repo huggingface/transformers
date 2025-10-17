@@ -94,6 +94,9 @@ class TvpConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability of attention layers.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
     """
 
     model_type = "tvp"

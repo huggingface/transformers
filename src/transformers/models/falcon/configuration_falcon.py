@@ -117,11 +117,15 @@ class FalconConfig(PreTrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 11):
             The id of the "end-of-sequence" token.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
         ffn_hidden_size (`int`, *optional*):
             The hidden size of the feedforward layer in the Transformer decoder.
             defaults to 4x hidden dim
         activation (`str`, *optional*, defaults to `"gelu"`):
             The activation function used in the feedforward layer.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 

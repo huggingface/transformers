@@ -148,6 +148,8 @@ class Qwen2VLTextConfig(PreTrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        pad_token_id (`int`, *optional*):
+            Padding token id.
 
     ```python
     >>> from transformers import Qwen2VLTextModel, Qwen2VLConfig

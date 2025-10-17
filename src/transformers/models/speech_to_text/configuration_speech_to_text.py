@@ -99,6 +99,8 @@ class Speech2TextConfig(PreTrainedConfig):
             features.
         input_channels (`int`, *optional*, defaults to 1):
             An integer specifying number of input channels of the input feature vector.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 

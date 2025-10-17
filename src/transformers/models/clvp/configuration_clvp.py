@@ -70,6 +70,8 @@ class ClvpEncoderConfig(PreTrainedConfig):
             Beginning of sequence token id.
         eos_token_id (`int`, *optional*, defaults to 0):
             End of sequence token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
 
     Example:
 
@@ -226,6 +228,8 @@ class ClvpDecoderConfig(PreTrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 8193):
             End of sequence token id, used in the method
             [`ClvpModelForConditionalGeneration.fix_speech_decoder_output()`] to correct decoder outputs.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
         feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted mel features. This value is used in [`ClvpConditioningEncoder`].
         use_attention_bias (`bool`, *optional*, defaults to `True`):
@@ -235,6 +239,8 @@ class ClvpDecoderConfig(PreTrainedConfig):
             testing).
         decoder_fixing_codes (`list`, *optional*, defaults to `[83, 45, 45, 248]`):
             These values are used in the method `fix_speech_decoder_output` to fix decoder generated outputs.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
 
     Example:
 

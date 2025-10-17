@@ -68,6 +68,8 @@ class Starcoder2Config(PreTrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 50256):
             The id of the "end-of-sequence" token.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
@@ -117,6 +119,8 @@ class Starcoder2Config(PreTrainedConfig):
             Embedding dropout.
         use_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias term on linear layers of the model.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
 
     ```python

@@ -72,6 +72,9 @@ class AltCLIPTextConfig(PreTrainedConfig):
             relevant if `config.is_decoder=True`.
         project_dim (`int`, *optional*, defaults to 768):
             The dimensions of the teacher model before the mapping layer.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
 
     Examples:
 

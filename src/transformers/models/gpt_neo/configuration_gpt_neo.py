@@ -83,6 +83,10 @@ class GPTNeoConfig(PreTrainedConfig):
             The id of the beginning of sentence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 50256):
             The id of the end of sentence token in the vocabulary.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 

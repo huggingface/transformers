@@ -69,6 +69,11 @@ class BrosConfig(PreTrainedConfig):
             The number of relations for SpadeEE(entity extraction), SpadeEL(entity linking) head.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the classifier head.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
 
 
     Examples:

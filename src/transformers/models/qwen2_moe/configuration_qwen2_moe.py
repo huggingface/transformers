@@ -137,6 +137,12 @@ class Qwen2MoeConfig(PreTrainedConfig):
             Whether to add a bias to the queries, keys and values.
         layer_types (`dict[int, str]`, *optional*): a dictionarry that explicitly maps layer index with
             the attention type. The attention type is one of `sliding_attention`, `full_attention`.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
     ```python
     >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
 

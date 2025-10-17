@@ -33,6 +33,13 @@ class EncoderDecoderConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        decoder_start_token_id (`int`, *optional*):
+            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
+        tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
+            Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
+            and decoder model to have the exact same parameter names.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
