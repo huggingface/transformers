@@ -19,8 +19,6 @@ import os
 from functools import lru_cache
 from typing import Optional, Union
 
-import regex as re
-
 from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import (
@@ -33,6 +31,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import logging
+from ...utils.safe import regex as re
 
 
 logger = logging.get_logger(__name__)

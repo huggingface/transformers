@@ -19,8 +19,6 @@ import textwrap
 from pathlib import Path
 from typing import get_args
 
-import regex as re
-
 from .doc import (
     MODELS_TO_PIPELINE,
     PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS,
@@ -28,6 +26,7 @@ from .doc import (
     _prepare_output_docstrings,
 )
 from .generic import ModelOutput
+from .safe import regex as re
 
 
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
