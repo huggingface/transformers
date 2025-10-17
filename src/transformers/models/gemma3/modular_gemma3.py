@@ -515,6 +515,7 @@ GEMMA3_START_DOCSTRING = None
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = ""
+    input_modalities = ["image", "text"]
     _no_split_modules = [
         "Gemma3DecoderLayer",
         "SiglipVisionEmbeddings",
@@ -546,6 +547,7 @@ def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, in
 
 class Gemma3TextModel(Gemma2Model):
     config: Gemma3TextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -1154,6 +1156,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
     """
 
     config: Gemma3TextConfig
+    input_modalities = "text"
 
 
 __all__ = [

@@ -1944,23 +1944,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         assert tokenizer.unk_token == "<unk>"
         ```"""
         proxies = kwargs.pop("proxies", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         subfolder = kwargs.pop("subfolder", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
         gguf_file = kwargs.get("gguf_file")
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class, "is_fast": "Fast" in cls.__name__}
         if from_pipeline is not None:
@@ -2511,18 +2499,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             A tuple of `str`: The files saved.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
+        save_jinja_files = kwargs.pop("save_jinja_files", True)
 
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -2560,7 +2537,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
             tokenizer_config.update(self.extra_special_tokens)
 
-        save_jinja_files = kwargs.get("save_jinja_files", True)
         tokenizer_config, saved_raw_chat_template_files = self.save_chat_templates(
             save_directory, tokenizer_config, filename_prefix, save_jinja_files
         )
