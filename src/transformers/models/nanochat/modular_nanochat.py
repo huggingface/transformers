@@ -36,6 +36,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from .configuration_nanochat import NanoChatConfig
 
 
@@ -56,19 +57,15 @@ class NanoChatRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class NanoChatRMSNorm(nn.Module):
+class NanoChatRMSNorm(Llama4TextL2Norm):
     """
-    NanoChatRMSNorm is equivalent to LlamaRMSNorm but without learnable weights.
+    NanoChatRMSNorm inherits from Llama4TextL2Norm (weight-less RMS normalization).
+    Overrides __init__ to match NanoChat's API with hidden_size parameter.
     """
 
     def __init__(self, hidden_size, eps=1e-6):
-        super().__init__()
+        super().__init__(eps=eps)
         self.hidden_size = hidden_size
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        return F.rms_norm(hidden_states, (self.hidden_size,), eps=self.variance_epsilon)
-
 
 
 class NanoChatAttention(LlamaAttention):
