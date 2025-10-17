@@ -420,7 +420,7 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True  # Fix me Michael
+    is_encoder_decoder = True
 
     def setUp(self):
         self.model_tester = BartModelTester(self)

@@ -461,7 +461,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         }
         if is_torch_available()
         else {}
-    )  # won't be maintained
+    )
     model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model

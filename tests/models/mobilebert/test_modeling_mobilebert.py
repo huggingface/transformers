@@ -282,7 +282,7 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         }
         if is_torch_available()
         else {}
-    )  # won't be maintained
+    )
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

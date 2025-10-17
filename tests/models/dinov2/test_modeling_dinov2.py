@@ -226,7 +226,7 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"image-feature-extraction": Dinov2Model, "image-classification": Dinov2ForImageClassification}
         if is_torch_available()
         else {}
-    )  # broken by output recording refactor
+    )
 
     test_resize_embeddings = False
 

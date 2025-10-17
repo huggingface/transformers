@@ -45,7 +45,7 @@ class StableLmModelTester(CausalLMModelTester):
 
 
 @require_torch
-class StableLmModelTest(CausalLMModelTest, unittest.TestCase):  # Broken by attention refactor cc @Cyrilvallez
+class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = StableLmModelTester
 
 

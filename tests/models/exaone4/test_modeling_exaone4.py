@@ -51,7 +51,7 @@ class Exaone4ModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):  # Broken by attention refactor cc @Cyrilvallez
+class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Exaone4ModelTester
     model_split_percents = [0.5, 0.6]
 

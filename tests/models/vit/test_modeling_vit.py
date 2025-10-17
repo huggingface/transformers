@@ -201,7 +201,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"image-feature-extraction": ViTModel, "image-classification": ViTForImageClassification}
         if is_torch_available()
         else {}
-    )  # broken by output recording refactor
+    )
 
     test_resize_embeddings = False
     test_torch_exportable = True

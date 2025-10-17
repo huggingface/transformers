@@ -168,7 +168,7 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         }
         if is_torch_available()
         else {}
-    )  # Broken by attention refactor cc @Cyrilvallez
+    )
     test_missing_keys = False
     model_tester_class = GPT2ModelTester
 

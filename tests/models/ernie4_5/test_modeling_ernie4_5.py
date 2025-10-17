@@ -44,7 +44,7 @@ class Ernie4_5ModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Ernie4_5ModelTest(CausalLMModelTest, unittest.TestCase):  # Broken by attention refactor cc @Cyrilvallez
+class Ernie4_5ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Ernie4_5ModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
