@@ -307,16 +307,6 @@ def get_image_processor_config(
     image_processor.save_pretrained("image-processor-test")
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         IMAGE_PROCESSOR_NAME,
@@ -438,18 +428,6 @@ class AutoImageProcessor:
         >>> # If image processor files are in a directory (e.g. image processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         # TODO: @yoni, change in v4.48 (use_fast set to True by default)
         use_fast = kwargs.pop("use_fast", None)

@@ -74,7 +74,6 @@ wandb의 경우, 해당 [object_parameter](https://docs.wandb.ai/guides/sweeps/c
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,
-...         token=True if model_args.use_auth_token else None,
 ...     )
 ```
 
