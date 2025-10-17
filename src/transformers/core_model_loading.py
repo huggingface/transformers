@@ -331,8 +331,10 @@ class To(ConversionOps):
     def __init__(self, device):
         self.device = device
 
+class DistributedOp(ConversionOps): # all `distributed_operations` need to respect this
+    pass
 
-class Shard(ConversionOps):
+class Shard(DistributedOp):
     """Shard tensors along a specific dimension.
 
     The operation supports two modes:
@@ -446,7 +448,7 @@ class Fp8Quantize(QuantizationOp):
         return {target_keys: quantized, scale_key: inv_scales}
 
 
-class Fp8Dequantize(ConversionOps):
+class Fp8Dequantize(QuantizationOp):
     """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
 
     def __init__(self, block_size: Optional[tuple[int, int]] = None):
@@ -608,112 +610,3 @@ def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_
 
     return converted_state_dict, used_operations
 
-
-def _ensure_list(value: Union[str, Sequence[str]]) -> list[str]:
-    if isinstance(value, str):
-        return [value]
-    return list(value)
-
-
-def _prepare_operations(
-    operations: Optional[Union[ConversionOps, type[ConversionOps], Sequence]],
-) -> list[ConversionOps]:
-    if operations is None:
-        return []
-    if isinstance(operations, (ConversionOps, type)):
-        operations = [operations]
-    prepared: list[ConversionOps] = []
-    for op in operations:  # type: ignore[assignment]
-        if isinstance(op, ConversionOps):
-            prepared.append(op)
-        elif isinstance(op, type) and issubclass(op, ConversionOps):
-            prepared.append(op())
-        else:
-            raise TypeError(f"Unsupported operation specification: {op!r}")
-    return prepared
-
-
-def _order_operations(operations: list[ConversionOps]) -> list[ConversionOps]:
-    if not operations:
-        return []
-    tp_ops = [op for op in operations if isinstance(op, Shard)]
-    quant_ops = [op for op in operations if isinstance(op, QuantizationOp)]
-    middle_ops = [op for op in operations if op not in tp_ops and op not in quant_ops]
-    return tp_ops + middle_ops + quant_ops
-
-
-def _collect_source_values(
-    state_dict: dict[str, torch.Tensor], patterns: list[str]
-) -> tuple[list[list[str]], list[Any]]:
-    matched_keys: list[list[str]] = []
-    collected: list[Any] = []
-    for pattern in patterns:
-        keys = sorted(_match_pattern(state_dict, pattern))
-        matched_keys.append(keys)
-        collected.append([state_dict[key] for key in keys])
-
-    simplified = [_simplify_singletons(bucket) for bucket in collected]
-    return matched_keys, _simplify_singletons(simplified)
-
-
-def _match_pattern(state_dict: dict[str, torch.Tensor], pattern: str) -> list[str]:
-    if pattern in state_dict:
-        return [pattern]
-    matched = [key for key in state_dict if fnmatchcase(key, pattern)]
-    if not matched:
-        logger.debug("Pattern %s did not match any key.", pattern)
-    return matched
-
-
-def _simplify_singletons(value: Any) -> Any:
-    if isinstance(value, list) and len(value) == 1:
-        inner = value[0]
-        simplified_inner = _simplify_singletons(inner)
-        return simplified_inner
-    if isinstance(value, list) and all(isinstance(elem, list) and len(elem) == 1 for elem in value):
-        return [elem[0] for elem in value]
-    return value
-
-
-def _assign_to_targets(
-    value: Any,
-    target_spec: Optional[Union[str, Sequence[str]]],
-    matched_keys: list[list[str]],
-) -> dict[str, torch.Tensor]:
-    assignments: dict[str, torch.Tensor] = {}
-    target_keys = target_spec
-
-    if isinstance(value, dict):
-        assignments.update(value)
-        return assignments
-
-    if target_keys is None:
-        flattened = list(chain.from_iterable(matched_keys))
-        if isinstance(value, (list, tuple)):
-            if len(flattened) != len(value):
-                raise ValueError(
-                    f"Cannot assign {len(value)} tensors to {len(flattened)} targets (patterns {matched_keys})."
-                )
-            for key, tensor in zip(flattened, value):
-                assignments[key] = tensor
-        elif len(flattened) == 1:
-            assignments[flattened[0]] = value
-        else:
-            raise ValueError("Ambiguous assignment with multiple matched keys and scalar value.")
-        return assignments
-
-    if isinstance(target_keys, str):
-        assignments[target_keys] = value
-        return assignments
-
-    if isinstance(target_keys, Sequence):
-        if not isinstance(value, (list, tuple)):
-            raise ValueError("Expected a sequence of tensors to match multiple target keys.")
-        if len(target_keys) != len(value):
-            raise ValueError(
-                f"Expected {len(target_keys)} tensors but received {len(value)} for targets {target_keys}."
-            )
-        for key, tensor in zip(target_keys, value):
-            assignments[key] = tensor
-        return assignments
-    raise TypeError(f"Unsupported target key specification: {target_keys!r}")

@@ -115,37 +115,42 @@ class Lfm2MoeMLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
-class Lfm2MoeExperts(nn.ModuleList):
-    """
-    ModuleList of experts.
-    """
+class Lfm2MoeExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
-        super().__init__()
+        nn.ModuleList.__init__(self)
         self.num_experts = config.num_experts
         for _ in range(config.num_experts):
             self.append(Lfm2MoeMLP(config, intermediate_size=config.moe_intermediate_size))
 
     def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
-        Returns:
-            (batch_size * sequence_length, hidden_dim)
-        """
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).flatten()
+
+        for expert_idx in expert_hit.tolist():
+            expert_selection = expert_mask[expert_idx].squeeze(0)
+            top_indices, token_positions = torch.where(expert_selection)
+            if token_positions.numel() == 0:
+                continue
+
+            current_state = hidden_states.index_select(0, token_positions)
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2)
+            current_hidden_states = self.act_fn(up)
+            current_hidden_states = current_hidden_states * gate
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+
+            routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
+            current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
+            final_hidden_states.index_add_(0, token_positions, current_hidden_states.to(final_hidden_states.dtype))
+
         return final_hidden_states
 
 
