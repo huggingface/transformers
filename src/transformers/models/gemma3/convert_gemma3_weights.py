@@ -252,7 +252,7 @@ _INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
 
 _INCLUDE_VISION_ENCODER = flags.DEFINE_bool(
     name="include_vision_encoder",
-    default=False,
+    default=True,
     help=(
         "If true, the model will expect vision weights in the checkpoint at `checkpoint_path` an if not found loading"
         " the weights will throw a `RuntimeError`."
