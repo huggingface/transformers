@@ -121,6 +121,10 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Install pytest-flakefinder
+        if: ${{ env.process == 'true' }}
+        run: python3 -m pip install pytest-flakefinder
+
       - name: Show installed libraries and their versions
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
