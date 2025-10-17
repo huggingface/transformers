@@ -38,7 +38,7 @@ class FastVlmConfig(PreTrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
             The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 151646):
+        image_token_id (`int`, *optional*, defaults to 151646):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
