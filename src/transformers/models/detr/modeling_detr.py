@@ -743,16 +743,17 @@ class DetrPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = self.config.init_std
         xavier_std = self.config.init_xavier_std
 
         if isinstance(module, DetrMHAttentionMap):
-            nn.init.zeros_(module.k_linear.bias)
-            nn.init.zeros_(module.q_linear.bias)
-            nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
-            nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
+            nn.init.zeros_(module.k_proj.bias)
+            nn.init.zeros_(module.q_proj.bias)
+            nn.init.xavier_uniform_(module.k_proj.weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.q_proj.weight, gain=xavier_std)
         elif isinstance(module, DetrLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
@@ -1342,6 +1343,8 @@ class DetrForSegmentation(DetrPreTrainedModel):
     _checkpoint_conversion_mapping = {
         "model.backbone.conv_encoder": "model.backbone",
         "out_proj": "o_proj",
+        "bbox_attention.q_linear": "bbox_attention.q_proj",
+        "bbox_attention.k_linear": "bbox_attention.k_proj",
     }
 
     def __init__(self, config: DetrConfig):
@@ -1358,9 +1361,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
             hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size
         )
 
-        self.bbox_attention = DetrMHAttentionMap(
-            hidden_size, hidden_size, number_of_heads, dropout=0.0, std=config.init_xavier_std
-        )
+        self.bbox_attention = DetrMHAttentionMap(hidden_size, number_of_heads, dropout=0.0)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1487,10 +1488,10 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         height, width = feature_map.shape[-2:]
         memory = encoder_outputs[0].permute(0, 2, 1).view(batch_size, self.config.d_model, height, width)
-        mask = flattened_mask.view(batch_size, height, width)
+        attention_mask = flattened_mask.view(batch_size, height, width)
 
         # Note: mask is reversed because the original DETR implementation works with reversed masks
-        bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
+        bbox_mask = self.bbox_attention(sequence_output, memory, attention_mask=~attention_mask)
 
         seg_masks = self.mask_head(
             projected_feature_map, bbox_mask, [vision_features[2][0], vision_features[1][0], vision_features[0][0]]
@@ -1614,29 +1615,44 @@ class DetrMaskHeadSmallConv(nn.Module):
 class DetrMHAttentionMap(nn.Module):
     """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
 
-    def __init__(self, query_dim, hidden_dim, num_heads, dropout=0.0, bias=True, std=None):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        dropout: float = 0.0,
+        bias: bool = True,
+    ):
         super().__init__()
-        self.num_heads = num_heads
-        self.hidden_dim = hidden_dim
+        self.head_dim = hidden_size // num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
         self.dropout = nn.Dropout(dropout)
 
-        self.q_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
-        self.k_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
 
-        self.normalize_fact = float(hidden_dim / self.num_heads) ** -0.5
+    def forward(
+        self, query_states: torch.Tensor, key_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None
+    ):
+        query_hidden_shape = (*query_states.shape[:-1], -1, self.head_dim)
+        key_hidden_shape = (key_states.shape[0], -1, self.head_dim, *key_states.shape[-2:])
 
-    def forward(self, q, k, mask: Optional[torch.Tensor] = None):
-        q = self.q_linear(q)
-        k = nn.functional.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
-        queries_per_head = q.view(q.shape[0], q.shape[1], self.num_heads, self.hidden_dim // self.num_heads)
-        keys_per_head = k.view(k.shape[0], self.num_heads, self.hidden_dim // self.num_heads, k.shape[-2], k.shape[-1])
-        weights = torch.einsum("bqnc,bnchw->bqnhw", queries_per_head * self.normalize_fact, keys_per_head)
+        query_states = self.q_proj(query_states).view(query_hidden_shape)
+        key_states = nn.functional.conv2d(
+            key_states, self.k_proj.weight.unsqueeze(-1).unsqueeze(-1), self.k_proj.bias
+        ).view(key_hidden_shape)
 
-        if mask is not None:
-            weights = weights.masked_fill(mask.unsqueeze(1).unsqueeze(1), torch.finfo(weights.dtype).min)
-        weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
-        weights = self.dropout(weights)
-        return weights
+        attn_weights = torch.einsum("bqnc,bnchw->bqnhw", query_states * self.scaling, key_states)
+
+        if attention_mask is not None:
+            attn_weights = attn_weights.masked_fill(
+                attention_mask.unsqueeze(1).unsqueeze(1), torch.finfo(attn_weights.dtype).min
+            )
+
+        attn_weights = nn.functional.softmax(attn_weights.flatten(2), dim=-1).view(attn_weights.size())
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+
+        return attn_weights
 
 
 __all__ = [
