@@ -207,13 +207,9 @@ class NanoChatPreTrainedModel(LlamaPreTrainedModel):
     }
     
     def _init_weights(self, module: nn.Module) -> None:
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-
+        super()._init_weights(module)
+        
+        # NanoChat-specific: scaled initialization for output projection
         for name, param in module.named_parameters():
             if name == "o_proj.weight":
                 nn.init.normal_(
