@@ -15,8 +15,10 @@
 # limitations under the License.
 
 import warnings
+from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -66,7 +68,8 @@ class Llama4VisionConfig(PreTrainedConfig):
         multi_modal_projector_bias (`int`, *optional*, defaults to `False`): TODO
         projector_dropout (`int`, *optional*, defaults to 0.0): TODO
         attention_dropout (`int`, *optional*, defaults to 0.0): TODO
-        rope_theta (`int`, *optional*, defaults to 10000): TODO
+        rope_parameters (`RopeParameters`, *optional*):
+            RoPE Parameters
     """
 
     base_model_tp_plan = {
@@ -83,25 +86,25 @@ class Llama4VisionConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        hidden_size: int = 768,
-        hidden_act: str = "gelu",
-        num_hidden_layers: int = 34,
-        num_attention_heads: int = 16,
-        num_channels: int = 3,
-        intermediate_size: int = 5632,
-        vision_output_dim: int = 7680,
-        image_size: int = 448,
-        patch_size: int = 14,
-        norm_eps: float = 1e-5,
-        vision_feature_select_strategy="default",
-        initializer_range: float = 0.02,
-        pixel_shuffle_ratio=0.5,
-        projector_input_dim=4096,
-        projector_output_dim=4096,
-        multi_modal_projector_bias=False,
-        projector_dropout=0.0,
-        attention_dropout=0.0,
-        rope_theta=10000,
+        hidden_size: Optional[int] = 768,
+        hidden_act: Optional[str] = "gelu",
+        num_hidden_layers: Optional[int] = 34,
+        num_attention_heads: Optional[int] = 16,
+        num_channels: Optional[int] = 3,
+        intermediate_size: Optional[int] = 5632,
+        vision_output_dim: Optional[int] = 7680,
+        image_size: Optional[int] = 448,
+        patch_size: Optional[int] = 14,
+        norm_eps: Optional[float] = 1e-5,
+        vision_feature_select_strategy: Optional[str] = "default",
+        initializer_range: Optional[float] = 0.02,
+        pixel_shuffle_ratio: Optional[float] = 0.5,
+        projector_input_dim: Optional[int] = 4096,
+        projector_output_dim: Optional[int] = 4096,
+        multi_modal_projector_bias: Optional[bool] = False,
+        projector_dropout: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -122,9 +125,14 @@ class Llama4VisionConfig(PreTrainedConfig):
         self.projector_dropout = projector_dropout
         self.attention_dropout = attention_dropout
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.rope_theta = rope_theta
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
-        self._vision_feature_layer = kwargs.get("vision_feature_layer", -1)
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         @property
         def vision_feature_layer(self):
@@ -187,8 +195,6 @@ class Llama4TextConfig(PreTrainedConfig):
             The id of the end of sentence token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to `500000.0`):
-            The base period of the RoPE embeddings.
         attention_dropout (`int`, *optional*, defaults to 0.0): TODO
         num_experts_per_tok (`int`, *optional*, defaults to 1): TODO
         num_local_experts (`int`, *optional*, defaults to 16): TODO
@@ -198,43 +204,10 @@ class Llama4TextConfig(PreTrainedConfig):
         output_router_logits (`int`, *optional*, defaults to `False`): TODO
         router_aux_loss_coef (`int`, *optional*, defaults to 0.001): TODO
         router_jitter_noise (`int`, *optional*, defaults to 0.0): TODO
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
             <TODO>
             <TODO>
         no_rope_layers (`list[int]`, *optional*):
@@ -308,7 +281,6 @@ class Llama4TextConfig(PreTrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        rope_theta=500000,
         attention_dropout=0.0,
         num_experts_per_tok=1,
         num_local_experts=16,
@@ -318,7 +290,7 @@ class Llama4TextConfig(PreTrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        rope_scaling=None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
@@ -345,7 +317,6 @@ class Llama4TextConfig(PreTrainedConfig):
         self.intermediate_size_mlp = intermediate_size_mlp
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.rope_scaling = rope_scaling
         self.attention_bias = False
         # for backward compatibility
         if num_key_value_heads is None:
@@ -356,10 +327,12 @@ class Llama4TextConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.use_qk_norm = use_qk_norm
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
@@ -392,6 +365,11 @@ class Llama4TextConfig(PreTrainedConfig):
                 "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
 
 class Llama4Config(PreTrainedConfig):

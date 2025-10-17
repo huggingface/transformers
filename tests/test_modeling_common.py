@@ -3545,6 +3545,7 @@ class ModelTesterMixin:
             config.use_sliding_window = True
             config_dict = config.to_diff_dict()
             config_dict.pop("layer_types", None)
+            config_dict.pop("rope_parameters", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -3562,6 +3563,7 @@ class ModelTesterMixin:
             config.use_sliding_window = False
             config_dict = config.to_diff_dict()
             config_dict.pop("layer_types", None)
+            config_dict.pop("rope_parameters", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -3744,12 +3746,12 @@ class ModelTesterMixin:
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
             if (
-                getattr(config, "rope_scaling", None) is not None
-                and len(config.rope_scaling.get("mrope_section", [])) > 0
+                getattr(config, "rope_parameters", None) is not None
+                and len(config.rope_parameters.get("mrope_section", [])) > 0
             ):
-                scaling_factor = max(requested_dim // (sum(config.rope_scaling["mrope_section"]) * 2), 1)
-                config.rope_scaling["mrope_section"] = [
-                    section * scaling_factor for section in config.rope_scaling["mrope_section"]
+                scaling_factor = max(requested_dim // (sum(config.rope_parameters["mrope_section"]) * 2), 1)
+                config.rope_parameters["mrope_section"] = [
+                    section * scaling_factor for section in config.rope_parameters["mrope_section"]
                 ]
 
         # Update config values

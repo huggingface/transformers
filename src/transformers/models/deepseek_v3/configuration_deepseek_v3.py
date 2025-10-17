@@ -16,8 +16,10 @@
 # limitations under the License.
 """DeepSeekV3 model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 DEEPSEEK_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
@@ -106,13 +108,10 @@ class DeepseekV3Config(PreTrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         rope_interleave (`bool`, *optional*, defaults to `True`):
             Whether to interleave the rotary position embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -157,41 +156,40 @@ class DeepseekV3Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=129280,
-        hidden_size=7168,
-        intermediate_size=18432,
-        moe_intermediate_size=2048,
-        num_hidden_layers=61,
-        num_attention_heads=128,
-        num_key_value_heads=128,
-        n_shared_experts=1,
-        n_routed_experts=256,
-        routed_scaling_factor=2.5,
-        kv_lora_rank=512,
-        q_lora_rank=1536,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-        qk_nope_head_dim=128,
-        n_group=8,
-        topk_group=4,
-        num_experts_per_tok=8,
-        first_k_dense_replace=3,
-        norm_topk_prob=True,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=0,
-        eos_token_id=1,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        rope_interleave=True,
-        attention_bias=False,
-        attention_dropout=0.0,
+        vocab_size: Optional[int] = 129280,
+        hidden_size: Optional[int] = 7168,
+        intermediate_size: Optional[int] = 18432,
+        moe_intermediate_size: Optional[int] = 2048,
+        num_hidden_layers: Optional[int] = 61,
+        num_attention_heads: Optional[int] = 128,
+        num_key_value_heads: Optional[int] = 128,
+        n_shared_experts: Optional[int] = 1,
+        n_routed_experts: Optional[int] = 256,
+        routed_scaling_factor: Optional[float] = 2.5,
+        kv_lora_rank: Optional[int] = 512,
+        q_lora_rank: Optional[int] = 1536,
+        qk_rope_head_dim: Optional[int] = 64,
+        v_head_dim: Optional[int] = 128,
+        qk_nope_head_dim: Optional[int] = 128,
+        n_group: Optional[int] = 8,
+        topk_group: Optional[int] = 4,
+        num_experts_per_tok: Optional[int] = 8,
+        first_k_dense_replace: Optional[int] = 3,
+        norm_topk_prob: Optional[bool] = True,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 1,
+        pretraining_tp: Optional[int] = 1,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_interleave: Optional[bool] = True,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -228,19 +226,19 @@ class DeepseekV3Config(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
-        if self.rope_scaling is not None:
-            for key in ["beta_fast", "beta_slow", "factor"]:
-                if key in self.rope_scaling:
-                    self.rope_scaling[key] = float(self.rope_scaling[key])
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+
+        for key in ["beta_fast", "beta_slow", "factor"]:
+            if key in self.rope_parameters:
+                self.rope_parameters[key] = float(self.rope_parameters[key])
 
         rope_config_validation(self)
 

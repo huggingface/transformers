@@ -1255,6 +1255,8 @@
       title: Importing Utilities
     - local: internal/time_series_utils
       title: Utilities for Time Series
+    - local: internal/rope_utils
+      title: Rotary Embeddings Utilities
     title: Internal helpers
   - sections:
     - local: reference/environment_variables

@@ -19,8 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
+from collections.abc import Callable
 from contextlib import nullcontext
 from typing import Optional, Union
 
@@ -247,33 +247,78 @@ class ModernBertRotaryEmbedding(nn.Module):
 
     def __init__(self, config: ModernBertConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.layer_types = list(set(config.layer_types))
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            rope_params = self.config.rope_parameters[layer_type]
+            if rope_params is None:
+                continue
+
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
+            setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[ModernBertConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+    def forward(self, x, position_ids, layer_type=None):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -321,11 +366,12 @@ def eager_attention_forward(
     local_attention: tuple[int, int],
     bs: int,
     dim: int,
+    position_embeddings: torch.Tensor,
     output_attentions: Optional[bool] = False,
     **_kwargs,
 ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
+    cos, sin = position_embeddings
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
     query, key = apply_rotary_pos_emb(query, key, cos, sin)
@@ -401,10 +447,11 @@ def sdpa_attention_forward(
     local_attention: tuple[int, int],
     bs: int,
     dim: int,
+    position_embeddings: torch.Tensor,
     **_kwargs,
 ) -> tuple[torch.Tensor]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
+    cos, sin = position_embeddings
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
     query, key = apply_rotary_pos_emb(query, key, cos, sin)
@@ -460,24 +507,25 @@ class ModernBertAttention(nn.Module):
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.all_head_size = self.head_dim * self.num_heads
         self.Wqkv = nn.Linear(config.hidden_size, 3 * self.all_head_size, bias=config.attention_bias)
+        layer_type = config.layer_types[layer_id]
 
         if layer_id % config.global_attn_every_n_layers != 0:
             self.local_attention = (config.local_attention // 2, config.local_attention // 2)
-            rope_theta = config.local_rope_theta if config.local_rope_theta is not None else config.global_rope_theta
             max_position_embeddings = config.local_attention
         else:
             self.local_attention = (-1, -1)
             max_position_embeddings = config.max_position_embeddings
-            rope_theta = config.global_rope_theta
 
         if config._attn_implementation == "flash_attention_2":
+            rope_parameters_dict = (
+                self.config.rope_parameters[layer_type] if layer_type is not None else self.config.rope_parameters
+            )
+            rope_theta = rope_parameters_dict["rope_theta"]
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            config_copy = copy.deepcopy(config)
-            config_copy.rope_theta = rope_theta
-            self.rotary_emb = ModernBertRotaryEmbedding(config=config_copy)
+            self.rotary_emb = None
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
@@ -485,6 +533,7 @@ class ModernBertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> torch.Tensor:
@@ -503,6 +552,7 @@ class ModernBertAttention(nn.Module):
             local_attention=self.local_attention,
             bs=bs,
             dim=self.all_head_size,
+            position_embeddings=position_embeddings,
             output_attentions=output_attentions,
             **kwargs,
         )
@@ -523,6 +573,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         self.attn = ModernBertAttention(config=config, layer_id=layer_id)
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.mlp = ModernBertMLP(config)
+        self.attention_type = config.layer_types[layer_id]
 
     @torch.compile(dynamic=True)
     def compiled_mlp(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -536,6 +587,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         position_ids: Optional[torch.LongTensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> torch.Tensor:
         attn_outputs = self.attn(
@@ -545,6 +597,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
+            position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
         hidden_states = hidden_states + attn_outputs[0]
@@ -769,6 +822,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             [ModernBertEncoderLayer(config, layer_id) for layer_id in range(config.num_hidden_layers)]
         )
         self.final_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+        self.rotary_emb = ModernBertRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -860,6 +914,9 @@ class ModernBertModel(ModernBertPreTrainedModel):
             )
 
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for encoder_layer in self.layers:
             if output_hidden_states:
@@ -872,6 +929,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
                 position_ids=position_ids,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                position_embeddings=position_embeddings[encoder_layer.attention_type],
                 output_attentions=output_attentions,
             )
             hidden_states = layer_outputs[0]

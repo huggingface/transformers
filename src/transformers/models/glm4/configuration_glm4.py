@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class Glm4Config(PreTrainedConfig):
@@ -45,7 +48,8 @@ class Glm4Config(PreTrainedConfig):
             by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
+            The factor of the partial rotary position.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -63,8 +67,10 @@ class Glm4Config(PreTrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 151329):
             Padding token id.
         eos_token_id (`int` | `list`, *optional*, defaults to `[151329, 151336, 151338]`):
@@ -101,26 +107,26 @@ class Glm4Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151552,
-        hidden_size=4096,
-        intermediate_size=13696,
-        num_hidden_layers=40,
-        num_attention_heads=32,
-        num_key_value_heads=2,
-        partial_rotary_factor=0.5,
-        head_dim=128,
-        hidden_act="silu",
-        attention_dropout=0.0,
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=0.00000015625,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        pad_token_id=151329,
-        eos_token_id=[151329, 151336, 151338],
-        bos_token_id=None,
-        attention_bias=True,
+        vocab_size: Optional[int] = 151552,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 13696,
+        num_hidden_layers: Optional[int] = 40,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 2,
+        partial_rotary_factor: Optional[float] = 0.5,
+        head_dim: Optional[int] = 128,
+        hidden_act: Optional[str] = "silu",
+        attention_dropout: Optional[float] = 0.0,
+        max_position_embeddings: Optional[int] = 131072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 0.00000015625,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        pad_token_id: Optional[int] = 151329,
+        eos_token_id: Optional[list[int]] = [151329, 151336, 151338],
+        bos_token_id: Optional[int] = None,
+        attention_bias: Optional[bool] = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -136,9 +142,16 @@ class Glm4Config(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

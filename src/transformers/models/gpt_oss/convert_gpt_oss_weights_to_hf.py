@@ -157,10 +157,10 @@ def write_model(
     original_config = json.loads((Path(input_base_path) / "config.json").read_text())
 
     num_local_experts = original_config.pop("num_experts")
-    rope_scaling = {
+    rope_parameters = {
         "beta_fast": float(original_config.pop("rope_ntk_beta")),
         "beta_slow": float(original_config.pop("rope_ntk_alpha")),
-        "factor": float(original_config.pop("rope_scaling_factor")),
+        "factor": float(original_config.pop("rope_parameters_factor")),
         "rope_type": "yarn",
         "truncate": False,
         "original_max_position_embeddings": 4096,
@@ -168,7 +168,7 @@ def write_model(
 
     config = GptOssConfig(
         num_local_experts=num_local_experts,
-        rope_scaling=rope_scaling,
+        rope_parameters=rope_parameters,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
         **original_config,

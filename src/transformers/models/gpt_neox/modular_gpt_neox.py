@@ -21,6 +21,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, rotate_half
+from .configuration_gpt_neox import GPTNeoXConfig
 
 
 logger = logging.get_logger(__name__)
@@ -38,6 +39,40 @@ class GPTNeoXMLP(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.dense_4h_to_h(hidden_states)
         return hidden_states
+
+
+class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[GPTNeoXConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -124,9 +159,8 @@ class GPTNeoXAttention(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         layer_past: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
         input_shape = hidden_states.shape[:-1]
@@ -191,7 +225,7 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
         attn_output, attn_weights = self.attention(
@@ -200,7 +234,6 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             layer_past=layer_past,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -227,10 +260,6 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
             outputs += (attn_weights,)
 
         return outputs
-
-
-class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
 
 
 class GPTNeoXPreTrainedModel(LlamaPreTrainedModel):
@@ -318,9 +347,7 @@ class GPTNeoXModel(LlamaModel):
         )
 
         hidden_states = self.emb_dropout(inputs_embeds)
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -334,9 +361,9 @@ class GPTNeoXModel(LlamaModel):
                 position_ids=position_ids,
                 layer_past=past_key_values,
                 use_cache=use_cache,
+                position_embeddings=position_embeddings,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
             hidden_states = outputs[0]

@@ -19,7 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class ModernBertDecoderConfig(PreTrainedConfig):
@@ -67,8 +70,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
             Classification token id.
         sep_token_id (`int`, *optional*, defaults to 50282):
             Separation token id.
-        global_rope_theta (`float`, *optional*, defaults to 160000.0):
-            The base period of the global RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -95,11 +96,13 @@ class ModernBertDecoderConfig(PreTrainedConfig):
             the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
         global_attn_every_n_layers (`int`, *optional*, defaults to 3):
             Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
-        local_rope_theta (`float`, *optional*, defaults to 160000.0):
-            The base period of the local RoPE embeddings. If not specified, defaults to 160000.0
-        layer_types (`list`, *optional*):
+        layer_types (`list[str]`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
 
     Examples:
 
@@ -122,37 +125,36 @@ class ModernBertDecoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50368,
-        hidden_size=768,
-        intermediate_size=1152,
-        num_hidden_layers=22,
-        num_attention_heads=12,
-        hidden_activation="gelu",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        initializer_cutoff_factor=2.0,
-        norm_eps=1e-5,
-        norm_bias=False,
-        pad_token_id=50283,
-        eos_token_id=50282,
-        bos_token_id=50281,
-        cls_token_id=50281,
-        sep_token_id=50282,
-        global_rope_theta=160000.0,
-        attention_bias=False,
-        attention_dropout=0.0,
-        embedding_dropout=0.0,
-        mlp_bias=False,
-        mlp_dropout=0.0,
-        decoder_bias=True,
-        classifier_dropout=0.0,
-        classifier_bias=False,
-        classifier_activation="gelu",
-        use_cache=True,
-        local_attention=128,
-        global_attn_every_n_layers=3,
-        local_rope_theta=160000.0,
-        layer_types=None,
+        vocab_size: Optional[int] = 50368,
+        hidden_size: Optional[int] = 768,
+        intermediate_size: Optional[int] = 1152,
+        num_hidden_layers: Optional[int] = 22,
+        num_attention_heads: Optional[int] = 12,
+        hidden_activation: Optional[str] = "gelu",
+        max_position_embeddings: Optional[int] = 8192,
+        initializer_range: Optional[float] = 0.02,
+        initializer_cutoff_factor: Optional[float] = 2.0,
+        norm_eps: Optional[int] = 1e-5,
+        norm_bias: Optional[bool] = False,
+        pad_token_id: Optional[int] = 50283,
+        eos_token_id: Optional[int] = 50282,
+        bos_token_id: Optional[int] = 50281,
+        cls_token_id: Optional[int] = 50281,
+        sep_token_id: Optional[int] = 50282,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        embedding_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        mlp_dropout: Optional[float] = 0.0,
+        decoder_bias: Optional[bool] = True,
+        classifier_dropout: Optional[float] = 0.0,
+        classifier_bias: Optional[bool] = False,
+        classifier_activation: Optional[str] = "gelu",
+        use_cache: Optional[bool] = True,
+        local_attention: Optional[int] = 128,
+        global_attn_every_n_layers: Optional[int] = 3,
+        layer_types: Optional[list[str]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -173,7 +175,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         self.initializer_cutoff_factor = initializer_cutoff_factor
         self.norm_eps = norm_eps
         self.norm_bias = norm_bias
-        self.global_rope_theta = global_rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
@@ -186,7 +187,9 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         self.classifier_activation = classifier_activation
         self.use_cache = use_cache
         self.global_attn_every_n_layers = global_attn_every_n_layers
-        self.local_rope_theta = local_rope_theta
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
         # for consistency with ModernBert
         self.reference_compile = False
 
@@ -200,6 +203,14 @@ class ModernBertDecoderConfig(PreTrainedConfig):
                     self.layer_types.append("sliding_attention")
                 else:
                     self.layer_types.append("full_attention")
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = getattr(self, "global_rope_theta", 160_000.0)
+        rope_local_base_freq = getattr(self, "local_rope_theta", 10000.0)
+        standardize_rope_params(
+            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
+        )
+        rope_config_validation(self)
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
         self.sliding_window = local_attention // 2 if local_attention else -1

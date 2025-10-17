@@ -14,8 +14,10 @@
 # limitations under the License.
 """Evolla model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -132,9 +134,7 @@ class EvollaConfig(PreTrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value for the RMS-norm layer in the llama model.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
-            The threshold value for the RoPE layer in the llama model.
-        rope_scaling (`float`, *optional*):
+        rope_parameters (`float`, *optional*):
             The scaling factor for the RoPE layer in the llama model.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the attention layer.
@@ -193,36 +193,35 @@ class EvollaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        protein_encoder_config=None,
-        vocab_size=128256,  # llama vocab size
-        hidden_size=4096,  # llama hidden size
-        intermediate_size=14336,  # llama intermediate size
-        num_hidden_layers=32,  # llama num layers
-        num_attention_heads=32,  # llama num heads
-        num_key_value_heads=8,  # llama num key-value heads
-        hidden_act="silu",  # llama activation function
-        max_position_embeddings=8192,  # llama rope max length
-        rms_norm_eps=1e-05,
-        rope_theta=500000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        aligner_ffn_mult=4,
-        aligner_enable_bias=True,
-        aligner_attention_probs_dropout_prob=0.1,
-        aligner_num_add_layers=8,
-        resampler_depth=6,
-        resampler_dim_head=64,
-        resampler_heads=8,
-        resampler_num_latents=64,
-        resampler_ff_mult=4,
-        initializer_range=0.02,
-        pad_token_id=None,
-        bos_token_id=128000,
-        eos_token_id=128009,
-        use_cache=False,
-        tie_word_embeddings=False,
+        protein_encoder_config: Optional[dict] = None,
+        vocab_size: Optional[int] = 128256,  # llama vocab size
+        hidden_size: Optional[int] = 4096,  # llama hidden size
+        intermediate_size: Optional[int] = 14336,  # llama intermediate size
+        num_hidden_layers: Optional[int] = 32,  # llama num layers
+        num_attention_heads: Optional[int] = 32,  # llama num heads
+        num_key_value_heads: Optional[int] = 8,  # llama num key-value heads
+        hidden_act: Optional[str] = "silu",  # llama activation function
+        max_position_embeddings: Optional[int] = 8192,  # llama rope max length
+        rms_norm_eps: Optional[int] = 1e-05,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        aligner_ffn_mult: Optional[int] = 4,
+        aligner_enable_bias: Optional[bool] = True,
+        aligner_attention_probs_dropout_prob: Optional[float] = 0.1,
+        aligner_num_add_layers: Optional[int] = 8,
+        resampler_depth: Optional[int] = 6,
+        resampler_dim_head: Optional[int] = 64,
+        resampler_heads: Optional[int] = 8,
+        resampler_num_latents: Optional[int] = 64,
+        resampler_ff_mult: Optional[int] = 4,
+        initializer_range: Optional[float] = 0.02,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 128000,
+        eos_token_id: Optional[int] = 128009,
+        use_cache: Optional[bool] = False,
+        tie_word_embeddings: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -250,13 +249,13 @@ class EvollaConfig(PreTrainedConfig):
         self.resampler_heads = resampler_heads
         self.resampler_num_latents = resampler_num_latents
         self.resampler_ff_mult = resampler_ff_mult
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         # Subconfig

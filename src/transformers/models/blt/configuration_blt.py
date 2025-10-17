@@ -14,7 +14,10 @@
 # limitations under the License.
 """Blt model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -30,22 +33,21 @@ class BltLocalEncoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=260,
-        cross_attn_all_layers=False,
-        cross_attn_k=2,
-        hidden_size_global=2048,
-        hidden_size=1024,
-        num_attention_heads=16,
-        num_key_value_heads=None,
-        num_hidden_layers=1,
-        rms_norm_eps=1e-5,
-        dropout=0.0,
-        max_position_embeddings=24576,
-        rope_theta=500000.0,
-        rope_scaling=None,
-        hidden_act="silu",
-        intermediate_size=2816,
-        initializer_range=0.02,
+        vocab_size: Optional[int] = 260,
+        cross_attn_all_layers: Optional[bool] = False,
+        cross_attn_k: Optional[int] = 2,
+        hidden_size_global: Optional[int] = 2048,
+        hidden_size: Optional[int] = 1024,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = None,
+        num_hidden_layers: Optional[int] = 1,
+        rms_norm_eps: Optional[float] = 1e-5,
+        dropout: Optional[float] = 0.0,
+        max_position_embeddings: Optional[int] = 24576,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        hidden_act: Optional[str] = "silu",
+        intermediate_size: Optional[int] = 2816,
+        initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -61,10 +63,16 @@ class BltLocalEncoderConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
@@ -80,22 +88,21 @@ class BltLocalDecoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=260,
-        cross_attn_all_layers=True,
-        cross_attn_k=2,
-        hidden_size_global=2048,
-        hidden_size=1024,
-        num_attention_heads=16,
-        num_key_value_heads=None,
-        num_hidden_layers=9,
-        rms_norm_eps=1e-5,
-        dropout=0.0,
-        max_position_embeddings=24576,
-        rope_theta=500000.0,
-        rope_scaling=None,
-        hidden_act="silu",
-        intermediate_size=2816,
-        initializer_range=0.02,
+        vocab_size: Optional[int] = 260,
+        cross_attn_all_layers: Optional[bool] = True,
+        cross_attn_k: Optional[int] = 2,
+        hidden_size_global: Optional[int] = 2048,
+        hidden_size: Optional[int] = 1024,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = None,
+        num_hidden_layers: Optional[int] = 9,
+        rms_norm_eps: Optional[float] = 1e-5,
+        dropout: Optional[float] = 0.0,
+        max_position_embeddings: Optional[int] = 24576,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        hidden_act: Optional[str] = "silu",
+        intermediate_size: Optional[int] = 2816,
+        initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -111,10 +118,16 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
@@ -130,18 +143,17 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        hidden_size=2048,
-        num_attention_heads=16,
-        num_key_value_heads=None,
-        num_hidden_layers=25,
-        rms_norm_eps=1e-5,
-        dropout=0.0,
-        max_position_embeddings=4096,
-        rope_theta=500000.0,
-        rope_scaling=None,
-        hidden_act="silu",
-        intermediate_size=5632,
-        initializer_range=0.02,
+        hidden_size: Optional[int] = 2048,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = None,
+        num_hidden_layers: Optional[int] = 25,
+        rms_norm_eps: Optional[float] = 1e-5,
+        dropout: Optional[float] = 0.0,
+        max_position_embeddings: Optional[int] = 4096,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        hidden_act: Optional[str] = "silu",
+        intermediate_size: Optional[int] = 5632,
+        initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -153,10 +165,15 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
@@ -168,55 +185,54 @@ class BltPatcherConfig(PreTrainedConfig):
     Configuration class for the Blt Patcher/Entropy model component.
 
     Args:
-            vocab_size (`int`, *optional*, defaults to 260):
-                Vocabulary size of the Blt patcher model. Defines the number of different tokens that can be represented by the
-                `inputs_ids` passed when calling the patcher model.
-            hidden_size (`int`, *optional*, defaults to 768):
-                Dimension of the hidden representations.
-            num_hidden_layers (`int`, *optional*, defaults to 14):
-                Number of hidden layers in the Transformer decoder.
-            num_attention_heads (`int`, *optional*, defaults to 12):
-                Number of attention heads for each attention layer in the Transformer decoder.
-            num_key_value_heads (`int`, *optional*):
-                This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-                `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-                `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-                converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-                by meanpooling all the original heads within that group. For more details, check out [this
-                paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-                `num_attention_heads`.
-            max_position_embeddings (`int`, *optional*, defaults to 8192):
-                The maximum sequence length that this model might ever be used with.
-            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-                The epsilon used by the rms normalization layers.
-            dropout (`float`, *optional*, defaults to 0.0):
-                The dropout ratio for the attention probabilities.
-            rope_theta (`float`, *optional*, defaults to 10000.0):
-                The base period of the RoPE embeddings.
-            intermediate_size (`int`, *optional*, defaults to 2048):
-                Dimension of the MLP representations.
-            rope_scaling (`dict`, *optional*):
-                Dictionary containing the RoPE scaling configuration.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        vocab_size (`int`, *optional*, defaults to 260):
+            Vocabulary size of the Blt patcher model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling the patcher model.
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimension of the hidden representations.
+        num_hidden_layers (`int`, *optional*, defaults to 14):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+            `num_attention_heads`.
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
+            The maximum sequence length that this model might ever be used with.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimension of the MLP representations.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
     model_type = "blt_patcher"
 
     def __init__(
         self,
-        vocab_size=260,
-        hidden_size=768,
-        num_hidden_layers=14,
-        num_attention_heads=12,
-        num_key_value_heads=None,
-        max_position_embeddings=8192,
-        rms_norm_eps=1e-5,
-        dropout=0.0,
-        rope_theta=10000.0,
-        intermediate_size=2048,
-        rope_scaling=None,
-        initializer_range=0.02,
+        vocab_size: Optional[int] = 260,
+        hidden_size: Optional[int] = 768,
+        num_hidden_layers: Optional[int] = 14,
+        num_attention_heads: Optional[int] = 12,
+        num_key_value_heads: Optional[int] = None,
+        max_position_embeddings: Optional[int] = 8192,
+        rms_norm_eps: Optional[float] = 1e-5,
+        dropout: Optional[float] = 0.0,
+        intermediate_size: Optional[int] = 2048,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -228,11 +244,16 @@ class BltPatcherConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
-        self.rope_theta = rope_theta
         self.hidden_act = "silu"  # Blt uses silu activation
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
-        self.rope_scaling = rope_scaling
         self.initializer_range = initializer_range
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
@@ -248,47 +269,47 @@ class BltConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-            vocab_size (`int`, *optional*, defaults to 260):
-                Vocabulary size of the Blt model. Defines the number of different tokens that can be represented by the
-                `inputs_ids` passed when calling [`BltModel`].
-            max_position_embeddings (`int`, *optional*, defaults to 4096):
-                The maximum sequence length that this model might ever be used with.
-            patch_in_forward (`bool`, *optional*, defaults to `True`):
-                Whether to perform patching during the forward pass.
-            patch_size (`int`, *optional*, defaults to 4):
-                Size of the patches used in the patching mechanism.
-            patching_mode (`str`, *optional*, defaults to `"entropy"`):
-                The mode used for patching, such as entropy-based patching.
-            patching_threshold (`float`, *optional*, defaults to 1.34):
-                Threshold value used for determining when to apply patches.
-            patching_batch_size (`int`, *optional*, defaults to 1):
-                Batch size used during the patching process.
-            max_patch_length (`int`, *optional*):
-                Maximum length of patches that can be generated.
-            cross_attn_k (`int`, *optional*, defaults to 2):
-                Number of cross-attention heads used in the model.
-            encoder_hash_byte_group_size (`list`, *optional*):
-                List of byte group sizes used in the encoder hash function.
-            encoder_hash_byte_group_vocab (`int`, *optional*, defaults to 500002):
-                Vocabulary size for the encoder hash byte groups.
-            encoder_hash_byte_group_nb_functions (`int`, *optional*, defaults to 1):
-                Number of hash functions used in the encoder byte grouping.
-            patcher_config (`BltPatcherConfig`, *optional*):
-                Configuration for the patcher component of the model.
-            encoder_config (`BltLocalEncoderConfig`, *optional*):
-                Configuration for the local encoder component of the model.
-            decoder_config (`BltLocalDecoderConfig`, *optional*):
-                Configuration for the local decoder component of the model.
-            global_config (`BltGlobalTransformerConfig`, *optional*):
-                Configuration for the global transformer component of the model.
-            tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-                Whether to tie weight embeddings.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            rope_theta (`float`, *optional*, defaults to 500000.0):
-                The base period of the RoPE embeddings.
-            rope_scaling (`dict`, *optional*):
-                Dictionary containing the RoPE scaling configuration.
+        vocab_size (`int`, *optional*, defaults to 260):
+            Vocabulary size of the Blt model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`BltModel`].
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
+            The maximum sequence length that this model might ever be used with.
+        patch_in_forward (`bool`, *optional*, defaults to `True`):
+            Whether to perform patching during the forward pass.
+        patch_size (`int`, *optional*, defaults to 4):
+            Size of the patches used in the patching mechanism.
+        patching_mode (`str`, *optional*, defaults to `"entropy"`):
+            The mode used for patching, such as entropy-based patching.
+        patching_threshold (`float`, *optional*, defaults to 1.34):
+            Threshold value used for determining when to apply patches.
+        patching_batch_size (`int`, *optional*, defaults to 1):
+            Batch size used during the patching process.
+        max_patch_length (`int`, *optional*):
+            Maximum length of patches that can be generated.
+        cross_attn_k (`int`, *optional*, defaults to 2):
+            Number of cross-attention heads used in the model.
+        encoder_hash_byte_group_size (`list`, *optional*):
+            List of byte group sizes used in the encoder hash function.
+        encoder_hash_byte_group_vocab (`int`, *optional*, defaults to 500002):
+            Vocabulary size for the encoder hash byte groups.
+        encoder_hash_byte_group_nb_functions (`int`, *optional*, defaults to 1):
+            Number of hash functions used in the encoder byte grouping.
+        patcher_config (`BltPatcherConfig`, *optional*):
+            Configuration for the patcher component of the model.
+        encoder_config (`BltLocalEncoderConfig`, *optional*):
+            Configuration for the local encoder component of the model.
+        decoder_config (`BltLocalDecoderConfig`, *optional*):
+            Configuration for the local decoder component of the model.
+        global_config (`BltGlobalTransformerConfig`, *optional*):
+            Configuration for the global transformer component of the model.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
 
     ```python
     >>> from transformers import BltModel, BltConfig
@@ -317,34 +338,31 @@ class BltConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=260,
-        max_position_embeddings=4096,
-        patch_in_forward=True,
-        patch_size=4,
-        patching_mode="entropy",
-        patching_threshold=1.335442066192627,
-        patching_batch_size=1,
-        max_patch_length=None,
-        cross_attn_k=2,
-        encoder_hash_byte_group_size=None,
-        encoder_hash_byte_group_vocab=500002,
-        encoder_hash_byte_group_nb_functions=1,
-        patcher_config=None,
-        encoder_config=None,
-        decoder_config=None,
-        global_config=None,
-        tie_word_embeddings=False,
-        initializer_range=0.02,
-        rope_theta=500000.0,
-        rope_scaling=None,
+        vocab_size: Optional[int] = 260,
+        max_position_embeddings: Optional[int] = 4096,
+        patch_in_forward: Optional[bool] = True,
+        patch_size: Optional[int] = 4,
+        patching_mode: Optional[str] = "entropy",
+        patching_threshold: Optional[float] = 1.335442066192627,
+        patching_batch_size: Optional[int] = 1,
+        max_patch_length: Optional[int] = None,
+        cross_attn_k: Optional[int] = 2,
+        encoder_hash_byte_group_size: Optional[int] = None,
+        encoder_hash_byte_group_vocab: Optional[int] = 500002,
+        encoder_hash_byte_group_nb_functions: Optional[int] = 1,
+        patcher_config: Optional[dict] = None,
+        encoder_config: Optional[dict] = None,
+        decoder_config: Optional[dict] = None,
+        global_config: Optional[dict] = None,
+        tie_word_embeddings: Optional[bool] = False,
+        initializer_range: Optional[float] = 0.02,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
         # Basic model configuration
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
 
         # Patching configuration
         self.patch_in_forward = patch_in_forward
@@ -357,6 +375,13 @@ class BltConfig(PreTrainedConfig):
         self.realtime_patching = kwargs.get("realtime_patching", True)
         self.patching_threshold_add = kwargs.get("patching_threshold_add")
         self.monotonicity = kwargs.get("monotonicity", False)
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
 
         # Cross attention configurations
         self.cross_attn_k = cross_attn_k

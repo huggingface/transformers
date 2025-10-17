@@ -65,14 +65,10 @@ class OpenLlamaConfig(PreTrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
-            these scaling strategies behave:
-            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-            experimental feature, subject to breaking API changes in future versions.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
 
         Example:
 
@@ -113,7 +109,7 @@ class OpenLlamaConfig(PreTrainedConfig):
         use_stable_embedding=True,
         shared_input_output_embedding=True,
         rope_theta=10000.0,
-        rope_scaling=None,
+        rope_parameters=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -134,8 +130,10 @@ class OpenLlamaConfig(PreTrainedConfig):
         self.use_stable_embedding = use_stable_embedding
         self.shared_input_output_embedding = shared_input_output_embedding
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        self._rope_scaling_validation()
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+        self._rope_parameters_validation()
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -145,25 +143,29 @@ class OpenLlamaConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    def _rope_scaling_validation(self):
+    def _rope_parameters_validation(self):
         """
-        Validate the `rope_scaling` configuration.
+        Validate the `rope_parameters` configuration.
         """
-        if self.rope_scaling is None:
+        if self.rope_parameters is None:
             return
 
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
+        if not isinstance(self.rope_parameters, dict) or len(self.rope_parameters) != 2:
             raise ValueError(
-                f"`rope_scaling` must be a dictionary with two fields, `type` and `factor`, got {self.rope_scaling}"
+                f"`rope_parameters` must be a dictionary with two fields, `type` and `factor`, got {self.rope_parameters}"
             )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_factor = self.rope_scaling.get("factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
+        rope_parameters_type = self.rope_parameters.get("type", None)
+        rope_parameters_factor = self.rope_parameters.get("factor", None)
+        if rope_parameters_type is None or rope_parameters_type not in ["linear", "dynamic"]:
             raise ValueError(
-                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
+                f"`rope_parameters`'s type field must be one of ['linear', 'dynamic'], got {rope_parameters_type}"
             )
-        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+        if (
+            rope_parameters_factor is None
+            or not isinstance(rope_parameters_factor, float)
+            or rope_parameters_factor <= 1.0
+        ):
+            raise ValueError(f"`rope_parameters`'s factor field must be a float > 1, got {rope_parameters_factor}")
 
 
 __all__ = ["OpenLlamaConfig"]

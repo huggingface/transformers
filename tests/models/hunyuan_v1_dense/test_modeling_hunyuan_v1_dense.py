@@ -15,8 +15,6 @@
 
 import unittest
 
-from parameterized import parameterized
-
 from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
@@ -53,15 +51,6 @@ class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @unittest.skip("HunYuanDenseV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("HunYuanDenseV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
 
 
 @require_torch

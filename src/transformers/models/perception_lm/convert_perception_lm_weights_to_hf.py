@@ -359,7 +359,7 @@ def write_model(
 
         use_scaled_rope = model_params["use_scaled_rope"]
         if use_scaled_rope:
-            rope_scaling = {
+            rope_parameters = {
                 "factor": model_params["rope_scale_factor"] * 1.0,
                 "low_freq_factor": model_params.get("low_freq_factor", 1.0) * 1.0,
                 "high_freq_factor": model_params.get("high_freq_factor", 4.0) * 1.0,
@@ -367,7 +367,7 @@ def write_model(
                 "rope_type": "llama3",
             }
         else:
-            rope_scaling = None
+            rope_parameters = None
 
         text_config = LlamaConfig(
             hidden_size=dim,
@@ -378,7 +378,7 @@ def write_model(
             num_key_value_heads=num_key_value_heads,
             vocab_size=len(tokenizer),
             rope_theta=base,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             max_position_embeddings=max_position_embeddings,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,

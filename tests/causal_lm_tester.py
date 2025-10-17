@@ -436,7 +436,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"rope_type": "default"}
+        _set_config_rope_params(config, {"rope_type": "default", "rope_theta": 10_000.0})
         original_model = self.model_tester_class.base_model_class(config)
         original_model.to(torch_device)
         original_model.eval()
@@ -444,7 +444,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"rope_type": scaling_type, "factor": 10.0}
+        _set_config_rope_params(config, {"rope_type": scaling_type, "factor": 10.0, "rope_theta": 10_000.0})
         scaled_model = self.model_tester_class.base_model_class(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
@@ -496,7 +496,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
-        config.rope_scaling = {"rope_type": "default"}
+        _set_config_rope_params(config, {"rope_type": "default", "rope_theta": 10_000.0})
         original_rope = rope_class(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
@@ -505,7 +505,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"rope_type": "linear", "factor": scaling_factor}
+        _set_config_rope_params(config, {"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0})
         linear_scaling_rope = rope_class(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
@@ -519,7 +519,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"rope_type": "dynamic", "factor": scaling_factor}
+        _set_config_rope_params(config, {"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0})
         ntk_scaling_rope = rope_class(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
@@ -533,7 +533,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
-        config.rope_scaling = {"rope_type": "yarn", "factor": scaling_factor}
+        _set_config_rope_params(config, {"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0})
         yarn_scaling_rope = rope_class(config=config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
@@ -601,9 +601,19 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
     """Returns whether a certain model config supports RoPE scaling parameterization."""
     # Has rope_scaling -> model was designed with rope scaling in mind
     # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
-    main_config_has_rope = hasattr(config, "rope_scaling") or hasattr(config, "rope_theta")
+    main_config_has_rope = hasattr(config, "rope_parameters")
     sub_config_has_rope = any(
-        hasattr(getattr(config, sub_config), "rope_scaling") or hasattr(getattr(config, sub_config), "rope_theta")
-        for sub_config in config.sub_configs.keys()
+        hasattr(getattr(config, sub_config), "rope_parameters") for sub_config in config.sub_configs.keys()
     )
     return main_config_has_rope or sub_config_has_rope
+
+
+def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
+    """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
+    config.rope_parameters = rope_params
+    if any(name in config.__class__.__name__.lower() for name in ["gemma3", "modernbert"]):
+        config.rope_parameters = {layer_type: config.rope_parameters.copy() for layer_type in config.layer_types}
+
+    for sub_config in config.sub_configs.keys():
+        _set_config_rope_params(getattr(config, sub_config), rope_params)
+    return config
