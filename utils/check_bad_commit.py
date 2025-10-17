@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 
+import git
 import requests
 
 
@@ -38,8 +39,14 @@ def create_script(target_test):
 import os
 import subprocess
 
+_ = subprocess.run(
+    ["python3", "-m", "pip", "install", "-e", "."],
+    capture_output = True,
+    text=True,
+)
+
 result = subprocess.run(
-    ["python3", "-m", "pytest", "-v", "-rfEp", f"{target_test}"],
+    ["python3", "-m", "pytest", "-v", "--flake-finder", "--flake-runs=4", "-rfEp", f"{target_test}"],
     capture_output = True,
     text=True,
 )
@@ -47,17 +54,20 @@ print(result.stdout)
 
 if f"FAILED {target_test}" in result.stdout:
     print("test failed")
-    exit(2)
+    exit(1)
 elif result.returncode != 0:
     if "ERROR: file or directory not found: " in result.stderr:
         print("test file or directory not found in this commit")
+        # git bisect treats exit code 125 as `test not found`. But this causes it not be able to make the conclusion
+        # if a test is added between the `good commit` (exclusive) and `bad commit` (inclusive) (in git bisect terminology).
+        # So we return 0 here in order to allow the process being able to identify the first commit that fails the test.
         exit(0)
     elif "ERROR: not found: " in result.stderr:
         print("test not found in this commit")
         exit(0)
     else:
         print(f"pytest gets unknown error: {{result.stderr}}")
-        exit(-1)
+        exit(1)
 
 print(f"pytest runs successfully.")
 exit(0)
@@ -67,20 +77,63 @@ exit(0)
         fp.write(script.strip())
 
 
+def is_bad_commit(target_test, commit):
+    repo = git.Repo(".")  # or specify path to your repo
+
+    # Save the current HEAD reference
+    original_head = repo.head.commit
+
+    # Checkout to the commit
+    repo.git.checkout(commit)
+
+    create_script(target_test=target_test)
+
+    result = subprocess.run(
+        ["python3", "target_script.py"],
+        capture_output=True,
+        text=True,
+    )
+
+    # Restore to original commit
+    repo.git.checkout(original_head)
+
+    return result.returncode != 0
+
+
 def find_bad_commit(target_test, start_commit, end_commit):
-    """Find (backward) the earliest commit between `start_commit` and `end_commit` at which `target_test` fails.
+    """Find (backward) the earliest commit between `start_commit` (inclusive) and `end_commit` (exclusive) at which `target_test` fails.
 
     Args:
         target_test (`str`): The test to check.
-        start_commit (`str`): The latest commit.
-        end_commit (`str`): The earliest commit.
+        start_commit (`str`): The latest commit (inclusive).
+        end_commit (`str`): The earliest commit (exclusive).
 
     Returns:
         `str`: The earliest commit at which `target_test` fails.
     """
 
+    # check if `end_commit` fails the test
+    failed_before = is_bad_commit(target_test, end_commit)
+    if failed_before:
+        return (
+            None,
+            f"flaky: test passed in the previous run (commit: {end_commit}) but failed (on the same commit) during the check of the current run.",
+        )
+
+    # if there is no new commit (e.g. 2 different CI runs on the same commit):
+    #   - failed once on `start_commit` but passed on `end_commit`, which are the same commit --> flaky (or something change externally) --> don't report
     if start_commit == end_commit:
-        return start_commit
+        return (
+            None,
+            f"flaky: test fails on the current CI run but passed in the previous run which is running on the same commit {end_commit}.",
+        )
+
+    # Now, we are (almost) sure `target_test` is not failing at `end_commit`
+    # check if `start_commit` fail the test
+    failed_now = is_bad_commit(target_test, start_commit)
+    if not failed_now:
+        # failed on CI run, but not reproducible here --> don't report
+        return None, f"flaky: test fails on the current CI run (commit: {start_commit}) but passes during the check."
 
     create_script(target_test=target_test)
 
@@ -105,7 +158,7 @@ git bisect run python3 target_script.py
     if "error: bisect run failed" in result.stderr:
         error_msg = f"Error when running git bisect:\nbash error: {result.stderr}\nbash output:\n{result.stdout}\nset `bad_commit` to `None`."
         print(error_msg)
-        return None
+        return None, "git bisect failed"
 
     pattern = r"(.+) is the first bad commit"
     commits = re.findall(pattern, result.stdout)
@@ -117,7 +170,7 @@ git bisect run python3 target_script.py
     print(f"Between `start_commit` {start_commit} and `end_commit` {end_commit}")
     print(f"bad_commit: {bad_commit}\n")
 
-    return bad_commit
+    return bad_commit, "git bisect found the bad commit."
 
 
 def get_commit_info(commit):
@@ -171,9 +224,11 @@ if __name__ == "__main__":
         raise ValueError("Exactly one argument `test` or `file` must be specified.")
 
     if args.test is not None:
-        commit = find_bad_commit(target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit)
+        commit, status = find_bad_commit(
+            target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit
+        )
         with open(args.output_file, "w", encoding="UTF-8") as fp:
-            fp.write(f"{args.test}\n{commit}")
+            fp.write(f"{args.test}\n{commit}\n{status}")
     elif os.path.isfile(args.file):
         with open(args.file, "r", encoding="UTF-8") as fp:
             reports = json.load(fp)
@@ -185,8 +240,10 @@ if __name__ == "__main__":
 
             failed_tests_with_bad_commits = []
             for test in failed_tests:
-                commit = find_bad_commit(target_test=test, start_commit=args.start_commit, end_commit=args.end_commit)
-                info = {"test": test, "commit": commit}
+                commit, status = find_bad_commit(
+                    target_test=test, start_commit=args.start_commit, end_commit=args.end_commit
+                )
+                info = {"test": test, "commit": commit, "status": status}
 
                 if commit in commit_info_cache:
                     commit_info = commit_info_cache[commit]
