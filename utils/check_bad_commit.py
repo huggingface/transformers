@@ -15,12 +15,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-import git
 import json
 import os
 import re
 import subprocess
 
+import git
 import requests
 
 
@@ -78,7 +78,7 @@ exit(0)
 
 
 def is_bad_commit(target_test, commit):
-    repo = git.Repo('.')  # or specify path to your repo
+    repo = git.Repo(".")  # or specify path to your repo
 
     # Save the current HEAD reference
     original_head = repo.head.commit
@@ -115,12 +115,18 @@ def find_bad_commit(target_test, start_commit, end_commit):
     # check if `end_commit` fails the test
     failed_before = is_bad_commit(target_test, end_commit)
     if failed_before:
-        return None, f"flaky: test passed in the previous run (commit: {end_commit}) but failed (on the same commit) during the check of the current run."
+        return (
+            None,
+            f"flaky: test passed in the previous run (commit: {end_commit}) but failed (on the same commit) during the check of the current run.",
+        )
 
     # if there is no new commit (e.g. 2 different CI runs on the same commit):
     #   - failed once on `start_commit` but passed on `end_commit`, which are the same commit --> flaky (or something change externally) --> don't report
     if start_commit == end_commit:
-        return None, f"flaky: test fails on the current CI run but passed in the previous run which is running on the same commit {end_commit}."
+        return (
+            None,
+            f"flaky: test fails on the current CI run but passed in the previous run which is running on the same commit {end_commit}.",
+        )
 
     # Now, we are (almost) sure `target_test` is not failing at `end_commit`
     # check if `start_commit` fail the test
@@ -218,7 +224,9 @@ if __name__ == "__main__":
         raise ValueError("Exactly one argument `test` or `file` must be specified.")
 
     if args.test is not None:
-        commit, status = find_bad_commit(target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit)
+        commit, status = find_bad_commit(
+            target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit
+        )
         with open(args.output_file, "w", encoding="UTF-8") as fp:
             fp.write(f"{args.test}\n{commit}\n{status}")
     elif os.path.isfile(args.file):
@@ -232,7 +240,9 @@ if __name__ == "__main__":
 
             failed_tests_with_bad_commits = []
             for test in failed_tests:
-                commit, status = find_bad_commit(target_test=test, start_commit=args.start_commit, end_commit=args.end_commit)
+                commit, status = find_bad_commit(
+                    target_test=test, start_commit=args.start_commit, end_commit=args.end_commit
+                )
                 info = {"test": test, "commit": commit, "status": status}
 
                 if commit in commit_info_cache:
