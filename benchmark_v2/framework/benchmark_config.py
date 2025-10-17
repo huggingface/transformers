@@ -1,7 +1,7 @@
 import hashlib
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 
 KERNELIZATION_AVAILABLE = False
@@ -27,11 +27,11 @@ class BenchmarkConfig:
         sequence_length: int = 128,
         num_tokens_to_generate: int = 128,
         attn_implementation: str = "eager",
-        sdpa_backend: Optional[str] = None,
-        compile_mode: Optional[str] = None,
-        compile_options: Optional[dict[str, Any]] = None,
+        sdpa_backend: str | None = None,
+        compile_mode: str | None = None,
+        compile_options: dict[str, Any] | None = None,
         kernelize: bool = False,
-        name: Optional[str] = None,
+        name: str | None = None,
         skip_validity_check: bool = False,
     ) -> None:
         # Benchmark parameters
@@ -104,7 +104,7 @@ class BenchmarkConfig:
             "attn_implementation": self.attn_implementation,
             "sdpa_backend": self.sdpa_backend,
             "compile_mode": self.compile_mode,
-            "compile_options": self.compile_options,
+            "compile_options": self.compile_options | {},  # to avoid inplace modification of the original dict
             "kernelize": self.kernelize,
         }
 
@@ -128,8 +128,8 @@ class BenchmarkConfig:
 
 
 def cross_generate_configs(
-    attn_impl_and_sdpa_backend: list[tuple[str, Optional[str]]],
-    compiled_mode: list[Optional[str]],
+    attn_impl_and_sdpa_backend: list[tuple[str, str | None]],
+    compiled_mode: list[str | None],
     kernelized: list[bool],
     warmup_iterations: int = 5,
     measurement_iterations: int = 20,
@@ -191,7 +191,7 @@ def generate_all_configs(
     )
 
 
-def generate_default_configs(
+def generate_main_configs(
     warmup_iterations: int = 5,
     measurement_iterations: int = 20,
     batch_size: int = 1,
@@ -199,20 +199,17 @@ def generate_default_configs(
     num_tokens_to_generate: int = 128,
     gpu_monitoring: bool = False,
 ) -> list[BenchmarkConfig]:
-    all_attn_implementations = [
-        ("flash_attention_2", None),
-        ("eager", None),
-        ("sdpa", "math"),
-        ("sdpa", "flash_attention"),  # note: this one can fail with compile because of attn mask
+    # Create kwargs common to all configs
+    kwargs = {
+        "warmup_iterations": warmup_iterations,
+        "measurement_iterations": measurement_iterations,
+        "batch_size": batch_size,
+        "sequence_length": sequence_length,
+        "num_tokens_to_generate": num_tokens_to_generate,
+        "gpu_monitoring": gpu_monitoring,
+    }
+    return [  # TODO: test max-autotune instead of default
+        BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", **kwargs),
+        BenchmarkConfig(attn_implementation="eager", compile_mode="default", **kwargs),
+        BenchmarkConfig(attn_implementation="flash_attention_2", **kwargs),
     ]
-    return cross_generate_configs(
-        attn_impl_and_sdpa_backend=all_attn_implementations,
-        compiled_mode=[None, "max-autotune"],
-        kernelized=[False, KERNELIZATION_AVAILABLE],
-        warmup_iterations=warmup_iterations,
-        measurement_iterations=measurement_iterations,
-        batch_size=batch_size,
-        sequence_length=sequence_length,
-        num_tokens_to_generate=num_tokens_to_generate,
-        gpu_monitoring=gpu_monitoring,
-    )
