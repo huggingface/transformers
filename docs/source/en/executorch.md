@@ -29,4 +29,5 @@ optimum-cli export executorch \
     --qembedding 8w \
     --output_dir="hf_smollm2"
 ```
+
 Run `optimum-cli export executorch --help` to see all export options. For detailed export instructions, check the [README](optimum/exporters/executorch/README.md).
