@@ -263,6 +263,31 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
+    @require_torch
+    def test_small_chat_model_with_response_parsing(self):
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        text_generator.tokenizer.response_schema = {
+            # A real response schema should probably have things like "role" and "content"
+            # and "reasoning_content" but it's unlikely we'd get a tiny model to reliably
+            # output anything like that, so let's keep it simple.
+            "type": "object",
+            "properties": {
+                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
+                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
+            },
+        }
+        outputs = text_generator(chat, do_sample=False, max_new_tokens=10)
+        parsed_message = outputs[0]["generated_text"][-1]
+        self.assertEqual(parsed_message, {"first_word": "factors", "last_word": "factors"})
+
     def get_test_pipeline(
         self,
         model,
