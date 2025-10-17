@@ -426,6 +426,7 @@ class Gemma3PreTrainedModel(PreTrainedModel):
         "hidden_states": Gemma3DecoderLayer,
         "attentions": Gemma3Attention,
     }
+    input_modalities = ["image", "text"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -452,6 +453,7 @@ def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, in
 @auto_docstring
 class Gemma3TextModel(Gemma3PreTrainedModel):
     config: Gemma3TextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -798,7 +800,7 @@ def create_causal_mask_mapping(
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
         image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-        image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
+        image_group_ids = torch.where(is_image, image_group_ids, -1)
         mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
             token_type_ids.to(cache_position.device), image_group_ids
         )
@@ -1335,6 +1337,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
     """
 
     config: Gemma3TextConfig
+    input_modalities = "text"
 
 
 __all__ = [

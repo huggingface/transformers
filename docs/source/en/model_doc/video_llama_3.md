@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-01-22 and added to Hugging Face Transformers on 2025-10-02.*
+*This model was released on 2025-01-22 and added to Hugging Face Transformers on 2025-10-13.*
 
 # VideoLLaMA3
 
@@ -34,7 +34,7 @@ as input; 2) Vision-Language Alignment, which jointly tunes the vision encoder, 
 <img src="https://github.com/DAMO-NLP-SG/VideoLLaMA3/raw/refs/heads/main/assets/pipeline.jpg"
 alt="drawing" width="600"/>
 
-<small> VideoLLaMA3 architecture. Taken from the <a href="https://arxiv.org/pdf/2501.13106">technical report.</a> </small>
+<small> VideoLLaMA3 architecture. Taken from the <a href="https://huggingface.co/papers/2501.13106">technical report.</a> </small>
 
 This model was contributed by [lkhl](https://huggingface.co/lkhl).
 

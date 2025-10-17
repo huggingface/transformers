@@ -752,6 +752,10 @@ class TrainingArguments:
             Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
             num_tokens_in_batch for precise loss calculation. Reference:
             https://github.com/huggingface/transformers/issues/34242
+
+        use_cache (`bool`, *optional*, defaults to `False`):
+            Whether or not to enable cache for the model. For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`.
+
     """
 
     # Sometimes users will pass in a `str` repr of a dict in the CLI
@@ -1291,20 +1295,6 @@ class TrainingArguments:
             )
         },
     )
-    ray_scope: str = field(
-        default=None,
-        metadata={
-            "help": (
-                "This argument is deprecated and will be removed in v5.2. Set env var RAY_SCOPE instead."
-                'The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray'
-                " will then use the last checkpoint of all trials, compare those, and select the best one. However,"
-                " other options are also available. See the Ray documentation"
-                " (https://docs.ray.io/en/latest/tune/api_docs/analysis.html"
-                "#ray.tune.ExperimentAnalysis.get_best_trial)"
-                " for more options."
-            )
-        },
-    )
     ddp_timeout: int = field(
         default=1800,
         metadata={
@@ -1393,6 +1383,13 @@ class TrainingArguments:
             "help": "Whether or not to average tokens across devices. If enabled, will use all_reduce to "
             "synchronize num_tokens_in_batch for precise loss calculation. Reference: "
             "https://github.com/huggingface/transformers/issues/34242"
+        },
+    )
+
+    use_cache: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to use cache for the model For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`."
         },
     )
 
