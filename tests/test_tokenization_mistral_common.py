@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import gc
+import io
 import tempfile
 import unittest
 
@@ -31,6 +33,8 @@ if is_mistral_common_available():
     import mistral_common.tokens.tokenizers
     from mistral_common.exceptions import InvalidMessageStructureException
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
+    from mistral_common.protocol.transcription.request import TranscriptionRequest
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
 
@@ -79,6 +83,10 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
             cls.repo_id, local_files_only=cls.local_files_only
         )
+
+        # Define SPM tokenizer to test the private methods that handle SPM and Tekken differencies.
+        cls.spm_repo_id = "mistralai/Mistral-7B-v0.3"
+
         # cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
         # )
@@ -124,12 +132,53 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         del cls.ref_special_ids
         gc.collect()
 
+    # Copy paste of `MistralCommonTokenizer._tekken_piece_to_id`
     def _ref_piece_to_id(self, piece: str) -> int:
-        pieces = self.ref_tokenizer.instruct_tokenizer.tokenizer._model.encode(
-            piece, allowed_special="all", disallowed_special=set()
+        tekken_tokenizer = self.ref_tokenizer.instruct_tokenizer.tokenizer
+
+        piece_bytes = piece.encode("utf-8")
+        shift = tekken_tokenizer.num_special_tokens
+        try:
+            return shift + tekken_tokenizer._tekken_token2id_nospecial[piece_bytes]
+        except KeyError:
+            piece_str = piece_bytes.decode("utf-8")
+            if piece_str in tekken_tokenizer._special_tokens_reverse_vocab:
+                return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
+            return tekken_tokenizer.unk_id
+
+    def _get_spm_tokenizer(self) -> MistralCommonTokenizer:
+        local_files_only = len(list_local_hf_repo_files(self.spm_repo_id, revision=None)) > 0
+        return AutoTokenizer.from_pretrained(
+            self.spm_repo_id,
+            local_files_only=local_files_only,
+            revision=None,
+            tokenizer_type="mistral",
         )
-        assert len(pieces) == 1, f"Expected to decode 1 token, got {len(pieces)}"
-        return pieces[0]
+
+    def test_spm_vs_tekken_is_control_token(self):
+        spm_tokenizer = self._get_spm_tokenizer()
+        self.assertTrue(spm_tokenizer._is_control_token(1))
+        self.assertTrue(spm_tokenizer._is_control_token(768))
+        self.assertFalse(spm_tokenizer._is_control_token(2000))
+
+        self.assertTrue(self.tokenizer._is_control_token(0))
+        self.assertTrue(self.tokenizer._is_control_token(768))
+        self.assertTrue(self.tokenizer._is_control_token(999))
+        self.assertFalse(self.tokenizer._is_control_token(1000))
+
+    def test_spm_vs_tekken_piece_to_id(self):
+        spm_tokenizer = self._get_spm_tokenizer()
+        self.assertEqual(spm_tokenizer._piece_to_id("<s>", False), 1)
+        self.assertEqual(spm_tokenizer._piece_to_id("h", False), 29484)
+
+        self.assertEqual(self.tokenizer._piece_to_id("<s>", False), 1)
+        self.assertEqual(self._ref_piece_to_id("<s>"), 1)
+        self.assertEqual(self.tokenizer._piece_to_id("\u0000", False), 1000)
+        self.assertEqual(self._ref_piece_to_id("\u0000"), 1000)
+        self.assertEqual(self.tokenizer._piece_to_id(" String", False), 3000)
+        self.assertEqual(self._ref_piece_to_id(" String"), 3000)
+        self.assertEqual(self.tokenizer._piece_to_id("后汉书", False), 131071)
+        self.assertEqual(self._ref_piece_to_id("后汉书"), 131071)
 
     def test_vocab_size(self):
         self.assertEqual(self.tokenizer.vocab_size, self.ref_tokenizer.instruct_tokenizer.tokenizer.n_words)
@@ -258,6 +307,31 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.decode`."
         ):
             self.tokenizer.decode(tokens_ids, skip_special_tokens=False, unk_args="")
+
+    def test_decode_transcription_mode(self):
+        # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
+        # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
+        # we made the explicit choice of skipping "lang:xx" it to ease users life, see `[~MistralCommonTokenizer.decode]`
+        expected_string = "lang:en[TRANSCRIBE]"
+
+        openai_transcription_request = {
+            "model": None,
+            "language": "en",
+            "file": io.BytesIO(base64.b64decode(AUDIO_BASE_64)),
+        }
+        transcription_request = TranscriptionRequest.from_openai(openai_transcription_request)
+        tokenized_transcription_request = self.ref_tokenizer_audio.encode_transcription(transcription_request)
+
+        # without skip_special_tokens
+        self.assertEqual(
+            self.tokenizer_audio.decode(tokenized_transcription_request.tokens, skip_special_tokens=False)[
+                -len(expected_string) :
+            ],
+            expected_string,
+        )
+
+        # with skip_special_tokens
+        self.assertEqual(self.tokenizer.decode(tokenized_transcription_request.tokens, skip_special_tokens=True), "")
 
     def test_batch_decode(self):
         string = "Hello, world!"
@@ -757,6 +831,40 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         with self.assertRaises(InvalidMessageStructureException):
             self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=False)
 
+    def test_apply_chat_template_with_add_generation_prompt(self):
+        conversation = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hi!"},
+        ]
+
+        # Test 1:
+        # with add_generation_prompt
+        for add_generation_prompt in [False, True]:
+            expected_tokenized = self.ref_tokenizer.encode_chat_completion(
+                ChatCompletionRequest.from_openai(conversation)
+            )
+            token_outputs = self.tokenizer.apply_chat_template(
+                conversation, tokenize=True, add_generation_prompt=add_generation_prompt
+            )
+            self.assertEqual(token_outputs, expected_tokenized.tokens)
+
+        # Test 2:
+        # with continue_final_message
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(
+                conversation, tokenize=True, add_generation_prompt=True, continue_final_message=True
+            )
+
+        # Test 3:
+        # with last message with assistant role
+        conversation = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hi!"},
+            {"role": "asistant", "content": "Hey!"},
+        ]
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, add_generation_prompt=True)
+
     def test_apply_chat_template_with_tools(self):
         conversation = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -863,7 +971,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             conversation, tokenize=True, return_dict=True, return_tensors="pt"
         )
         self.assertEqual(output_dict["input_ids"].tolist()[0], expected_tokenized.tokens)
-        self.assertTrue(torch.allclose(output_dict["pixel_values"], torch.tensor(expected_tokenized.images)))
+        expected_images_pt_tensor = torch.from_numpy(np.stack(expected_tokenized.images))
+        self.assertTrue(torch.allclose(output_dict["pixel_values"], expected_images_pt_tensor))
 
     def test_apply_chat_template_with_audio(self):
         ref_conversation = conversation = [
@@ -919,7 +1028,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 conversation, tokenize=True, return_dict=True, return_tensors="pt"
             )
 
-    def test_appsly_chat_template_with_truncation(self):
+    def test_apply_chat_template_with_truncation(self):
         conversation = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hi!"},
@@ -945,7 +1054,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 3:
         # assert truncation is boolean
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.tokenizer.apply_chat_template(
                 conversation, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
             )
@@ -1035,7 +1144,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         ):
             self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
-    def test_batch_apply_images(self):
+    def test_batch_apply_chat_template_images(self):
         conversations = [
             [
                 {"role": "system", "content": "You are a helpful assistant."},
@@ -1107,7 +1216,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
         self.assertEqual(output["input_ids"].tolist(), [expected_tokenized.tokens] * 3)
         self.assertEqual(output["input_ids"].shape[0], len(expected_tokenized.images) * 3)
-        self.assertTrue(torch.allclose(output["pixel_values"], torch.tensor([expected_tokenized.images] * 3)))
+        expected_images_pt_tensor = torch.from_numpy(np.stack([expected_tokenized.images] * 3))
+        self.assertTrue(torch.allclose(output["pixel_values"], expected_images_pt_tensor))
 
         output = self.tokenizer.apply_chat_template(
             conversations, tokenize=True, return_dict=True, return_tensors="np"
@@ -1166,6 +1276,54 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 continue_final_message=True,
             )
 
+    def test_batch_apply_chat_template_with_add_generation_prompt(self):
+        conversations = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+            ],
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+            ],
+        ]
+
+        # Test 1:
+        # with add_generation_prompt
+        for add_generation_prompt in [False, True]:
+            expected_tokenized = [
+                self.ref_tokenizer.encode_chat_completion(ChatCompletionRequest.from_openai(conversation))
+                for conversation in conversations
+            ]
+            token_outputs = self.tokenizer.apply_chat_template(
+                conversations, tokenize=True, add_generation_prompt=add_generation_prompt
+            )
+            for output, expected in zip(token_outputs, expected_tokenized):
+                self.assertEqual(output, expected.tokens)
+
+        # Test 2:
+        # with continue_final_message
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(
+                conversations, tokenize=True, add_generation_prompt=True, continue_final_message=True
+            )
+
+        # Test 3:
+        # with last message with assistant role
+        conversations = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+                {"role": "asistant", "content": "Hey!"},
+            ],
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+            ],
+        ]
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(conversations, tokenize=True, add_generation_prompt=True)
+
     def test_batch_apply_chat_template_with_truncation(
         self,
     ):
@@ -1189,7 +1347,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 3:
         # assert truncation is boolean
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.tokenizer.apply_chat_template(
                 self.fixture_conversations, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
             )
@@ -1771,3 +1929,16 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                         for i, ids in enumerate(expected_tokens)
                     ],
                 )
+
+    def test_get_vocab(self):
+        vocab = self.tokenizer.get_vocab()
+        # loss of some tokens due to conversion
+        self.assertNotEqual(len(vocab), len(self.tokenizer))
+        for token, id_token in vocab.items():
+            # Issue during conversion
+            if id_token == 0 and token != "<unk>":
+                continue
+            self.assertEqual(self.tokenizer.convert_tokens_to_ids(token), id_token)
+            self.assertEqual(
+                self.ref_tokenizer.decode([id_token], special_token_policy=SpecialTokenPolicy.KEEP), token
+            )

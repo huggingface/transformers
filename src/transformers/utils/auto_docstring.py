@@ -17,7 +17,7 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import Optional, Union, get_args
+from typing import get_args
 
 import regex as re
 
@@ -66,6 +66,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "kosmos2-5": "Kosmos2_5Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
+    "parakeet": "ParakeetCTCConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
@@ -98,6 +99,13 @@ class ImageProcessorArgs:
     size = {
         "description": """
     Describes the maximum input dimensions to the model.
+    """,
+        "shape": None,
+    }
+
+    size_divisor = {
+        "description": """
+    The size by which to make sure both the height and width can be divided.
     """,
         "shape": None,
     }
@@ -1076,7 +1084,7 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     return params, remainder_docstring
 
 
-def contains_type(type_hint, target_type) -> tuple[bool, Optional[object]]:
+def contains_type(type_hint, target_type) -> tuple[bool, object | None]:
     """
     Check if a "nested" type hint contains a specific target type,
     return the first-level type containing the target_type if found.
@@ -1165,7 +1173,7 @@ def format_args_docstring(docstring, model_name):
     return docstring
 
 
-def get_args_doc_from_source(args_classes: Union[object, list[object]]) -> dict:
+def get_args_doc_from_source(args_classes: object | list[object]) -> dict:
     if isinstance(args_classes, (list, tuple)):
         args_classes_dict = {}
         for args_class in args_classes:
@@ -1185,8 +1193,7 @@ def get_checkpoint_from_config_class(config_class):
     # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
     for ckpt_name, ckpt_link in checkpoints:
         # allow the link to end with `/`
-        if ckpt_link.endswith("/"):
-            ckpt_link = ckpt_link[:-1]
+        ckpt_link = ckpt_link.removesuffix("/")
 
         # verify the checkpoint name corresponds to the checkpoint link
         ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"
