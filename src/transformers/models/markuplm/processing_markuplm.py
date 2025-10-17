@@ -45,6 +45,9 @@ class MarkupLMProcessor(ProcessorMixin):
 
     parse_html = True
 
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
+
     def __call__(
         self,
         html_strings=None,
