@@ -209,7 +209,6 @@ if is_peft_available():
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
-    from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DataLoaderConfiguration,
@@ -4967,10 +4966,12 @@ class Trainer:
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
-        args = {"mixed_precision": self.args.mixed_precision,
-                "dataloader_config": dataloader_config,
-                "fsdp_plugin": self.args.fsdp_plugin,
-                "deepspeed_plugin": self.args.deepspeed_plugin}
+        args = {
+            "mixed_precision": self.args.mixed_precision,
+            "dataloader_config": dataloader_config,
+            "fsdp_plugin": self.args.fsdp_plugin,
+            "deepspeed_plugin": self.args.deepspeed_plugin,
+        }
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
@@ -4995,9 +4996,12 @@ class Trainer:
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
             from accelerate.utils import TorchDynamoPlugin
-            dynamo_plugin = TorchDynamoPlugin(backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode)
+
+            dynamo_plugin = TorchDynamoPlugin(
+                backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode
+            )
             args["dynamo_plugin"] = dynamo_plugin
-            
+
         # create accelerator object
         self.accelerator = Accelerator(**args)
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
