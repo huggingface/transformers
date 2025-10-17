@@ -207,7 +207,7 @@ class TrainingArguments:
 
     Parameters:
         output_dir (`str`, *optional*, defaults to `"trainer_output"`):
-            The output directory where the model predictions and checkpoints will be written.
+            The output directory where the model predictions and checkpoints will be written. Can be set via the OUTPUT_DIR environment variable.
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
             by your training/evaluation scripts instead. See the [example
@@ -329,10 +329,11 @@ class TrainingArguments:
                 - `"best"`: Save is done whenever a new `best_metric` is achieved.
 
                 If `"epoch"` or `"steps"` is chosen, saving will also be performed at the
-                very end of training, always.
+                very end of training, always. Can be set via the SAVE_STRATEGY environment variable.
         save_steps (`int` or `float`, *optional*, defaults to 500):
             Number of updates steps before two checkpoint saves if `save_strategy="steps"`. Should be an integer or a
             float in range `[0,1)`. If smaller than 1, will be interpreted as ratio of total training steps.
+            Can be set via the SAVE_STEPS environment variable.
         save_total_limit (`int`, *optional*):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             `output_dir`. When `load_best_model_at_end` is enabled, the "best" checkpoint according to
@@ -340,6 +341,12 @@ class TrainingArguments:
             `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be retained
             alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`, it is possible that two
             checkpoints are saved: the last one and the best one (if they are different).
+            Can be set via the SAVE_TOTAL_LIMIT environment variable.
+        enable_jit_checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to enable Just-In-Time (JIT) checkpointing on SIGTERM signal. When enabled, training will
+            checkpoint asynchronously upon receiving SIGTERM, allowing for graceful termination without losing
+            progress. This is particularly useful for shared clusters with preemptible workloads (e.g., Kueue).
+            Can be set via the ENABLE_JIT_CHECKPOINT environment variable.
         save_safetensors (`bool`, *optional*, defaults to `True`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
             default `torch.load` and `torch.save`.
@@ -633,6 +640,7 @@ class TrainingArguments:
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
             [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            Can be set via the RESUME_FROM_CHECKPOINT environment variable.
         hub_model_id (`str`, *optional*):
             The name of the repository to keep in sync with the local *output_dir*. It can be a simple model ID in
             which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
@@ -774,7 +782,8 @@ class TrainingArguments:
     output_dir: str | None = field(
         default=None,
         metadata={
-            "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."
+            "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided. "
+            "Can be set via the OUTPUT_DIR environment variable."
         },
     )
 
@@ -915,7 +924,8 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`. "
-                "If smaller than 1, will be interpreted as ratio of total training steps."
+                "If smaller than 1, will be interpreted as ratio of total training steps. "
+                "Can be set via the SAVE_STEPS environment variable."
             )
         },
     )
@@ -929,7 +939,19 @@ class TrainingArguments:
                 " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
                 " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
                 " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
-                " Default is unlimited checkpoints"
+                " Default is unlimited checkpoints. Can be set via the SAVE_TOTAL_LIMIT environment variable."
+            )
+        },
+    )
+    enable_jit_checkpoint: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to enable Just-In-Time (JIT) checkpointing on SIGTERM signal. "
+                "When enabled, training will checkpoint asynchronously upon receiving SIGTERM, "
+                "allowing for graceful termination without losing progress. "
+                "This is particularly useful for shared clusters with preemptible workloads (Kueue). "
+                "Can be set via the ENABLE_JIT_CHECKPOINT environment variable."
             )
         },
     )
@@ -1234,7 +1256,10 @@ class TrainingArguments:
     )
     resume_from_checkpoint: str | None = field(
         default=None,
-        metadata={"help": "The path to a folder with a valid checkpoint for your model."},
+        metadata={
+            "help": "The path to a folder with a valid checkpoint for your model. "
+            "Can be set via the RESUME_FROM_CHECKPOINT environment variable."
+        },
     )
     hub_model_id: str | None = field(
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
@@ -1676,6 +1701,30 @@ class TrainingArguments:
             self.deepspeed_plugin = DeepSpeedPlugin()
             self.deepspeed_plugin.set_mixed_precision(self.mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
+
+        # Override enable_jit_checkpoint from environment if set
+        if "ENABLE_JIT_CHECKPOINT" in os.environ:
+            self.enable_jit_checkpoint = strtobool(os.environ.get("ENABLE_JIT_CHECKPOINT"))
+
+        # Override save_strategy from environment if set
+        if "SAVE_STRATEGY" in os.environ:
+            self.save_strategy = os.environ.get("SAVE_STRATEGY")
+
+        # Override save_steps from environment if set
+        if "SAVE_STEPS" in os.environ:
+            self.save_steps = float(os.environ.get("SAVE_STEPS"))
+
+        # Override save_total_limit from environment if set
+        if "SAVE_TOTAL_LIMIT" in os.environ:
+            self.save_total_limit = int(os.environ.get("SAVE_TOTAL_LIMIT"))
+
+        # Override output_dir from environment if set
+        if "OUTPUT_DIR" in os.environ:
+            self.output_dir = os.environ.get("OUTPUT_DIR")
+
+        # Override resume_from_checkpoint from environment if set
+        if "RESUME_FROM_CHECKPOINT" in os.environ:
+            self.resume_from_checkpoint = os.environ.get("RESUME_FROM_CHECKPOINT")
 
         if self.use_cpu:
             self.dataloader_pin_memory = False
