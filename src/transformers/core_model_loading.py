@@ -14,6 +14,7 @@
 # limitations under the License.
 """Core helpers for loading model checkpoints."""
 
+from collections import defaultdict
 from __future__ import annotations
 import re
 
@@ -370,6 +371,27 @@ class SplitModuleList(ConversionOps):
             result.append(list(splits))
         return result
 
+class Cast(ConversionOps):
+    """
+    Casts the tensor to a given dtype
+    """
+
+    def __init__(self, dtype):
+        self.dtype = dtype
+
+class To(ConversionOps):
+    """
+    Transfers the tensor to the provided device potentially using a stream?
+
+    if param_device == "disk":
+        if not is_safetensors:
+            disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
+    elif not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
+        if is_fsdp_enabled():
+            param_device = "cpu" if is_local_dist_rank_0() else "meta"
+    """
+    def __init__(self, device):
+        self.device = device
 
 class Shard(ConversionOps):
     """Shard tensors along a specific dimension.
@@ -591,18 +613,6 @@ def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_
     if state_dict is None:
         raise ValueError("`state_dict` must be provided for conversion.")
 
-    if isinstance(state_dict, OrderedDict):
-        working_state = OrderedDict(state_dict)
-    else:
-        working_state = dict(state_dict)
-
-    if hasattr(torch, "distributed") and torch.distributed.is_available() and torch.distributed.is_initialized():
-        default_world_size = torch.distributed.get_world_size()
-        default_rank = torch.distributed.get_rank()
-    else:
-        default_world_size = 1
-        default_rank = 0
-    from collections import defaultdict
     collected_keys: dict[str, dict[str, list[torch.Tensor]]] = defaultdict(lambda: defaultdict(list))
 
     # 1. we need to find which key we have (so we keep track of which pattern was matched)
@@ -619,72 +629,39 @@ def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_
             # we replace the whole key by the matched pattern so that we can find it later
             pattern = re.sub(rf"^({ '|'.join(keys_to_convert) })$", r"\1", k)
             collected_keys[pattern][k] += [v] # we collect all tensors that match the pattern
+        converter = weight_mapping[pattern]
         if pattern in tp_plan: # If we want this to work conversion needs to be explicit no?
-            # TODO: for now just shard but we should create the op based on the TP plan
-            # TODO: don't add sharding or tp ops if such ops are already present?
-            weight_mapping[pattern].operations = Shard(0) +  weight_mapping[pattern].operation
+            if converter.distributed_operation is None:
+                converter.distributed_operation = Shard(0) # for now
+        # TODO: use `param_needs_quantization` !
         if pattern in quantization_config.conversion_mapping:
-            # TODO: here again we need to check for other quantization. Maybe these are two
-            # keys that we want to have explicit
-            weight_mapping[pattern].operations.append(Fp8Quantize)
+            if converter.quantize_operations is None:
+                converter.quantize_operations = Fp8Quantize()
+        # if pattern in device_map:
+        #     converter.operations.append(To(device_map[pattern]))
+        # TODO: always call .contiguous()
+        # TODO: the only missing part now is to update the TP plan for quantized weights
+        # TODO: AND quantization that updates the keys (adds some). THIS IS FOR THE HOOKS
+        # NOT FOR THE WEIGHTS
 
     # 2. now that we collectedd the tensors, we iterate over the "patterns" that were matched
     # Cuz remember we have to add TP and QUANT to the ops of some keys. but we do it on the renamed!
-    for mapping in weight_mapping or []:
-        source_patterns = _ensure_list(mapping.source_keys)
-        matched_keys, collected_values = _collect_source_values(working_state, source_patterns)
-        if not any(matched_keys):
-            logger.debug("No keys matched pattern(s) %s; skipping conversion.", source_patterns)
-            continue
-        if any(len(group) == 0 for group in matched_keys):
-            logger.debug(
-                "At least one pattern in %s had no matches (%s); skipping conversion.",
-                source_patterns,
-                matched_keys,
-            )
-            continue
+    for key, current_value in collected_keys:
+        # 1. Distributed, equivalent to our `shard_and_distribute_module`
+        used_operations.append(weight_mapping[key].distributed_operation)
+        current_value = weight_mapping[key].distributed_operation(current_value)
 
-        operations = _prepare_operations(mapping.operations)
-        operations = _order_operations(operations)
-
-        target_spec = mapping.target_keys
-        if isinstance(target_spec, Sequence) and not isinstance(target_spec, str) and len(target_spec) == 1:
-            target_for_ops: Union[str, Sequence[str], None] = target_spec[0]
-        else:
-            target_for_ops = target_spec
-
-        context = {
-            "model": model,
-            "tp_plan": tp_plan,
-            "quantization_config": quantization_config,
-            "target_keys": target_for_ops,
-            "source_keys": source_patterns,
-            "matched_keys": matched_keys,
-            "tp_world_size": default_world_size,
-            "tp_rank": default_rank,
-        }
-
-        current_value: Any = collected_values
-        for operation in operations:
+        # 2. Other opérations
+        for operation in weight_mapping[key].operations:
             used_operations.append(operation)
-            current_value = operation(current_value, context=context, profile=profile)
+            current_value = operation(current_value, profile=profile)
 
-        assignments = _assign_to_targets(current_value, target_spec, matched_keys)
+        # 3. Quantization equivalent to `create_quantized_param`
+        used_operations.append(weight_mapping[key].quantization_operation)
+        current_value = weight_mapping[key].quantization_operation(current_value)
+        converted_state_dict[key] = current_value
 
-        # Remove consumed keys from the intermediate dict so they do not leak in the output.
-        for keys_group in matched_keys:
-            for key in keys_group:
-                working_state.pop(key, None)
-
-        converted_state_dict.update(assignments)
-        working_state.update(assignments)
-
-    # Add all leftover keys that were never converted.
-    for key, tensor in working_state.items():
-        if key not in converted_state_dict:
-            converted_state_dict[key] = tensor
-
-    # Clear cached buffers in unique operations
+        # Clear cached buffers in unique operations
     for op in {op for op in used_operations if hasattr(op, "clear_cache")}:
         op.clear_cache()
 
