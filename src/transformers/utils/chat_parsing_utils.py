@@ -12,7 +12,7 @@ else:
     jmespath = None
 
 
-def _parse_re_match(node_match):
+def _parse_re_match(node_match: re.Match) -> dict | str:
     # If the regex has named groups, return a dict of those groups
     if node_match.groupdict():
         return {key: val for key, val in node_match.groupdict().items() if val is not None}
