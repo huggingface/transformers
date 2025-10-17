@@ -920,11 +920,11 @@ class BartModel(BartPreTrainedModel):
             if self.shared.weight.device == torch.device(
                 "meta"
             ) and self.decoder.embed_tokens.weight.device != torch.device("meta"):
-                self._tie_or_clone_weights(self.encoder.embed_tokens, self.decoder.embed_tokens)
-                self._tie_or_clone_weights(self.shared, self.decoder.embed_tokens)
+                self._tie_embedding_weights(self.encoder.embed_tokens, self.decoder.embed_tokens)
+                self._tie_embedding_weights(self.shared, self.decoder.embed_tokens)
             else:
-                self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-                self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+                self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+                self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_input_embeddings(self):
         return self.shared
@@ -1089,7 +1089,7 @@ class BartForConditionalGeneration(BartPreTrainedModel, GenerationMixin):
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self.model._tie_weights()
-            self._tie_or_clone_weights(self.lm_head, self.model.shared)
+            self._tie_embedding_weights(self.lm_head, self.model.shared)
 
     @auto_docstring
     def forward(
