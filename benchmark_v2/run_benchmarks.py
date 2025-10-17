@@ -20,7 +20,6 @@ in the ./benches directory, organizing outputs into model-specific subfolders.
 
 import argparse
 import logging
-import os
 import sys
 import uuid
 
@@ -48,7 +47,9 @@ if __name__ == "__main__":
     parser.add_argument("--commit-id", type=str, help="Git commit ID (if not provided, will auto-detect from git)")
     parser.add_argument("--commit-message", type=str, help="Git commit message")
 
-    parser.add_argument("--monitor-gpu", action="store_true", help="Whether to monitor GPU usage during benchmarks")
+    parser.add_argument(
+        "--no-gpu-monitoring", action="store_true", help="Disables GPU monitoring during benchmark runs"
+    )
 
     parser.add_argument(
         "--push-result-to-dataset",
@@ -87,7 +88,7 @@ if __name__ == "__main__":
                 batch_size=args.batch_size[0],
                 sequence_length=args.sequence_length[0],
                 num_tokens_to_generate=args.num_tokens_to_generate[0],
-                gpu_monitoring=args.monitor_gpu,
+                gpu_monitoring=not args.no_gpu_monitoring,
             )
         else:
             benchmark_configs = generate_main_configs(
@@ -96,7 +97,6 @@ if __name__ == "__main__":
                 batch_size=args.batch_size[0],
                 sequence_length=args.sequence_length[0],
                 num_tokens_to_generate=args.num_tokens_to_generate[0],
-                gpu_monitoring=args.monitor_gpu,
             )
 
     # Otherwise, we benchmark across all combinations of dimensions
@@ -107,7 +107,6 @@ if __name__ == "__main__":
             batch_size=args.batch_size[0],
             sequence_length=args.sequence_length[0],
             num_tokens_to_generate=args.num_tokens_to_generate[0],
-            gpu_monitoring=args.monitor_gpu,
         )[0]
         benchmark_configs = []
         for num_tokens_to_generate in args.num_tokens_to_generate:
