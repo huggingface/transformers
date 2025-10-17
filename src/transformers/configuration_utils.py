@@ -304,7 +304,7 @@ class PreTrainedConfig(PushToHubMixin):
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
         for parameter_name in self._get_global_generation_defaults().keys():
-            kwargs.pop(parameter_name)
+            kwargs.pop(parameter_name, None)
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
