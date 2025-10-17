@@ -205,6 +205,7 @@ VLMS = [
     "videollava",
     "vipllava",
     "vit",
+    "deit",
 ]
 
 
