@@ -14,11 +14,11 @@
 # limitations under the License.
 """Ernie4.5-VL model configuration"""
 
-from ...modeling_rope_utils import rope_config_validation
-from ...modeling_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
+from ...modeling_utils import PreTrainedConfig
 
 
-class Ernie4_5_VLVisionConfig(PretrainedConfig):
+class Ernie4_5_VLVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of the [`Ernie4_5_VLVisionTransformerPretrainedModel`] and the
     [`Ernie4_5_VLVariableResolutionResamplerModel`]. It is used to instantiate the vision models portion of the complete
@@ -97,7 +97,7 @@ class Ernie4_5_VLVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Ernie4_5_VLTextConfig(PretrainedConfig):
+class Ernie4_5_VLTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Ernie4_5_VLTextModel`]. It is used to instantiate a
     the text model portion of the complete Ernie4.5-VL model according to the specified arguments, defining the model architecture.
@@ -139,49 +139,10 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
             Whether to use a bias in any of the projections including mlp and attention for example.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
-            The base period of the RoPE embeddings.
-        freq_allocation (`int`, *optional*, defaults to 20):
-            The absolute size allocated to the time dimension in 3D RoPE.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3', 'ernie_3d'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-                `freq_allocation` (`int`, *optional*):
-                    Only used with 'ernie_3d'. The absolute size allocated to the time dimension in 3D RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         moe_intermediate_size (`list[int]`, *optional*, defaults to [1536, 512]):
             Intermediate size of the routed experts; differs between text (first) and image (second) experts.
         moe_k (`int`, *optional*, defaults to 6):
@@ -224,9 +185,7 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
         use_cache=True,
         use_bias=False,
         tie_word_embeddings=True,
-        rope_theta=500_000.0,
-        freq_allocation=20,
-        rope_scaling=None,
+        rope_parameters=None,
         moe_intermediate_size=[1536, 512],
         moe_k=6,
         moe_num_experts=64,
@@ -251,11 +210,9 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.use_bias = use_bias
-        self.rope_theta = rope_theta
-        self.freq_allocation = freq_allocation
-        self.rope_scaling = rope_scaling
-        if rope_scaling is None:
-            self.rope_scaling = {"rope_type": "ernie_3d", "freq_allocation": freq_allocation}
+        self.rope_parameters = rope_parameters
+        rope_theta = kwargs.get("rope_theta", 500_000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
         self.moe_intermediate_size = moe_intermediate_size
         self.moe_k = moe_k
@@ -271,7 +228,7 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class Ernie4_5_VLConfig(PretrainedConfig):
+class Ernie4_5_VLConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Ernie4_5_VLModel`]. It is used to instantiate a
     Ernie4.5-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration

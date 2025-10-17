@@ -84,7 +84,7 @@ ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + [
     "moe_layer_end_index",
     "moe_layer_start_index",
     "moe_num_experts",
-    "freq_allocation",
+    "rope_parameters",
 ]
 
 TMP_TOKENIZER_DIR = "/tmp/ernie_vl_tokenizer"
@@ -249,7 +249,7 @@ def convert_state_dict_to_hf(state_dict, is_tied=True):
 
 
 def convert_weights(model_path, save_dir):
-    print('Starting to convert model weights')
+    print("Starting to convert model weights")
 
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir, exist_ok=True)
@@ -280,7 +280,7 @@ def convert_weights(model_path, save_dir):
     # save index
     write_json(index_dict, save_dir, SAFETENSOR_INDEX_NAME)
 
-    print('Converted all model weights\n')
+    print("Converted all model weights\n")
 
 
 def convert_vision_config_to_hf(vision_config, original_config, original_vision_config):
@@ -313,7 +313,10 @@ def convert_text_config_to_hf(text_config, original_config):
     text_config["moe_layer_end_index"] = max(original_config["moe_layer_end_index"])
     text_config["moe_layer_start_index"] = min(original_config["moe_layer_start_index"])
     text_config["moe_num_experts"] = original_config["moe_num_experts"][0]  # the same for both modalities
-    text_config["freq_allocation"] = 20  # can also be extracted from mrope
+    text_config["rope_parameters"] = {
+        "rope_type": "ernie_3d",
+        "freq_allocation": 20,  # can also be extracted from mrope
+    }
 
     # delete everything else
     for key in list(text_config.keys()):
@@ -351,7 +354,7 @@ def convert_config(model_path, save_dir):
 
             final_config.save_pretrained(save_dir)
             break
-    print('Converted model config\n')
+    print("Converted model config\n")
 
 
 def convert_tokenizer(original_tokenizer_path, save_dir):
@@ -414,7 +417,7 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
 
 
 def convert_processor(model_path, save_dir):
-    print('Starting to convert processor')
+    print("Starting to convert processor")
 
     convert_tokenizer(model_path, save_dir)
     tokenizer = AutoTokenizer.from_pretrained(save_dir)
@@ -429,14 +432,17 @@ def convert_processor(model_path, save_dir):
     )
     processor.save_pretrained(save_dir)
 
-    print('Finished converting the processor\n')
+    print("Finished converting the processor\n")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
     parser.add_argument(
-        "--checkpoint_path", type=str, default="baidu/ERNIE-4.5-VL-28B-A3B-PT", help="Path to the downloaded checkpoints"
+        "--checkpoint_path",
+        type=str,
+        default="baidu/ERNIE-4.5-VL-28B-A3B-PT",
+        help="Path to the downloaded checkpoints",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default="AntonV/ErnieVL", type=str, help="Path to the output PyTorch model."

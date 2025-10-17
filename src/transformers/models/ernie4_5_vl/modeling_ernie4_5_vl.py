@@ -20,7 +20,8 @@
 # limitations under the License.
 
 import itertools
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -37,16 +38,14 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
-from .configuration_ernie4_5_vl import Ernie4_5_VLConfig, Ernie4_5_VLTextConfig, Ernie4_5_VLVisionConfig
+from .configuration_ernie4_5_vl import (
+    Ernie4_5_VLConfig,
+    Ernie4_5_VLTextConfig,
+    Ernie4_5_VLVisionConfig,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -55,28 +54,22 @@ logger = logging.get_logger(__name__)
 class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
+        self.config = config
 
+        self.rope_type = self.config.rope_parameters["rope_type"]
         if self.rope_type != "ernie_3d":
             raise ValueError(f"Ernie 4.5 VL requires the `ernie_3d` rope type, but found {self.rope_type} instead.")
-
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = ROPE_INIT_FUNCTIONS[self.rope_type](self.config, device)
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
 
         # for 3d recomposition
-        t_dim = config.rope_scaling["freq_allocation"]  # time dimension
-        hw_dim = inv_freq.shape[-1] - t_dim  # height and width dimension
+        t_dim = self.config.rope_parameters["freq_allocation"]  # time dimension
+        hw_dim = inv_freq.shape[-1] - t_dim  # height and width dimension  # noqa: F821
         self.split_sizes = (hw_dim // 2, hw_dim // 2, t_dim)
 
     @torch.no_grad()
@@ -200,12 +193,11 @@ class Ernie4_5_VLTextAttention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -271,7 +263,7 @@ class Ernie4_5_VLMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
 
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
@@ -290,8 +282,11 @@ class Ernie4_5_VLMoeStatics(nn.Module):
         - Additionally, usage per expert in the original codebase
     """
 
-    def __init__(self, num_experts_groups, num_experts):
+    def __init__(self, config):
         super().__init__()
+
+        num_experts_groups = 1
+        num_experts = config.moe_num_experts
 
         self.e_score_correction_bias = nn.Parameter(
             torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
@@ -307,67 +302,67 @@ class Ernie4_5_VLMoeStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_VLSparseMoeBlock(nn.Module):
-    def __init__(self, config, num_experts, intermediate_size):
+class Ernie4_5_VLMoeExperts(nn.ModuleList):
+    def __init__(self, config, intermediate_size=None):
         super().__init__()
-        self.num_experts = num_experts
-        self.top_k = config.moe_k
-
-        # correction bias (yes it seems to be a typo with statics <> statistics)
-        self.moe_statics = Ernie4_5_VLMoeStatics(num_experts_groups=1, num_experts=self.num_experts)
-
-        # gating
-        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
-        self.experts = nn.ModuleList([Ernie4_5_VLMLP(config, intermediate_size) for _ in range(self.num_experts)])
-        self.norm_min = config.moe_norm_min
+        self.num_experts = config.moe_num_experts
+        intermediate_size = config.moe_intermediate_size if intermediate_size is None else intermediate_size
+        for _ in range(self.num_experts):
+            self.append(Ernie4_5_VLMLP(config, intermediate_size))
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
+        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
+            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        return final_hidden_states
+
+
+class Ernie4_5_VLSparseMoeBlock(nn.Module):
+    def __init__(self, config, intermediate_size):
+        super().__init__()
+        self.hidden_dim = config.hidden_size
+        self.num_experts = config.moe_num_experts
+        self.top_k = config.moe_k
+        self.norm_min = config.moe_norm_min
+
+        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
+        self.moe_statics = Ernie4_5_VLMoeStatics(config)
+        self.experts = Ernie4_5_VLMoeExperts(config, intermediate_size)
+
+    def route_tokens_to_experts(self, hidden_states):
         device_type = (
             hidden_states.device.type
             if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
             else "cpu"
         )
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            # router_logits: (batch * sequence_length, n_experts)
-            router_logits = self.gate(hidden_states.float())
 
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            router_logits = self.gate(hidden_states.float())
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
             _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-            routing_weights = routing_weights.to(hidden_states.dtype)
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return selected_experts, routing_weights, router_logits
 
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
 
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        # Loop over all available experts in the model and perform the computation on each expert
-        expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hitted:
-            expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        selected_experts, routing_weights, router_logits = self.route_tokens_to_experts(hidden_states)
+        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
 
         # moe results are changed to a flattened shape to ease the modality isolated assigning of results
         return final_hidden_states.flatten(), router_logits.flatten()
@@ -386,12 +381,8 @@ class Ernie4_5_VLMoeBlock(nn.Module):
         super().__init__()
         self.num_experts = config.moe_num_experts
 
-        self.text_moe = Ernie4_5_VLSparseMoeBlock(
-            config, num_experts=self.num_experts, intermediate_size=config.moe_intermediate_size[0]
-        )
-        self.vision_moe = Ernie4_5_VLSparseMoeBlock(
-            config, num_experts=self.num_experts, intermediate_size=config.moe_intermediate_size[1]
-        )
+        self.text_moe = Ernie4_5_VLSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[0])
+        self.vision_moe = Ernie4_5_VLSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[1])
 
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
@@ -509,6 +500,7 @@ class Ernie4_5_VLDecoderLayer(GradientCheckpointingLayer):
 class Ernie4_5_VLPreTrainedModel(PreTrainedModel):
     config: Ernie4_5_VLConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ernie4_5_VLDecoderLayer", "Ernie4_5_VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -546,7 +538,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_VLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -705,18 +697,7 @@ class Ernie4_5_VLVisionAttention(nn.Module):
         query_states, key_states, value_states = (
             self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         )
-        if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
-            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-        else:
-            cos, sin = position_embeddings
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
@@ -1280,8 +1261,8 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is

@@ -25,12 +25,7 @@ import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -40,33 +35,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    logging,
-)
+from ...utils import TensorType, auto_docstring, logging
 from ...video_utils import VideoInput, make_batched_videos
+from .image_processing_ernie4_5_vl import Ernie4_5_VLImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
-
-
-class Ernie4_5_VLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    min_pixels (`int`, *optional*, defaults to `56 * 56`):
-        The min pixels of the image to resize the image.
-    max_pixels (`int`, *optional*, defaults to `28 * 28 * 6177`):
-        The max pixels of the image to resize the image.
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    merge_size: Optional[int]
 
 
 def smart_resize(
@@ -113,10 +87,10 @@ class Ernie4_5_VLImageProcessorFast(BaseImageProcessorFast):
     merge_size = 2
     min_pixels = None
     max_pixels = None
-    valid_kwargs = Ernie4_5_VLFastImageProcessorKwargs
+    valid_kwargs = Ernie4_5_VLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Ernie4_5_VLFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Ernie4_5_VLImageProcessorKwargs]):
         size = kwargs.pop("size", None)
         min_pixels = kwargs.pop("min_pixels", None)
         max_pixels = kwargs.pop("max_pixels", None)
@@ -161,7 +135,7 @@ class Ernie4_5_VLImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         videos: Optional[VideoInput] = None,
-        **kwargs: Unpack[Ernie4_5_VLFastImageProcessorKwargs],
+        **kwargs: Unpack[Ernie4_5_VLImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, videos, **kwargs)
 
@@ -172,7 +146,7 @@ class Ernie4_5_VLImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+        **kwargs: Unpack[Ernie4_5_VLImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
