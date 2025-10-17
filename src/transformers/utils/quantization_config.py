@@ -30,14 +30,12 @@ from packaging import version
 from ..utils import (
     is_auto_awq_available,
     is_compressed_tensors_available,
-    is_gptqmodel_available,
     is_hqq_available,
     is_quark_available,
     is_torch_available,
     is_torchao_available,
     logging,
 )
-from .import_utils import is_auto_gptq_available
 
 
 if is_torch_available():
@@ -626,7 +624,7 @@ class ExllamaVersion(int, Enum):
 class GPTQConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
-    loaded using `optimum` api for gptq quantization relying on auto_gptq backend.
+    loaded using `optimum` api for GPTQ quantization relying on the gptqmodel backend.
 
     Args:
         bits (`int`):
@@ -647,6 +645,9 @@ class GPTQConfig(QuantizationConfigMixin):
         desc_act (`bool`, *optional*, defaults to `False`):
             Whether to quantize columns in order of decreasing activation size. Setting it to False can significantly
             speed up inference but the perplexity may become slightly worse. Also known as act-order.
+        act_group_aware (`bool`, *optional*, defaults to `True`):
+            Use GAR (group aware activation order) during quantization. Has measurable positive impact on quantization
+            quality. Only applicable when `desc_act = False`. Will forced to be `False` when `desc_act = True`.
         sym (`bool`, *optional*, defaults to `True`):
             Whether to use symmetric quantization.
         true_sequential (`bool`, *optional*, defaults to `True`):
@@ -654,15 +655,13 @@ class GPTQConfig(QuantizationConfigMixin):
             the entire block at once, we perform layer-wise quantization. As a result, each layer undergoes
             quantization using inputs that have passed through the previously quantized layers.
         checkpoint_format (`str`, *optional*, defaults to `"gptq"`):
-            GPTQ weight format. `gptq`(v1) is supported by both gptqmodel and auto-gptq. `gptq_v2` is gptqmodel only.
+            GPTQ weight format. `gptq` (v1) is supported by gptqmodel. `gptq_v2` is gptqmodel only.
         meta (`dict[str, any]`, *optional*):
             Properties, such as tooling:version, that do not directly contributes to quantization or quant inference are stored in meta.
             i.e. `meta.quantizer`: ["optimum:_version_", "gptqmodel:_version_"]
         backend (`str`, *optional*):
-            Controls which gptq kernel to be used. Valid values for gptqmodel are `auto`, `auto_trainable` and more. For auto-gptq, only
-            valid value is None and `auto_trainable`. Ref gptqmodel backends: https://github.com/ModelCloud/GPTQModel/blob/main/gptqmodel/utils/backend.py
-        use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
-            Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16. Auto-gptq only.
+            Controls which kernel to use. Valid values for gptqmodel are `auto`, `auto_trainable` and more. Ref gptqmodel backends:
+            https://github.com/ModelCloud/GPTQModel/blob/main/gptqmodel/utils/backend.py
         model_seqlen (`int`, *optional*):
             The maximum sequence length that the model can take.
         block_name_to_quantize (`str`, *optional*):
@@ -673,14 +672,9 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
-        use_exllama (`bool`, *optional*):
-            Whether to use exllama backend. Defaults to `True` if unset. Only works with `bits` = 4.
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
-        exllama_config (`dict[str, Any]`, *optional*):
-            The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
-            to `{"version": 1}` if unset.
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
             Whether to cache block outputs to reuse as inputs for the succeeding block.
         modules_in_block_to_quantize (`list[list[str]]`, *optional*):
@@ -700,20 +694,18 @@ class GPTQConfig(QuantizationConfigMixin):
         group_size: int = 128,
         damp_percent: float = 0.1,
         desc_act: bool = False,
+        act_group_aware: bool = True,
         sym: bool = True,
         true_sequential: bool = True,
         checkpoint_format: str = "gptq",
         meta: Optional[dict[str, Any]] = None,
         backend: Optional[str] = None,
-        use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
         block_name_to_quantize: Optional[str] = None,
         module_name_preceding_first_block: Optional[list[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
-        use_exllama: Optional[bool] = None,
         max_input_length: Optional[int] = None,
-        exllama_config: Optional[dict[str, Any]] = None,
         cache_block_outputs: bool = True,
         modules_in_block_to_quantize: Optional[list[list[str]]] = None,
         **kwargs,
@@ -725,33 +717,25 @@ class GPTQConfig(QuantizationConfigMixin):
         self.group_size = group_size
         self.damp_percent = damp_percent
         self.desc_act = desc_act
+        self.act_group_aware = act_group_aware
         self.sym = sym
         self.true_sequential = true_sequential
         self.checkpoint_format = checkpoint_format.lower()
         self.meta = meta
         self.backend = backend.lower() if isinstance(backend, str) else backend
-        self.use_cuda_fp16 = use_cuda_fp16
         self.model_seqlen = model_seqlen
         self.block_name_to_quantize = block_name_to_quantize
         self.module_name_preceding_first_block = module_name_preceding_first_block
         self.batch_size = batch_size
         self.pad_token_id = pad_token_id
-        self.use_exllama = use_exllama
         self.max_input_length = max_input_length
-        self.exllama_config = exllama_config
         self.cache_block_outputs = cache_block_outputs
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
         self.post_init()
 
     def get_loading_attributes(self):
         attributes_dict = copy.deepcopy(self.__dict__)
-        loading_attributes = [
-            "use_exllama",
-            "exllama_config",
-            "use_cuda_fp16",
-            "max_input_length",
-            "backend",
-        ]
+        loading_attributes = ["max_input_length", "backend"]
         loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
         return loading_attributes_dict
 
@@ -778,46 +762,14 @@ class GPTQConfig(QuantizationConfigMixin):
                     ['wikitext2','c4','c4-new'], but we found {self.dataset}"""
                 )
 
-        # make sure backend is back/forward compatible with both gptqmodel (full) and auto-gptq (partial)
-        if is_gptqmodel_available():
-            # convert auto-gptq control into gptqmodel backend
-            if self.backend is None:
-                self.backend = "auto_trainable" if self.use_exllama is not None and not self.use_exllama else "auto"
-        else:
-            # convert gptqmodel backend `auto_trainable` into auto-gptq control
-            if self.backend == "auto_trainable":
-                self.use_exllama = False
+        # act_group_order is only applicable when `desc_act = False`
+        if self.desc_act and self.act_group_aware:
+            self.act_group_aware = False
+            logger.warning("`act_group_aware` has been auto-disabled as it is not compatible with `desc_act = True`.")
 
-        # auto-gptq specific kernel control logic
-        if self.use_exllama is None:
-            # New default behaviour
-            self.use_exllama = True
-
-        if self.exllama_config is None:
-            self.exllama_config = {"version": ExllamaVersion.ONE}
-        else:
-            if "version" not in self.exllama_config:
-                raise ValueError("`exllama_config` needs to have a `version` key.")
-            elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
-                exllama_version = self.exllama_config["version"]
-                raise ValueError(
-                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
-                )
-
-        if self.bits == 4 and self.use_exllama:
-            if self.exllama_config["version"] == ExllamaVersion.ONE:
-                logger.info(
-                    "You have activated exllama backend. Note that you can get better inference "
-                    "speed using exllamav2 kernel by setting `exllama_config`."
-                )
-            elif self.exllama_config["version"] == ExllamaVersion.TWO:
-                if is_auto_gptq_available():
-                    optimum_version = version.parse(importlib.metadata.version("optimum"))
-                    autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
-                    if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
-                        raise ValueError(
-                            f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
-                        )
+        # make sure backend default stays consistent with gptqmodel expectations
+        if self.backend is None:
+            self.backend = "auto"
         if self.modules_in_block_to_quantize is not None:
             optimum_version = version.parse(importlib.metadata.version("optimum"))
             if optimum_version < version.parse("1.15.0"):
@@ -826,29 +778,19 @@ class GPTQConfig(QuantizationConfigMixin):
                 )
 
     def to_dict(self) -> dict[str, Any]:
-        config_dict = super().to_dict()
-        config_dict.pop("disable_exllama", None)
-        return config_dict
+        return super().to_dict()
 
     def to_dict_optimum(self):
         """
         Get compatible dict for optimum gptq config
         """
-        quant_dict = self.to_dict()
-        # make it compatible with optimum config
-        quant_dict["disable_exllama"] = not self.use_exllama
-        return quant_dict
+        return self.to_dict()
 
     @classmethod
     def from_dict_optimum(cls, config_dict):
         """
         Get compatible class with optimum gptq config dict
         """
-
-        if "disable_exllama" in config_dict:
-            config_dict["use_exllama"] = not config_dict["disable_exllama"]
-            # switch to None to not trigger the warning
-            config_dict.pop("disable_exllama")
 
         config = cls(**config_dict)
         return config
