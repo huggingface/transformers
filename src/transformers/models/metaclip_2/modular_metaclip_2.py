@@ -7,7 +7,7 @@ from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepa
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
@@ -375,6 +375,9 @@ class MetaClip2TextModel(CLIPTextModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs()
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -382,6 +385,7 @@ class MetaClip2TextModel(CLIPTextModel):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Examples:
@@ -404,6 +408,7 @@ class MetaClip2TextModel(CLIPTextModel):
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
 
@@ -456,6 +461,7 @@ class MetaClip2TextModelWithProjection(CLIPTextModelWithProjection):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Examples:
@@ -477,6 +483,7 @@ class MetaClip2TextModelWithProjection(CLIPTextModelWithProjection):
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
 
@@ -547,9 +554,8 @@ class MetaClip2Model(CLIPModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         return_loss (`bool`, *optional*):
@@ -582,9 +588,8 @@ class MetaClip2Model(CLIPModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             return_loss=return_loss,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
 
     def get_text_features(
@@ -592,8 +597,6 @@ class MetaClip2Model(CLIPModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
     ):
         r"""
         Returns:
@@ -615,15 +618,11 @@ class MetaClip2Model(CLIPModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
         )
 
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ):
         r"""
@@ -650,8 +649,6 @@ class MetaClip2Model(CLIPModel):
         ```"""
         return super().get_image_features(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
@@ -693,12 +690,13 @@ class MetaClip2VisionModel(CLIPVisionModel):
     >>> pooled_output = outputs.pooler_output  # pooled CLS states
     ```"""
 
+    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Examples:
@@ -722,9 +720,8 @@ class MetaClip2VisionModel(CLIPVisionModel):
         ```"""
         return super().forward(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
 
 
@@ -767,9 +764,8 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Examples:
@@ -792,9 +788,8 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
         ```"""
         return super().forward(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
 
 
