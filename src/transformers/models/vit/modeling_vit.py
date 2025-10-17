@@ -307,7 +307,7 @@ class ViTEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
