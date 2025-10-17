@@ -181,6 +181,9 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         mlp_only_layers=None,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         super().__init__(
@@ -210,6 +213,9 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
             output_router_logits,
             router_aux_loss_coef,
             mlp_only_layers,
+            pad_token_id,
+            bos_token_id,
+            eos_token_id,
             **kwargs,
         )
         del self.use_sliding_window
@@ -331,6 +337,9 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
         layer_types=None,
         attention_dropout=0,
         num_code_groups=32,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         super().__init__(
@@ -355,6 +364,9 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
             None,
             layer_types,
             attention_dropout,
+            pad_token_id,
+            bos_token_id,
+            eos_token_id,
             **kwargs,
         )
         del self.use_sliding_window
@@ -391,6 +403,9 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         mlp_only_layers=None,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         super().__init__(
@@ -420,6 +435,9 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
             output_router_logits,
             router_aux_loss_coef,
             mlp_only_layers,
+            pad_token_id,
+            bos_token_id,
+            eos_token_id,
             **kwargs,
         )
         del self.use_sliding_window

@@ -205,7 +205,7 @@ class SmolLM3Config(PreTrainedConfig):
         tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(*kwargs)
+        super().__init__(**kwargs)
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

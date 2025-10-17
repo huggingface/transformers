@@ -824,7 +824,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
-
         self.post_init()
 
     def get_input_embeddings(self):

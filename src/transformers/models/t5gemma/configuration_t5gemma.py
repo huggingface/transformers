@@ -159,8 +159,6 @@ class T5GemmaModuleConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -187,6 +185,8 @@ class T5GemmaModuleConfig(PreTrainedConfig):
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
 
 
 class T5GemmaConfig(PreTrainedConfig):

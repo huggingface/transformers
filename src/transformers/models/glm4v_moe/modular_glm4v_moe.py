@@ -138,6 +138,12 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
                                                                     \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
 
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig

@@ -138,6 +138,7 @@ class Glm4MoeConfig(PreTrainedConfig):
             End of stream token id.
         pad_token_id (`int`, *optional*):
             Padding token id.
+
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
 
