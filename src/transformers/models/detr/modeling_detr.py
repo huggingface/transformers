@@ -571,6 +571,23 @@ class DetrCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class DetrMLP(nn.Module):
+    def __init__(self, config: DetrConfig, hidden_size: int, intermediate_size: int):
+        super().__init__()
+        self.fc1 = nn.Linear(hidden_size, intermediate_size)
+        self.fc2 = nn.Linear(intermediate_size, hidden_size)
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.dropout = config.dropout
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        return hidden_states
+
+
 class DetrEncoderLayer(nn.Module):
     def __init__(self, config: DetrConfig):
         super().__init__()
@@ -583,10 +600,7 @@ class DetrEncoderLayer(nn.Module):
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.hidden_size)
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.hidden_size, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.hidden_size)
+        self.mlp = DetrMLP(config, self.hidden_size, config.encoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(self.hidden_size)
 
     def forward(
@@ -619,12 +633,7 @@ class DetrEncoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -648,8 +657,6 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
             dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.hidden_size)
         self.encoder_attn = DetrCrossAttention(
@@ -659,8 +666,7 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
             dropout=config.attention_dropout,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.hidden_size)
-        self.fc1 = nn.Linear(self.hidden_size, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.hidden_size)
+        self.mlp = DetrMLP(config, self.hidden_size, config.decoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(self.hidden_size)
 
     def forward(
@@ -724,10 +730,7 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -744,6 +747,14 @@ class DetrPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_attention_backend = True
     _supports_flex_attn = True
+    _checkpoint_conversion_mapping = {
+        "model.backbone.conv_encoder": "model.backbone",
+        "out_proj": "o_proj",
+        "bbox_attention.q_linear": "bbox_attention.q_proj",
+        "bbox_attention.k_linear": "bbox_attention.k_proj",
+        r"(\d+)\.fc1": r"\1.mlp.fc1",
+        r"(\d+)\.fc2": r"\1.mlp.fc2",
+    }
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -769,17 +780,11 @@ class DetrPreTrainedModel(PreTrainedModel):
 
 class DetrEncoder(DetrPreTrainedModel):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`DetrEncoderLayer`].
-
-    The encoder updates the flattened feature map through multiple self-attention layers.
-
-    Small tweak for DETR:
-
-    - object_queries are added to the forward pass.
+    Transformer encoder that processes a flattened feature map from a vision backbone, composed of a stack of
+    [`DetrEncoderLayer`] modules.
 
     Args:
-        config: DetrConfig
+        config (`DetrConfig`): Model configuration object.
     """
 
     _can_record_outputs = {
@@ -792,10 +797,7 @@ class DetrEncoder(DetrPreTrainedModel):
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-
         self.layers = nn.ModuleList([DetrEncoderLayer(config) for _ in range(config.encoder_layers)])
-
-        # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -812,7 +814,6 @@ class DetrEncoder(DetrPreTrainedModel):
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
 
@@ -820,7 +821,6 @@ class DetrEncoder(DetrPreTrainedModel):
                 - 0 for pixel features that are padding (i.e. **masked**).
 
                 [What are attention masks?](../glossary#attention-mask)
-
             spatial_position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Spatial position embeddings (2D positional encodings) that are added to the queries and keys in each self-attention layer.
         """
@@ -836,7 +836,7 @@ class DetrEncoder(DetrPreTrainedModel):
                 attention_mask=attention_mask,
             )
 
-        for i, encoder_layer in enumerate(self.layers):
+        for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -849,10 +849,7 @@ class DetrEncoder(DetrPreTrainedModel):
             else:
                 # we add spatial_position_embeddings as extra input to the encoder_layer
                 hidden_states = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    spatial_position_embeddings=spatial_position_embeddings,
-                    **kwargs,
+                    hidden_states, attention_mask, spatial_position_embeddings=spatial_position_embeddings, **kwargs
                 )
 
         return BaseModelOutput(last_hidden_state=hidden_states)
@@ -860,17 +857,11 @@ class DetrEncoder(DetrPreTrainedModel):
 
 class DetrDecoder(DetrPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DetrDecoderLayer`].
-
-    The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
-
-    Some small tweaks for DETR:
-
-    - object_queries and query_position_embeddings are added to the forward pass.
-    - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
+    Transformer decoder that refines a set of object queries. It is composed of a stack of [`DetrDecoderLayer`] modules,
+    which apply self-attention to the queries and cross-attention to the encoder's outputs.
 
     Args:
-        config: DetrConfig
+        config (`DetrConfig`): Model configuration object.
     """
 
     _can_record_outputs = {
@@ -996,11 +987,6 @@ class DetrDecoder(DetrPreTrainedModel):
     """
 )
 class DetrModel(DetrPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "backbone.conv_encoder": "backbone",
-        "out_proj": "o_proj",
-    }
-
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
@@ -1154,7 +1140,7 @@ class DetrModel(DetrPreTrainedModel):
             attention_mask=decoder_attention_mask,
             spatial_position_embeddings=spatial_position_embeddings,
             object_queries_position_embeddings=object_queries_position_embeddings,
-            encoder_hidden_states=encoder_outputs[0],
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
             encoder_attention_mask=flattened_mask,
             **kwargs,
         )
@@ -1200,11 +1186,6 @@ class DetrMLPPredictionHead(nn.Module):
     """
 )
 class DetrForObjectDetection(DetrPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "model.backbone.conv_encoder": "model.backbone",
-        "out_proj": "o_proj",
-    }
-
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
@@ -1340,13 +1321,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     """
 )
 class DetrForSegmentation(DetrPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "model.backbone.conv_encoder": "model.backbone",
-        "out_proj": "o_proj",
-        "bbox_attention.q_linear": "bbox_attention.q_proj",
-        "bbox_attention.k_linear": "bbox_attention.k_proj",
-    }
-
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
@@ -1476,7 +1450,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
             attention_mask=decoder_attention_mask,
             spatial_position_embeddings=spatial_position_embeddings,
             object_queries_position_embeddings=object_queries_position_embeddings,
-            encoder_hidden_states=encoder_outputs[0],
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
             encoder_attention_mask=flattened_mask,
             **kwargs,
         )
@@ -1487,7 +1461,9 @@ class DetrForSegmentation(DetrPreTrainedModel):
         pred_boxes = self.detr.bbox_predictor(sequence_output).sigmoid()
 
         height, width = feature_map.shape[-2:]
-        memory = encoder_outputs[0].permute(0, 2, 1).view(batch_size, self.config.d_model, height, width)
+        memory = encoder_outputs.last_hidden_state.permute(0, 2, 1).view(
+            batch_size, self.config.d_model, height, width
+        )
         attention_mask = flattened_mask.view(batch_size, height, width)
 
         # Note: mask is reversed because the original DETR implementation works with reversed masks
