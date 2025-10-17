@@ -68,9 +68,7 @@ def sdpa_attention_forward(
     if attention_mask is not None and attention_mask.ndim == 4:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
 
-    # Kwarg takes precedence over the defined module's attribute
-    # - Allows dynamic switching, e.g. when model's switch based on the model input type (CLIP)
-    # - Defaults to "normal" behavior for all attention types (encoder, decoder, cross)
+    # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
 
     # SDPA's Flash Attention (and cuDNN) kernels rely on the `is_causal` flag. However, there are certain conditions:
