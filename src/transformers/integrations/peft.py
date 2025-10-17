@@ -625,7 +625,7 @@ class PeftAdapterMixin:
 def maybe_load_adapters(
     pretrained_model_name_or_path,
     download_kwargs: DownloadKwargs,
-    **adapter_kwargs,
+    adapter_kwargs: dict[str, Any],
 ):
     if pretrained_model_name_or_path is None or not is_peft_available():
         return None, pretrained_model_name_or_path
