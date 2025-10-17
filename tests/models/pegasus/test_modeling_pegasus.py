@@ -234,7 +234,6 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False
     test_resize_position_embeddings = True
 
     test_missing_keys = False

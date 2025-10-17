@@ -231,7 +231,6 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False  # Fix me Michael
 
     test_missing_keys = False
 
