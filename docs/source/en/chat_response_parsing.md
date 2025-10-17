@@ -27,16 +27,14 @@ can be appended to the chat. For a concrete example, let's say we ask [GPT-OSS](
 what the weather is like, and it thinks and decides to call a tool. Here's what the raw model output might look like:
 
 ```txt
-<|start|><|assistant|><|channel|>analysis<|message|>The user asks: "What is the weather like in SF?" We need to get the location of the user? The user explicitly asks about SF (San Francisco).
+<|start|>analysis<|message|>The user asks: "What is the weather like in SF?" We need to get the location of the user? The user explicitly asks about SF (San Francisco).
 So we need to get the current weather in San Francisco, CA. We need to call get_current_weather function. But we need to call function to get weather data.
 So we should call get_current_weather with location "San Francisco, CA". Let's do that.
-
-We will call function get_current_weather.<|end|><|start|>assistant<|channel|>commentary to=functions.get_current_weather <|constrain|>json<|message|>{
-  "location": "San Francisco, CA"
+We will call function get_current_weather.<|end|><|start|>commentary to=functions.get_current_weather<|channel|>commentary <|constrain|>json<|message|>{"location":"San Francisco, CA"}<|call|>
 }
 ```
 
-And here's what that output would look like as a chat message dict:
+But if you want to append this to a chat, you'll need to format it as a chat message dict, like this:
 
 ```json
 {
