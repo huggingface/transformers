@@ -32,7 +32,7 @@ from ..llava.modeling_llava import (
 
 class FastVlmConfig(LlavaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FastVLMForConditionalGeneration`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`FastVlmForConditionalGeneration`]. It is used to instantiate a
     FastVLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield the same configuration as the one of FastVLM-7B.
 
