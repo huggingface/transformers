@@ -41,11 +41,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
-from .configuration_ernie4_5_vl import (
-    Ernie4_5_VLConfig,
-    Ernie4_5_VLTextConfig,
-    Ernie4_5_VLVisionConfig,
-)
+from .configuration_ernie4_5_vl import Ernie4_5_VLConfig, Ernie4_5_VLTextConfig, Ernie4_5_VLVisionConfig
 
 
 logger = logging.get_logger(__name__)
