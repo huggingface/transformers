@@ -41,6 +41,7 @@ from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -108,23 +109,23 @@ def _get_feat_extract_output_lengths(input_lengths):
 class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
     def __init__(
         self,
-        num_mel_bins=128,
-        encoder_layers=32,
-        encoder_attention_heads=20,
-        encoder_ffn_dim=5120,
-        d_model=1280,
-        dropout=0,
-        attention_dropout=0,
-        activation_function="gelu",
-        activation_dropout=0,
-        scale_embedding=False,
-        initializer_range=0.02,
-        max_source_positions=1500,
-        n_window=100,
-        output_dim=3584,
-        n_window_infer=400,
-        conv_chunksize=500,
-        downsample_hidden_size=480,
+        num_mel_bins: Optional[int] = 128,
+        encoder_layers: Optional[int] = 32,
+        encoder_attention_heads: Optional[int] = 20,
+        encoder_ffn_dim: Optional[int] = 5120,
+        d_model: Optional[int] = 1280,
+        dropout: Optional[int] = 0,
+        attention_dropout: Optional[int] = 0,
+        activation_function: Optional[int] = "gelu",
+        activation_dropout: Optional[int] = 0,
+        scale_embedding: Optional[int] = False,
+        initializer_range: Optional[int] = 0.02,
+        max_source_positions: Optional[int] = 1500,
+        n_window: Optional[int] = 100,
+        output_dim: Optional[int] = 3584,
+        n_window_infer: Optional[int] = 400,
+        conv_chunksize: Optional[int] = 500,
+        downsample_hidden_size: Optional[int] = 480,
         **kwargs,
     ):
         super().__init__(
@@ -156,31 +157,30 @@ class Qwen3OmniMoeVisionEncoderConfig(Qwen3VLMoeVisionConfig):
 class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
     def __init__(
         self,
-        vocab_size=3584,
-        hidden_size=2048,
-        intermediate_size=18944,
-        num_hidden_layers=28,
-        num_attention_heads=28,
-        num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=1000000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        sliding_window=None,
-        attention_dropout=0,
-        decoder_sparse_step=1,
-        moe_intermediate_size=768,
-        num_experts_per_tok=8,
-        num_experts=128,
-        norm_topk_prob=True,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        mlp_only_layers=None,
+        vocab_size: Optional[int] = 3584,
+        hidden_size: Optional[int] = 2048,
+        intermediate_size: Optional[int] = 18944,
+        num_hidden_layers: Optional[int] = 28,
+        num_attention_heads: Optional[int] = 28,
+        num_key_value_heads: Optional[int] = 4,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        attention_dropout: Optional[int] = 0,
+        decoder_sparse_step: Optional[int] = 1,
+        moe_intermediate_size: Optional[int] = 768,
+        num_experts_per_tok: Optional[int] = 8,
+        num_experts: Optional[int] = 128,
+        norm_topk_prob: Optional[bool] = True,
+        output_router_logits: Optional[bool] = False,
+        router_aux_loss_coef: Optional[float] = 0.001,
+        mlp_only_layers: Optional[list[int]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -196,8 +196,7 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
             rms_norm_eps,
             use_cache,
             tie_word_embeddings,
-            rope_theta,
-            rope_scaling,
+            rope_parameters,
             attention_bias,
             False,
             sliding_window,
@@ -214,6 +213,11 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
         )
         del self.use_sliding_window
         self.sliding_window = sliding_window
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
 
 class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
@@ -311,26 +315,25 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
 class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
     def __init__(
         self,
-        vocab_size=2048,
-        hidden_size=1024,
-        intermediate_size=3072,
-        num_hidden_layers=5,
-        num_attention_heads=16,
-        num_key_value_heads=8,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=0.000001,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000,
-        rope_scaling=None,
-        attention_bias=False,
-        sliding_window=None,
-        layer_types=None,
-        attention_dropout=0,
-        num_code_groups=32,
+        vocab_size: Optional[int] = 2048,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 3072,
+        num_hidden_layers: Optional[int] = 5,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = 8,
+        head_dim: Optional[int] = 128,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 0.000001,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[int] = None,
+        attention_bias: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        layer_types: Optional[list[str]] = None,
+        attention_dropout: Optional[int] = 0,
+        num_code_groups: Optional[int] = 32,
         **kwargs,
     ):
         super().__init__(
@@ -347,8 +350,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
             rms_norm_eps,
             use_cache,
             tie_word_embeddings,
-            rope_theta,
-            rope_scaling,
+            rope_parameters,
             attention_bias,
             False,
             sliding_window,
@@ -366,31 +368,30 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
 class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
     def __init__(
         self,
-        vocab_size=3072,
-        hidden_size=1024,
-        intermediate_size=2048,
-        num_hidden_layers=20,
-        num_attention_heads=16,
-        num_key_value_heads=2,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=0.000001,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000,
-        rope_scaling=None,
-        attention_bias=False,
-        sliding_window=None,
-        attention_dropout=0,
-        decoder_sparse_step=1,
-        moe_intermediate_size=384,
-        num_experts_per_tok=8,
-        num_experts=128,
-        norm_topk_prob=False,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        mlp_only_layers=None,
+        vocab_size: Optional[int] = 3072,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 2048,
+        num_hidden_layers: Optional[int] = 20,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = 2,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 0.000001,
+        use_cache: Optional[int] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        attention_dropout: Optional[int] = 0,
+        decoder_sparse_step: Optional[int] = 1,
+        moe_intermediate_size: Optional[int] = 384,
+        num_experts_per_tok: Optional[int] = 8,
+        num_experts: Optional[int] = 128,
+        norm_topk_prob: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
+        router_aux_loss_coef: Optional[float] = 0.001,
+        mlp_only_layers: Optional[list[int]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -406,8 +407,7 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
             rms_norm_eps,
             use_cache,
             tie_word_embeddings,
-            rope_theta,
-            rope_scaling,
+            rope_parameters,
             attention_bias,
             False,
             sliding_window,
@@ -1494,6 +1494,10 @@ class Qwen3OmniMoeTalkerCodePredictorDecoderLayer(Qwen3DecoderLayer):
         self.self_attn = Qwen3OmniMoeTalkerCodePredictorAttention(config=config, layer_idx=layer_idx)
 
 
+class Qwen3OmniMoeRotaryEmbedding(Qwen3RotaryEmbedding):
+    pass
+
+
 class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
     config_class = Qwen3OmniMoeTalkerCodePredictorConfig
     base_model_prefix = "talker.code_predictor.model"
@@ -1564,7 +1568,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
+        hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -1668,15 +1672,14 @@ class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3ForCausa
 @dataclass
 class Qwen3OmniMoeTalkerOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
-    Args:
-        generation_step (`int`, *optional*):
-            Current generation step, used to track which `trailing_text_hidden` should be used.
+    generation_step (`int`, *optional*):
+        Current generation step, used to track which `trailing_text_hidden` should be used.
     """
 
     generation_step: Optional[int] = None
 
 
-class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
+class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3RotaryEmbedding):
     pass
 
 
@@ -2040,10 +2043,6 @@ class Qwen3OmniMoeConvNeXtBlock(nn.Module):
         hidden_states = input + hidden_states
 
         return hidden_states
-
-
-class Qwen3OmniMoeCode2WavRotatoryEmbedding(Qwen3RotaryEmbedding):
-    pass
 
 
 class Qwen3OmniMoeCode2WavAttention(Qwen3Attention):

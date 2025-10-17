@@ -106,7 +106,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"rope_type": "linear", "factor": scaling_factor}
+        config.rope_parameters = {"rope_type": "linear", "rope_theta": 10000.0, "factor": scaling_factor}
         linear_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
         linear_freqs_cis_short = linear_scaling_rope(x, position_ids_short)
         linear_freqs_cis_long = linear_scaling_rope(x, position_ids_long)
@@ -115,7 +115,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"rope_type": "dynamic", "factor": scaling_factor}
+        config.rope_parameters = {"rope_type": "dynamic", "rope_theta": 10000.0, "factor": scaling_factor}
         ntk_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
         ntk_freqs_cis_short = ntk_scaling_rope(x, position_ids_short)
         ntk_freqs_cis_long = ntk_scaling_rope(x, position_ids_long)
@@ -126,7 +126,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
-        config.rope_scaling = {"rope_type": "yarn", "factor": scaling_factor}
+        config.rope_parameters = {"rope_type": "yarn", "rope_theta": 10000.0, "factor": scaling_factor}
         yarn_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
         yarn_freqs_cis_short = yarn_scaling_rope(x, position_ids_short)
         yarn_freqs_cis_long = yarn_scaling_rope(x, position_ids_long)

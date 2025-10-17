@@ -49,6 +49,7 @@ logger = logging.get_logger(__name__)
 class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        del self.layer_type
         self.sliding_window = getattr(config, "sliding_window", None)
 
 

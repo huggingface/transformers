@@ -14,7 +14,10 @@
 # limitations under the License.
 """FalconH1 model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -103,9 +106,7 @@ class FalconH1Config(PreTrainedConfig):
             Whether to use RMSNorm instead of LayerNorm in the Mamba block
         projectors_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
-        rope_theta (`float`, *optional*, defaults to 100000.0):
-            The theta value used for the RoPE embeddings.
-        rope_scaling (`float`, *optional*):
+        rope_parameters (`float`, *optional*):
             The scaling value used for the RoPE embeddings. If `None`, no scaling is applied.
         lm_head_multiplier (`float`, *optional*, defaults to 1.0):
             The multiplier for the LM head. This is used to scale the output of the LM head.
@@ -133,47 +134,46 @@ class FalconH1Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128000,
-        tie_word_embeddings=False,
-        hidden_size=4096,
-        intermediate_size=14336,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        num_logits_to_keep=1,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        max_position_embeddings=8192,
-        attention_dropout=0.0,
-        mamba_d_ssm=1024,
-        mamba_n_heads=128,
-        mamba_d_head="auto",
-        mamba_n_groups=1,
-        mamba_d_state=256,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=256,
-        mamba_conv_bias=True,
-        mamba_proj_bias=False,
-        mamba_norm_before_gate=True,
-        mamba_rms_norm=False,
-        projectors_bias=False,
-        rope_theta=100000.0,
-        rope_scaling=None,
-        lm_head_multiplier=1.0,
-        embedding_multiplier=1.0,
-        mlp_multipliers=None,
-        key_multiplier=None,
-        attention_out_multiplier=None,
-        attention_in_multiplier=None,
-        ssm_multipliers=None,
-        ssm_in_multiplier=None,
-        ssm_out_multiplier=None,
+        vocab_size: Optional[int] = 128000,
+        tie_word_embeddings: Optional[bool] = False,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 14336,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 8,
+        hidden_act: Optional[str] = "silu",
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[int] = True,
+        num_logits_to_keep: Optional[int] = 1,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        max_position_embeddings: Optional[int] = 8192,
+        attention_dropout: Optional[float] = 0.0,
+        mamba_d_ssm: Optional[int] = 1024,
+        mamba_n_heads: Optional[int] = 128,
+        mamba_d_head: Optional[str] = "auto",
+        mamba_n_groups: Optional[int] = 1,
+        mamba_d_state: Optional[int] = 256,
+        mamba_d_conv: Optional[int] = 4,
+        mamba_expand: Optional[int] = 2,
+        mamba_chunk_size: Optional[int] = 256,
+        mamba_conv_bias: Optional[bool] = True,
+        mamba_proj_bias: Optional[bool] = False,
+        mamba_norm_before_gate: Optional[bool] = True,
+        mamba_rms_norm: Optional[bool] = False,
+        projectors_bias: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        lm_head_multiplier: Optional[float] = 1.0,
+        embedding_multiplier: Optional[float] = 1.0,
+        mlp_multipliers: Optional[int] = None,
+        key_multiplier: Optional[int] = None,
+        attention_out_multiplier: Optional[int] = None,
+        attention_in_multiplier: Optional[int] = None,
+        ssm_multipliers: Optional[int] = None,
+        ssm_in_multiplier: Optional[int] = None,
+        ssm_out_multiplier: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -197,10 +197,15 @@ class FalconH1Config(PreTrainedConfig):
 
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
-        self.rope_theta = rope_theta
-        self.rope_scaling = None
-        self.rope_scaling = rope_scaling
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
+
         self.projectors_bias = projectors_bias
         mamba_intermediate = mamba_expand * hidden_size if mamba_d_ssm is None else mamba_d_ssm
 
