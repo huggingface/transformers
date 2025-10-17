@@ -695,7 +695,6 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     test_missing_keys = False
 
     # torchscript disabled for now because forward with an int
-    test_torchscript = False
 
     test_resize_embeddings = True
 
