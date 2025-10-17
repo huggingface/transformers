@@ -147,6 +147,8 @@ class FPQuantHfQuantizer(HfQuantizer):
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from fp_quant import FPQuantLinear
 
+        missing_keys = super().update_missing_keys(model, missing_keys, prefix)
+
         fp_quant_names = {name for name, module in model.named_modules() if isinstance(module, FPQuantLinear)}
 
         def should_exclude(key: str) -> bool:
