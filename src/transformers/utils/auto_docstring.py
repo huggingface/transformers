@@ -17,7 +17,7 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import Optional, Union, get_args
+from typing import get_args
 
 import regex as re
 
@@ -1084,7 +1084,7 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     return params, remainder_docstring
 
 
-def contains_type(type_hint, target_type) -> tuple[bool, Optional[object]]:
+def contains_type(type_hint, target_type) -> tuple[bool, object | None]:
     """
     Check if a "nested" type hint contains a specific target type,
     return the first-level type containing the target_type if found.
@@ -1173,7 +1173,7 @@ def format_args_docstring(docstring, model_name):
     return docstring
 
 
-def get_args_doc_from_source(args_classes: Union[object, list[object]]) -> dict:
+def get_args_doc_from_source(args_classes: object | list[object]) -> dict:
     if isinstance(args_classes, (list, tuple)):
         args_classes_dict = {}
         for args_class in args_classes:
