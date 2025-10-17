@@ -591,8 +591,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     additional_model_inputs = ["decoder_input_ids"]
     # training is not supported yet for MusicGen
     test_resize_embeddings = False
-    # not to test torchscript as the model tester doesn't prepare `input_features` and `padding_mask`
-    # (and `torchscript` hates `None` values).
     _is_composite = True
 
     def setUp(self):
