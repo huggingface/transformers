@@ -440,7 +440,7 @@ else:
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update", "RopeParameters"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
     _import_structure["optimization"] = [
@@ -619,6 +619,7 @@ if TYPE_CHECKING:
     from .modelcard import ModelCard as ModelCard
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
+    from .modeling_rope_utils import RopeParameters as RopeParameters
     from .modeling_rope_utils import dynamic_rope_update as dynamic_rope_update
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel

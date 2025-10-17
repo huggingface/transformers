@@ -22,10 +22,9 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    logging,
-)
+from ...utils import logging
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -35,9 +34,9 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
+    LlamaRotaryEmbedding,
     eager_attention_forward,
 )
-from ..llama4.modeling_llama4 import Llama4TextRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 
 
@@ -86,10 +85,10 @@ class DeepseekV2Config(LlamaConfig):
             End-of-sequence token ID.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the Rotary Position Embeddings (RoPE).
-        rope_scaling (`Dict`, *optional*):
-            Configuration for scaling RoPE embeddings. Supports `linear` and `dynamic` scaling strategies.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value, and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -153,40 +152,39 @@ class DeepseekV2Config(LlamaConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        first_k_dense_replace=0,
-        kv_lora_rank=512,
-        q_lora_rank=1536,
-        n_group=None,
-        n_routed_experts=64,
-        n_shared_experts=2,
-        qk_nope_head_dim=128,
-        qk_rope_head_dim=64,
-        routed_scaling_factor=1.0,
-        topk_group=None,
-        topk_method="greedy",
-        v_head_dim=128,
-        num_experts_per_tok=None,
-        moe_intermediate_size=1407,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        first_k_dense_replace: Optional[int] = 0,
+        kv_lora_rank: Optional[int] = 512,
+        q_lora_rank: Optional[int] = 1536,
+        n_group: Optional[int] = None,
+        n_routed_experts: Optional[int] = 64,
+        n_shared_experts: Optional[int] = 2,
+        qk_nope_head_dim: Optional[int] = 128,
+        qk_rope_head_dim: Optional[int] = 64,
+        routed_scaling_factor: Optional[float] = 1.0,
+        topk_group: Optional[int] = None,
+        topk_method: Optional[str] = "greedy",
+        v_head_dim: Optional[int] = 128,
+        num_experts_per_tok: Optional[int] = None,
+        moe_intermediate_size: Optional[int] = 1407,
         **kwargs,
     ):
         self.first_k_dense_replace = first_k_dense_replace
@@ -293,15 +291,20 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class DeepseekV2RotaryEmbedding(Llama4TextRotaryEmbedding):
-    def __init__(self, config: DeepseekV2Config, device=None):
-        super().__init__(config=config, device=device)
-        # BC: "rope_type" was originally "type"
-        self.rope_type = (
-            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            if config.rope_scaling is not None
-            else "default"
-        )
+class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
+            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
+            freqs_cis = freqs_cis * self.attention_scaling
+
+        return freqs_cis
 
 
 class DeepseekV2Attention(nn.Module):
@@ -316,7 +319,7 @@ class DeepseekV2Attention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = config.head_dim
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+
         self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank

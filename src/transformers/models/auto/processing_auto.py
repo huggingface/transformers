@@ -17,7 +17,6 @@
 import importlib
 import inspect
 import json
-import warnings
 from collections import OrderedDict
 
 # Build the list of all feature extractors
@@ -266,18 +265,6 @@ class AutoProcessor:
         >>> # If processor files are in a directory (e.g. processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # processor = AutoProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True

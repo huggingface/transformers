@@ -35,6 +35,7 @@ from ...utils.import_utils import (
     is_flash_linear_attention_available,
 )
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
@@ -47,7 +48,6 @@ from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
     Qwen3MoeMLP,
-    Qwen3MoeRotaryEmbedding,
     eager_attention_forward,
 )
 from .configuration_qwen3_next import Qwen3NextConfig
@@ -181,8 +181,38 @@ class Qwen3NextDynamicCache:
         return self.conv_states[self.last_linear_layer] is not None
 
 
-class Qwen3NextRotaryEmbedding(Qwen3MoeRotaryEmbedding):
-    pass
+class Qwen3NextRotaryEmbedding(Gemma2RotaryEmbedding):
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Qwen3NextConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
 
 class Qwen3NextRMSNorm(Gemma3RMSNorm):
@@ -766,8 +796,6 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
         linear_attn_mask = self._update_linear_attn_mask(attention_mask, cache_position)
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:

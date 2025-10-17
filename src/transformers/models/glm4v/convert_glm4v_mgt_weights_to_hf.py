@@ -626,8 +626,8 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         }
         hf_config["vision_config"] = vision_config
 
-    if "rope_scaling" in model_config:
-        hf_config["rope_scaling"] = model_config["rope_scaling"]
+    if "rope_parameters" in model_config:
+        hf_config["rope_parameters"] = model_config["rope_parameters"]
 
     config_path = os.path.join(output_path, "config.json")
     with open(config_path, "w") as f:

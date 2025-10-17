@@ -144,7 +144,6 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -467,7 +466,6 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
