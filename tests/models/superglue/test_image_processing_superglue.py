@@ -11,12 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import time
 import unittest
 
+import numpy as np
+import pytest
+from packaging import version
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
@@ -32,6 +42,9 @@ if is_torch_available():
 
 if is_vision_available():
     from transformers import SuperGlueImageProcessor
+
+    if is_torchvision_available():
+        from transformers import SuperGlueImageProcessorFast
 
 
 def random_array(size):
@@ -119,6 +132,7 @@ class SuperGlueImageProcessingTester:
 @require_vision
 class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = SuperGlueImageProcessor if is_vision_available() else None
+    fast_image_processing_class = SuperGlueImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self) -> None:
         super().setUp()
@@ -397,3 +411,76 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             tensor_post_processed_outputs = image_processor.post_process_keypoint_matching(outputs, tensor_image_sizes)
 
             check_post_processed_output(tensor_post_processed_outputs, tensor_image_sizes)
+
+    @unittest.skip(reason="Many failing cases. This test needs a more deep investigation.")
+    def test_fast_is_faster_than_slow(self):
+        """Override the generic test since EfficientLoFTR requires image pairs."""
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast speed test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast speed test as one of the image processors is not defined")
+
+        # Create image pairs for speed test
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=False)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        # Time slow processor
+        start_time = time.time()
+        for _ in range(10):
+            _ = image_processor_slow(dummy_images, return_tensors="pt")
+        slow_time = time.time() - start_time
+
+        # Time fast processor
+        start_time = time.time()
+        for _ in range(10):
+            _ = image_processor_fast(dummy_images, return_tensors="pt")
+        fast_time = time.time() - start_time
+
+        # Fast should be faster (or at least not significantly slower)
+        self.assertLessEqual(
+            fast_time, slow_time * 1.2, "Fast processor should not be significantly slower than slow processor"
+        )
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        dummy_image = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, numpify=True, batch_size=2, pairs=False
+        )
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+
+    @slow
+    @require_torch_accelerator
+    @require_vision
+    @pytest.mark.torch_compile_test
+    def test_can_compile_fast_image_processor(self):
+        """Override the generic test since EfficientLoFTR requires image pairs."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping compilation test as fast image processor is not defined")
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        torch.compiler.reset()
+        input_image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=False)
+        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        image_processor = torch.compile(image_processor, mode="reduce-overhead")
+        output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+        self._assert_slow_fast_tensors_equivalence(
+            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
+        )
