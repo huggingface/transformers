@@ -61,17 +61,9 @@ class MixtralExperts(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
-
-        self.w1 = nn.Parameter(torch.empty(self.num_experts, self.intermediate_dim, self.hidden_dim))
-        self.w2 = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.w3 = nn.Parameter(torch.empty(self.num_experts, self.intermediate_dim, self.hidden_dim))
-
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
-
-    def reset_parameters(self, initializer_range: float):
-        nn.init.normal_(self.w1, mean=0.0, std=initializer_range)
-        nn.init.normal_(self.w2, mean=0.0, std=initializer_range)
-        nn.init.normal_(self.w3, mean=0.0, std=initializer_range)
 
     def forward(
         self,
@@ -91,11 +83,10 @@ class MixtralExperts(nn.Module):
                 continue
 
             current_state = hidden_states.index_select(0, token_positions)
-            current_hidden_states = nn.functional.linear(current_state, self.w1[expert_idx])
-            current_hidden_states = self.act_fn(current_hidden_states)
-            gate_hidden_states = nn.functional.linear(current_state, self.w3[expert_idx])
-            current_hidden_states = current_hidden_states * gate_hidden_states
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.w2[expert_idx])
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2)
+            current_hidden_states = self.act_fn(up)
+            current_hidden_states = current_hidden_states * gate
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
 
             routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
             current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
@@ -378,11 +369,6 @@ class MixtralPreTrainedModel(PreTrainedModel):
         "hidden_states": MixtralDecoderLayer,
         "attentions": MixtralAttention,
     }
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, MixtralExperts):
-            initializer_range = getattr(self.config, "initializer_range", 0.02)
-            module.reset_parameters(initializer_range)
 
 
 @auto_docstring

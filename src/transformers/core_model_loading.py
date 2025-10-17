@@ -14,14 +14,13 @@
 # limitations under the License.
 """Core helpers for loading model checkpoints."""
 
-from collections import defaultdict
 from __future__ import annotations
-import re
 
 import math
+import re
 import time
 from abc import abstractmethod
-from collections import OrderedDict
+from collections import defaultdict
 from collections.abc import Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -51,12 +50,11 @@ except AttributeError:
     )
 
 try:
-    from torch.profiler import ProfilerActivity, profile as torch_profile
+    from torch.profiler import ProfilerActivity
+    from torch.profiler import profile as torch_profile
 except (ImportError, AttributeError):
     ProfilerActivity = None
     torch_profile = None
-
-
 
 
 class ConversionOps:
@@ -308,6 +306,7 @@ class SplitModuleList(ConversionOps):
             result.append(list(splits))
         return result
 
+
 class Cast(ConversionOps):
     """
     Casts the tensor to a given dtype
@@ -315,6 +314,7 @@ class Cast(ConversionOps):
 
     def __init__(self, dtype):
         self.dtype = dtype
+
 
 class To(ConversionOps):
     """
@@ -327,8 +327,10 @@ class To(ConversionOps):
         if is_fsdp_enabled():
             param_device = "cpu" if is_local_dist_rank_0() else "meta"
     """
+
     def __init__(self, device):
         self.device = device
+
 
 class Shard(ConversionOps):
     """Shard tensors along a specific dimension.
@@ -555,21 +557,23 @@ def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_
     # 1. we need to find which key we have (so we keep track of which pattern was matched)
     converted_state_dict: dict[str, torch.Tensor] = {}
     used_operations: list[ConversionOps] = []
-    keys_to_convert = [ rf"{ '|'.join(k.source_keys) if isinstance(k.source_keys, list) else k.source_keys}" for k in weight_mapping ]
+    keys_to_convert = [
+        rf"{'|'.join(k.source_keys) if isinstance(k.source_keys, list) else k.source_keys}" for k in weight_mapping
+    ]
     # tensor parallel is also a conversion scheme! So add it to the keys to convert!
     # quantization as well! But for quantization we would need to get the module, check if its a linear?
 
-    for k,v in state_dict.items():
-        if re.sub(rf"^({ '|'.join(keys_to_convert) })$", "", k) == k:
+    for k, v in state_dict.items():
+        if re.sub(rf"^({'|'.join(keys_to_convert)})$", "", k) == k:
             converted_state_dict[k] = v
         else:
             # we replace the whole key by the matched pattern so that we can find it later
-            pattern = re.sub(rf"^({ '|'.join(keys_to_convert) })$", r"\1", k)
-            collected_keys[pattern][k] += [v] # we collect all tensors that match the pattern
+            pattern = re.sub(rf"^({'|'.join(keys_to_convert)})$", r"\1", k)
+            collected_keys[pattern][k] += [v]  # we collect all tensors that match the pattern
         converter = weight_mapping[pattern]
-        if pattern in tp_plan: # If we want this to work conversion needs to be explicit no?
+        if pattern in tp_plan:  # If we want this to work conversion needs to be explicit no?
             if converter.distributed_operation is None:
-                converter.distributed_operation = Shard(0) # for now
+                converter.distributed_operation = Shard(0)  # for now
         # TODO: use `param_needs_quantization` !
         if pattern in quantization_config.conversion_mapping:
             if converter.quantize_operations is None:

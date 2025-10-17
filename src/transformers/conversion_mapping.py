@@ -5,7 +5,7 @@
 #
 # Either we keep it here, or we move it to the config, but for newcomers, seeing this is kinda weird no?
 
-from .core_model_loading import Concatenate, MergeModuleList, WeightConversion, Fp8Quantize, Shard
+from .core_model_loading import Concatenate, Fp8Quantize, MergeModuleList, Shard, WeightConversion
 
 
 _checkpoint_conversion_mapping = {

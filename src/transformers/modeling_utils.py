@@ -26,13 +26,13 @@ import sys
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Optional, Sequence, TypeVar, Union, get_type_hints
+from typing import Any, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -45,6 +45,8 @@ from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
+from .conversion_mapping import _checkpoint_conversion_mapping as DEFAULT_WEIGHT_CONVERSION_MAPPING
+from .core_model_loading import WeightConversion, convert_state_dict
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -59,7 +61,6 @@ from .integrations.accelerate import (
     init_empty_weights,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
-from .core_model_loading import QuantizationOp, Shard, WeightConversion, convert_state_dict
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
@@ -125,7 +126,6 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import QuantizationMethod
-from .conversion_mapping import _checkpoint_conversion_mapping as DEFAULT_WEIGHT_CONVERSION_MAPPING
 
 
 if is_accelerate_available():
@@ -732,8 +732,6 @@ def load_shard_file(args):
 
     # Fix the key names
     state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
-
-
 
 
 def load_shard_files_with_threadpool(args_list):
@@ -4407,7 +4405,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if model_type is not None:
             weight_conversions = DEFAULT_WEIGHT_CONVERSION_MAPPING.get(model_type)
 
-
         if gguf_file:
             if hf_quantizer is not None:
                 raise ValueError(
@@ -4700,7 +4697,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if weight_mapping:
             merged_state_dict = {}
-            for file in checkpoint_files: # TODO this is sequential but supposed to be fast
+            for file in checkpoint_files:  # TODO this is sequential but supposed to be fast
                 merged_state_dict.update(
                     load_state_dict(file, is_quantized=is_quantized, map_location="meta", weights_only=weights_only)
                 )
@@ -4749,7 +4746,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(missing_keys + mismatched_keys, is_quantized)
 
-
         is_offloaded_safetensors = False
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
@@ -4761,10 +4757,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 checkpoint_files,
                 device_map,
                 checkpoint_keys,
-                key_renaming_mapping,
+                new_state_dict.keys(),
                 sharded_metadata,
                 dtype,
-                reverse_key_renaming_mapping,
             )
         # To be able to iterate, even if we don't use it if the state_dict is already provided
         elif state_dict is not None:
@@ -4798,8 +4793,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 hf_quantizer=hf_quantizer,
                 device_mesh=device_mesh,
             )
-
-
 
         # Save offloaded index if needed
         if disk_offload_index is not None and len(disk_offload_index) > 0 and not is_offloaded_safetensors:
