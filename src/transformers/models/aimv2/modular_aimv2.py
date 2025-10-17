@@ -173,10 +173,6 @@ class Aimv2TextConfig(SiglipTextConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        pad_token_id (`int`, *optional*, defaults to 1):
-            The id of the padding token in the vocabulary.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            The id of the beginning-of-sequence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 49407):
             The id of the end-of-sequence token in the vocabulary.
         max_position_embeddings (`int`, *optional*, defaults to 77):
