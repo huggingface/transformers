@@ -538,6 +538,7 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
 class Pop2PianoPreTrainedModel(PreTrainedModel):
     config: Pop2PianoConfig
     base_model_prefix = "transformer"
+    output_modalities = "audio"
     supports_gradient_checkpointing = True
 
     _can_compile_fullgraph = False
