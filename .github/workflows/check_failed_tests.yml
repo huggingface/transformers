@@ -44,7 +44,7 @@ jobs:
     name: "Find commits for new failing tests"
     strategy:
       matrix:
-        run_idx: [1, 2, 3]
+        run_idx: [1]
     runs-on:
       group: aws-g5-4xlarge-cache
     container:
@@ -169,68 +169,76 @@ jobs:
           ls -la /transformers
           ls -la /transformers/new_failures_with_bad_commit_${{ inputs.job }}
 
+      # Currently, we only run with a single runner by using `run_idx: [1]`. We might try to run with multiple runners
+      # to further reduce the false positive caused by flaky tests, which requires further processing to merge reports.
+      - name: Merge files
+        shell: bash
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: |
+          cp /transformers/new_failures_with_bad_commit_${{ inputs.job }}/new_failures_with_bad_commit_${{ inputs.job }}_1.json new_failures_with_bad_commit.json
 
-#      - name: Process report
-#        shell: bash
-#        working-directory: /transformers
-#        if: ${{ env.process == 'true' }}
-#        env:
-#          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-#          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
-#          JOB_NAME: ${{ inputs.job }}
-#          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
-#        run: |
-#          python3 utils/process_bad_commit_report.py
+      - name: Process report
+        shell: bash
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          JOB_NAME: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+        run: |
+          python3 utils/process_bad_commit_report.py
 
-#      - name: Process report
-#        shell: bash
-#        working-directory: /transformers
-#        if: ${{ env.process == 'true' }}
-#        env:
-#          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-#          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
-#          JOB_NAME: ${{ inputs.job }}
-#          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
-#        run: |
-#          {
-#            echo 'REPORT_TEXT<<EOF'
-#            python3 utils/process_bad_commit_report.py
-#            echo EOF
-#          } >> "$GITHUB_ENV"
-#
-#      - name: Prepare Slack report title
-#        working-directory: /transformers
-#        if: ${{ env.process == 'true' }}
-#        run: |
-#          pip install slack_sdk
-#          echo "title=$(python3 -c 'import sys; sys.path.append("utils"); from utils.notification_service import job_to_test_map; ci_event = "${{ inputs.ci_event }}"; job = "${{ inputs.job }}"; test_name = job_to_test_map[job]; title = f"New failed tests of {ci_event}" + ":" + f" {test_name}"; print(title)')" >> $GITHUB_ENV
-#
-#      - name: Send processed report
-#        if: ${{ env.process == 'true' && !endsWith(env.REPORT_TEXT, '{}') }}
-#        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
-#        with:
-#          # Slack channel id, channel name, or user id to post message.
-#          # See also: https://api.slack.com/methods/chat.postMessage#channels
-#          channel-id: '#${{ inputs.slack_report_channel }}'
-#          # For posting a rich message using Block Kit
-#          payload: |
-#            {
-#              "blocks": [
-#                {
-#                  "type": "header",
-#                  "text": {
-#                    "type": "plain_text",
-#                    "text": "${{ env.title }}"
-#                  }
-#                },
-#                {
-#                  "type": "section",
-#                  "text": {
-#                    "type": "mrkdwn",
-#                    "text": "${{ env.REPORT_TEXT }}"
-#                  }
-#                }
-#              ]
-#            }
-#        env:
-#          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+      - name: Process report
+        shell: bash
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          JOB_NAME: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+        run: |
+          {
+            echo 'REPORT_TEXT<<EOF'
+            python3 utils/process_bad_commit_report.py
+            echo EOF
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare Slack report title
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: |
+          pip install slack_sdk
+          echo "title=$(python3 -c 'import sys; sys.path.append("utils"); from utils.notification_service import job_to_test_map; ci_event = "${{ inputs.ci_event }}"; job = "${{ inputs.job }}"; test_name = job_to_test_map[job]; title = f"New failed tests of {ci_event}" + ":" + f" {test_name}"; print(title)')" >> $GITHUB_ENV
+
+      - name: Send processed report
+        if: ${{ env.process == 'true' && !endsWith(env.REPORT_TEXT, '{}') }}
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        with:
+          # Slack channel id, channel name, or user id to post message.
+          # See also: https://api.slack.com/methods/chat.postMessage#channels
+          channel-id: '#${{ inputs.slack_report_channel }}'
+          # For posting a rich message using Block Kit
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ env.title }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ env.REPORT_TEXT }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
