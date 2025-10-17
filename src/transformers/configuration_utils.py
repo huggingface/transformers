@@ -437,8 +437,6 @@ class PreTrainedConfig(PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        self._set_token_in_kwargs(kwargs)
-
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -485,33 +483,6 @@ class PreTrainedConfig(PushToHubMixin):
                 commit_message=commit_message,
                 token=kwargs.get("token"),
             )
-
-    @staticmethod
-    def _set_token_in_kwargs(kwargs, token=None):
-        """Temporary method to deal with `token` and `use_auth_token`.
-
-        This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
-
-        Need to clean up `use_auth_token` in a follow PR.
-        """
-        # Some model config classes like CLIP define their own `from_pretrained` without the new argument `token` yet.
-        if token is None:
-            token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
-        if token is not None:
-            kwargs["token"] = token
 
     @classmethod
     def from_pretrained(
@@ -601,8 +572,6 @@ class PreTrainedConfig(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        cls._set_token_in_kwargs(kwargs, token)
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if cls.base_config_key and cls.base_config_key in config_dict:
             config_dict = config_dict[cls.base_config_key]
@@ -639,8 +608,6 @@ class PreTrainedConfig(PushToHubMixin):
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
-        cls._set_token_in_kwargs(kwargs)
-
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
