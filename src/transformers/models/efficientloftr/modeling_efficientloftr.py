@@ -617,7 +617,7 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
     def forward(
         self,
         coarse_features: torch.Tensor,
-        residual_features: list[torch.Tensor],
+        residual_features: list[torch.Tensor] | tuple[torch.Tensor],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         For each image pair, compute the fine features of pixels.

@@ -40,8 +40,7 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         cls.monolingual_vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["monolingual_vocab_file"])
         with open(cls.monolingual_vocab_file, "w", encoding="utf-8") as fp:
-            for token in vocab_tokens:
-                fp.write(f"{token} {vocab_tokens[token]}\n")
+            fp.writelines(f"{token} {vocab_tokens[token]}\n" for token in vocab_tokens)
 
         tokenizer = BartphoTokenizer(SAMPLE_VOCAB, cls.monolingual_vocab_file, **cls.special_tokens_map)
         tokenizer.save_pretrained(cls.tmpdirname)

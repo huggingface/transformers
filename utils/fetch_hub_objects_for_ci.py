@@ -210,8 +210,7 @@ if __name__ == "__main__":
             response.raise_for_status()
 
             with open(filename, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+                f.writelines(response.iter_content(chunk_size=8192))
             print(f"Successfully downloaded: {filename}")
         except requests.exceptions.RequestException as e:
             print(f"Error downloading {filename}: {e}")

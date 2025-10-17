@@ -317,8 +317,7 @@ def convert_tiktoken_to_hf(
 
         with open(merge_file, "w", encoding="utf-8") as writer:
             writer.write("#version: 0.2\n")
-            for bpe_tokens in merges:
-                writer.write(bpe_tokens + "\n")
+            writer.writelines(bpe_tokens + "\n" for bpe_tokens in merges)
 
         hf_tokenizer = WhisperTokenizer(vocab_file, merge_file)
 

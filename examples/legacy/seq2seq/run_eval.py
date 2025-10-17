@@ -130,7 +130,7 @@ def run_generate(verbose=True):
     parsed_args = parse_numeric_n_bool_cl_kwargs(rest)
     if parsed_args and verbose:
         print(f"parsed the following generate kwargs: {parsed_args}")
-    examples = [" " + x.rstrip() if "t5" in args.model_name else x.rstrip() for x in open(args.input_path).readlines()]
+    examples = [" " + x.rstrip() if "t5" in args.model_name else x.rstrip() for x in open(args.input_path)]
     if args.n_obs > 0:
         examples = examples[: args.n_obs]
     Path(args.save_path).parent.mkdir(exist_ok=True)
@@ -159,8 +159,8 @@ def run_generate(verbose=True):
 
     # Compute scores
     score_fn = calculate_bleu if "translation" in args.task else calculate_rouge
-    output_lns = [x.rstrip() for x in open(args.save_path).readlines()]
-    reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()][: len(output_lns)]
+    output_lns = [x.rstrip() for x in open(args.save_path)]
+    reference_lns = [x.rstrip() for x in open(args.reference_path)][: len(output_lns)]
     scores: dict = score_fn(output_lns, reference_lns)
     scores.update(runtime_metrics)
 
