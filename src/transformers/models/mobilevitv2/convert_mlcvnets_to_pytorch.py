@@ -54,7 +54,7 @@ def load_orig_config_file(orig_cfg_file):
     config = argparse.Namespace()
     with open(orig_cfg_file, "r") as yaml_file:
         try:
-            cfg = yaml.load(yaml_file, Loader=yaml.FullLoader)
+            cfg = yaml.safe_load(yaml_file, Loader=yaml.FullLoader)
 
             flat_cfg = flatten_yaml_as_dict(cfg)
             for k, v in flat_cfg.items():

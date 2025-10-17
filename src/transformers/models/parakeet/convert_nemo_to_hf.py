@@ -294,7 +294,7 @@ def main(
     filepath = cached_file(hf_repo_id, nemo_filename)
 
     model_files = extract_nemo_archive(filepath, os.path.dirname(filepath))
-    nemo_config = yaml.load(open(model_files["model_config"], "r"), Loader=yaml.FullLoader)
+    nemo_config = yaml.safe_load(open(model_files["model_config"], "r"), Loader=yaml.FullLoader)
 
     write_processor(nemo_config, model_files, output_dir, push_to_repo_id)
     write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id)
