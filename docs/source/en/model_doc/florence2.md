@@ -70,8 +70,8 @@ from transformers import AutoProcessor, Florence2ForConditionalGeneration
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base", dtype=torch.bfloat16, device_map="auto")
-processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base")
+model = Florence2ForConditionalGeneration.from_pretrained("florence-community/Florence-2-base", dtype=torch.bfloat16, device_map="auto")
+processor = AutoProcessor.from_pretrained("florence-community/Florence-2-base")
 
 task_prompt = "<OD>"
 inputs = processor(text=task_prompt, images=image, return_tensors="pt").to(model.device)
@@ -105,12 +105,12 @@ from transformers import AutoProcessor, Florence2ForConditionalGeneration, BitsA
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model = Florence2ForConditionalGeneration.from_pretrained(
-    "microsoft/Florence-2-large",
+    "florence-community/Florence-2-base",
     dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
-processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large")
+processor = AutoProcessor.from_pretrained("florence-community/Florence-2-base")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
