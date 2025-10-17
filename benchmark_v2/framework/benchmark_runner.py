@@ -12,6 +12,8 @@ from queue import Queue
 from typing import Any
 
 import torch
+from datasets import Dataset
+from huggingface_hub import HfApi
 from tqdm import trange
 
 from transformers import (
@@ -418,9 +420,6 @@ class BenchmarkRunner:
             raise ValueError(
                 "PUSH_TO_HUB_TOKEN is not set, cannot push results to the Hub. When setting dataset_id, please also set the PUSH_TO_HUB_TOKEN environment variable."
             )
-
-        from datasets import Dataset
-        from huggingface_hub import HfApi
 
         n_results = len(results)
         self.logger.info(f"Pushing {n_results} results to: {dataset_id}")
