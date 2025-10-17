@@ -302,10 +302,9 @@ class PreTrainedConfig(PushToHubMixin):
         self.sep_token_id = sep_token_id
         self.decoder_start_token_id = decoder_start_token_id
 
-        # Retrocompatibility: Parameters for sequence generation. While we will keep the ability to load these
-        # parameters, saving them will be deprecated. In a distant future, we won't need to load them.
-        for parameter_name, default_value in self._get_global_generation_defaults().items():
-            setattr(self, parameter_name, kwargs.pop(parameter_name, default_value))
+        # Parameters for sequence generation saved in the config are popped instead of loading them.
+        for parameter_name in self._get_global_generation_defaults().keys():
+            kwargs.pop(parameter_name)
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
@@ -445,14 +444,11 @@ class PreTrainedConfig(PushToHubMixin):
 
         non_default_generation_parameters = self._get_non_default_generation_parameters()
         if len(non_default_generation_parameters) > 0:
-            # TODO (joao): this should be an exception if the user has modified the loaded config. See #33886
-            warnings.warn(
+            raise ValueError(
                 "Some non-default generation parameters are set in the model config. These should go into either a) "
                 "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
                 "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)."
-                "This warning will become an exception in the future."
                 f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
-                UserWarning,
             )
 
         os.makedirs(save_directory, exist_ok=True)
