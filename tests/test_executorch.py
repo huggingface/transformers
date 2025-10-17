@@ -23,8 +23,10 @@ from transformers.integrations.executorch import (
     TorchExportableModuleWithHybridCache,
     TorchExportableModuleWithStaticCache,
 )
+from transformers.models.granite_speech.feature_extraction_granite_speech import GraniteSpeechFeatureExtractor
+from transformers.models.whisper.feature_extraction_whisper import WhisperFeatureExtractor
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torchaudio
 
 
 @require_torch
@@ -127,3 +129,29 @@ class ExecutorchTest(unittest.TestCase):
             inputs_embeds=self.inputs_embeds, cache_position=self.cache_position
         )
         torch.testing.assert_close(eager_output_embeds, exported_output_embeds, atol=1e-4, rtol=1e-4)
+
+
+@require_torchaudio
+@require_torch
+class FeatureExtractorExportTest(unittest.TestCase):
+    def setUp(self):
+        if not is_torch_greater_or_equal_than_2_3:
+            self.skipTest("torch >= 2.3 is required")
+
+    def test_whisper_export(self):
+        feature_extractor = WhisperFeatureExtractor()
+        exportable_module = feature_extractor.to_exportable_module()
+        waveform = torch.randn(1, 16000, dtype=torch.float32)
+        exported_program = torch.export.export(exportable_module, args=(waveform,))
+        self.assertIsNotNone(exported_program)
+        exported_output = exported_program.module()(waveform)
+        self.assertIsNotNone(exported_output)
+
+    def test_granite_speech_export(self):
+        feature_extractor = GraniteSpeechFeatureExtractor()
+        exportable_module = feature_extractor.to_exportable_module()
+        waveform = torch.randn(1, 16000, dtype=torch.float32)
+        exported_program = torch.export.export(exportable_module, args=(waveform,))
+        self.assertIsNotNone(exported_program)
+        exported_output = exported_program.module()(waveform)
+        self.assertIsNotNone(exported_output)
