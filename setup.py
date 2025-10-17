@@ -67,7 +67,6 @@ To create the package for pypi.
 9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 """
 
-import os
 import re
 import shutil
 from pathlib import Path
@@ -261,10 +260,7 @@ extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
 extras["hf_xet"] = deps_list("hf_xet")
 
-if os.name == "nt":  # windows
-    extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
-else:
-    extras["retrieval"] = deps_list("faiss-cpu", "datasets")
+extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
