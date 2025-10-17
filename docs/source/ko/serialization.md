@@ -47,7 +47,7 @@ ONNX 형식으로 내보낸 모델은 다음과 같이 사용할 수 있습니�
 🤗 Transformers 모델을 ONNX로 내보내려면 먼저 추가 종속성을 설치하세요:
 
 ```bash
-pip install optimum[exporters]
+pip install optimum-onnx
 ```
 
 사용 가능한 모든 인수를 확인하려면 [🤗 Optimum 문서](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli)를 참조하거나 명령줄에서 도움말을 보세요.
@@ -123,59 +123,3 @@ CLI 대신에 `optimum.onnxruntime`을 사용하여 프로그래밍 방식으로
 ### 지원되지 않는 아키텍처의 모델 내보내기 [[exporting-a-model-for-an-unsupported-architecture]]
 
 현재 내보낼 수 없는 모델을 지원하기 위해 기여하려면, 먼저 [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/exporters/onnx/overview)에서 지원되는지 확인한 후 지원되지 않는 경우에는 [🤗 Optimum에 기여](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute)하세요.
-
-### `transformers.onnx`를 사용하여 모델 내보내기 [[exporting-a-model-with-transformersonnx]]
-
-<Tip warning={true}>
-
-`tranformers.onnx`는 더 이상 유지되지 않습니다. 위에서 설명한 대로 🤗 Optimum을 사용하여 모델을 내보내세요. 이 섹션은 향후 버전에서 제거될 예정입니다.
-
-</Tip>
-
-🤗 Transformers 모델을 ONNX로 내보내려면 추가 종속성을 설치하세요:
-
-```bash
-pip install transformers[onnx]
-```
-
-`transformers.onnx` 패키지를 Python 모듈로 사용하여 준비된 구성을 사용하여 체크포인트를 내보냅니다:
-
-```bash
-python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
-```
-
-이렇게 하면 `--model` 인수에 정의된 체크포인트의 ONNX 그래프가 내보내집니다. 🤗 Hub에서 제공하는 체크포인트나 로컬에 저장된 체크포인트를 전달할 수 있습니다. 결과로 생성된 `model.onnx` 파일은 ONNX 표준을 지원하는 많은 가속기 중 하나에서 실행할 수 있습니다. 예를 들어, 다음과 같이 ONNX Runtime을 사용하여 모델을 로드하고 실행할 수 있습니다:
-
-```python
->>> from transformers import AutoTokenizer
->>> from onnxruntime import InferenceSession
-
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
->>> session = InferenceSession("onnx/model.onnx")
->>> # ONNX Runtime expects NumPy arrays as input
->>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")
->>> outputs = session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
-```
-
-필요한 출력 이름(예: `["last_hidden_state"]`)은 각 모델의 ONNX 구성을 확인하여 얻을 수 있습니다. 예를 들어, DistilBERT의 경우 다음과 같습니다:
-
-```python
->>> from transformers.models.distilbert import DistilBertConfig, DistilBertOnnxConfig
-
->>> config = DistilBertConfig()
->>> onnx_config = DistilBertOnnxConfig(config)
->>> print(list(onnx_config.outputs.keys()))
-["last_hidden_state"]
-```
-
-Hub의 TensorFlow 체크포인트에 대해서도 동일한 프로세스가 적용됩니다. 예를 들어, 다음과 같이 순수한 TensorFlow 체크포인트를 내보냅니다:
-
-```bash
-python -m transformers.onnx --model=keras-io/transformers-qa onnx/
-```
-
-로컬에 저장된 모델을 내보내려면 모델의 가중치 파일과 토크나이저 파일을 동일한 디렉토리에 저장한 다음, transformers.onnx 패키지의 --model 인수를 원하는 디렉토리로 지정하여 ONNX로 내보냅니다:
-
-```bash
-python -m transformers.onnx --model=local-pt-checkpoint onnx/
-```
