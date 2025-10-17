@@ -193,7 +193,19 @@ class NanoChatPreTrainedModel(LlamaPreTrainedModel):
     base_model_prefix = "model"
     _no_split_modules = ["NanoChatDecoderLayer"]
     _supports_attention_backend = True
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
 
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    
+    _can_record_outputs = {
+        "hidden_states": NanoChatDecoderLayer,
+        "attentions": NanoChatAttention,
+    }
+    
     def _init_weights(self, module: nn.Module) -> None:
         if isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
