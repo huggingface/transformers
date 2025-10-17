@@ -167,8 +167,6 @@ class PreTrainedConfig(PushToHubMixin):
 
         > PyTorch specific parameters
 
-        torchscript (`bool`, *optional*, defaults to `False`):
-            Whether or not the model should be used with Torchscript.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
             model has a output word embedding layer.
@@ -206,7 +204,6 @@ class PreTrainedConfig(PushToHubMixin):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         return_dict: bool = True,
-        torchscript: bool = False,
         dtype: Optional[Union[str, "torch.dtype"]] = None,
         # Common arguments
         tie_word_embeddings: bool = True,
@@ -268,7 +265,6 @@ class PreTrainedConfig(PushToHubMixin):
         # Attributes common for all models
         self.return_dict = return_dict
         self.output_hidden_states = output_hidden_states
-        self.torchscript = torchscript
         self.dtype = dtype
         self._output_attentions = output_attentions  # has public property
 
@@ -373,8 +369,7 @@ class PreTrainedConfig(PushToHubMixin):
         """
         `bool`: Whether or not return [`~utils.ModelOutput`] instead of tuples.
         """
-        # If torchscript is set, force `return_dict=False` to avoid jit errors
-        return self.return_dict and not self.torchscript
+        return self.return_dict
 
     @property
     def num_labels(self) -> int:

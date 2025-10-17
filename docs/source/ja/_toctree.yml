@@ -109,8 +109,6 @@
     title: チャットモデルのテンプレート
   - local: serialization
     title: ONNX へのエクスポート
-  - local: torchscript
-    title: トーチスクリプトへのエクスポート
   - local: community
     title: コミュニティリソース
   - local: troubleshooting

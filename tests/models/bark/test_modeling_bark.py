@@ -694,9 +694,6 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_missing_keys = False
 
-    # torchscript disabled for now because forward with an int
-    test_torchscript = False
-
     test_resize_embeddings = True
 
     def setUp(self):
