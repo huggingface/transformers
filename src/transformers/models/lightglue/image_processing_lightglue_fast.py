@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,19 +12,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
-
-from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
-if TYPE_CHECKING:
-    from .configuration_lightglue import *
-    from .image_processing_lightglue import *
-    from .image_processing_lightglue_fast import *
-    from .modeling_lightglue import *
-else:
-    import sys
 
-    _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_utils import PILImageResampling
+from ...utils import auto_docstring
+
+
+@auto_docstring
+class LightGlueImageProcessorFast(BaseImageProcessorFast):
+    resample = PILImageResampling.BILINEAR
+    image_mean = None
+    image_std = None
+    size = {"height": 480, "width": 640}
+    default_to_square = False
+    crop_size = None
+    do_resize = True
+    do_center_crop = None
+    do_rescale = True
+    do_normalize = None
+    do_convert_rgb = None
+
+
+__all__ = ["LightGlueImageProcessorFast"]
