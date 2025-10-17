@@ -87,7 +87,6 @@ class FastVlmConfig(PreTrainedConfig):
         multimodal_projector_bias=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.image_token_id = image_token_id
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
@@ -135,6 +134,8 @@ class FastVlmConfig(PreTrainedConfig):
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["FastVlmConfig"]

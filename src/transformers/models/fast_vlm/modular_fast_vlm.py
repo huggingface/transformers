@@ -91,7 +91,6 @@ class FastVlmConfig(LlavaConfig):
         multimodal_projector_bias=True,
         **kwargs,
     ):
-        PreTrainedConfig.__init__(**kwargs)
         self.image_token_id = image_token_id
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
@@ -140,6 +139,8 @@ class FastVlmConfig(LlavaConfig):
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
 
+        PreTrainedConfig.__init__(**kwargs)
+
 
 class FastVlmMultiModalProjector(LlavaMultiModalProjector):
     def __init__(self, config: FastVlmConfig):
@@ -163,9 +164,6 @@ class FastVlmModel(LlavaModel):
     _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: FastVlmConfig):
-        # Timm models don't support this way of setting attention mode so we set the vision config to eager while keeping the language part
-        # the same as the user requested
-        # config.vision_config._attn_implementation = "eager"
         super().__init__(config)
 
     def get_image_features(
