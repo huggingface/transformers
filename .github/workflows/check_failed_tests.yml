@@ -45,7 +45,6 @@ jobs:
     strategy:
       matrix:
         run_idx: [1, 2, 3]
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: aws-g5-4xlarge-cache
     container:
@@ -147,6 +146,7 @@ jobs:
 
   process_new_failures_with_commit_info:
     name: "process bad commit reports"
+    needs: [check_new_failures]
     runs-on:
       group: aws-g5-4xlarge-cache
     container:
