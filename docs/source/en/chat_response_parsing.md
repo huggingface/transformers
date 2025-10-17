@@ -56,10 +56,10 @@ And here's what that output would look like as a chat message dict:
 Chat **templates** give us a way to turn messages into formatted input for a model, but we need something else to
 parse model output back into a standard message dict. This is what chat **parsing** is for.
 
-## The `parse_response` method
+## The [parse_response](~PreTrainedTokenizerBase.parse_response) method
 
 Parsing a chat response on a model that supports it is straightforward. Simply take the raw, decoded output from
-`generate()`, and pass it to the tokenizer's `parse_response` method:
+[generate](~PreTrainedTokenizerBase.generate), and pass it to the tokenizer's [parse_response](~PreTrainedTokenizerBase.parse_response) method:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
