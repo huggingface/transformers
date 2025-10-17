@@ -566,6 +566,8 @@ def main():
                     json.dump(vocab_dict, file)
 
         tokenizer_kwargs = {
+            "config": config,
+            "tokenizer_type": config.model_type,
             "unk_token": unk_token,
             "pad_token": pad_token,
             "word_delimiter_token": word_delimiter_token,
@@ -576,6 +578,7 @@ def main():
     # one local process can concurrently download model & vocab.
 
     # load feature_extractor and tokenizer
+    print(config, "tokenizer_name_or_path", tokenizer_name_or_path)
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
         token=data_args.token,

@@ -570,6 +570,8 @@ def main():
                     json.dump(vocab_dict, file)
 
         tokenizer_kwargs = {
+            "config": config,
+            "tokenizer_type": config.model_type,
             "unk_token": unk_token,
             "pad_token": pad_token,
             "word_delimiter_token": word_delimiter_token,
