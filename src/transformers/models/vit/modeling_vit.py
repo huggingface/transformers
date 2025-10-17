@@ -249,31 +249,21 @@ class ViTAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class ViTIntermediate(nn.Module):
+class ViTMLP(nn.Module):
     def __init__(self, config: ViTConfig):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-class ViTOutput(nn.Module):
-    def __init__(self, config: ViTConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = hidden_states + input_tensor
+
         return hidden_states
 
 
@@ -283,12 +273,10 @@ class ViTLayer(GradientCheckpointingLayer):
     def __init__(self, config: ViTConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
         self.attention = ViTAttention(config)
-        self.intermediate = ViTIntermediate(config)
-        self.output = ViTOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = ViTMLP(config)
 
     def forward(
         self,
@@ -296,20 +284,17 @@ class ViTLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output, _ = self.attention(hidden_states_norm, attention_mask, **kwargs)
+        residual = hidden_states
+        hidden_states = self.layernorm_before(hidden_states)
+        hidden_states, _ = self.attention(hidden_states, attention_mask, **kwargs)
 
-        # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = hidden_states + residual
+        residual = hidden_states
+        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = hidden_states + residual
 
-        # in ViT, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
-
-        # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
-
-        return layer_output
+        return hidden_states
 
 
 class ViTEncoder(nn.Module):
@@ -346,6 +331,14 @@ class ViTPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": ViTLayer,
         "attentions": ViTAttention,
+    }
+    _checkpoint_conversion_mapping = {
+        "attention.query": "q_proj",
+        "attention.key": "k_proj",
+        "attention.value": "v_proj",
+        "attention.output.dense": "attention.o_proj",
+        "intermediate.dense": "mlp.fc1",
+        "output.dense": "mlp.fc2",
     }
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
