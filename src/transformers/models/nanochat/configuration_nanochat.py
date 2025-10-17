@@ -39,25 +39,6 @@ class NanoChatConfig(PretrainedConfig):
         pad_token_id: int = 1,
         **kwargs,
     ):
-
-
-        if intermediate_size is None:
-            intermediate_size = 4 * hidden_size
-
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        if hidden_size % num_attention_heads != 0:
-            raise ValueError(
-                "hidden_size must be divisible by num_attention_heads (got hidden_size="
-                f"{hidden_size} and num_attention_heads={num_attention_heads})."
-            )
-        if num_attention_heads % num_key_value_heads != 0:
-            raise ValueError(
-                "num_attention_heads must be divisible by num_key_value_heads (got num_attention_heads="
-                f"{num_attention_heads} and num_key_value_heads={num_key_value_heads})."
-            )
-
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
