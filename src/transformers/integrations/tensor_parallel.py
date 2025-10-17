@@ -459,10 +459,12 @@ class GatherParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        assert device_mesh.ndim == 1, f"Expected 1D device mesh but got {device_mesh.ndim}-D device mesh"
+        pg = device_mesh.get_group(mesh_dim=0)
         if isinstance(outputs, torch.Tensor):
-            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False)
+            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False, group=pg)
         else:
-            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
+            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False, group=pg)
         return outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
