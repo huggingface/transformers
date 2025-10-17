@@ -21,6 +21,7 @@ python src/transformers/models/gemma3/convert_gemma3_weights.py \
     --tokenizer_path="$HOME/gemma3/tokenizer/gemma3_cleaned_262144_v2.spiece.model" \
     --checkpoint_path="$HOME/gemma3/gemma3_4b_pt_orbax/" \
     --output_path="$HOME/gemma3/gemma3_4b_pt_safetensors/"
+    --include_vision_encoder
 """
 
 from collections.abc import Iterator, Sequence
@@ -182,7 +183,7 @@ _VARIANTS = {
     ),
     _VARIANT_GEMMA_3_4B: Gemma3Config(
         text_config=Gemma3TextConfig(
-            vocab_size=262_208,
+            vocab_size=262_144,
             hidden_size=2560,
             intermediate_size=2560 * 8 // 2,
             num_attention_heads=8,
@@ -200,7 +201,7 @@ _VARIANTS = {
     ),
     _VARIANT_GEMMA_3_12B: Gemma3Config(
         text_config=Gemma3TextConfig(
-            vocab_size=262_208,
+            vocab_size=262_144,
             hidden_size=30 * 128,
             intermediate_size=30 * 128 * 8 // 2,
             num_attention_heads=16,
@@ -218,7 +219,7 @@ _VARIANTS = {
     ),
     _VARIANT_GEMMA_3_27B: Gemma3Config(
         text_config=Gemma3TextConfig(
-            vocab_size=262_208,
+            vocab_size=262_144,
             hidden_size=42 * 128,
             intermediate_size=42 * 128 * 8 // 2,
             num_attention_heads=32,
@@ -251,7 +252,7 @@ _INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
 
 _INCLUDE_VISION_ENCODER = flags.DEFINE_bool(
     name="include_vision_encoder",
-    default=True,
+    default=False,
     help=(
         "If true, the model will expect vision weights in the checkpoint at `checkpoint_path` an if not found loading"
         " the weights will throw a `RuntimeError`."
@@ -412,7 +413,7 @@ def convert_transformer_weights(
     if path.endswith(_TRANSFORMER_EMBEDDER):
         if prop == "input_embedding":
             # Tied to language_model.lm_head.weight, assigned at the end.
-            converted_paths = ["language_model.model.embed_tokens.weight"]
+            converted_paths = ["model.language_model.embed_tokens.weight"]
 
             if _INCLUDE_VISION_ENCODER.value:
                 # Gemma3 model doesn't have image soft token in input and output embeddings, resize to avoid bugs we had with Mllama
@@ -421,6 +422,7 @@ def convert_transformer_weights(
                 sigma = np.cov(pre_expansion_embeddings, rowvar=False, bias=True)
                 new_embeddings = np.random.multivariate_normal(mu, 1e-5 * sigma, size=64)
                 weights = np.vstack([pre_expansion_embeddings, new_embeddings])
+                config.vocab_size += 64
 
             converted_weights = [weights]
         elif not _INCLUDE_VISION_ENCODER.value or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
@@ -432,15 +434,15 @@ def convert_transformer_weights(
             return zip([], [])
 
         if path.endswith("/mm_input_projection"):
-            converted_paths = ["multi_modal_projector.mm_input_projection_weight"]
+            converted_paths = ["model.multi_modal_projector.mm_input_projection_weight"]
             converted_weights = [weights]
         elif path.endswith("/mm_soft_embedding_norm"):
-            converted_paths = ["multi_modal_projector.mm_soft_emb_norm.weight"]
+            converted_paths = ["model.multi_modal_projector.mm_soft_emb_norm.weight"]
             converted_weights = [weights]
         else:
             raise ValueError(f"Unexpected subpath, `{path}`, in Embedder.")
     elif path.endswith(_TRANSFORMER_FINAL_NORM):
-        converted_paths = ["language_model.model.norm.weight"]
+        converted_paths = ["model.language_model.norm.weight"]
         converted_weights = [weights]
     elif _TRANSFORMER_DECODER_BLOCK in path:
         decoder_block_start = path.find(_TRANSFORMER_DECODER_BLOCK)
@@ -450,7 +452,7 @@ def convert_transformer_weights(
         layer_idx = decoder_block_path[:next_path_separator_idx]
         decoder_block_path = decoder_block_path[next_path_separator_idx:]
 
-        base_path = f"language_model.model.layers.{layer_idx}"
+        base_path = f"model.language_model.layers.{layer_idx}"
 
         if path.endswith("attn/attn_vec_einsum"):
             converted_paths = [f"{base_path}.self_attn.o_proj.weight"]
@@ -537,9 +539,16 @@ def convert(
         else:
             for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
                 if not _INCLUDE_VISION_ENCODER.value:
-                    path = path[len("language_model.") :]
+                    # Paths generated during weights conversion assume it is targeting a Gemma3ForConditionalGeneration
+                    # model, which has a Gemma3TextModel at "model.language_model". If _INCLUDE_VISION_ENCODER.value is
+                    # False, then this is targeting a Gemma3ForCausalLM, which has its Gemma3TextModel at "model", so
+                    # the "language_model." portion of the path needs to be removed prior to calling load_state_dict().
+                    path = path.replace("language_model.", "")
 
                 if variant == _VARIANT_EMBEDDINGGEMMA:
+                    # EmbeddingGemma only the Gemma3TextModel instead of an LLM of VLM class for loading weights, and
+                    # defers final model construction to SentenceTransformers, so the "model." portion of the path
+                    # needs to be removed prior to calling load_state_dict().
                     path = path[len("model.") :]
 
                 update_tree(path, weights, config.text_config.dtype)
@@ -547,10 +556,10 @@ def convert(
     if variant == _VARIANT_EMBEDDINGGEMMA:
         return hf_tree, [weight[1].T for weight in orbax_tree_flat[: _NUM_LINEAR_LAYERS.value]]
 
-    if not _INCLUDE_VISION_ENCODER.value:
-        hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
+    if _INCLUDE_VISION_ENCODER.value:
+        hf_tree["lm_head.weight"] = hf_tree["model.language_model.embed_tokens.weight"]
     else:
-        hf_tree["language_model.lm_head.weight"] = hf_tree["language_model.model.embed_tokens.weight"]
+        hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
 
     return hf_tree, None
 
