@@ -13,12 +13,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch NanoChat model."""
 
-import gc
 import unittest
 
 from transformers import AutoTokenizer, NanoChatConfig, is_torch_available
 from transformers.testing_utils import (
-    backend_empty_cache,
+    cleanup,
     require_torch,
     slow,
     torch_device,
@@ -53,6 +52,12 @@ class NanoChatModelTest(CausalLMModelTest, unittest.TestCase):
 class NanoChatIntegrationTest(unittest.TestCase):
     """Integration tests for NanoChat models using real checkpoints."""
 
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     @slow
     def test_model_d20_logits(self):
         """Test that d20 model logits are computed correctly."""
@@ -86,10 +91,6 @@ class NanoChatIntegrationTest(unittest.TestCase):
             [-12.875, -13.0625, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -12.625, -4.21875]
         )
         torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=1e-2)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @slow
     def test_model_d20_generation(self):
@@ -128,10 +129,6 @@ class NanoChatIntegrationTest(unittest.TestCase):
         # Expected: "The capital of France is Paris."
         self.assertIn("Paris", generated_text)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
     @slow
     def test_model_d32_logits(self):
         """Test that d32 model logits are computed correctly."""
@@ -168,10 +165,6 @@ class NanoChatIntegrationTest(unittest.TestCase):
             [-12.4375, -13.1875, -12.875, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -11.9375, -1.6328]
         )
         torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=1e-2)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @slow
     def test_model_d32_generation(self):
@@ -212,7 +205,3 @@ class NanoChatIntegrationTest(unittest.TestCase):
         # The model should generate a reasonable response (with greedy decoding this is deterministic)
         # Expected: "The capital of France is Paris."
         self.assertIn("Paris", generated_text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
