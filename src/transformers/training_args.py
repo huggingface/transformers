@@ -395,10 +395,10 @@ class TrainingArguments:
         dataloader_num_workers (`int`, *optional*, defaults to 0):
             Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
             main process.
-        run_name (`str`, *optional*, defaults to `output_dir`):
+        run_name (`str`, *optional*):
             A descriptor for the run. Typically used for [trackio](https://github.com/gradio-app/trackio),
             [wandb](https://www.wandb.com/), [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and
-            [swanlab](https://swanlab.cn) logging. If not specified, will be the same as `output_dir`.
+            [swanlab](https://swanlab.cn) logging.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
