@@ -578,7 +578,6 @@ def main():
     # one local process can concurrently download model & vocab.
 
     # load feature_extractor and tokenizer
-    print(config, "tokenizer_name_or_path", tokenizer_name_or_path)
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
         token=data_args.token,
