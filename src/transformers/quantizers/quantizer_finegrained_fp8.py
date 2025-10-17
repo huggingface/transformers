@@ -13,8 +13,37 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+class FP8QATQuantizer(HfQuantizer):
 
-class FineGrainedFP8HfQuantizer(HfQuantizer):
+    def __init__(self, quantization_config, **kwargs):
+        super().__init__(quantization_config, **kwargs)
+        self.quantization_config = quantization_config
+
+    def fake_quantize(self, model: "PreTrainedModel", **kwargs):
+        # Keep it simple: add activation fake-quant hooks to Linear layers.
+        modules_to_not_convert = self.get_modules_to_not_convert(
+            model,
+            getattr(self.quantization_config, "modules_to_not_convert", None),
+            kwargs.get("keep_in_fp32_modules"),
+        )
+        block_size = getattr(self.quantization_config, "weight_block_size", (128, 128))
+        from ..integrations.finegrained_fp8 import add_fp8_qat_hook
+        add_fp8_qat_hook(
+            model,
+            modules_to_not_convert=modules_to_not_convert,
+            block_size=block_size,
+        )
+        return model
+
+    def prepare_model(self, model: "PreTrainedModel", **kwargs):
+        return self.fake_quantize(model, **kwargs)
+
+    def remove_fake_quantization(self, model: "PreTrainedModel", **kwargs):
+        from ..integrations.finegrained_fp8 import remove_fp8_qat_hook
+        remove_fp8_qat_hook(model)
+        return model
+
+class FineGrainedFP8HfQuantizer(FP8QATQuantizer):
     """
     FP8 quantization implementation supporting both standard and MoE models.
     Supports both e4m3fn formats based on platform.
@@ -212,7 +241,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return True
+
+    def is_qat_trainable(self) -> bool:
+        return True
 
     def get_accelerator_warm_up_factor(self):
         # Pre-processing is done cleanly, so we can allocate everything here

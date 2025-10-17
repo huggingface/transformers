@@ -263,6 +263,11 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+
+    "quantizers.quantizer_finegrained_fp8": [
+        "FineGrainedFP8HfQuantizer",
+    ],
+
     "utils.kernel_config": ["KernelConfig"],
 }
 
@@ -769,6 +774,8 @@ if TYPE_CHECKING:
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
+
+    from .quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 else:
     import sys
 
