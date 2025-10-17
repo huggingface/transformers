@@ -1559,7 +1559,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 
 @auto_docstring
 class Sam2VideoModel(Sam2VideoPreTrainedModel):
-    input_modalities = ["video", "text"]
+    input_modalities = ("video", "text")
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]

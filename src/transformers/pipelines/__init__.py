@@ -45,6 +45,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
+from .any_to_any import AnyToAnyPipeline
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -107,6 +108,7 @@ if is_torch_available():
         AutoModelForKeypointMatching,
         AutoModelForMaskedLM,
         AutoModelForMaskGeneration,
+        AutoModelForMultimodalLM,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSemanticSegmentation,
@@ -328,6 +330,17 @@ SUPPORTED_TASKS = {
         "default": {"model": ("magic-leap-community/superglue_outdoor", "f4041f8")},
         "type": "image",
     },
+    "any-to-any": {
+        "impl": AnyToAnyPipeline,
+        "tf": (),
+        "pt": (AutoModelForMultimodalLM,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("google/gemma-3n-E4B-it", "c1221e9"),
+            }
+        },
+        "type": "multimodal",
+    },
 }
 
 PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
@@ -432,6 +445,8 @@ from typing import Literal, overload
 
 @overload
 def pipeline(task: Literal[None], model: Optional[Union[str, "PreTrainedModel"]] = None, config: Optional[Union[str, PreTrainedConfig]] = None, tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None, feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None, image_processor: Optional[Union[str, BaseImageProcessor]] = None, processor: Optional[Union[str, ProcessorMixin]] = None, revision: Optional[str] = None, use_fast: bool = True, token: Optional[Union[str, bool]] = None, device: Optional[Union[int, str, "torch.device"]] = None, device_map: Optional[Union[str, dict[str, Union[int, str]]]] = None, dtype: Optional[Union[str, "torch.dtype"]] = "auto", trust_remote_code: Optional[bool] = None, model_kwargs: Optional[dict[str, Any]] = None, pipeline_class: Optional[Any] = None, **kwargs: Any) -> Pipeline: ...
+@overload
+def pipeline(task: Literal["any-to-any"], model: Optional[Union[str, "PreTrainedModel"]] = None, config: Optional[Union[str, PreTrainedConfig]] = None, tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None, feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None, image_processor: Optional[Union[str, BaseImageProcessor]] = None, processor: Optional[Union[str, ProcessorMixin]] = None, revision: Optional[str] = None, use_fast: bool = True, token: Optional[Union[str, bool]] = None, device: Optional[Union[int, str, "torch.device"]] = None, device_map: Optional[Union[str, dict[str, Union[int, str]]]] = None, dtype: Optional[Union[str, "torch.dtype"]] = "auto", trust_remote_code: Optional[bool] = None, model_kwargs: Optional[dict[str, Any]] = None, pipeline_class: Optional[Any] = None, **kwargs: Any) -> AnyToAnyPipeline: ...
 @overload
 def pipeline(task: Literal["audio-classification"], model: Optional[Union[str, "PreTrainedModel"]] = None, config: Optional[Union[str, PreTrainedConfig]] = None, tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None, feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None, image_processor: Optional[Union[str, BaseImageProcessor]] = None, processor: Optional[Union[str, ProcessorMixin]] = None, revision: Optional[str] = None, use_fast: bool = True, token: Optional[Union[str, bool]] = None, device: Optional[Union[int, str, "torch.device"]] = None, device_map: Optional[Union[str, dict[str, Union[int, str]]]] = None, dtype: Optional[Union[str, "torch.dtype"]] = "auto", trust_remote_code: Optional[bool] = None, model_kwargs: Optional[dict[str, Any]] = None, pipeline_class: Optional[Any] = None, **kwargs: Any) -> AudioClassificationPipeline: ...
 @overload

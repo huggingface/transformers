@@ -326,7 +326,11 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {}
+    pipeline_model_mapping = (
+        {"any-to-any": Emu3ForConditionalGeneration, "image-text-to-text": Emu3ForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = False
 
