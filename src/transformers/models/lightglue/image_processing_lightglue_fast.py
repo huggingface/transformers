@@ -17,10 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from typing import Optional, Union
 
-import numpy as np
 import torch
 from torchvision.transforms.v2 import functional as F
 
@@ -39,7 +37,7 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_matplotlib_available
+from ...utils import TensorType, auto_docstring
 from .image_processing_lightglue import LightGlueImageProcessorKwargs
 from .modeling_lightglue import LightGlueKeypointMatchingOutput
 
@@ -106,34 +104,6 @@ def convert_to_grayscale(
     if is_grayscale(image):
         return image
     return F.rgb_to_grayscale(image, num_output_channels=3)
-
-
-def validate_and_format_image_pairs(images: ImageInput):
-    error_message = (
-        "Input images must be a one of the following :",
-        " - A pair of PIL images.",
-        " - A pair of 3D arrays.",
-        " - A list of pairs of PIL images.",
-        " - A list of pairs of 3D arrays.",
-    )
-
-    def _is_valid_image(image):
-        """images is a PIL Image or a 3D array."""
-        return is_pil_image(image) or (
-            is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
-        )
-
-    if isinstance(images, list):
-        if len(images) == 2 and all((_is_valid_image(image)) for image in images):
-            return images
-        if all(
-            isinstance(image_pair, list)
-            and len(image_pair) == 2
-            and all(_is_valid_image(image) for image in image_pair)
-            for image_pair in images
-        ):
-            return [image for image_pair in images for image in image_pair]
-    raise ValueError(error_message)
 
 
 @auto_docstring
@@ -284,7 +254,6 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
             `List[PIL.Image.Image]`: A list of PIL images, each containing the image pairs side by side with the detected
             keypoints as well as the matching between them.
         """
-        from ...image_utils import to_numpy_array
         from .image_processing_lightglue import validate_and_format_image_pairs
 
         images = validate_and_format_image_pairs(images)
@@ -328,61 +297,6 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
         g = int(255 * score)
         b = 0
         return r, g, b
-
-    def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: LightGlueKeypointMatchingOutput):
-        """
-        Plots the image pairs side by side with the detected keypoints as well as the matching between them. Requires
-        matplotlib to be installed.
-
-        .. deprecated::
-            `plot_keypoint_matching` is deprecated and will be removed in a future version. Use `visualize_keypoint_matching` instead.
-
-        Args:
-            images (`ImageInput`):
-                Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2 images or
-                a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output ([`LightGlueKeypointMatchingOutput`]):
-                Raw outputs of the model.
-        """
-        warnings.warn(
-            "`plot_keypoint_matching` is deprecated and will be removed in transformers v. "
-            "Use `visualize_keypoint_matching` instead.",
-            FutureWarning,
-        )
-
-        if is_matplotlib_available():
-            import matplotlib.pyplot as plt
-        else:
-            raise ImportError("Please install matplotlib to use `plot_keypoint_matching` method")
-
-        images = validate_and_format_image_pairs(images)
-        images = [to_numpy_array(image) for image in images]
-        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
-
-        for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
-            height0, width0 = image_pair[0].shape[:2]
-            height1, width1 = image_pair[1].shape[:2]
-            plot_image = np.zeros((max(height0, height1), width0 + width1, 3))
-            plot_image[:height0, :width0] = image_pair[0] / 255.0
-            plot_image[:height1, width0:] = image_pair[1] / 255.0
-            plt.imshow(plot_image)
-            plt.axis("off")
-
-            keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
-            keypoints1_x, keypoints1_y = pair_output["keypoints1"].unbind(1)
-            for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
-                keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
-            ):
-                plt.plot(
-                    [keypoint0_x, keypoint1_x + width0],
-                    [keypoint0_y, keypoint1_y],
-                    color=plt.get_cmap("RdYlGn")(matching_score.item()),
-                    alpha=0.9,
-                    linewidth=0.5,
-                )
-                plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
-                plt.scatter(keypoint1_x + width0, keypoint1_y, c="black", s=2)
-            plt.show()
 
 
 __all__ = ["LightGlueImageProcessorFast"]
