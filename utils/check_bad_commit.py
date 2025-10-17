@@ -39,6 +39,12 @@ def create_script(target_test):
 import os
 import subprocess
 
+_ = subprocess.run(
+    ["python3", "-m", "pip", "install", "-e", "."],
+    capture_output = True,
+    text=True,
+)
+
 result = subprocess.run(
     ["python3", "-m", "pytest", "-v", "--flake-finder", "--flake-runs=4", "-rfEp", f"{target_test}"],
     capture_output = True,
@@ -48,14 +54,14 @@ print(result.stdout)
 
 if f"FAILED {target_test}" in result.stdout:
     print("test failed")
-    exit(2)
+    exit(1)
 elif result.returncode != 0:
     if "ERROR: file or directory not found: " in result.stderr:
         print("test file or directory not found in this commit")
-        exit(0)
+        exit(125)
     elif "ERROR: not found: " in result.stderr:
         print("test not found in this commit")
-        exit(0)
+        exit(125)
     else:
         print(f"pytest gets unknown error: {{result.stderr}}")
         exit(-1)
