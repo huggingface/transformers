@@ -24,7 +24,7 @@ import random
 import sys
 import warnings
 from collections.abc import Callable
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 import torch
 import torch.utils._pytree as pytree
@@ -77,7 +77,7 @@ _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE
 
 def _generate_supported_model_class_names(
     model_name: type[PreTrainedConfig],
-    supported_tasks: Optional[Union[str, list[str]]] = None,
+    supported_tasks: str | list[str] | None = None,
 ) -> list[str]:
     task_mapping = {
         "default": MODEL_MAPPING_NAMES,
@@ -733,8 +733,8 @@ class HFCacheProxy(HFProxy):
 
 def create_wrapper(
     function: Callable,
-    op_type: Union[Literal["call_function"], Literal["call_method"], Literal["get_attr"]],
-    proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
+    op_type: Literal["call_function"] | Literal["call_method"] | Literal["get_attr"],
+    proxy_factory_fn: Callable[[Node], Proxy] | None = None,
 ) -> Callable:
     @functools.wraps(function)
     def wrapper(*args, **kwargs):
@@ -775,7 +775,7 @@ class HFProxyableClassMeta(type):
         name: str,
         bases: tuple[type, ...],
         attrs: dict[str, Any],
-        proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
+        proxy_factory_fn: Callable[[Node], Proxy] | None = None,
     ):
         instance = super().__new__(cls, name, bases, attrs)
         for attr_name in dir(instance):
@@ -845,7 +845,7 @@ ProxyableStaticCache = HFProxyableClassMeta(
 )
 
 
-def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[list[int]] = None):
+def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: list[int] | None = None):
     if forbidden_values is None:
         forbidden_values = []
     value = random.randint(low, high)
@@ -1184,7 +1184,7 @@ class HFTracer(Tracer):
         return HFProxy(node, self)
 
     @contextlib.contextmanager
-    def patch_for_tracing(self, root: Union[torch.nn.Module, Callable[..., Any]]):
+    def patch_for_tracing(self, root: torch.nn.Module | Callable[..., Any]):
         # Patching torch functions
         self.patched_torch_methods = {
             target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
@@ -1222,9 +1222,9 @@ class HFTracer(Tracer):
 
     def trace(
         self,
-        root: Union[torch.nn.Module, Callable[..., Any]],
-        concrete_args: Optional[dict[str, Any]] = None,
-        dummy_inputs: Optional[dict[str, Any]] = None,
+        root: torch.nn.Module | Callable[..., Any],
+        concrete_args: dict[str, Any] | None = None,
+        dummy_inputs: dict[str, Any] | None = None,
         complete_concrete_args_with_inputs_not_in_dummy_inputs: bool = True,
     ) -> Graph:
         """
@@ -1440,7 +1440,7 @@ def check_if_model_is_supported(model: "PreTrainedModel"):
 
 def symbolic_trace(
     model: "PreTrainedModel",
-    input_names: Optional[list[str]] = None,
+    input_names: list[str] | None = None,
     disable_check: bool = False,
     tracer_cls: type[HFTracer] = HFTracer,
 ) -> GraphModule:
