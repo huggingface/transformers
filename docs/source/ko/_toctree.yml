@@ -1057,7 +1057,7 @@
         title: FLAVA
       - local: model_doc/gemma3
         title: Gemma3
-      - local: in_translation
+      - local: model_doc/gemma3n
         title: Gemma3n
       - local: in_translation
         title: GIT
