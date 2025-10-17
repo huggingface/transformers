@@ -14,17 +14,9 @@
 # limitations under the License.
 """Whisper model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Union
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    from ...feature_extraction_utils import FeatureExtractionMixin
-    from ...tokenization_utils_base import PreTrainedTokenizerBase
 
 logger = logging.get_logger(__name__)
 

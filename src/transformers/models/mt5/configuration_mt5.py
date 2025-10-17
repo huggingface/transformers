@@ -14,8 +14,6 @@
 # limitations under the License.
 """mT5 model configuration"""
 
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 

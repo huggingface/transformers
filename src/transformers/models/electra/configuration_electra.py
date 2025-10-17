@@ -15,9 +15,6 @@
 # limitations under the License.
 """ELECTRA model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 

@@ -14,11 +14,6 @@
 # limitations under the License.
 """GPT Neo model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any
-
-from ... import PreTrainedTokenizer, is_torch_available
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 

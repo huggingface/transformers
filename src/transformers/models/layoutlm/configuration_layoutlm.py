@@ -14,11 +14,7 @@
 # limitations under the License.
 """LayoutLM model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any, Optional
-
-from ... import PreTrainedConfig, PreTrainedTokenizer
+from ... import PreTrainedConfig
 from ...utils import logging
 
 

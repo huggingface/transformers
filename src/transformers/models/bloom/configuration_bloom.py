@@ -14,18 +14,8 @@
 # limitations under the License.
 """Bloom configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional
-
-from packaging import version
-
-
-if TYPE_CHECKING:
-    from ... import PreTrainedTokenizer
-
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_torch_available, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

@@ -14,13 +14,7 @@
 # limitations under the License.
 """BlenderbotSmall model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any
-
-from ... import PreTrainedTokenizer
 from ...configuration_utils import PreTrainedConfig
-from ...file_utils import is_torch_available
 from ...utils import logging
 
 

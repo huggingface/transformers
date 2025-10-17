@@ -14,19 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-from packaging import version
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
-
-if TYPE_CHECKING:
-    from ... import PreTrainedTokenizerBase
 
 logger = logging.get_logger(__name__)
 

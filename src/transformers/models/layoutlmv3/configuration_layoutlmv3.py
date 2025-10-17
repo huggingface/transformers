@@ -14,18 +14,8 @@
 # limitations under the License.
 """LayoutLMv3 model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-from packaging import version
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
 
 
 logger = logging.get_logger(__name__)

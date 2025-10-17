@@ -14,16 +14,10 @@
 # limitations under the License.
 """Longformer configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from ...tokenization_utils_base import PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)

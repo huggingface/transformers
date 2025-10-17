@@ -15,10 +15,6 @@
 """SegFormer model configuration"""
 
 import warnings
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging

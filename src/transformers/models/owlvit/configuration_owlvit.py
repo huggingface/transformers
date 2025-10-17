@@ -14,14 +14,6 @@
 # limitations under the License.
 """OWL-ViT model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 

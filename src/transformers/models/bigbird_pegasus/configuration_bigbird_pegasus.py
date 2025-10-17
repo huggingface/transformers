@@ -14,13 +14,8 @@
 # limitations under the License.
 """BigBirdPegasus model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any
-
-from ... import PreTrainedTokenizer
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_torch_available, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

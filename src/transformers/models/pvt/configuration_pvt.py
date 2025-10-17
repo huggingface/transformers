@@ -16,10 +16,7 @@
 # limitations under the License.
 """Pvt model configuration"""
 
-from collections import OrderedDict
 from collections.abc import Callable, Mapping
-
-from packaging import version
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging

@@ -14,11 +14,6 @@
 # limitations under the License.
 """MobileNetV2 model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 

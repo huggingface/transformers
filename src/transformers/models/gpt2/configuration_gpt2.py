@@ -15,11 +15,6 @@
 # limitations under the License.
 """OpenAI GPT-2 configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any, Optional
-
-from ... import PreTrainedTokenizer, is_torch_available
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 

@@ -14,10 +14,6 @@
 # limitations under the License.
 """Marian model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 

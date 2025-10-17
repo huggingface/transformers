@@ -14,16 +14,8 @@
 # limitations under the License.
 """DeBERTa model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Union
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)

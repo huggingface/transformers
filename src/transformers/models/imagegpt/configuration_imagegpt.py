@@ -14,16 +14,9 @@
 # limitations under the License.
 """OpenAI ImageGPT configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin
 
 logger = logging.get_logger(__name__)
 

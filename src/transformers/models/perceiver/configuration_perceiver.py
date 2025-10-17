@@ -14,13 +14,7 @@
 # limitations under the License.
 """Perceiver model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any, Union
-
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import FeatureExtractionMixin
-from ...tokenization_utils_base import PreTrainedTokenizerBase
 from ...utils import logging
 
 

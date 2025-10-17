@@ -14,11 +14,6 @@
 # limitations under the License.
 """Table Transformer model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
