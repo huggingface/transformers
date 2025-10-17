@@ -306,8 +306,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         else {}
     )
 
-    test_torchscript = False
-
     maxDiff = None
 
     def setUp(self):

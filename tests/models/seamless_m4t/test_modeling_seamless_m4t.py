@@ -340,7 +340,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     test_missing_keys = False
 
     test_resize_embeddings = False
-    test_torchscript = False
 
     all_model_classes = (
         (
@@ -534,7 +533,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
     test_missing_keys = False
 
     test_resize_embeddings = True
-    test_torchscript = False
 
     all_model_classes = (
         (

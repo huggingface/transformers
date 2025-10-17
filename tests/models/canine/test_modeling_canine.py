@@ -240,14 +240,6 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # we set has_text_modality to False as the config has no vocab_size attribute
         self.config_tester = ConfigTester(self, config_class=CanineConfig, has_text_modality=False, hidden_size=37)
 
-    @unittest.skip("failing. Will fix only when the community opens an issue for it.")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @unittest.skip("failing. Will fix only when the community opens an issue for it.")
-    def test_torchscript_simple(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 

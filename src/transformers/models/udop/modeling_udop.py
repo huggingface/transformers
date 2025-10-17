@@ -1080,7 +1080,7 @@ class UdopStack(UdopPreTrainedModel):
     def _tie_weights(self):
         for bias in self.relative_bias.biases:
             if isinstance(bias, RelativePositionBias1D):
-                self._tie_or_clone_weights(
+                self._tie_embedding_weights(
                     bias.relative_attention_bias, self.block[0].layer[0].SelfAttention.relative_attention_bias
                 )
 

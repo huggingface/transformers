@@ -260,8 +260,6 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
 
-    test_torchscript = False
-
     pipeline_model_mapping = (
         {
             "feature-extraction": YosoModel,

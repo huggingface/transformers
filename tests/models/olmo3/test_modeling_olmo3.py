@@ -53,7 +53,6 @@ class Olmo3ModelTester(CausalLMModelTester):
 @require_torch
 class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
     fx_compatible = False
-    test_torchscript = False
     test_all_params_have_gradient = False
     model_tester_class = Olmo3ModelTester
 

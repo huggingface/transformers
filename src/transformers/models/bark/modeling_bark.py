@@ -1033,15 +1033,12 @@ class BarkFineModel(BarkPreTrainedModel):
 
             for i in range(self.config.n_codes_total - self.config.n_codes_given):
                 # self.input_embeds_layers[i + 1].weight = self.lm_heads[i].weight
-                self._tie_or_clone_weights(output_embeddings[i], input_embeddings[i + 1])
+                self._tie_embedding_weights(output_embeddings[i], input_embeddings[i + 1])
                 self._tied_weights_keys.append(f"lm_heads.{i}.weight")
 
     def tie_weights(self):
         """
         Tie the weights between the input embeddings list and the output embeddings list.
-
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
-        weights instead.
         """
         for module in self.modules():
             if hasattr(module, "_tie_weights"):
@@ -1586,9 +1583,6 @@ class BarkModel(BarkPreTrainedModel):
     def tie_weights(self):
         """
         Tie the weights between the input embeddings list and the output embeddings list.
-
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
-        weights instead.
         """
         for module in self.modules():
             if hasattr(module, "_tie_weights"):

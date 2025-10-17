@@ -955,8 +955,8 @@ class UMT5Model(UMT5PreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5Model._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     # Copied from transformers.models.t5.modeling_t5.T5Model.get_encoder
     def get_encoder(self):
@@ -1141,8 +1141,8 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_encoder
     def get_encoder(self):
@@ -1341,7 +1341,7 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
 
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.get_encoder
     def get_encoder(self):
@@ -1660,8 +1660,8 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.get_encoder
     def get_encoder(self):

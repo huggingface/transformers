@@ -268,10 +268,6 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         pass
 
     @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
-    def test_tie_model_weights(self):
-        pass
-
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):
         pass
 
@@ -574,9 +570,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     additional_model_inputs = ["decoder_input_ids"]
     # training is not supported yet for MusicGen
     test_resize_embeddings = False
-    # not to test torchscript as the model tester doesn't prepare `input_values` and `padding_mask`
-    # (and `torchscript` hates `None` values).
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -771,10 +764,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
-
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
-    def test_tie_model_weights(self):
-        pass
 
     @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):

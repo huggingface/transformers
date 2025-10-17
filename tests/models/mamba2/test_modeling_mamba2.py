@@ -239,7 +239,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @molbap
-    test_torchscript = False  # FIXME I think this should be doable @molbap @ArthurZucker
     test_missing_keys = False
 
     pipeline_model_mapping = (

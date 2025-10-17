@@ -224,18 +224,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="ESMFold doesn't support torchscript compilation.")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @unittest.skip(reason="ESMFold doesn't support torchscript compilation.")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @unittest.skip(reason="ESMFold doesn't support torchscript compilation.")
-    def test_torchscript_simple(self):
-        pass
-
     @unittest.skip(reason="ESMFold doesn't support data parallel.")
     def test_multi_gpu_data_parallel_forward(self):
         pass

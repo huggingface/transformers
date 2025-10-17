@@ -1010,8 +1010,8 @@ class T5Model(T5PreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1178,8 +1178,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1359,7 +1359,7 @@ class T5EncoderModel(T5PreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1670,8 +1670,8 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder

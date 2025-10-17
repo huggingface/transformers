@@ -252,7 +252,6 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     fx_compatible = False
 
     test_missing_keys = True
-    test_torchscript = True
     # The small UMT5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
 

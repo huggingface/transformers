@@ -382,7 +382,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     fx_compatible = False
-    test_torchscript = False
 
     # special case for GitForCausalLM model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

@@ -208,7 +208,6 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     pipeline_model_mapping = {"feature-extraction": AutoformerModel} if is_torch_available() else {}
 
     test_missing_keys = False
-    test_torchscript = False
     test_inputs_embeds = False
 
     def setUp(self):

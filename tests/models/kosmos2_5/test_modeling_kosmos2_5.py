@@ -452,55 +452,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # overwrite from common in order to use `config.text_config.vocab_size` instead of `config.vocab_size`
-    def test_tie_model_weights(self):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def check_same_values(layer_1, layer_2):
-            equal = True
-            for p1, p2 in zip(layer_1.weight, layer_2.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    equal = False
-            return equal
-
-        for model_class in self.all_model_classes:
-            config.torchscript = True
-            model_not_tied = model_class(config)
-            if model_not_tied.get_output_embeddings() is None:
-                continue
-
-            config_tied = copy.deepcopy(config)
-            config_tied.torchscript = False
-            model_tied = model_class(config_tied)
-            params_tied = list(model_tied.parameters())
-            # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
-            # # Check that after modification, they remain the same.
-            # embeddings.weight.data.div_(2)
-            # # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
-            # # Check that after modification, they remain the same.
-            # decoding.weight.data.div_(4)
-            # # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
-            # Check that after resize they remain tied.
-            model_tied.resize_token_embeddings(config.text_config.vocab_size + 10)
-            params_tied_2 = list(model_tied.parameters())
-            self.assertEqual(len(params_tied_2), len(params_tied))
-
-            # decoding.weight.data.mul_(20)
-            # # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
-            # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/kosmos-2.5"

@@ -1021,7 +1021,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     def _tie_weights(self):
         # Decoder input and output embeddings are tied.
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
+            self._tie_embedding_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
 
     def get_encoder(self):
         return self.model.encoder

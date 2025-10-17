@@ -261,7 +261,6 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
 
-    test_torchscript = False
     has_attentions = False
 
     pipeline_model_mapping = (

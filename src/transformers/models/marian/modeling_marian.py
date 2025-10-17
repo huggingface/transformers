@@ -1143,15 +1143,12 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.
-
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
-        weights instead.
         """
         output_embeddings = self.get_output_embeddings()
         if output_embeddings is not None and getattr(self.config, "tie_word_embeddings", True):
             # if embeddings are shared this will return shared embeddings otherwise decoder embed_tokens
             word_embeddings = self.get_decoder().get_input_embeddings()
-            self._tie_or_clone_weights(output_embeddings, word_embeddings)
+            self._tie_embedding_weights(output_embeddings, word_embeddings)
 
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):

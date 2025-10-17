@@ -363,8 +363,6 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else {}
     )
 
-    test_torchscript = False
-
     def setUp(self):
         self.model_tester = UniSpeechSatModelTester(self)
         self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=37)
@@ -536,8 +534,6 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = UniSpeechSatModelTester(
