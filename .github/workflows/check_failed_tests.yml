@@ -165,6 +165,11 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          name: ci_results_${{ inputs.job }}
+          path: /transformers/ci_results_${{ inputs.job }}
+
+      - uses: actions/download-artifact@v4
+        with:
           pattern: new_failures_with_bad_commit_${{ inputs.job }}*
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}
           merge-multiple: true
