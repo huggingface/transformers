@@ -421,7 +421,6 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False
 
     test_missing_keys = False
 
@@ -789,8 +788,6 @@ class MvpStandaloneDecoderModelTester:
 @require_torch
 class MvpStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MvpDecoder, MvpForCausalLM) if is_torch_available() else ()
-    fx_comptatible = True
-
     is_encoder_decoder = False
 
     def setUp(

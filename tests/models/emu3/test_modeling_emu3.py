@@ -131,8 +131,6 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         else {}
     )
 
-    fx_compatible = False
-
     def setUp(self):
         self.model_tester = Emu3Text2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Emu3TextConfig, hidden_size=37)
@@ -287,8 +285,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else ()
     )
     pipeline_model_mapping = {}
-
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)

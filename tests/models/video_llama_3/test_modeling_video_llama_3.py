@@ -348,7 +348,6 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (VideoLlama3VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["grid_thw", "merge_sizes"]
-    # fx_compatible = False
     test_resize_embeddings = False
     test_head_masking = False
     test_cpu_offload = False

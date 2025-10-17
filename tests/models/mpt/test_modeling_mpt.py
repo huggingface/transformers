@@ -350,7 +350,6 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
 
-    fx_compatible = False
     test_missing_keys = False
 
     pipeline_model_mapping = (

@@ -208,7 +208,6 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (CLIPVisionModel, CLIPVisionModelWithProjection) if is_torch_available() else ()
-    fx_compatible = True
 
     test_resize_embeddings = False
 
@@ -396,7 +395,6 @@ class CLIPTextModelTester:
 @require_torch
 class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPTextModel, CLIPTextModelWithProjection) if is_torch_available() else ()
-    fx_compatible = True
 
     model_split_percents = [0.5, 0.8, 0.9]
 
@@ -524,7 +522,6 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         {"feature-extraction": CLIPModel, "image-feature-extraction": CLIPVisionModel} if is_torch_available() else {}
     )
     additional_model_inputs = ["pixel_values"]
-    fx_compatible = True
 
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -624,7 +621,6 @@ class CLIPForImageClassificationModelTester(CLIPModelTester):
 class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": CLIPForImageClassification} if is_torch_available() else {}
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False

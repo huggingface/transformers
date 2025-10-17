@@ -167,7 +167,6 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SmolVLMModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = True
 
@@ -330,7 +329,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     all_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": SmolVLMForConditionalGeneration} if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = True
 

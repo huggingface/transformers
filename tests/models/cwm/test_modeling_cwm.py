@@ -76,7 +76,6 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
     model_tester_class = CwmModelTester
 
     model_split_percents = [0.5, 0.7, 0.8]

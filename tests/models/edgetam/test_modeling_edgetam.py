@@ -234,7 +234,6 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     pipeline_model_mapping = (
         {"feature-extraction": EdgeTamModel, "mask-generation": EdgeTamModel} if is_torch_available() else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = False
     _is_composite = True

@@ -215,7 +215,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     is_encoder_decoder = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
 
     test_missing_keys = False
 

@@ -1258,6 +1258,25 @@ def is_torch_fx_proxy(x):
         return False
 
 
+def is_jit_tracing() -> bool:
+    try:
+        import torch
+
+        return torch.jit.is_tracing()
+    except Exception:
+        return False
+
+
+def is_tracing(tensor=None) -> bool:
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, or torch.fx"""
+    # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
+    # only checks export)
+    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing()
+    if tensor is not None:
+        _is_tracing |= is_torch_fx_proxy(tensor)
+    return _is_tracing
+
+
 @lru_cache
 def is_in_notebook() -> bool:
     try:

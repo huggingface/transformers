@@ -167,7 +167,6 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Idefics3Model,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = True
 
@@ -333,7 +332,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = True
 

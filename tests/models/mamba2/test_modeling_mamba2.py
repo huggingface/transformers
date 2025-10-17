@@ -238,7 +238,6 @@ class Mamba2ModelTester:
 class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
-    fx_compatible = False  # FIXME let's try to support this @molbap
     test_missing_keys = False
 
     pipeline_model_mapping = (

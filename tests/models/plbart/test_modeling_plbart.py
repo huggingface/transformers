@@ -225,7 +225,6 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False  # Fix me Michael
 
     test_missing_keys = False
 

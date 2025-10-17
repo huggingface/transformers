@@ -166,7 +166,6 @@ class SamHQVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SamHQVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_torch_exportable = True
@@ -544,7 +543,6 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": SamHQModel, "mask-generation": SamHQModel} if is_torch_available() else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_cpu_offload = False

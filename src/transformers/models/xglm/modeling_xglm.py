@@ -92,7 +92,6 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
         bsz, seq_len = position_ids.size()
         position_ids += self.offset
 
-        # Expand embeddings if needed. `position_ids.max()` is NOT used to keep torch.fx compatibility.
         max_pos = 2 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos, self.embedding_dim, self.padding_idx)

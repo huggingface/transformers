@@ -162,7 +162,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         else {}
     )
 
-    fx_compatible = False
     model_tester_class = Lfm2VlModelTester
     _is_composite = True
 
