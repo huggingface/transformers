@@ -183,11 +183,7 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"image-text-to-text": LightOnOCRForConditionalGeneration}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-text-to-text": LightOnOCRForConditionalGeneration} if is_torch_available() else {}
 
     _is_composite = True
     test_head_masking = False
@@ -286,7 +282,7 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             ]
 
             num_patches = (self.model_tester.image_size // self.model_tester.patch_size) ** 2
-            num_image_tokens = num_patches // (config.spatial_merge_size ** 2)
+            num_image_tokens = num_patches // (config.spatial_merge_size**2)
 
             input_ids = ids_tensor([batch_size, 10 + num_image_tokens], config.text_config.vocab_size - 1) + 1
             input_ids[:, :num_image_tokens] = config.image_token_id
@@ -316,9 +312,7 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
             # Check that outputs are deterministic
             if hasattr(outputs1, "last_hidden_state") and hasattr(outputs2, "last_hidden_state"):
-                self.assertTrue(
-                    torch.allclose(outputs1.last_hidden_state, outputs2.last_hidden_state, atol=1e-5)
-                )
+                self.assertTrue(torch.allclose(outputs1.last_hidden_state, outputs2.last_hidden_state, atol=1e-5))
 
     @unittest.skip(
         "LightOnOCR uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
@@ -501,7 +495,7 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Calculate number of image tokens
         num_patches = (image_size // 14) ** 2  # patch_size = 14
-        num_image_tokens = num_patches // (config.spatial_merge_size ** 2)
+        num_image_tokens = num_patches // (config.spatial_merge_size**2)
 
         seq_len = num_image_tokens + 10
         input_ids = torch.randint(0, config.vocab_size - 1, (batch_size, seq_len), device=torch_device) + 1
