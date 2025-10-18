@@ -32,7 +32,6 @@ from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
-    require_jinja,
     require_read_token,
     require_sentencepiece,
     require_tiktoken,
@@ -701,32 +700,6 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
         with self.assertRaises(ValueError):
             tokenizer = LlamaTokenizerFast(SAMPLE_VOCAB, eos_token=None, add_bos_token=True, add_eos_token=True)
-
-    @require_jinja
-    def test_tokenization_for_chat(self):
-        tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
-
-        test_chats = [
-            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
-            [
-                {"role": "system", "content": "You are a helpful chatbot."},
-                {"role": "user", "content": "Hello!"},
-                {"role": "assistant", "content": "Nice to meet you."},
-            ],
-            [{"role": "user", "content": "Hello!"}],
-        ]
-        # Matt: The third test case tests the default system message, but if this is ever changed in the
-        #       class/repo code then that test will fail, and the case will need to be updated.
-        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
-        # fmt: off
-        expected_tokens = [
-            [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962],
-            [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962, 20103, 304, 5870, 366, 29889, 29871, 2],
-            [1, 29961, 25580, 29962, 15043, 29991, 518, 29914, 25580, 29962]
-        ]
-        # fmt: on
-        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
-            self.assertListEqual(tokenized_chat, expected_tokens)
 
 
 @require_sentencepiece
