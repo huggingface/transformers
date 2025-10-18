@@ -40,6 +40,19 @@ from ...utils import (
 )
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
+# SDPA and Flash Attention support
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
+from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+
+
+
 
 logger = logging.get_logger(__name__)
 
@@ -353,6 +366,169 @@ class LayoutLMv3Attention(nn.Module):
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
+
+
+
+# MY NEW CLASS
+# Additional imports for SDPA and Flash Attention support
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
+from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+
+
+class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
+    """
+    Implements LayoutLMv3 attention using PyTorch's SDPA backend.
+    Provides improved speed and memory efficiency while maintaining original model weights.
+    """
+
+    def forward(
+            self,
+            hidden_states,
+            attention_mask=None,
+            head_mask=None,
+            output_attentions=False,
+            rel_pos=None,
+            rel_2d_pos=None,
+    ):
+        # Use standard attention when attention weights are requested
+        if output_attentions:
+            logger.warning_once(
+                "Manual attention is used since output_attentions=True; this is slower than SDPA."
+            )
+            return super().forward(
+                hidden_states,
+                attention_mask,
+                head_mask,
+                output_attentions,
+                rel_pos,
+                rel_2d_pos,
+            )
+
+        batch_size, seq_len, _ = hidden_states.size()
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+
+        # Add relative position bias if available
+        if self.has_relative_attention_bias:
+            query_layer += rel_pos
+            key_layer += rel_2d_pos
+
+        # Reshape for SDPA: [batch, heads, seq_len, head_dim]
+        query_layer = query_layer.view(batch_size, self.num_attention_heads, seq_len, self.attention_head_size)
+        key_layer = key_layer.view(batch_size, self.num_attention_heads, seq_len, self.attention_head_size)
+        value_layer = value_layer.view(batch_size, self.num_attention_heads, seq_len, self.attention_head_size)
+
+        # Convert mask to expected 4D format and dtype for SDPA
+        if attention_mask is not None:
+            attention_mask = attention_mask.view(batch_size, 1, 1, seq_len).expand(
+                batch_size, self.num_attention_heads, seq_len, seq_len
+            )
+            attention_mask = (1.0 - attention_mask.to(dtype=query_layer.dtype)) * torch.finfo(query_layer.dtype).min
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout.p if self.training else 0.0,
+            scale=1.0 / math.sqrt(self.attention_head_size),
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.all_head_size)
+        outputs = self.dropout(self.dense(attn_output))
+        return (outputs,)
+
+
+class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
+    """
+    Implements LayoutLMv3 attention using the Flash Attention 2 library.
+    Offers optimal memory usage and speed, with graceful fallback when features are unavailable.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def _reshape(self, tensor, seq_len, batch_size):
+        return tensor.view(batch_size, seq_len, self.num_attention_heads, self.attention_head_size)
+
+    def forward(
+            self,
+            hidden_states,
+            attention_mask=None,
+            head_mask=None,
+            output_attentions=False,
+            rel_pos=None,
+            rel_2d_pos=None,
+    ):
+        # Fallback when output_attentions are explicitly requested
+        if output_attentions:
+            logger.warning_once(
+                "Flash Attention 2 does not provide output_attentions; reverting to standard logic."
+            )
+            return super().forward(
+                hidden_states, attention_mask, head_mask, output_attentions, rel_pos, rel_2d_pos
+            )
+
+        batch_size, seq_length, _ = hidden_states.size()
+        query_states = self._reshape(self.query(hidden_states), seq_length, batch_size)
+        key_states = self._reshape(self.key(hidden_states), seq_length, batch_size)
+        value_states = self._reshape(self.value(hidden_states), seq_length, batch_size)
+
+        # Fall back if model requires relative position bias
+        if self.has_relative_attention_bias and rel_pos is not None:
+            logger.warning_once(
+                "Standard attention used as Flash Attention 2 cannot process relative position bias."
+            )
+            return super().forward(
+                hidden_states, attention_mask, head_mask, output_attentions, rel_pos, rel_2d_pos
+            )
+
+        if attention_mask is not None:
+            # Prepare variable length input for Flash Attention 2
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, attention_mask, seq_length
+            )
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_q, max_seqlen_k = max_seq_lens
+
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_q,
+                max_seqlen_k=max_seqlen_k,
+                dropout_p=self.dropout.p if self.training else 0.0,
+                softmax_scale=1.0 / math.sqrt(self.attention_head_size),
+                causal=False,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, seq_length)
+        else:
+            # Standard path for full-sequence, no padding required
+            attn_output = flash_attn_func(
+                query_states,
+                key_states,
+                value_states,
+                dropout_p=self.dropout.p if self.training else 0.0,
+                softmax_scale=1.0 / math.sqrt(self.attention_head_size),
+                causal=False,
+            )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, -1)
+        attn_output = self.dropout(self.dense(attn_output))
+        return (attn_output,)
+
 
 
 # Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Layer with LayoutLMv2->LayoutLMv3
