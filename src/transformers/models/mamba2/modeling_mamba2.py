@@ -592,8 +592,7 @@ class Mamba2Mixer(nn.Module):
             L = torch.exp(segment_sum(A))
 
             # Contraction of C and B to get G (attention-weights like)
-            G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, :, :]  # shape: (b, c, l, s, h, n)
-            G = G_intermediate.sum(dim=-1)  # shape: (b, c, l, s, h)
+            G = torch.einsum('bclhn,bcshn->bclsh', C, B)
 
             # Compute M, equivalent to applying attention mask to weights
             M_intermediate = G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]
