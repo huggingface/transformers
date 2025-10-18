@@ -565,9 +565,6 @@ class LwDetrConvModel(ConditionalDetrConvModel):
 
 
 class LwDetrAttention(LlamaAttention):
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[torch.Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -579,7 +576,7 @@ class LwDetrAttention(LlamaAttention):
 
         hidden_states_original = hidden_states
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
 
         if self.training:
             hidden_states_original = torch.cat(
@@ -851,9 +848,7 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
-        reference_points_inputs, query_pos = self.get_reference(
-            reference_points, valid_ratios
-        )
+        reference_points_inputs, query_pos = self.get_reference(reference_points, valid_ratios)
 
         for idx, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
@@ -879,8 +874,10 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
             intermediate_reference_points=intermediate_reference_points,
         )
 
+
 class LwDetrSinePositionEmbedding(ConditionalDetrSinePositionEmbedding):
     pass
+
 
 class LwDetrModel(DeformableDetrModel):
     def __init__(self, config: LwDetrConfig):
