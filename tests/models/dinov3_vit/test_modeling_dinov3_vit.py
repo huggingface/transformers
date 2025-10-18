@@ -27,9 +27,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    from torch import nn
 
-    from transformers import DINOv3ViTModel
+    from transformers import DINOv3ViTForImageClassification, DINOv3ViTModel
 
 
 if is_vision_available():
@@ -124,6 +123,24 @@ class DINOv3ViTModelTester:
             (self.batch_size, self.seq_length, self.hidden_size),
         )
 
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+        config.num_labels = self.type_sequence_label_size
+        model = DINOv3ViTForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+        # test greyscale images
+        config.num_channels = 1
+        model = DINOv3ViTForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -142,7 +159,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DINOv3ViTModel,) if is_torch_available() else ()
+    all_model_classes = (DINOv3ViTModel, DINOv3ViTForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-feature-extraction": DINOv3ViTModel,
@@ -183,14 +200,9 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    def test_model_get_set_embeddings(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
