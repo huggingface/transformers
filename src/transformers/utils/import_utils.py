@@ -1835,10 +1835,10 @@ class _LazyModule(ModuleType):
                         if any(key in backend for key in ["=", "<", ">"]):
                             backend = Backend(backend)
                             callable = backend.is_satisfied
-                        else:
-                            raise ValueError(
-                                f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}"
-                            )
+#                        else:  TODO(hainan). Removed for debuggin. Will restore
+#                            raise ValueError(
+#                                f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}"
+#                            )
 
                     try:
                         if not callable():

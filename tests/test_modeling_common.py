@@ -966,7 +966,11 @@ class ModelTesterMixin:
         if config.__class__ not in MODEL_MAPPING:
             self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
 
+        print("MODEL_MAPPING", MODEL_MAPPING)
+        print("CLASS", config.__class__)
         base_class = MODEL_MAPPING[config.__class__]
+
+        print("BASECLASS", base_class)
 
         if isinstance(base_class, tuple):
             base_class = base_class[0]

@@ -301,7 +301,10 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
         ("parakeet_ctc", "ParakeetCTCConfig"),
+        ("parakeet_tdt", "ParakeetTDTConfig"),
         ("parakeet_encoder", "ParakeetEncoderConfig"),
+        ("parakeet_tdt_decoder", "ParakeetTDTDecoderConfig"),
+        ("parakeet_tdt_joint", "ParakeetTDTJointConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -759,7 +762,10 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("paligemma", "PaliGemma"),
         ("parakeet", "Parakeet"),
         ("parakeet_ctc", "Parakeet"),
+        ("parakeet_tdt", "ParakeetTDT"),
         ("parakeet_encoder", "ParakeetEncoder"),
+        ("parakeet_tdt_decoder", "ParakeetTDTDecoder"),
+        ("parakeet_tdt_joint", "ParakeetTDTJoint"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
@@ -1002,7 +1008,10 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
+        ("parakeet_tdt_decoder", "parakeet"),
+        ("parakeet_tdt_joint", "parakeet"),
         ("parakeet_ctc", "parakeet"),
+        ("parakeet_tdt", "parakeet"),
     ]
 )
 
@@ -1320,6 +1329,7 @@ class AutoConfig:
         code_revision = kwargs.pop("code_revision", None)
 
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         if has_remote_code:
