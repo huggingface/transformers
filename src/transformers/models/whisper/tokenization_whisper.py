@@ -1160,14 +1160,14 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
 def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
     """
     Find the longest common sequence between consecutive Whisper speech recognition chunks.
-    
+
     Optimized O(n) implementation using the property that sequences MUST be in order.
     This avoids the O(n²) nested loop approach while preserving timestamp handling and conflict resolution.
-    
+
     Args:
         sequences: List of token sequences from speech recognition chunks
         token_timestamp_sequences: Optional list of timestamp sequences corresponding to tokens
-        
+
     Returns:
         List of tokens or tuple of (tokens, timestamps) if timestamps provided
     """
@@ -1184,31 +1184,31 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
 
     for seq_idx, right_sequence in enumerate(sequences[1:]):
         right_length = len(right_sequence)
-        
+
         # Optimized approach: find the longest common prefix/suffix match
         # This is O(n) instead of O(n²) because we use the property that sequences are in order
         best_score = 0.0
         best_indices = (left_length, left_length, 0, 0)
-        
+
         # Check all possible overlap lengths, starting from the maximum possible
         max_possible_overlap = min(left_length, right_length)
-        
+
         for overlap_len in range(max_possible_overlap, 0, -1):
             # Calculate indices for this overlap length
             left_start = left_length - overlap_len
             left_stop = left_length
             right_start = 0
             right_stop = overlap_len
-            
+
             # Extract the overlapping subsequences
             left_subseq = left_sequence[left_start:left_stop]
             right_subseq = right_sequence[right_start:right_stop]
-            
+
             # Check if subsequences match
             if np.array_equal(left_subseq, right_subseq):
                 # Calculate score with epsilon to favor longer matches
                 eps = overlap_len / 10000.0
-                
+
                 if token_timestamp_sequences:
                     # Check timestamp ordering for matches
                     matches = sum(
@@ -1222,7 +1222,7 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
                     )
                 else:
                     matches = overlap_len
-                
+
                 if matches > 1:
                     score = matches + eps
                     if score > best_score:

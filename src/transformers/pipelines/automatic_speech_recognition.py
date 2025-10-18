@@ -87,52 +87,52 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
 def _find_longest_common_sequence(sequences, tokenizer):
     """
     Find the longest common sequence between consecutive speech recognition chunks.
-    
+
     Optimized O(n) implementation using the property that sequences MUST be in order.
     This avoids the O(n²) nested loop approach by using a more efficient algorithm.
-    
+
     Args:
         sequences: List of token sequences from speech recognition chunks
         tokenizer: Tokenizer to filter special tokens
-        
+
     Returns:
         np.array: The merged sequence of tokens
     """
     if not sequences:
         return np.array([])
-    
+
     # Filter special tokens from first sequence
     sequence = [tok_id for tok_id in sequences[0][0].tolist() if tok_id not in tokenizer.all_special_ids]
-    
+
     for new_seq in sequences[1:]:
         new_sequence = [tok_id for tok_id in new_seq[0].tolist() if tok_id not in tokenizer.all_special_ids]
-        
+
         if not new_sequence:
             continue
-            
+
         # Find the longest common prefix between the end of current sequence and start of new sequence
         # This is O(n) instead of O(n²) because we use the property that sequences are in order
         best_overlap = 0
         best_score = 0.0
-        
+
         # Start from the maximum possible overlap and work backwards
         max_possible_overlap = min(len(sequence), len(new_sequence))
-        
+
         for overlap_len in range(max_possible_overlap, 0, -1):
             # Check if the last 'overlap_len' tokens of sequence match the first 'overlap_len' tokens of new_sequence
             if sequence[-overlap_len:] == new_sequence[:overlap_len]:
                 # Calculate score with epsilon to favor longer matches
                 eps = overlap_len / 10000.0
                 score = overlap_len + eps
-                
+
                 if score > best_score:
                     best_score = score
                     best_overlap = overlap_len
                     break  # Since we're going from longest to shortest, first match is best
-        
+
         # Add the non-overlapping part of the new sequence
         sequence.extend(new_sequence[best_overlap:])
-    
+
     return np.array(sequence)
 
 
