@@ -427,6 +427,9 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "pretraining_tp",
         "boi_token_id",
         "eoi_token_id",
+        "tie_word_embeddings",
+        "is_decoder",
+        "add_cross_attention",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 

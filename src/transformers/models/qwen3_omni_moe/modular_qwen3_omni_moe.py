@@ -181,6 +181,9 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         mlp_only_layers: Optional[list[int]] = None,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(
@@ -209,6 +212,9 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
             output_router_logits,
             router_aux_loss_coef,
             mlp_only_layers,
+            pad_token_id,
+            bos_token_id,
+            eos_token_id,
             **kwargs,
         )
         del self.use_sliding_window
@@ -334,6 +340,9 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[int] = 0,
         num_code_groups: Optional[int] = 32,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(
@@ -357,6 +366,9 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
             None,
             layer_types,
             attention_dropout,
+            pad_token_id,
+            bos_token_id,
+            eos_token_id,
             **kwargs,
         )
         del self.use_sliding_window
@@ -392,6 +404,9 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         mlp_only_layers: Optional[list[int]] = None,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(
@@ -420,6 +435,9 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
             output_router_logits,
             router_aux_loss_coef,
             mlp_only_layers,
+            pad_token_id,
+            bos_token_id,
+            eos_token_id,
             **kwargs,
         )
         del self.use_sliding_window

@@ -66,6 +66,10 @@ class SqueezeBertConfig(PreTrainedConfig):
 
         pad_token_id (`int`, *optional*, defaults to 0):
             The ID of the token in the word embedding to use as padding.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         embedding_size (`int`, *optional*, defaults to 768):
             The dimension of the word embedding vectors.
 
@@ -81,6 +85,11 @@ class SqueezeBertConfig(PreTrainedConfig):
             The number of groups in the second feed forward network layer.
         output_groups (`int`, *optional*, defaults to 4):
             The number of groups in the third feed forward network layer.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -115,6 +124,8 @@ class SqueezeBertConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         embedding_size=768,
         q_groups=4,
         k_groups=4,
@@ -122,10 +133,17 @@ class SqueezeBertConfig(PreTrainedConfig):
         post_attention_groups=1,
         intermediate_groups=4,
         output_groups=4,
+        is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
 
+        self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

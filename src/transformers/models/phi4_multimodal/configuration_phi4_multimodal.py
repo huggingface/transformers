@@ -420,13 +420,11 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         self._rope_parameters_validation()
         self.sliding_window = sliding_window
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
     def _rope_parameters_adjustment(self):
         """

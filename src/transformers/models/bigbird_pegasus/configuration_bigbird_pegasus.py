@@ -147,8 +147,14 @@ class BigBirdPegasusConfig(PreTrainedConfig):
         block_size=64,
         num_random_blocks=3,
         use_bias=False,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
@@ -176,14 +182,11 @@ class BigBirdPegasusConfig(PreTrainedConfig):
         self.num_random_blocks = num_random_blocks
         self.use_bias = use_bias
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig with Bart->BigBirdPegasus

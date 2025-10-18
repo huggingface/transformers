@@ -140,6 +140,8 @@ class ModernBertConfig(PreTrainedConfig):
         repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
             When True, ModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
             applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -196,6 +198,7 @@ class ModernBertConfig(PreTrainedConfig):
         sparse_pred_ignore_index: Optional[int] = -100,
         reference_compile: Optional[bool] = None,
         repad_logits_with_grad: Optional[bool] = False,
+        tie_word_embeddings: Optional[bool] = True,
         **kwargs,
     ):
         super().__init__(
@@ -206,6 +209,7 @@ class ModernBertConfig(PreTrainedConfig):
             sep_token_id=sep_token_id,
             **kwargs,
         )
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

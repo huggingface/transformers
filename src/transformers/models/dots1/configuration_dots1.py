@@ -93,6 +93,12 @@ class Dots1Config(PreTrainedConfig):
             additional layer afterwards will use SWA (Sliding Window Attention).
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     Examples:
         ```python
@@ -166,6 +172,9 @@ class Dots1Config(PreTrainedConfig):
         sliding_window: Optional[int] = 4096,
         max_window_layers: Optional[int] = 62,
         layer_types: Optional[list[str]] = None,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -209,15 +218,17 @@ class Dots1Config(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["Dots1Config"]

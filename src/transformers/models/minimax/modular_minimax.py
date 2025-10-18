@@ -236,6 +236,10 @@ class MiniMaxConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.layer_types = layer_types
         self.block_size = block_size
@@ -259,13 +263,7 @@ class MiniMaxConfig(PreTrainedConfig):
         rope_theta = getattr(self, "rope_theta", 1000000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):

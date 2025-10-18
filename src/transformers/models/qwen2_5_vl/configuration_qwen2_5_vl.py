@@ -123,6 +123,8 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -179,6 +181,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
         max_window_layers: Optional[int] = 80,
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
+        pad_token_id: Optional[int] = None,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
@@ -222,7 +225,9 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
         if self.rope_parameters["rope_type"] == "mrope":
             self.rope_parameters["rope_type"] = "default"
         rope_config_validation(self, ignore_keys={"mrope_section"})
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        super().__init__(**kwargs)
 
 
 class Qwen2_5_VLConfig(PreTrainedConfig):

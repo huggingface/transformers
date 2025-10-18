@@ -100,8 +100,14 @@ class T5Config(PreTrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         classifier_dropout=0.0,
+        tie_word_embeddings=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.tie_word_embeddings = tie_word_embeddings
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -119,6 +125,8 @@ class T5Config(PreTrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -135,12 +143,7 @@ class T5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
