@@ -1188,7 +1188,7 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
         # Use the original algorithm exactly as it was
         max_ = 0.0
         max_indices = (left_length, left_length, 0, 0)
-        
+
         for i in range(1, left_length + right_length):
             # epsilon to favor long perfect matches
             eps = i / 10000.0
