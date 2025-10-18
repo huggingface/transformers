@@ -33,9 +33,8 @@ if __name__ == "__main__":
     parser.add_argument("--output-dir", type=str, default=None, help="Output dir for benchmark results")
     parser.add_argument("--log-level", type=str, choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO")
     parser.add_argument("--model-id", type=str, help="Specific model ID to benchmark (if supported by benchmarks)")
-
-    parser.add_argument("--warmup", type=int, default=3, help="Number of warmup iterations")
-    parser.add_argument("--iterations", type=int, default=10, help="Number of measurement iterations")
+    parser.add_argument("--warmup", "-w", type=int, default=3, help="Number of warmup iterations")
+    parser.add_argument("--iterations", "-i", type=int, default=10, help="Number of measurement iterations")
 
     parser.add_argument("--batch-size", "-b", type=int, nargs="+", help="Batch size")
     parser.add_argument("--sequence-length", "-s", type=int, nargs="+", help="Sequence length")
@@ -44,7 +43,20 @@ if __name__ == "__main__":
     parser.add_argument("--cross-generate", action="store_true", help="Cross-generate all combinations of configs")
     parser.add_argument("--num-tokens-to-profile", "-p", type=int, default=0, help="Number of tokens to profile")
 
+    parser.add_argument("--branch-name", type=str, help="Git branch name")
     parser.add_argument("--commit-id", type=str, help="Git commit ID (if not provided, will auto-detect from git)")
+    parser.add_argument("--commit-message", type=str, help="Git commit message")
+
+    parser.add_argument(
+        "--no-gpu-monitoring", action="store_true", help="Disables GPU monitoring during benchmark runs"
+    )
+
+    parser.add_argument(
+        "--push-result-to-dataset",
+        type=str,
+        default=None,
+        help="Name of the dataset to push results to. If not provided, results are not pushed to the Hub.",
+    )
     args = parser.parse_args()
 
     # Setup logging
@@ -76,6 +88,7 @@ if __name__ == "__main__":
                 batch_size=args.batch_size[0],
                 sequence_length=args.sequence_length[0],
                 num_tokens_to_generate=args.num_tokens_to_generate[0],
+                gpu_monitoring=not args.no_gpu_monitoring,
             )
         else:
             benchmark_configs = generate_main_configs(
@@ -106,11 +119,24 @@ if __name__ == "__main__":
                     cfg_dict.pop("name")
                     benchmark_configs.append(BenchmarkConfig.from_dict(cfg_dict))
 
-    runner = BenchmarkRunner(logger, args.output_dir, args.commit_id)
-    results = runner.run_benchmarks(
+    runner = BenchmarkRunner(
+        logger,
+        args.output_dir,
+        args.branch_name,
+        args.commit_id,
+        args.commit_message,
+    )
+    timestamp, results = runner.run_benchmarks(
         args.model_id,
         benchmark_configs,
         args.num_tokens_to_profile,
         pretty_print_summary=True,
     )
-    # runner.save_results(args.model_id, results)
+
+    dataset_id = args.push_result_to_dataset
+    if dataset_id is not None and len(results) > 0:
+        runner.push_results_to_hub(
+            dataset_id,
+            results,
+            timestamp,
+        )
