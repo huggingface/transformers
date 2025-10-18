@@ -43,10 +43,6 @@ class LayoutLMv3Processor(ProcessorMixin):
             An instance of [`LayoutLMv3Tokenizer`] or [`LayoutLMv3TokenizerFast`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "LayoutLMv3ImageProcessor"
-    tokenizer_class = ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast")
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 

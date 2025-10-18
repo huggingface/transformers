@@ -102,12 +102,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
     """
 
-    attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
     ):

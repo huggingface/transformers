@@ -61,10 +61,6 @@ class Pix2StructProcessor(ProcessorMixin):
             An instance of ['T5TokenizerFast`] or ['T5Tokenizer`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Pix2StructImageProcessor"
-    tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
-
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)

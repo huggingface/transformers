@@ -65,11 +65,6 @@ class InstructBlipProcessor(ProcessorMixin):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
-    attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
-    image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
-    tokenizer_class = "AutoTokenizer"
-    qformer_tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = AddedToken("<image>", normalized=False, special=True)
@@ -160,16 +155,7 @@ class InstructBlipProcessor(ProcessorMixin):
         qformer_tokenizer_path = os.path.join(save_directory, "qformer_tokenizer")
         self.qformer_tokenizer.save_pretrained(qformer_tokenizer_path)
 
-        # We modify the attributes so that only the tokenizer and image processor are saved in the main folder
-        qformer_present = "qformer_tokenizer" in self.attributes
-        if qformer_present:
-            self.attributes.remove("qformer_tokenizer")
-
-        outputs = super().save_pretrained(save_directory, **kwargs)
-
-        if qformer_present:
-            self.attributes += ["qformer_tokenizer"]
-        return outputs
+        return super().save_pretrained(save_directory, exclude_attributes=["qformer_tokenizer"], **kwargs)
 
     # overwrite to load the Q-Former tokenizer from a separate folder
     @classmethod
