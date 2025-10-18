@@ -232,7 +232,6 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
         "eos_token": "</s>",
         "model_max_length": 1024,
         "pad_token": "<pad>",
-        "special_tokens_map_file": None,
         "tokenizer_class": "BioGptTokenizer",
         "unk_token": "<unk>",
     }
