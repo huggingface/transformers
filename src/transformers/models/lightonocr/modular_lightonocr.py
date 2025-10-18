@@ -187,7 +187,7 @@ class LightOnOCRConfig(PretrainedConfig):
         self.text_config.num_hidden_layers = value
 
 
-class PixtralProcessorKwargs(ProcessingKwargs, total=False):
+class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -237,7 +237,7 @@ class LightOnOCRProcessor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You must provide either text or images")
         output_kwargs = self._merge_kwargs(
-            PixtralProcessorKwargs,
+            LightOnOCRProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -294,7 +294,7 @@ class LightOnOCRProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = PixtralProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs = LightOnOCRProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
             size = images_kwargs.get("size", None) or self.image_processor.size
