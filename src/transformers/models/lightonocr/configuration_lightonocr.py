@@ -329,85 +329,103 @@ class LightOnOCRConfig(PretrainedConfig):
     """
 
     model_type = "lightonocr"
+    sub_configs = {"text_config": LightOnOCRTextConfig, "vision_config": LightOnOCRVisionConfig}
 
     def __init__(
         self,
         spatial_merge_size: int = 2,
         image_token_index: int = 151655,
-        vision_config: Optional[dict[str, Any]] = {
-            "attention_dropout": 0,
-            "head_dim": 64,
-            "hidden_act": "silu",
-            "hidden_size": 1024,
-            "image_size": 1540,
-            "initializer_range": 0.02,
-            "intermediate_size": 4096,
-            "model_type": "pixtral",
-            "num_attention_heads": 16,
-            "num_channels": 3,
-            "num_hidden_layers": 24,
-            "patch_size": 14,
-            "rope_theta": 10000,
-        },
-        text_config: Optional[dict[str, Any]] = {
-            "architectures": ["Qwen3ForCausalLM"],
-            "attention_dropout": 0,
-            "head_dim": 128,
-            "hidden_act": "silu",
-            "hidden_size": 1024,
-            "initializer_range": 0.02,
-            "intermediate_size": 3072,
-            "max_position_embeddings": 40960,
-            "model_type": "qwen3",
-            "num_attention_heads": 16,
-            "num_hidden_layers": 28,
-            "num_key_value_heads": 8,
-            "rms_norm_eps": 1e-6,
-            "rope_theta": 1000000,
-            "sliding_window": None,
-            "use_cache": True,
-            "use_sliding_window": False,
-            "vocab_size": 151936,
-        },
+        tie_word_embeddings=True,
+        vision_config: Optional[dict[str, Any]] = None,
+        text_config: Optional[dict[str, Any]] = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.spatial_merge_size = spatial_merge_size
         self.image_token_id = image_token_index
 
         if vision_config is None:
-            self.vision_config = LightOnOCRVisionConfig()
+            self.vision_config = LightOnOCRVisionConfig(
+                attention_dropout=0,
+                head_dim=64,
+                hidden_act="silu",
+                hidden_size=1024,
+                image_size=1540,
+                initializer_range=0.02,
+                intermediate_size=4096,
+                model_type="pixtral",
+                num_attention_heads=16,
+                num_channels=3,
+                num_hidden_layers=24,
+                patch_size=14,
+                rope_theta=10000,
+            )
+        elif isinstance(vision_config, PretrainedConfig):
+            self.vision_config = vision_config
         else:
             self.vision_config = LightOnOCRVisionConfig(**vision_config)
 
         if text_config is None:
-            self.text_config = LightOnOCRTextConfig()
+            self.text_config = LightOnOCRTextConfig(
+                architectures=["Qwen3ForCausalLM"],
+                attention_dropout=0,
+                head_dim=128,
+                hidden_act="silu",
+                hidden_size=1024,
+                initializer_range=0.02,
+                intermediate_size=3072,
+                max_position_embeddings=40960,
+                model_type="qwen3",
+                num_attention_heads=16,
+                num_hidden_layers=28,
+                num_key_value_heads=8,
+                rms_norm_eps=1e-6,
+                rope_theta=1000000,
+                sliding_window=None,
+                use_cache=True,
+                use_sliding_window=False,
+                vocab_size=151936,
+            )
+        elif isinstance(text_config, PretrainedConfig):
+            self.text_config = text_config
         else:
             self.text_config = LightOnOCRTextConfig(**text_config)
+
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
     @property
     def vocab_size(self):
         """Get vocab size from text config for generation."""
-        return self._text_config.vocab_size
+        return self.text_config.vocab_size
 
-    def to_dict(self):
-        """Serialize config to dict."""
-        output = super().to_dict()
+    @property
+    def hidden_size(self):
+        """Get hidden size from text config."""
+        return self.text_config.hidden_size
 
-        # Ensure nested configs are properly serialized
-        if self.vision_config is not None:
-            output["vision_config"] = self.vision_config.to_dict()
-        if self.text_config is not None:
-            output["text_config"] = self.text_config.to_dict()
+    @hidden_size.setter
+    def hidden_size(self, value):
+        """Set hidden size in text config."""
+        self.text_config.hidden_size = value
 
-        return output
+    @property
+    def num_attention_heads(self):
+        """Get num attention heads from text config."""
+        return self.text_config.num_attention_heads
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        """Load config from pretrained model."""
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        return cls.from_dict(config_dict, **kwargs)
+    @num_attention_heads.setter
+    def num_attention_heads(self, value):
+        """Set num attention heads in text config."""
+        self.text_config.num_attention_heads = value
+
+    @property
+    def num_hidden_layers(self):
+        """Get num hidden layers from text config."""
+        return self.text_config.num_hidden_layers
+
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value):
+        """Set num hidden layers in text config."""
+        self.text_config.num_hidden_layers = value
 
 
 __all__ = ["LightOnOCRConfig"]
