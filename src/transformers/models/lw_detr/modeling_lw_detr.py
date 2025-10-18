@@ -558,7 +558,7 @@ class LwDetrAttention(nn.Module):
 
         hidden_states_original = hidden_states
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
 
         if self.training:
             hidden_states_original = torch.cat(
@@ -591,9 +591,6 @@ class LwDetrAttention(nn.Module):
             attn_output = torch.cat(torch.split(attn_output, batch_size, dim=0), dim=1)
 
         return attn_output, attn_weights
-
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[torch.Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
 
 
 @use_kernel_forward_from_hub("MultiScaleDeformableAttention")
