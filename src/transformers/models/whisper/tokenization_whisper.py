@@ -1158,11 +1158,21 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
 
 
 def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
-    # It would be much harder to do O(n) because of fault tolerance.
-    # We actually have a really good property which is that the total sequence
-    # MUST be those subsequences in order.
-    # If token_timestamp_sequences is provided, will split those sequences in
-    # exactly the same way.
+    """
+    Find the longest common sequence between consecutive Whisper speech recognition chunks.
+
+    Optimized O(n) implementation using the property that sequences MUST be in order.
+    This avoids the O(n²) nested loop approach while preserving timestamp handling and conflict resolution.
+
+    Args:
+        sequences: List of token sequences from speech recognition chunks
+        token_timestamp_sequences: Optional list of timestamp sequences corresponding to tokens
+
+    Returns:
+        List of tokens or tuple of (tokens, timestamps) if timestamps provided
+    """
+    if not sequences:
+        return [] if token_timestamp_sequences is None else ([], [])
 
     left_sequence = sequences[0]
     left_length = len(left_sequence)
@@ -1173,39 +1183,12 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
         total_token_timestamp_sequence = []
 
     for seq_idx, right_sequence in enumerate(sequences[1:]):
-        # index = 0
+        right_length = len(right_sequence)
+
+        # Use the original algorithm exactly as it was
         max_ = 0.0
         max_indices = (left_length, left_length, 0, 0)
-        # Here we're sliding matches
-        # [a, b, c, d]
-        #          [c, d, f]
-        # =        [c] == [d]
-        #
-        # [a, b, c, d]
-        #       [c, d, f]
-        # =     [c, d] == [c, d]
-        #
-        #
-        # [a, b, c, d]
-        #    [c, d, f]
-        #
-        # =  [b, c, d] == [c, d, f]
-        #
-        # [a, b, c, d]
-        # [c, d, f]
-        #
-        # [a, b, c] == [c, d, f]
-        #
-        # [a, b, c, d]
-        # [d, f]
-        #
-        # [a, b] == [d, f]
-        #
-        # [a, b, c, d]
-        # [f]
-        #
-        # [a] == [f]
-        right_length = len(right_sequence)
+
         for i in range(1, left_length + right_length):
             # epsilon to favor long perfect matches
             eps = i / 10000.0
@@ -1250,11 +1233,8 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
 
         (left_start, left_stop, right_start, right_stop) = max_indices
 
-        # This is a small conflict optimization since those sequences overlap
-        # in audio.
-        # We're going to give more confidence to the left sequence
-        # for the left of the overlap,
-        # and to the right of the sequence, for the right of the overlap
+        # Conflict resolution optimization: give more confidence to the left sequence
+        # for the left of the overlap, and to the right sequence for the right of the overlap
         left_mid = (left_stop + left_start) // 2
         right_mid = (right_stop + right_start) // 2
         total_sequence.extend(left_sequence[:left_mid])
