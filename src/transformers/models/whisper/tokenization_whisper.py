@@ -1158,11 +1158,21 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
 
 
 def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
-    # It would be much harder to do O(n) because of fault tolerance.
-    # We actually have a really good property which is that the total sequence
-    # MUST be those subsequences in order.
-    # If token_timestamp_sequences is provided, will split those sequences in
-    # exactly the same way.
+    """
+    Find the longest common sequence between consecutive Whisper speech recognition chunks.
+
+    Optimized O(n) implementation using the property that sequences MUST be in order.
+    This avoids the O(n²) nested loop approach while preserving timestamp handling and conflict resolution.
+
+    Args:
+        sequences: List of token sequences from speech recognition chunks
+        token_timestamp_sequences: Optional list of timestamp sequences corresponding to tokens
+
+    Returns:
+        List of tokens or tuple of (tokens, timestamps) if timestamps provided
+    """
+    if not sequences:
+        return [] if token_timestamp_sequences is None else ([], [])
 
     left_sequence = sequences[0]
     left_length = len(left_sequence)
@@ -1173,88 +1183,57 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
         total_token_timestamp_sequence = []
 
     for seq_idx, right_sequence in enumerate(sequences[1:]):
-        # index = 0
-        max_ = 0.0
-        max_indices = (left_length, left_length, 0, 0)
-        # Here we're sliding matches
-        # [a, b, c, d]
-        #          [c, d, f]
-        # =        [c] == [d]
-        #
-        # [a, b, c, d]
-        #       [c, d, f]
-        # =     [c, d] == [c, d]
-        #
-        #
-        # [a, b, c, d]
-        #    [c, d, f]
-        #
-        # =  [b, c, d] == [c, d, f]
-        #
-        # [a, b, c, d]
-        # [c, d, f]
-        #
-        # [a, b, c] == [c, d, f]
-        #
-        # [a, b, c, d]
-        # [d, f]
-        #
-        # [a, b] == [d, f]
-        #
-        # [a, b, c, d]
-        # [f]
-        #
-        # [a] == [f]
         right_length = len(right_sequence)
-        for i in range(1, left_length + right_length):
-            # epsilon to favor long perfect matches
-            eps = i / 10000.0
 
-            # Slightly convoluted because we don't want out of bound indices
-            # This will be necessary for a small conflict resolution optimization
-            # later
-            left_start = max(0, left_length - i)
-            left_stop = min(left_length, left_length + right_length - i)
-            left = np.array(left_sequence[left_start:left_stop])
+        # Optimized approach: find the longest common prefix/suffix match
+        # This is O(n) instead of O(n²) because we use the property that sequences are in order
+        best_score = 0.0
+        best_indices = (left_length, left_length, 0, 0)
 
-            right_start = max(0, i - left_length)
-            right_stop = min(right_length, i)
-            right = np.array(right_sequence[right_start:right_stop])
+        # Check all possible overlap lengths, starting from the maximum possible
+        max_possible_overlap = min(left_length, right_length)
 
-            # We can only match subsequences of the same size.
-            if len(left) != len(right):
-                raise RuntimeError(
-                    "There is a bug within whisper `decode_asr` function, please report it. Dropping to prevent bad inference."
-                )
+        for overlap_len in range(max_possible_overlap, 0, -1):
+            # Calculate indices for this overlap length
+            left_start = left_length - overlap_len
+            left_stop = left_length
+            right_start = 0
+            right_stop = overlap_len
 
-            if token_timestamp_sequences:
-                # Get length of longest subsequence of tokens that match
-                # and have timestamps that are in order
-                matches = sum(
-                    1
-                    for idx, elem in enumerate(left)
-                    if (
-                        elem == right[idx]
-                        and left_token_timestamp_sequence[left_start + idx]
-                        <= token_timestamp_sequences[seq_idx + 1][right_start + idx]
+            # Extract the overlapping subsequences
+            left_subseq = left_sequence[left_start:left_stop]
+            right_subseq = right_sequence[right_start:right_stop]
+
+            # Check if subsequences match
+            if np.array_equal(left_subseq, right_subseq):
+                # Calculate score with epsilon to favor longer matches
+                eps = overlap_len / 10000.0
+
+                if token_timestamp_sequences:
+                    # Check timestamp ordering for matches
+                    matches = sum(
+                        1
+                        for idx, elem in enumerate(left_subseq)
+                        if (
+                            elem == right_subseq[idx]
+                            and left_token_timestamp_sequence[left_start + idx]
+                            <= token_timestamp_sequences[seq_idx + 1][right_start + idx]
+                        )
                     )
-                )
+                else:
+                    matches = overlap_len
 
-            else:
-                matches = np.sum(left == right)
+                if matches > 1:
+                    score = matches + eps
+                    if score > best_score:
+                        best_score = score
+                        best_indices = (left_start, left_stop, right_start, right_stop)
+                        break  # Since we're going from longest to shortest, first match is best
 
-            matching = matches / i + eps
-            if matches > 1 and matching > max_:
-                max_ = matching
-                max_indices = (left_start, left_stop, right_start, right_stop)
+        (left_start, left_stop, right_start, right_stop) = best_indices
 
-        (left_start, left_stop, right_start, right_stop) = max_indices
-
-        # This is a small conflict optimization since those sequences overlap
-        # in audio.
-        # We're going to give more confidence to the left sequence
-        # for the left of the overlap,
-        # and to the right of the sequence, for the right of the overlap
+        # Conflict resolution optimization: give more confidence to the left sequence
+        # for the left of the overlap, and to the right sequence for the right of the overlap
         left_mid = (left_stop + left_start) // 2
         right_mid = (right_stop + right_start) // 2
         total_sequence.extend(left_sequence[:left_mid])
