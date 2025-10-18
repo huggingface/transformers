@@ -45,8 +45,8 @@ if is_torch_available():
 
 def to_channel_dimension_format(
     image: np.ndarray,
-    channel_dim: Union[ChannelDimension, str],
-    input_channel_dim: Optional[Union[ChannelDimension, str]] = None,
+    channel_dim: ChannelDimension | str,
+    input_channel_dim: ChannelDimension | str | None = None,
 ) -> np.ndarray:
     """
     Converts `image` to the channel dimension format specified by `channel_dim`. The input
@@ -91,7 +91,7 @@ def rescale(
     scale: float,
     data_format: Optional[ChannelDimension] = None,
     dtype: np.dtype = np.float32,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> np.ndarray:
     """
     Rescales `image` by `scale`.
@@ -155,7 +155,7 @@ def to_pil_image(
     image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor"],
     do_rescale: Optional[bool] = None,
     image_mode: Optional[str] = None,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> "PIL.Image.Image":
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
