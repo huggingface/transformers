@@ -1185,53 +1185,53 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
     for seq_idx, right_sequence in enumerate(sequences[1:]):
         right_length = len(right_sequence)
 
-        # Use the original sliding window approach for compatibility
-        # This maintains the exact same behavior as the original algorithm
-        best_score = 0.0
-        best_indices = (left_length, left_length, 0, 0)
-
-        # Iterate through all possible overlap positions (original algorithm)
+        # Use the original algorithm exactly as it was
+        max_ = 0.0
+        max_indices = (left_length, left_length, 0, 0)
+        
         for i in range(1, left_length + right_length):
-            # Calculate indices using the original formula
+            # epsilon to favor long perfect matches
+            eps = i / 10000.0
+
+            # Slightly convoluted because we don't want out of bound indices
+            # This will be necessary for a small conflict resolution optimization
+            # later
             left_start = max(0, left_length - i)
             left_stop = min(left_length, left_length + right_length - i)
+            left = np.array(left_sequence[left_start:left_stop])
+
             right_start = max(0, i - left_length)
             right_stop = min(right_length, i)
+            right = np.array(right_sequence[right_start:right_stop])
 
-            # Extract the overlapping subsequences
-            left_subseq = left_sequence[left_start:left_stop]
-            right_subseq = right_sequence[right_start:right_stop]
+            # We can only match subsequences of the same size.
+            if len(left) != len(right):
+                raise RuntimeError(
+                    "There is a bug within whisper `decode_asr` function, please report it. Dropping to prevent bad inference."
+                )
 
-            # Check if subsequences have the same length (original requirement)
-            if len(left_subseq) != len(right_subseq):
-                continue
-
-            # Check if subsequences match
-            if np.array_equal(left_subseq, right_subseq):
-                # Calculate score with epsilon to favor longer matches (original formula)
-                eps = i / 10000.0
-
-                if token_timestamp_sequences:
-                    # Check timestamp ordering for matches
-                    matches = sum(
-                        1
-                        for idx, elem in enumerate(left_subseq)
-                        if (
-                            elem == right_subseq[idx]
-                            and left_token_timestamp_sequence[left_start + idx]
-                            <= token_timestamp_sequences[seq_idx + 1][right_start + idx]
-                        )
+            if token_timestamp_sequences:
+                # Get length of longest subsequence of tokens that match
+                # and have timestamps that are in order
+                matches = sum(
+                    1
+                    for idx, elem in enumerate(left)
+                    if (
+                        elem == right[idx]
+                        and left_token_timestamp_sequence[left_start + idx]
+                        <= token_timestamp_sequences[seq_idx + 1][right_start + idx]
                     )
-                else:
-                    matches = len(left_subseq)
+                )
 
-                if matches > 1:
-                    score = matches / i + eps  # Original scoring formula
-                    if score > best_score:
-                        best_score = score
-                        best_indices = (left_start, left_stop, right_start, right_stop)
+            else:
+                matches = np.sum(left == right)
 
-        (left_start, left_stop, right_start, right_stop) = best_indices
+            matching = matches / i + eps
+            if matches > 1 and matching > max_:
+                max_ = matching
+                max_indices = (left_start, left_stop, right_start, right_stop)
+
+        (left_start, left_stop, right_start, right_stop) = max_indices
 
         # Conflict resolution optimization: give more confidence to the left sequence
         # for the left of the overlap, and to the right sequence for the right of the overlap
