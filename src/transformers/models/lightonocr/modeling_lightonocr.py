@@ -126,6 +126,9 @@ class LightOnOCRPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+
     def _init_weights(self, module):
         # Determine which component this module belongs to by checking the module path
         module_name = None
@@ -429,6 +432,8 @@ class LightOnOCRTextRotaryEmbedding(nn.Module):
     """
 )
 class LightOnOCRText(LightOnOCRTextPreTrainedModel):
+    config_class = LightOnOCRTextConfig
+
     def __init__(self, config: LightOnOCRTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -518,6 +523,12 @@ class LightOnOCRText(LightOnOCRTextPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
 
 
 # Vision model components - explicitly renamed from Pixtral
@@ -940,6 +951,12 @@ class LightOnOCRVision(LightOnOCRVisionPreTrainedModel):
 
 
 class LightOnOCRModel(LightOnOCRPreTrainedModel):
+    base_model_prefix = ""
+    _checkpoint_conversion_mapping = {}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
+    config: LightOnOCRConfig
+
     def __init__(self, config: LightOnOCRConfig):
         super().__init__(config)
 
@@ -964,14 +981,57 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
 
         return image_features
 
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
         image_sizes: Optional[list[tuple[int, int]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> BaseModelOutputWithPast:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         if inputs_embeds is None:
             if input_ids is None:
                 raise ValueError("Either input_ids or inputs_embeds must be provided")
@@ -979,28 +1039,56 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
             # Get text embeddings
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
-            # If pixel_values is provided, process vision encoder
-            if pixel_values is not None:
-                # Process image through the vision encoder
-                visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
-                projected_visual = self.vision_projection(visual_features.squeeze(0), image_sizes)
+        # Store image features for output
+        image_features = None
+        # If pixel_values is provided, process vision encoder
+        if pixel_values is not None:
+            # Process image through the vision encoder
+            visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
+            projected_visual = self.vision_projection(visual_features.squeeze(0), image_sizes)
 
-                # Convert to same dtype
-                projected_visual = projected_visual.to(inputs_embeds.dtype)
+            # Store image features for output
+            image_features = projected_visual
 
-                # Create mask for image tokens
-                image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            # Convert to same dtype
+            projected_visual = projected_visual.to(inputs_embeds.dtype)
 
-                # Replace image tokens with visual embeddings using masked_scatter
-                inputs_embeds = inputs_embeds.masked_scatter(image_mask, projected_visual)
+            # Get mask for image tokens using get_placeholder_mask
+            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, projected_visual)
 
-        # Returns hidden states only
-        return self.language_model(inputs_embeds=inputs_embeds, **kwargs)
+            # Replace image tokens with visual embeddings using masked_scatter
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, projected_visual)
+
+        # Get language model outputs
+        outputs = self.language_model(
+            input_ids=None,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            **kwargs,
+        )
+
+        if not return_dict:
+            return outputs
+
+        # Return BaseModelOutputWithPast with all relevant information
+        return BaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMixin):
+    _checkpoint_conversion_mapping = {}
     config_class = LightOnOCRConfig
-    _supports_attention_backend = True
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: LightOnOCRConfig):
         super().__init__(config)
@@ -1029,6 +1117,10 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
         pixel_values: Optional[torch.Tensor] = None,
         image_sizes: Optional[list[tuple[int, int]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> CausalLMOutputWithPast:
@@ -1037,6 +1129,10 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
             pixel_values=pixel_values,
             image_sizes=image_sizes,
             inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
+            use_cache=use_cache,
             **kwargs,
         )
 
@@ -1045,10 +1141,7 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
 
         loss = None
         if labels is not None:
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = self.loss_fn(logits, labels)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1064,72 +1157,36 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
-        image_sizes=None,
         attention_mask=None,
         cache_position=None,
         **kwargs,
     ):
-        """
-        Prepare inputs for generation. This handles KV cache by only processing
-        vision inputs on the first generation step.
-        """
-        # Determine if this is the first generation step (prefill) or subsequent steps (decode)
-        # First step: past_key_values is None or cache_position[0] == 0
-        # Subsequent steps: past_key_values exists and cache_position[0] > 0
-        is_first_step = past_key_values is None or (cache_position is not None and cache_position[0] == 0)
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        # First generation step: process vision encoder if pixel_values provided
-        if inputs_embeds is None and pixel_values is not None and is_first_step:
-            pixel_values = pixel_values.to(dtype=self.dtype)
-            # Process image through the vision encoder
-            visual_features = self.model.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
-            # Apply vision projection based on config
-            projected_visual = self.model.vision_projection(visual_features.squeeze(0), image_sizes)
-
-            # Get text embeddings
-            token_embeddings = self.model.language_model.get_input_embeddings()(input_ids)
-
-            # Convert to same dtype
-            projected_visual = projected_visual.to(token_embeddings.dtype)
-
-            # Create mask for image tokens
-            image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(token_embeddings)
-
-            # Replace image tokens with visual embeddings using masked_scatter
-            inputs_embeds = token_embeddings.masked_scatter(image_mask, projected_visual)
-        # For subsequent generation steps, trim to only the last token
-        if past_key_values is not None and not is_first_step:
-            if inputs_embeds is not None:
-                inputs_embeds = inputs_embeds[:, -1:, :]
-            if input_ids is not None:
-                input_ids = input_ids[:, -1:]
-
-        model_inputs = {
-            "inputs_embeds": inputs_embeds,
-            "input_ids": input_ids if inputs_embeds is None else None,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache", True),
-            "attention_mask": attention_mask,
-            "cache_position": cache_position,
-        }
-
-        return model_inputs
-
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, **kwargs):
-        """Update model kwargs for next generation step."""
-        # Call parent to handle standard kwargs like attention_mask, past_key_values, etc.
-        model_kwargs = super()._update_model_kwargs_for_generation(
-            outputs=outputs,
-            model_kwargs=model_kwargs,
-            is_encoder_decoder=is_encoder_decoder,
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
             **kwargs,
         )
 
-        # After first generation step, remove vision inputs so they're not reprocessed
-        model_kwargs["pixel_values"] = None
-        model_kwargs["image_sizes"] = None
+        if cache_position[0] == 0:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["image_sizes"] = kwargs.get("image_sizes")
 
-        return model_kwargs
+        return model_inputs
+
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_encoder(self):
+        return self.model.vision_encoder
 
 
 __all__ = [
