@@ -1185,29 +1185,31 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
     for seq_idx, right_sequence in enumerate(sequences[1:]):
         right_length = len(right_sequence)
 
-        # Optimized approach: find the longest common prefix/suffix match
-        # This is O(n) instead of O(n²) because we use the property that sequences are in order
+        # Use the original sliding window approach for compatibility
+        # This maintains the exact same behavior as the original algorithm
         best_score = 0.0
         best_indices = (left_length, left_length, 0, 0)
 
-        # Check all possible overlap lengths, starting from the maximum possible
-        max_possible_overlap = min(left_length, right_length)
-
-        for overlap_len in range(max_possible_overlap, 0, -1):
-            # Calculate indices for this overlap length
-            left_start = left_length - overlap_len
-            left_stop = left_length
-            right_start = 0
-            right_stop = overlap_len
+        # Iterate through all possible overlap positions (original algorithm)
+        for i in range(1, left_length + right_length):
+            # Calculate indices using the original formula
+            left_start = max(0, left_length - i)
+            left_stop = min(left_length, left_length + right_length - i)
+            right_start = max(0, i - left_length)
+            right_stop = min(right_length, i)
 
             # Extract the overlapping subsequences
             left_subseq = left_sequence[left_start:left_stop]
             right_subseq = right_sequence[right_start:right_stop]
 
+            # Check if subsequences have the same length (original requirement)
+            if len(left_subseq) != len(right_subseq):
+                continue
+
             # Check if subsequences match
             if np.array_equal(left_subseq, right_subseq):
-                # Calculate score with epsilon to favor longer matches
-                eps = overlap_len / 10000.0
+                # Calculate score with epsilon to favor longer matches (original formula)
+                eps = i / 10000.0
 
                 if token_timestamp_sequences:
                     # Check timestamp ordering for matches
@@ -1221,14 +1223,13 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
                         )
                     )
                 else:
-                    matches = overlap_len
+                    matches = len(left_subseq)
 
                 if matches > 1:
-                    score = matches + eps
+                    score = matches / i + eps  # Original scoring formula
                     if score > best_score:
                         best_score = score
                         best_indices = (left_start, left_stop, right_start, right_stop)
-                        break  # Since we're going from longest to shortest, first match is best
 
         (left_start, left_stop, right_start, right_stop) = best_indices
 
