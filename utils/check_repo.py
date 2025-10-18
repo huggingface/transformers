@@ -100,6 +100,8 @@ PRIVATE_MODELS = [
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
+    "LightOnOCRText",
+    "LightOnOCRVision",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
@@ -196,6 +198,8 @@ IGNORE_NON_TESTED = (
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
+        "LightOnOCRText",  # Building part of bigger (tested) model. Tested implicitly through LightOnOCRForConditionalGeneration.
+        "LightOnOCRVision",  # Building part of bigger (tested) model. Tested implicitly through LightOnOCRForConditionalGeneration.
         "TimesFmModel",  # Building part of bigger (tested) model
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.

@@ -1109,6 +1109,8 @@
         title: LayoutXLM
       - local: model_doc/lfm2_vl
         title: LFM2-VL
+      - local: model_doc/lightonocr
+        title: LightOnOCR
       - local: model_doc/lilt
         title: LiLT
       - local: model_doc/llama4
