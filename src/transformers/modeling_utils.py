@@ -203,6 +203,8 @@ VLMS = [
     "qwen2_5_vl",
     "videollava",
     "vipllava",
+    "vit",
+    "deit",
 ]
 
 
