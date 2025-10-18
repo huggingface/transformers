@@ -33,7 +33,6 @@ from ..masking_utils import (
 from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ..pytorch_utils import (
     is_torch_greater_or_equal,
-    is_torch_greater_or_equal_than_2_3,
     is_torch_greater_or_equal_than_2_6,
 )
 
@@ -765,8 +764,6 @@ def convert_and_export_with_cache(
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
     """
-    if not is_torch_greater_or_equal_than_2_3:
-        raise ImportError("torch >= 2.3 is required.")
 
     import torch.export._trace
 
@@ -1035,8 +1032,6 @@ def export_with_dynamic_cache(
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
     """
-    if not is_torch_greater_or_equal_than_2_3:
-        raise ImportError("torch >= 2.3 is required.")
 
     # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
     ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
