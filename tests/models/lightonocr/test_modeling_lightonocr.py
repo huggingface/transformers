@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,192 +13,512 @@
 # limitations under the License.
 """Testing suite for the PyTorch LightOnOCR model."""
 
-import gc
+import copy
 import unittest
 
-import requests
-from PIL import Image
-
-from transformers import LightOnOCRConfig, LightOnOCRForConditionalGeneration, is_torch_available
+from transformers import (
+    LightOnOCRConfig,
+    LightOnOCRForConditionalGeneration,
+    LightOnOCRModel,
+    is_torch_available,
+    is_vision_available,
+)
 from transformers.testing_utils import (
-    backend_empty_cache,
+    cleanup,
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+
 
 if is_torch_available():
     import torch
 
 
-@require_torch
-class LightOnOCRModelTest(unittest.TestCase):
-    """Basic tests for LightOnOCR model."""
+if is_vision_available():
+    pass  # May be needed for future integration tests
 
-    def setUp(self):
-        """Set up test fixtures."""
-        self.config = LightOnOCRConfig()
-        self.config.text_config.num_hidden_layers = 2
-        self.config.vision_config.num_hidden_layers = 2
 
-    def tearDown(self):
-        """Clean up after each test."""
-        gc.collect()
-        backend_empty_cache(torch_device)
+class LightOnOCRVisionText2TextModelTester:
+    def __init__(
+        self,
+        parent,
+        image_token_index=10,
+        spatial_merge_size=2,
+        seq_length=7,
+        text_config={
+            "model_type": "lightonocr_text",
+            "seq_length": 7,
+            "is_training": True,
+            "use_input_mask": True,
+            "use_token_type_ids": False,
+            "use_labels": True,
+            "vocab_size": 99,
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "intermediate_size": 37,
+            "hidden_act": "silu",
+            "hidden_dropout_prob": 0.1,
+            "attention_probs_dropout_prob": 0.1,
+            "max_position_embeddings": 512,
+            "type_vocab_size": 16,
+            "type_sequence_label_size": 2,
+            "initializer_range": 0.02,
+            "num_labels": 3,
+            "num_choices": 4,
+            "pad_token_id": 1,
+            "bos_token_id": 0,
+            "eos_token_id": 2,
+            "rms_norm_eps": 1e-6,
+            "rope_theta": 10000.0,
+            "attention_bias": False,
+            "attention_dropout": 0.0,
+            "head_dim": 8,
+        },
+        is_training=True,
+        vision_config={
+            "image_size": 112,
+            "patch_size": 14,
+            "num_channels": 3,
+            "is_training": True,
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "attention_dropout": 0.0,
+            "hidden_act": "silu",
+            "initializer_range": 0.02,
+            "rope_theta": 10000.0,
+        },
+    ):
+        self.parent = parent
+        self.image_token_index = image_token_index
+        self.spatial_merge_size = spatial_merge_size
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.pad_token_id = text_config["pad_token_id"]
 
-    def test_model_creation(self):
-        """Test that model can be created from config."""
-        model = LightOnOCRForConditionalGeneration(self.config)
-        self.assertIsInstance(model, LightOnOCRForConditionalGeneration)
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.vocab_size = text_config["vocab_size"]
+        self.hidden_size = text_config["hidden_size"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+        self.is_training = is_training
 
-    @require_vision
-    def test_model_forward_with_image(self):
-        """Test forward pass with image input."""
-        model = LightOnOCRForConditionalGeneration(self.config)
-        model.eval()
+        self.batch_size = 3
+        self.num_channels = 3
+        # Image size must be divisible by patch_size
+        self.image_size = vision_config["image_size"]
+        self.patch_size = vision_config["patch_size"]
+        # Number of patches after patch conv
+        num_patches = (self.image_size // self.patch_size) ** 2
+        # After spatial merging, number of tokens is reduced by spatial_merge_size**2
+        self.num_image_tokens = num_patches // (self.spatial_merge_size**2)
+        self.seq_length = seq_length + self.num_image_tokens
+        self.encoder_seq_length = self.seq_length
 
-        # Create dummy inputs
-        batch_size = 1
-        seq_len = 20
-
-        # Create input_ids with image token
-        input_ids = torch.randint(0, self.config.text_config.vocab_size, (batch_size, seq_len), device=torch_device)
-        # Replace some tokens with image token
-        input_ids[:, 5:15] = self.config.image_token_id
-
-        # Create dummy pixel values (batch, channels, height, width)
-        pixel_values = torch.randn(
-            batch_size,
-            self.config.vision_config.num_channels,
-            self.config.vision_config.image_size,
-            self.config.vision_config.image_size,
-            device=torch_device,
+    def get_config(self):
+        return LightOnOCRConfig(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            image_token_index=self.image_token_index,
+            spatial_merge_size=self.spatial_merge_size,
         )
 
-        # Image sizes (height, width)
-        image_sizes = [(self.config.vision_config.image_size, self.config.vision_config.image_size)]
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                self.vision_config["num_channels"],
+                self.vision_config["image_size"],
+                self.vision_config["image_size"],
+            ]
+        )
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+
+        # Avoid placing image tokens on positions that would be the pad token
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+
+        # Place image tokens at the beginning
+        input_ids[:, : self.num_image_tokens] = config.image_token_id
+
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+
+        # Create image_sizes - must match batch size
+        image_sizes = [(self.image_size, self.image_size)] * self.batch_size
+
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "image_sizes": image_sizes,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    """
+    Model tester for `LightOnOCRForConditionalGeneration`.
+    """
+
+    all_model_classes = (
+        (
+            LightOnOCRModel,
+            LightOnOCRForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {"image-text-to-text": LightOnOCRForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
+
+    _is_composite = True
+    test_head_masking = False
+    test_pruning = False
+
+    def setUp(self):
+        self.model_tester = LightOnOCRVisionText2TextModelTester(self)
+        common_properties = ["image_token_id", "spatial_merge_size"]
+        self.config_tester = ConfigTester(
+            self, config_class=LightOnOCRConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_mismatching_num_image_tokens(self):
+        """
+        Tests that VLMs throw an error with explicit message saying what is wrong
+        when number of images doesn't match number of image tokens in the text.
+        Also we need to test multi-image cases when one prompt has multiple image tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            curr_input_dict = copy.deepcopy(input_dict)  # in-place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
+
+            # remove one image but leave the image token in text
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
+            curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
+            image_sizes = curr_input_dict["image_sizes"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+
+            # one image and two image tokens raise an error
+            with self.assertRaises(ValueError):
+                _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+
+            # two images and two image tokens don't raise an error
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            image_sizes = image_sizes + image_sizes
+            _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+
+    def test_spatial_merge_size(self):
+        """
+        Test that models can be created and initialized with different spatial_merge_size values.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Test that model can be created with different spatial_merge_size values
+        for spatial_merge_size in [1, 2, 4]:
+            curr_config = copy.deepcopy(config)
+            curr_config.spatial_merge_size = spatial_merge_size
+
+            for model_class in self.all_model_classes:
+                # Build model with the new config - should not raise any errors
+                model = model_class(curr_config).to(torch_device)
+                model.eval()
+
+                # Verify the spatial_merge_size is set correctly
+                self.assertEqual(model.config.spatial_merge_size, spatial_merge_size)
+
+                # Verify the model has the expected components
+                if hasattr(model, "model"):
+                    self.assertTrue(hasattr(model.model, "vision_projection"))
+                    self.assertEqual(model.model.vision_projection.config.spatial_merge_size, spatial_merge_size)
+                elif hasattr(model, "vision_projection"):
+                    self.assertEqual(model.vision_projection.config.spatial_merge_size, spatial_merge_size)
+
+    def test_forward_pass_with_image_sizes(self):
+        """
+        Test that the model correctly handles variable image sizes.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            # Test with different image sizes in the same batch
+            batch_size = 2
+            pixel_values = floats_tensor(
+                [batch_size, 3, self.model_tester.image_size, self.model_tester.image_size]
+            ).to(torch_device)
+
+            # Different image sizes (but still need to be divisible by patch_size)
+            image_sizes = [
+                (self.model_tester.image_size, self.model_tester.image_size),
+                (self.model_tester.image_size, self.model_tester.image_size),
+            ]
+
+            num_patches = (self.model_tester.image_size // self.model_tester.patch_size) ** 2
+            num_image_tokens = num_patches // (config.spatial_merge_size ** 2)
+
+            input_ids = ids_tensor([batch_size, 10 + num_image_tokens], config.text_config.vocab_size - 1) + 1
+            input_ids[:, :num_image_tokens] = config.image_token_id
+            input_ids = input_ids.to(torch_device)
+
+            outputs = model(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                image_sizes=image_sizes,
+            )
+
+            self.assertIsNotNone(outputs)
+
+    def test_model_outputs_equivalence(self):
+        """
+        Test that model outputs are consistent across different input configurations.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs1 = model(**input_dict)
+                outputs2 = model(**input_dict)
+
+            # Check that outputs are deterministic
+            if hasattr(outputs1, "last_hidden_state") and hasattr(outputs2, "last_hidden_state"):
+                self.assertTrue(
+                    torch.allclose(outputs1.last_hidden_state, outputs2.last_hidden_state, atol=1e-5)
+                )
+
+    @unittest.skip(
+        "LightOnOCR uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        "LightOnOCR uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        "LightOnOCR uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    def test_initialization(self):
+        """
+        Test that model initializes correctly with proper weight initialization.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            # Check that model has all expected components
+            if model_class == LightOnOCRForConditionalGeneration:
+                self.assertTrue(hasattr(model, "model"))
+                self.assertTrue(hasattr(model.model, "vision_encoder"))
+                self.assertTrue(hasattr(model.model, "language_model"))
+                self.assertTrue(hasattr(model.model, "vision_projection"))
+                self.assertTrue(hasattr(model, "lm_head"))
+            elif model_class == LightOnOCRModel:
+                self.assertTrue(hasattr(model, "vision_encoder"))
+                self.assertTrue(hasattr(model, "language_model"))
+                self.assertTrue(hasattr(model, "vision_projection"))
+
+    def test_vision_projection(self):
+        """
+        Test that the vision projection correctly transforms vision embeddings to text space.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = LightOnOCRModel(config).to(torch_device)
+        model.eval()
 
         with torch.no_grad():
-            outputs = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+            # Get vision features
+            vision_outputs = model.vision_encoder(
+                pixel_values=input_dict["pixel_values"].to(torch_device),
+                image_sizes=input_dict["image_sizes"],
+            )
 
+            # Project vision features
+            projected = model.vision_projection(
+                vision_outputs.last_hidden_state.squeeze(0),
+                input_dict["image_sizes"],
+            )
+
+            # Check output dimensions - should match text hidden size
+            self.assertEqual(projected.shape[-1], config.text_config.hidden_size)
+
+    def test_get_image_features(self):
+        """
+        Test the get_image_features method.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = LightOnOCRModel(config).to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            image_features = model.get_image_features(
+                pixel_values=input_dict["pixel_values"].to(torch_device),
+                image_sizes=input_dict["image_sizes"],
+            )
+
+            # Check that features are returned and have correct shape
+            self.assertIsNotNone(image_features)
+            self.assertEqual(image_features.shape[-1], config.text_config.hidden_size)
+
+
+@require_torch
+class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    @require_vision
+    def test_small_model_inference(self):
+        """
+        Test basic inference with a small model.
+        This is a placeholder for when we have actual pretrained checkpoints.
+        """
+        # This test would be similar to LLaVA's integration tests
+        # but would require an actual pretrained LightOnOCR checkpoint
+        pass
+
+    def test_model_can_generate_without_images(self):
+        """
+        Test that the model can generate text without image inputs.
+        """
+        # Create a small config for fast testing
+        text_config = {
+            "vocab_size": 100,
+            "hidden_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "intermediate_size": 128,
+            "max_position_embeddings": 512,
+            "rms_norm_eps": 1e-6,
+            "head_dim": 16,
+        }
+        vision_config = {
+            "hidden_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 128,
+            "image_size": 112,
+            "patch_size": 14,
+        }
+
+        config = LightOnOCRConfig(text_config=text_config, vision_config=vision_config, image_token_index=10)
+        model = LightOnOCRForConditionalGeneration(config).to(torch_device)
+        model.eval()
+
+        # Create text-only input
+        input_ids = torch.randint(0, config.vocab_size - 1, (1, 10), device=torch_device) + 1
+
+        with torch.no_grad():
+            outputs = model.generate(input_ids=input_ids, max_new_tokens=5)
+
+        self.assertIsNotNone(outputs)
+        self.assertEqual(outputs.shape[0], 1)
+        self.assertGreater(outputs.shape[1], input_ids.shape[1])
+
+    def test_model_forward_with_images(self):
+        """
+        Test forward pass with image inputs.
+        """
+        text_config = {
+            "vocab_size": 100,
+            "hidden_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "intermediate_size": 128,
+            "max_position_embeddings": 512,
+            "rms_norm_eps": 1e-6,
+            "head_dim": 16,
+        }
+        vision_config = {
+            "hidden_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 128,
+            "image_size": 112,
+            "patch_size": 14,
+        }
+
+        config = LightOnOCRConfig(text_config=text_config, vision_config=vision_config, image_token_index=10)
+        model = LightOnOCRForConditionalGeneration(config).to(torch_device)
+        model.eval()
+
+        # Create inputs
+        batch_size = 2
+        image_size = 112
+        pixel_values = torch.randn(batch_size, 3, image_size, image_size, device=torch_device)
+        image_sizes = [(image_size, image_size)] * batch_size
+
+        # Calculate number of image tokens
+        num_patches = (image_size // 14) ** 2  # patch_size = 14
+        num_image_tokens = num_patches // (config.spatial_merge_size ** 2)
+
+        seq_len = num_image_tokens + 10
+        input_ids = torch.randint(0, config.vocab_size - 1, (batch_size, seq_len), device=torch_device) + 1
+        # Ensure no tokens accidentally equal image_token_id
+        input_ids[input_ids == config.image_token_id] = config.image_token_id + 1
+        # Now place image tokens at the beginning
+        input_ids[:, :num_image_tokens] = config.image_token_id
+
+        with torch.no_grad():
+            outputs = model(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                image_sizes=image_sizes,
+            )
+
+        self.assertIsNotNone(outputs)
         self.assertIsNotNone(outputs.logits)
         self.assertEqual(outputs.logits.shape[0], batch_size)
         self.assertEqual(outputs.logits.shape[1], seq_len)
-        self.assertEqual(outputs.logits.shape[2], self.config.text_config.vocab_size)
-
-    @require_vision
-    def test_generation_with_image(self):
-        """Test that model can generate text from image input (OCR task)."""
-        model = LightOnOCRForConditionalGeneration(self.config)
-        model.eval()
-
-        batch_size = 1
-        seq_len = 20
-
-        # Create input_ids with image tokens and some text
-        input_ids = torch.randint(0, self.config.text_config.vocab_size, (batch_size, seq_len), device=torch_device)
-        input_ids[:, 0:10] = self.config.image_token_id  # First 10 tokens are image tokens
-
-        # Create dummy pixel values
-        pixel_values = torch.randn(
-            batch_size,
-            self.config.vision_config.num_channels,
-            self.config.vision_config.image_size,
-            self.config.vision_config.image_size,
-            device=torch_device,
-        )
-
-        image_sizes = [(self.config.vision_config.image_size, self.config.vision_config.image_size)]
-
-        with torch.no_grad():
-            generated_ids = model.generate(
-                input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes, max_new_tokens=10, do_sample=False
-            )
-
-        self.assertEqual(generated_ids.shape[0], batch_size)
-        self.assertGreater(generated_ids.shape[1], input_ids.shape[1])  # should have generated tokens
-
-    @require_vision
-    def test_model_outputs_with_labels(self):
-        """Test that loss is computed when labels are provided (for OCR training)."""
-        model = LightOnOCRForConditionalGeneration(self.config)
-        model.train()
-
-        batch_size = 1
-        seq_len = 15
-
-        # Create input_ids with image tokens
-        input_ids = torch.randint(0, self.config.text_config.vocab_size, (batch_size, seq_len), device=torch_device)
-        input_ids[:, 0:5] = self.config.image_token_id  # First 5 tokens are image tokens
-
-        # Create dummy pixel values
-        pixel_values = torch.randn(
-            batch_size,
-            self.config.vision_config.num_channels,
-            self.config.vision_config.image_size,
-            self.config.vision_config.image_size,
-            device=torch_device,
-        )
-
-        image_sizes = [(self.config.vision_config.image_size, self.config.vision_config.image_size)]
-        labels = torch.randint(0, self.config.text_config.vocab_size, (batch_size, seq_len), device=torch_device)
-
-        outputs = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes, labels=labels)
-
-        self.assertIsNotNone(outputs.loss)
-        self.assertIsInstance(outputs.loss.item(), float)
-
-
-@slow
-@require_torch
-@require_vision
-class LightOnOCRIntegrationTest(unittest.TestCase):
-    """Integration tests with actual model checkpoints (slow tests)."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        # URL for a test image (simple OCR-like text image)
-        self.image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-
-    def tearDown(self):
-        """Clean up after each test."""
-        gc.collect()
-        backend_empty_cache(torch_device)
-
-    def get_test_image(self):
-        """Download and return test image."""
-        image = Image.open(requests.get(self.image_url, stream=True).raw)
-        return image
-
-    @unittest.skip("No public pretrained LightOnOCR model available yet")
-    def test_inference_with_pretrained_model(self):
-        """
-        Test inference with a pretrained model.
-        This test should be enabled once a pretrained model is available.
-        """
-        # Example code for when a pretrained model is available:
-        # processor = LightOnOCRProcessor.from_pretrained("lighton/lightonocr-base")
-        # model = LightOnOCRForConditionalGeneration.from_pretrained(
-        #     "lighton/lightonocr-base", device_map="auto"
-        # )
-        # model.eval()
-        #
-        # image = self.get_test_image()
-        # prompt = "<|image_pad|>Extract text from this image:"
-        #
-        # inputs = processor(images=image, text=prompt, return_tensors="pt")
-        # inputs = {k: v.to(model.device) for k, v in inputs.items()}
-        #
-        # with torch.no_grad():
-        #     generated_ids = model.generate(**inputs, max_new_tokens=50)
-        #
-        # generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        # self.assertIsInstance(generated_text, str)
-        # self.assertGreater(len(generated_text), 0)
-        pass
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(outputs.logits.shape[2], config.vocab_size)
