@@ -793,7 +793,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "class_embed") and module.class_embed is not None:
             prior_prob = 0.01
             bias_value = -math.log((1 - prior_prob) / prior_prob)
-            self.class_embed.bias.data = torch.ones(self.config.num_labels) * bias_value
+            nn.init.constant_(module.class_embed.bias.data, bias_value)
         if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
             nn.init.constant_(module.bbox_embed.layers[-1].weight.data, 0)
             nn.init.constant_(module.bbox_embed.layers[-1].bias.data, 0)
@@ -1089,7 +1089,6 @@ class LwDetrModel(DeformableDetrModel):
         topk_coords_logits_undetach = torch.cat(topk_coords_logits_undetach, 1)
         object_query_undetach = torch.cat(object_query_undetach, 1)
 
-        topk_coords_logits = topk_coords_logits.sigmoid()
         enc_outputs_class = object_query_undetach
         enc_outputs_coord_logits = topk_coords_logits
 
@@ -1159,7 +1158,6 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
 
         outputs_coord_delta = self.bbox_embed(hidden_states)
         outputs_coord = refine_bboxes(reference_points, outputs_coord_delta)
-        outputs_coord = outputs_coord.sigmoid()
 
         outputs_class = self.class_embed(hidden_states)
 
