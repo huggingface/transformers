@@ -1039,16 +1039,11 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
             # Get text embeddings
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
-        # Store image features for output
-        image_features = None
         # If pixel_values is provided, process vision encoder
         if pixel_values is not None:
             # Process image through the vision encoder
             visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
             projected_visual = self.vision_projection(visual_features.squeeze(0), image_sizes)
-
-            # Store image features for output
-            image_features = projected_visual
 
             # Convert to same dtype
             projected_visual = projected_visual.to(inputs_embeds.dtype)
