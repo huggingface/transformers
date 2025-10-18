@@ -104,7 +104,7 @@ class Trie:
 
     def split(self, text: str) -> list[str]:
         """
-        Will look for the words added to the trie within `text`. Output is the original string splitted along the
+        Will look for the words added to the trie within `text`. Output is the original string split along the
         boundaries of the words found.
 
         This trie will match the longest possible word first !
@@ -467,7 +467,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
 
         Returns:
-            `Dict[str, int]`: The added tokens.
+            `dict[str, int]`: The added tokens.
         """
         return dict(sorted(self._added_tokens_decoder.items(), key=lambda item: item[0]))
 
@@ -491,7 +491,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         something we should change.
 
         Returns:
-            `Dict[str, int]`: The added tokens.
+            `dict[str, int]`: The added tokens.
         """
         return self._added_tokens_encoder
 
@@ -516,7 +516,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         vocab which is why they have to be handled specifically.
 
         Args:
-            new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
+            new_tokens (`list[str]`or `list[tokenizers.AddedToken]`):
                 Token(s) to add in vocabulary. A token is counted as added if it's not already in the vocabulary
                 (tested by checking if the tokenizer assign the index of the `unk_token` to them). If a token is part
                 of the vocabulary then we simply mark this token as an `AddedToken` which allows to control the
@@ -587,11 +587,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._update_total_vocab_size()
         return added_tokens
 
-    def _update_trie(self, unique_no_split_tokens: Optional[str] = []):
+    def _update_trie(self, unique_no_split_tokens: Optional[list[str]] = None):
         for token in self._added_tokens_decoder.values():
-            if token not in self.tokens_trie._tokens:
+            if token.content not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token.content)
-        for token in unique_no_split_tokens:
+        for token in unique_no_split_tokens or []:
             if token not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token)
 
@@ -632,7 +632,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 Passed along to the model-specific `prepare_for_tokenization` preprocessing method.
 
         Returns:
-            `List[str]`: The list of tokens.
+            `list[str]`: The list of tokens.
         """
         split_special_tokens = kwargs.pop("split_special_tokens", self.split_special_tokens)
 
@@ -713,10 +713,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         vocabulary.
 
         Args:
-            tokens (`str` or `List[str]`): One or several token(s) to convert to token id(s).
+            tokens (`str` or `list[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
-            `int` or `List[int]`: The token id or list of token ids.
+            `int` or `list[int]`: The token id or list of token ids.
         """
         if tokens is None:
             return None
@@ -877,9 +877,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
-            if not isinstance(ids_or_pair_ids, (list, tuple)):
-                ids, pair_ids = ids_or_pair_ids, None
-            elif is_split_into_words and not isinstance(ids_or_pair_ids[0], (list, tuple)):
+            if (
+                not isinstance(ids_or_pair_ids, (list, tuple))
+                or is_split_into_words
+                and not isinstance(ids_or_pair_ids[0], (list, tuple))
+            ):
                 ids, pair_ids = ids_or_pair_ids, None
             else:
                 ids, pair_ids = ids_or_pair_ids
@@ -995,11 +997,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Keyword arguments to use for the tokenization.
 
         Returns:
-            `Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
+            `tuple[str, dict[str, Any]]`: The prepared text and the unused kwargs.
         """
         return (text, kwargs)
 
@@ -1011,9 +1013,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of ids of the first sequence.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 List of ids of the second sequence.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
@@ -1047,13 +1049,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added tokens.
 
         Args:
-            ids (`int` or `List[int]`):
+            ids (`int` or `list[int]`):
                 The token id (or token ids) to convert to tokens.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
 
         Returns:
-            `str` or `List[str]`: The decoded token(s).
+            `str` or `list[str]`: The decoded token(s).
         """
         if isinstance(ids, int):
             if ids in self._added_tokens_decoder:

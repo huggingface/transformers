@@ -14,9 +14,9 @@
 # limitations under the License.
 """LongT5 model configuration"""
 
-from typing import Mapping
+from collections.abc import Mapping
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
@@ -24,15 +24,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class LongT5Config(PretrainedConfig):
+class LongT5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LongT5Model`] or a [`FlaxLongT5Model`]. It is
+    This is the configuration class to store the configuration of a [`LongT5Model`]. It is
     used to instantiate a LongT5 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the LongT5
     [google/long-t5-local-base](https://huggingface.co/google/long-t5-local-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
@@ -54,7 +54,7 @@ class LongT5Config(PretrainedConfig):
         local_radius (`int`, *optional*, defaults to 127)
             Number of tokens to the left/right for each token to locally self-attend in a local attention mechanism.
         global_block_size (`int`, *optional*, defaults to 16)
-            Lenght of blocks an input sequence is divided into for a global token representation. Used only for
+            Length of blocks an input sequence is divided into for a global token representation. Used only for
             `encoder_attention_type = "transient-global"`.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.

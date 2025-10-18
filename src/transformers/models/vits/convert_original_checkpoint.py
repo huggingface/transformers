@@ -329,7 +329,7 @@ def convert_checkpoint(
         phonemize = True
     else:
         # Save vocab as temporary json file
-        symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
+        symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8")]
         symbol_to_id = {s: i for i, s in enumerate(symbols)}
         # MMS-TTS does not use a <pad> token, so we set to the token used to space characters
         _pad = symbols[0]
@@ -346,7 +346,7 @@ def convert_checkpoint(
 
     model.decoder.apply_weight_norm()
 
-    orig_checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+    orig_checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)
     recursively_load_weights(orig_checkpoint["model"], model)
 
     model.decoder.remove_weight_norm()

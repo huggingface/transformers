@@ -51,7 +51,7 @@ Hugging Faceチームのメンバーがサポートを提供するので、一�
 
 ### Overview of models
 
-モデルを正常に追加するためには、モデルとその設定、[`PreTrainedModel`]、および[`PretrainedConfig`]の相互作用を理解することが重要です。
+モデルを正常に追加するためには、モデルとその設定、[`PreTrainedModel`]、および[`PreTrainedConfig`]の相互作用を理解することが重要です。
 例示的な目的で、🤗 Transformersに追加するモデルを「BrandNewBert」と呼びます。
 
 以下をご覧ください：
@@ -77,7 +77,7 @@ model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
 model.config  # model has access to its config
 ```
 
-モデルと同様に、設定は[`PretrainedConfig`]から基本的なシリアル化および逆シリアル化の機能を継承しています。注意すべきは、設定とモデルは常に2つの異なる形式にシリアル化されることです - モデルは*pytorch_model.bin*ファイルに、設定は*config.json*ファイルにシリアル化されます。[`~PreTrainedModel.save_pretrained`]を呼び出すと、自動的に[`~PretrainedConfig.save_pretrained`]も呼び出され、モデルと設定の両方が保存されます。
+モデルと同様に、設定は[`PreTrainedConfig`]から基本的なシリアル化および逆シリアル化の機能を継承しています。注意すべきは、設定とモデルは常に2つの異なる形式にシリアル化されることです - モデルは*pytorch_model.bin*ファイルに、設定は*config.json*ファイルにシリアル化されます。[`~PreTrainedModel.save_pretrained`]を呼び出すと、自動的に[`~PreTrainedConfig.save_pretrained`]も呼び出され、モデルと設定の両方が保存されます。
 
 ### Code style
 
@@ -312,7 +312,7 @@ cd transformers
 既存のモデル:
 
 ```bash
-transformers-cli add-new-model-like
+transformers add-new-model-like
 ```
 
 モデルの基本情報を入力するためのアンケートが表示されます。
@@ -517,7 +517,7 @@ tensor([[-0.0818,  0.2207, -0.0749, -0.0030,  0.0045, -0.1569, -0.1598,  0.0212,
 
 スクリプト内の変換スクリプトでは、ランダムに初期化された重みを、対応するチェックポイント内の正確な重みで埋める必要があります。例えば、以下のように翻訳します：
 
- 
+
 ```python
 # retrieve matching layer weights, e.g. by
 # recursive algorithm
@@ -747,5 +747,3 @@ brand_new_bert.push_to_hub("brand_new_bert")
 さあ、コミュニティからあなたの作業に対する評価を得る時が来ました！モデルの追加を完了することは、TransformersおよびNLPコミュニティにとって重要な貢献です。あなたのコードとポートされた事前学習済みモデルは、何百人、何千人という開発者や研究者によって確実に使用されるでしょう。あなたの仕事に誇りを持ち、コミュニティとあなたの成果を共有しましょう。
 
 **あなたはコミュニティの誰でも簡単にアクセスできる別のモデルを作成しました！ 🤯**
-
-

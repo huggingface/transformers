@@ -368,7 +368,7 @@ GPU (利用可能な場合)。これは [`Trainer`] が自動的に処理する�
 >>> import torch
 
 >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
->>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
+>>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16)
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model.to(device)
 ```

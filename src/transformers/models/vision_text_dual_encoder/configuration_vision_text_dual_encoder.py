@@ -14,7 +14,7 @@
 # limitations under the License.
 """VisionTextDualEncoder model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..chinese_clip.configuration_chinese_clip import ChineseCLIPVisionConfig
@@ -31,14 +31,14 @@ VISION_MODEL_CONFIGS = {
 }
 
 
-class VisionTextDualEncoderConfig(PretrainedConfig):
+class VisionTextDualEncoderConfig(PreTrainedConfig):
     r"""
     [`VisionTextDualEncoderConfig`] is the configuration class to store the configuration of a
     [`VisionTextDualEncoderModel`]. It is used to instantiate [`VisionTextDualEncoderModel`] model according to the
     specified arguments, defining the text model and vision model configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         projection_dim (`int`, *optional*, defaults to 512):
@@ -76,7 +76,7 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
 
     model_type = "vision-text-dual-encoder"
     sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(self, projection_dim=512, logit_scale_init_value=2.6592, **kwargs):
         super().__init__(**kwargs)
@@ -107,7 +107,7 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
 
     @classmethod
-    def from_vision_text_configs(cls, vision_config: PretrainedConfig, text_config: PretrainedConfig, **kwargs):
+    def from_vision_text_configs(cls, vision_config: PreTrainedConfig, text_config: PreTrainedConfig, **kwargs):
         r"""
         Instantiate a [`VisionTextDualEncoderConfig`] (or a derived class) from text model configuration and vision
         model configuration.

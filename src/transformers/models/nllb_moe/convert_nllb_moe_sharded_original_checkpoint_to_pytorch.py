@@ -46,7 +46,7 @@ def make_linear_from_emb(emb):
 
 def rename_fairseq_keys(state_dict, expert_idx=None):
     new_dict = {}
-    for old_key in state_dict.keys():
+    for old_key in state_dict:
         key = old_key
         if "moe_layer.experts." in key:
             if expert_idx is not None:
@@ -77,7 +77,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
     for expert in range(num_experts):
         expert_path = switch_checkpoint_path + f"-rank-{expert}.pt"
         if os.path.isfile(expert_path):
-            expert_state = torch.load(expert_path)["model"]
+            expert_state = torch.load(expert_path, weights_only=True)["model"]
             remove_ignore_keys_(expert_state)
             expert_state = rename_fairseq_keys(expert_state, expert)
             save_path = os.path.join(
@@ -85,7 +85,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
             )
             torch.save(expert_state, save_path)
             sharded_state_dicts.append(expert_state.keys())
-            total_size += sum([value.numel() for key, value in expert_state.items()]) * (
+            total_size += sum(value.numel() for key, value in expert_state.items()) * (
                 expert_state[list(expert_state)[0]].element_size()
             )
 
@@ -93,7 +93,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
     save_path = os.path.join(
         dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts) + 1:05d}-of-???.bin")
     )
-    shared_weights = torch.load(switch_checkpoint_path + "-shared.pt")["model"]
+    shared_weights = torch.load(switch_checkpoint_path + "-shared.pt", weights_only=True)["model"]
     remove_ignore_keys_(shared_weights)
     shared_weights = rename_fairseq_keys(shared_weights, None)
     shared_weights["shared.weight"] = shared_weights["decoder.embed_tokens.weight"]

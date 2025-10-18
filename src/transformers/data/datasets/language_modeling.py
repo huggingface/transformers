@@ -18,7 +18,7 @@ import pickle
 import random
 import time
 import warnings
-from typing import Dict, List, Optional
+from typing import Optional
 
 import torch
 from filelock import FileLock
@@ -38,10 +38,6 @@ DEPRECATION_WARNING = (
 
 
 class TextDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     def __init__(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -111,10 +107,6 @@ class TextDataset(Dataset):
 
 
 class LineByLineTextDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
         warnings.warn(
             DEPRECATION_WARNING.format(
@@ -139,15 +131,11 @@ class LineByLineTextDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+    def __getitem__(self, i) -> dict[str, torch.tensor]:
         return self.examples[i]
 
 
 class LineByLineWithRefDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, ref_path: str):
         warnings.warn(
             DEPRECATION_WARNING.format(
@@ -187,7 +175,7 @@ class LineByLineWithRefDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+    def __getitem__(self, i) -> dict[str, torch.tensor]:
         return self.examples[i]
 
 
@@ -339,15 +327,11 @@ class LineByLineWithSOPTextDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+    def __getitem__(self, i) -> dict[str, torch.tensor]:
         return self.examples[i]
 
 
 class TextDatasetForNextSentencePrediction(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     def __init__(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -433,7 +417,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
                     f"Saving features into cached file {cached_features_file} [took {time.time() - start:.3f} s]"
                 )
 
-    def create_examples_from_document(self, document: List[List[int]], doc_index: int, block_size: int):
+    def create_examples_from_document(self, document: list[list[int]], doc_index: int, block_size: int):
         """Creates examples for a single document."""
 
         max_num_tokens = block_size - self.tokenizer.num_special_tokens_to_add(pair=True)

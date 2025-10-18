@@ -14,16 +14,23 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# bitsandbytes
+# Bitsandbytes
 
-[bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) features the LLM.int8 and QLoRA quantization to enable accessible large language model inference and training.
+The [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) library provides quantization tools for LLMs through a lightweight Python wrapper around hardware accelerator functions. It enables working with large models using limited computational resources by reducing their memory footprint.
 
-[LLM.int8()](https://hf.co/papers/2208.07339) is a quantization method that aims to make large language model inference more accessible without significant degradation. Unlike naive 8-bit quantization, which can result in loss of critical information and accuracy, LLM.int8() dynamically adapts to ensure sensitive components of the computation retain higher precision when needed.
+At its core, bitsandbytes provides:
 
-QLoRA, or 4-bit quantization, compresses a model even further to 4-bits and inserts a small set of trainable low-rank adaptation (LoRA) weights to allowing training. 
+- **Quantized Linear Layers**: `Linear8bitLt` and `Linear4bit` layers that replace standard PyTorch linear layers with memory-efficient quantized alternatives
+- **Optimized Optimizers**: 8-bit versions of common optimizers through its `optim` module, enabling training of large models with reduced memory requirements
+- **Matrix Multiplication**: Optimized matrix multiplication operations that leverage the quantized format
+
+bitsandbytes offers two main quantization features:
+
+1. **LLM.int8()** - An 8-bit quantization method that makes inference more accessible without significant performance degradation. Unlike naive quantization, [LLM.int8()](https://hf.co/papers/2208.07339) dynamically preserves higher precision for critical computations, preventing information loss in sensitive parts of the model.
+
+2. **QLoRA** - A 4-bit quantization technique that compresses models even further while maintaining trainability by inserting a small set of trainable low-rank adaptation (LoRA) weights.
 
 > **Note:** For a user-friendly quantization experience, you can use the `bitsandbytes` [community space](https://huggingface.co/spaces/bnb-community/bnb-my-repo).
-
 
 Run the command below to install bitsandbytes.
 
@@ -31,11 +38,41 @@ Run the command below to install bitsandbytes.
 pip install --upgrade transformers accelerate bitsandbytes
 ```
 
+To compile from source, follow the instructions in the [bitsandbytes installation guide](https://huggingface.co/docs/bitsandbytes/main/en/installation).
+
+## Hardware Compatibility
+
+bitsandbytes is supported on NVIDIA GPUs for CUDA versions 11.8 - 13.0, Intel XPU, Intel Gaudi (HPU), and CPU. There is an ongoing effort to support additional platforms. If you're interested in providing feedback or testing, check out the [bitsandbytes repository](https://github.com/bitsandbytes-foundation/bitsandbytes) for more information.
+
+### NVIDIA GPUs (CUDA)
+
+This backend is supported on Linux x86-64, Linux aarch64, and Windows platforms.
+
+| Feature | Minimum Hardware Requirement |
+|---------|-------------------------------|
+| 8-bit optimizers | NVIDIA Pascal (GTX 10X0 series, P100) or newer GPUs * |
+| LLM.int8() | NVIDIA Turing (RTX 20X0 series, T4) or newer GPUs |
+| NF4/FP4 quantization | NVIDIA Pascal (GTX 10X0 series, P100) or newer GPUs * |
+
+### Intel GPUs (XPU)
+
+This backend is supported on Linux x86-64 and Windows x86-64 platforms.
+
+### Intel Gaudi (HPU)
+
+This backend is supported on Linux x86-64 for Gaudi2 and Gaudi3.
+
+### CPU
+
+This backend is supported on Linux x86-64, Linux aarch64, and Windows x86-64 platforms.
+
+## Quantization Examples
+
 Quantize a model by passing a [`BitsAndBytesConfig`] to [`~PreTrainedModel.from_pretrained`]. This works for any model in any modality, as long as it supports [Accelerate](https://huggingface.co/docs/accelerate/index) and contains [torch.nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) layers.
 
 <hfoptions id="bnb">
 <hfoption id="8-bit">
-
+<div class="bnb-container" style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0">
 Quantizing a model in 8-bit halves the memory-usage, and for large models, set `device_map="auto"` to efficiently distribute the weights across all available GPUs.
 
 ```py
@@ -45,11 +82,12 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-1b7", 
+    device_map="auto",
     quantization_config=quantization_config
 )
 ```
 
-By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are set to the default torch dtype. You can change the data type of these modules with the `torch_dtype` parameter. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
+By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are set to the default torch dtype. You can change the data type of these modules with the `dtype` parameter. Setting `dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -59,8 +97,9 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m", 
+    device_map="auto",
     quantization_config=quantization_config, 
-    torch_dtype="auto"
+    dtype="auto"
 )
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
@@ -74,16 +113,17 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 model = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-560m", 
+    device_map="auto",
     quantization_config=quantization_config
 )
-tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-560m")
 
 model.push_to_hub("bloom-560m-8bit")
 ```
 
+</div>
 </hfoption>
 <hfoption id="4-bit">
-
+<div class="bnb-container" style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0">
 Quantizing a model in 4-bit reduces your memory-usage by 4x, and for large models, set `device_map="auto"` to efficiently distribute the weights across all available GPUs.
 
 ```py
@@ -93,11 +133,12 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model_4bit = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-1b7",
+    device_map="auto",
     quantization_config=quantization_config
 )
 ```
 
-By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter.. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
+By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are converted to `torch.float16`. You can change the data type of these modules with the `dtype` parameter.. Setting `dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -107,14 +148,30 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model_4bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m",
+    device_map="auto",
     quantization_config=quantization_config, 
-    torch_dtype="auto"
+    dtype="auto"
 )
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
 Make sure you have the latest bitsandbytes version so you can serialize 4-bit models and push them to the Hub with [`~PreTrainedModel.push_to_hub`]. Use [`~PreTrainedModel.save_pretrained`] to save the 4-bit model locally.  
 
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "bigscience/bloom-560m", 
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+model.push_to_hub("bloom-560m-4bit")
+```
+
+</div>
 </hfoption>
 </hfoptions>
 
@@ -166,7 +223,7 @@ Now load your model with the custom `device_map` and `quantization_config`.
 ```py
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-1b7",
-    torch_dtype="auto",
+    dtype="auto",
     device_map=device_map,
     quantization_config=quantization_config,
 )
@@ -190,7 +247,7 @@ quantization_config = BitsAndBytesConfig(
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype="auto",
+    dtype="auto",
     device_map=device_map,
     quantization_config=quantization_config,
 )
@@ -211,7 +268,7 @@ quantization_config = BitsAndBytesConfig(
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config,
 )
@@ -248,10 +305,10 @@ nf4_config = BitsAndBytesConfig(
     bnb_4bit_quant_type="nf4",
 )
 
-model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", quantization_config=nf4_config)
+model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", quantization_config=nf4_config)
 ```
 
-For inference, the `bnb_4bit_quant_type` does not have a huge impact on performance. However, to remain consistent with the model weights, you should use the `bnb_4bit_compute_dtype` and `torch_dtype` values.
+For inference, the `bnb_4bit_quant_type` does not have a huge impact on performance. However, to remain consistent with the model weights, you should use the `bnb_4bit_compute_dtype` and `dtype` values.
 
 ### Nested quantization
 
@@ -265,7 +322,7 @@ double_quant_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", torch_dtype="auto", quantization_config=double_quant_config)
+model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", dtype="auto", quantization_config=double_quant_config)
 ```
 
 ## Dequantizing bitsandbytes models

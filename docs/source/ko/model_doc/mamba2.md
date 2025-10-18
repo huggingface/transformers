@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[overview]]
 
-맘바2 모델은 Tri Dao, Albert Gu가 제안한 [트랜스포머는 SSM이다: 구조화된 상태 공간 이중성을 통한 일반화된 모델과 효율적인 알고리즘](https://arxiv.org/abs/2405.21060)라는 논문에서 소개되었습니다. 맘바2는 맘바1과 유사한 상태 공간 모델로, 단순화된 아키텍처에서 더 나은 성능을 보입니다.
+맘바2 모델은 Tri Dao, Albert Gu가 제안한 [트랜스포머는 SSM이다: 구조화된 상태 공간 이중성을 통한 일반화된 모델과 효율적인 알고리즘](https://huggingface.co/papers/2405.21060)라는 논문에서 소개되었습니다. 맘바2는 맘바1과 유사한 상태 공간 모델로, 단순화된 아키텍처에서 더 나은 성능을 보입니다.
 
 해당 논문의 초록입니다:
 
@@ -57,40 +57,19 @@ print(tokenizer.batch_decode(out))
 
 이곳은 미세조정을 위한 초안 스크립트입니다: 
 ```python 
-from trl import SFTTrainer
+from datasets import load_dataset
 from peft import LoraConfig
-from transformers import AutoTokenizer, Mamba2ForCausalLM, TrainingArguments
-model_id = 'mistralai/Mamba-Codestral-7B-v0.1'
-tokenizer = AutoTokenizer.from_pretrained(model_id, revision='refs/pr/9', from_slow=True, legacy=False)
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "left" #왼쪽 패딩으로 설정
+from trl import SFTConfig, SFTTrainer
 
-model = Mamba2ForCausalLM.from_pretrained(model_id, revision='refs/pr/9')
+model_id = "mistralai/Mamba-Codestral-7B-v0.1"
 dataset = load_dataset("Abirate/english_quotes", split="train")
-# CUDA 커널없이는, 배치크기 2가 80GB 장치를 하나 차지합니다.
-# 하지만 정확도는 감소합니다.
-# 실험과 시도를 환영합니다!
-training_args = TrainingArguments(
-    output_dir="./results",
-    num_train_epochs=3,
-    per_device_train_batch_size=2,
-    logging_dir='./logs',
-    logging_steps=10,
-    learning_rate=2e-3
-)
-lora_config =  LoraConfig(
-        r=8,
-        target_modules=["embeddings", "in_proj", "out_proj"],
-        task_type="CAUSAL_LM",
-        bias="none"
-)
+training_args = SFTConfig(dataset_text_field="quote", gradient_checkpointing=True, per_device_train_batch_size=4)
+lora_config =  LoraConfig(target_modules=["x_proj", "embeddings", "in_proj", "out_proj"])
 trainer = SFTTrainer(
-    model=model,
-    tokenizer=tokenizer,
+    model=model_id,
     args=training_args,
-    peft_config=lora_config,
     train_dataset=dataset,
-    dataset_text_field="quote",
+    peft_config=lora_config,
 )
 trainer.train()
 ```

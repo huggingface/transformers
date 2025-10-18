@@ -55,7 +55,7 @@ limitations under the License.
 
 一旦你确认该 bug 尚未被报告，请在你的 issue 中包含以下信息，以便我们快速解决：
 
-* 使用的**操作系统类型和版本**，以及 **Python**、**PyTorch** 和 **TensorFlow** 的版本。
+* 使用的**操作系统类型和版本**，以及 **Python** 和 **PyTorch** 的版本。
 * 一个简短、独立的代码片段，可以让我们在不到30秒内重现这个问题。
 * 如果发生异常，请提供*完整的* traceback。
 * 附上你认为可能有帮助的任何其他附加信息，如屏幕截图。
@@ -63,7 +63,7 @@ limitations under the License.
 想要自动获取操作系统和软件版本，请运行以下命令：
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 你也可以从代码仓库的根目录下运行相同的命令：
@@ -140,7 +140,7 @@ python src/transformers/commands/transformers_cli.py env
 
    如果在虚拟环境中已经安装了 🤗 Transformers，请先使用 `pip uninstall transformers` 卸载它，然后再用 `-e` 参数以可编辑模式重新安装。
 
-   根据你的操作系统，以及 Transformers 的可选依赖项数量的增加，可能会在执行此命令时出现失败。如果出现这种情况，请确保已经安装了你想使用的深度学习框架（PyTorch, TensorFlow 和 Flax），然后执行以下操作：
+   根据你的操作系统，以及 Transformers 的可选依赖项数量的增加，可能会在执行此命令时出现失败。如果出现这种情况，请确保已经安装了你想使用的深度学习框架（PyTorch），然后执行以下操作：
 
    ```bash
    pip install -e ".[quality]"

@@ -19,9 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_resnet import *
-    from .modeling_flax_resnet import *
     from .modeling_resnet import *
-    from .modeling_tf_resnet import *
 else:
     import sys
 

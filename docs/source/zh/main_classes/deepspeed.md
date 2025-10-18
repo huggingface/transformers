@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed集成
 
-[DeepSpeed](https://github.com/deepspeedai/DeepSpeed)实现了[ZeRO论文](https://arxiv.org/abs/1910.02054)中描述的所有内容。目前，它提供对以下功能的全面支持：
+[DeepSpeed](https://github.com/deepspeedai/DeepSpeed)实现了[ZeRO论文](https://huggingface.co/papers/1910.02054)中描述的所有内容。目前，它提供对以下功能的全面支持：
 
 1. 优化器状态分区（ZeRO stage 1）
 2. 梯度分区（ZeRO stage 2）
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 5. 一系列基于CUDA扩展的快速优化器
 6. ZeRO-Offload 到 CPU 和 NVMe
 
-ZeRO-Offload有其自己的专门论文：[ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840)。而NVMe支持在论文[ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857)中进行了描述。
+ZeRO-Offload有其自己的专门论文：[ZeRO-Offload: Democratizing Billion-Scale Model Training](https://huggingface.co/papers/2101.06840)。而NVMe支持在论文[ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://huggingface.co/papers/2104.07857)中进行了描述。
 
 DeepSpeed ZeRO-2主要用于训练，因为它的特性对推理没有用处。
 
@@ -179,7 +179,7 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.js
 deepspeed examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -202,7 +202,7 @@ deepspeed examples/pytorch/translation/run_translation.py \
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -236,7 +236,7 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 }
 ```
 
-这会启用`optimizer offload `和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
+这会启用`optimizer offload`和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
 
 关于这种启用类型的实际使用示例，请参阅 [此帖](https://github.com/huggingface/transformers/issues/8771#issuecomment-759176685)。
 
@@ -1293,8 +1293,6 @@ DeepSpeed支持完整的fp32和fp16混合精度。
 
 ### 自动混合精度
 
-您可以使用自动混合精度，可以选择使用类似 PyTorch AMP 的方式，也可以选择使用类似 Apex 的方式：
-
 ### fp16
 
 要配置PyTorch AMP-like 的 fp16（float16） 模式，请设置：
@@ -1392,38 +1390,6 @@ bf16具有与fp32相同的动态范围，因此不需要损失缩放。
 根据这个信息，有效的值包括"fp16"、"bfp16"和"fp32"。
 
 注意：在stage zero 3中，bf16通信数据类型存在一个bug，该问题已在`deepspeed==0.8.1`版本中得到修复。
-
-
-### apex
-
-配置apex AMP-like模式：
-
-```json
-"amp": {
-    "enabled": "auto",
-    "opt_level": "auto"
-}
-```
-
-并且，[`Trainer`]将根据`args.fp16_backend`和`args.fp16_opt_level`的值自动配置它。
-
-当传递`--fp16 --fp16_backend apex --fp16_opt_level 01`命令行参数时，此模式将被启用。
-
-您还可以显式配置此模式：
-
-```json
-{
-    "amp": {
-        "enabled": true,
-        "opt_level": "O1"
-    }
-}
-```
-
-但是，您需要自己同步[`Trainer`]命令行参数和DeepSpeed配置。
-
-这里是[文档](https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options)
-
 
 <a id='deepspeed-bs'></a>
 
@@ -1650,7 +1616,7 @@ trainer = Trainer(model=model, args=training_args, ...)
 
 有关此方法和其他相关功能的完整详细信息，请参阅[构建大模型](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models)。
 
-此外，在加载fp16预训练模型时，您希望`from_pretrained`使用`torch_dtype=torch.float16`。详情请参见[from_pretrained-torch-dtype](#from_pretrained-torch-dtype)。
+此外，在加载fp16预训练模型时，您希望`from_pretrained`使用`dtype=torch.float16`。详情请参见[from_pretrained-torch-dtype](#from_pretrained-torch-dtype)。
 
 
 #### 参数收集
@@ -1693,7 +1659,7 @@ deepspeed examples/pytorch/translation/run_translation.py \
 --model_name_or_path google-t5/t5-small --output_dir output_dir \
 --do_eval --max_eval_samples 50 --warmup_steps 50  \
 --max_source_length 128 --val_max_target_length 128 \
---overwrite_output_dir --per_device_eval_batch_size 4 \
+--per_device_eval_batch_size 4 \
 --predict_with_generate --dataset_config "ro-en" --fp16 \
 --source_lang en --target_lang ro --dataset_name wmt16 \
 --source_prefix "translate English to Romanian: "
@@ -2093,8 +2059,8 @@ RUN_SLOW=1 pytest tests/deepspeed
 
 论文:
 
-- [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models](https://arxiv.org/abs/1910.02054)
-- [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840)
-- [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857)
+- [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models](https://huggingface.co/papers/1910.02054)
+- [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://huggingface.co/papers/2101.06840)
+- [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://huggingface.co/papers/2104.07857)
 
 最后，请记住，HuggingFace [`Trainer`]仅集成了DeepSpeed，因此如果您在使用DeepSpeed时遇到任何问题或疑问，请在[DeepSpeed GitHub](https://github.com/deepspeedai/DeepSpeed/issues)上提交一个issue。

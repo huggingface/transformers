@@ -17,29 +17,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class PromptDepthAnythingConfig(PretrainedConfig):
+class PromptDepthAnythingConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PromptDepthAnythingModel`]. It is used to instantiate a PromptDepthAnything
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the PromptDepthAnything
     [LiheYoung/depth-anything-small-hf](https://huggingface.co/LiheYoung/depth-anything-small-hf) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
+        backbone_config (`Union[dict[str, Any], PreTrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
         backbone (`str`, *optional*):
@@ -60,9 +58,9 @@ class PromptDepthAnythingConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         reassemble_hidden_size (`int`, *optional*, defaults to 384):
             The number of input channels of the reassemble layers.
-        reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
+        reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
-        neck_hidden_sizes (`List[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
+        neck_hidden_sizes (`list[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
             The hidden sizes to project to for the feature maps of the backbone.
         fusion_hidden_size (`int`, *optional*, defaults to 64):
             The number of channels before fusion.
@@ -92,6 +90,7 @@ class PromptDepthAnythingConfig(PretrainedConfig):
     ```"""
 
     model_type = "prompt_depth_anything"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -112,7 +111,6 @@ class PromptDepthAnythingConfig(PretrainedConfig):
         max_depth=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone.")
             backbone_config = CONFIG_MAPPING["dinov2"](
@@ -154,18 +152,7 @@ class PromptDepthAnythingConfig(PretrainedConfig):
         self.depth_estimation_type = depth_estimation_type
         self.max_depth = max_depth if max_depth else 1
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-
-        if output["backbone_config"] is not None:
-            output["backbone_config"] = self.backbone_config.to_dict()
-
-        output["model_type"] = self.__class__.model_type
-        return output
+        super().__init__(**kwargs)
 
 
 __all__ = ["PromptDepthAnythingConfig"]

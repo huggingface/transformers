@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-04-18 and added to Hugging Face Transformers on 2022-05-24.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -29,6 +30,9 @@ The model is pre-trained on three key objectives:
 1. Masked Language Modeling (MLM) for text understanding
 2. Masked Image Modeling (MIM) for visual understanding
 3. Word-Patch Alignment (WPA) for learning cross-modal relationships
+The LayoutLMv3 model was proposed in [LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking](https://huggingface.co/papers/2204.08387) by Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei.
+LayoutLMv3 simplifies [LayoutLMv2](layoutlmv2) by using patch embeddings (as in [ViT](vit)) instead of leveraging a CNN backbone, and pre-trains the model on 3 objectives: masked language modeling (MLM), masked image modeling (MIM)
+and word-patch alignment (WPA).
 
 This unified architecture and training approach makes LayoutLMv3 particularly effective for both text-centric tasks (like form understanding and receipt analysis) and image-centric tasks (like document classification and layout analysis).
 
@@ -39,6 +43,9 @@ You can find all the original LayoutLMv3 checkpoints under the [LayoutLM](https:
 > Click on the LayoutLMv3 models in the right sidebar for more examples of how to apply LayoutLMv3 to different vision and language tasks.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+<small> LayoutLMv3 architecture. Taken from the <a href="https://huggingface.co/papers/2204.08387">original paper</a>. </small>
+
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/layoutlmv3).
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -72,6 +79,11 @@ model = AutoModelForDocumentQuestionAnswering.from_pretrained("microsoft/layoutl
 # Process inputs
 image = Image.open("document.jpg").convert("RGB")
 encoding = processor(image, return_tensors="pt")
+- In terms of data processing, LayoutLMv3 is identical to its predecessor [LayoutLMv2](layoutlmv2), except that:
+  - images need to be resized and normalized with channels in regular RGB format. LayoutLMv2 on the other hand normalizes the images internally and expects the channels in BGR format.
+  - text is tokenized using byte-pair encoding (BPE), as opposed to WordPiece.
+  Due to these differences in data preprocessing, one can use [`LayoutLMv3Processor`] which internally combines a [`LayoutLMv3ImageProcessor`] (for the image modality) and a [`LayoutLMv3Tokenizer`]/[`LayoutLMv3TokenizerFast`] (for the text modality) to prepare all data for the model.
+- Regarding usage of [`LayoutLMv3Processor`], we refer to the [usage guide](layoutlmv2#usage-layoutlmv2processor) of its predecessor.
 
 # Get predictions
 outputs = model(**encoding)
@@ -125,6 +137,9 @@ print(outputs)
   Due to these differences in data preprocessing, one can use [`LayoutLMv3Processor`] which internally combines a [`LayoutLMv3ImageProcessor`] (for the image modality) and a [`LayoutLMv3Tokenizer`]/[`LayoutLMv3TokenizerFast`] (for the text modality) to prepare all data for the model.
 - Regarding usage of [`LayoutLMv3Processor`], we refer to the [usage guide](layoutlmv2#usage-layoutlmv2processor) of its predecessor.
 
+**Document question answering**
+
+- [Document question answering task guide](../tasks/document_question_answering)
 
 ### LayoutLMv3Config
 
@@ -141,11 +156,18 @@ print(outputs)
     - __call__
 
 ### LayoutLMv3ImageProcessor
+## LayoutLMv3ImageProcessor
 
 [[autodoc]] LayoutLMv3ImageProcessor
     - preprocess
 
 ### LayoutLMv3Tokenizer
+## LayoutLMv3ImageProcessorFast
+
+[[autodoc]] LayoutLMv3ImageProcessorFast
+    - preprocess
+
+## LayoutLMv3Tokenizer
 
 [[autodoc]] LayoutLMv3Tokenizer
     - __call__
@@ -162,6 +184,7 @@ print(outputs)
     - __call__
 
 ### LayoutLMv3Model
+## LayoutLMv3Model
 
 [[autodoc]] LayoutLMv3Model
 
@@ -192,3 +215,4 @@ print(outputs)
 ### TFLayoutLMv3ForQuestionAnswering
 
 [[autodoc]] TFLayoutLMv3ForQuestionAnswering
+    - forward

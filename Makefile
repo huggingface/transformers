@@ -3,18 +3,24 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-check_dirs := examples tests src utils
+check_dirs := examples tests src utils scripts benchmark benchmark_v2
 
 exclude_folders :=  ""
 
 modified_only_fixup:
-	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
-	@if test -n "$(modified_py_files)"; then \
-		echo "Checking/fixing $(modified_py_files)"; \
-		ruff check $(modified_py_files) --fix --exclude $(exclude_folders); \
-		ruff format $(modified_py_files) --exclude $(exclude_folders);\
+	@current_branch=$$(git branch --show-current); \
+	if [ "$$current_branch" = "main" ]; then \
+		echo "On main branch, running 'style' target instead..."; \
+		$(MAKE) style; \
 	else \
-		echo "No library .py files were modified"; \
+		modified_py_files=$$(python utils/get_modified_files.py $(check_dirs)); \
+		if [ -n "$$modified_py_files" ]; then \
+			echo "Checking/fixing files: $${modified_py_files}"; \
+			ruff check $${modified_py_files} --fix --exclude $(exclude_folders); \
+			ruff format $${modified_py_files} --exclude $(exclude_folders); \
+		else \
+			echo "No library .py files were modified"; \
+		fi; \
 	fi
 
 # Update src/transformers/dependency_versions_table.py
@@ -40,11 +46,13 @@ repo-consistency:
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/check_inits.py
+	python utils/check_pipeline_typing.py
 	python utils/check_config_docstrings.py
 	python utils/check_config_attributes.py
 	python utils/check_doctest_list.py
 	python utils/update_metadata.py --check-only
 	python utils/check_docstrings.py
+	python utils/add_dates.py
 
 # this target runs checks on all files
 
@@ -79,8 +87,9 @@ fixup: modified_only_fixup extra_style_checks autogenerate_code repo-consistency
 
 fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
-	python utils/check_modular_conversion.py  --fix_and_overwrite
+	python utils/check_modular_conversion.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
+	python utils/check_pipeline_typing.py --fix_and_overwrite
 	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_docstrings.py --fix_and_overwrite
 

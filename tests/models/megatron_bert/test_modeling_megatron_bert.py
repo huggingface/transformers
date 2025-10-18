@@ -288,9 +288,7 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
     # test_resize_embeddings = False
-    test_head_masking = False
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -381,5 +379,5 @@ class MegatronBertModelIntegrationTests(unittest.TestCase):
             for jj in range(3):
                 a = output[0, ii, jj]
                 b = expected[3 * ii + jj]
-                msg = "ii={} jj={} a={} b={}".format(ii, jj, a, b)
+                msg = f"ii={ii} jj={jj} a={a} b={b}"
                 self.assertTrue(math.isclose(a, b, rel_tol=TOLERANCE, abs_tol=TOLERANCE), msg=msg)

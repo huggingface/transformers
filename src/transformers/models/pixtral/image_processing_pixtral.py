@@ -15,7 +15,7 @@
 """Image processor class for Pixtral."""
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -32,12 +32,13 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_kwargs,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -47,6 +48,15 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    patch_size (`Union[dict[str, int], int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+        Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
+    """
+
+    patch_size: Union[dict[str, int], int]
 
 
 # Adapted from function in image_transforms.py to ensure any transparent pixels are converted to white.
@@ -76,14 +86,14 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     return new_image
 
 
-def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) -> int:
+def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> int:
     """
     Calculate the number of image tokens given the image size and patch size.
 
     Args:
-        image_size (`Tuple[int, int]`):
+        image_size (`tuple[int, int]`):
             The size of the image as `(height, width)`.
-        patch_size (`Tuple[int, int]`):
+        patch_size (`tuple[int, int]`):
             The patch size as `(height, width)`.
 
     Returns:
@@ -98,8 +108,8 @@ def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) 
 
 def get_resize_output_image_size(
     input_image: ImageInput,
-    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
-    patch_size: Union[int, Tuple[int, int], List[int], Tuple[int]],
+    size: Union[int, tuple[int, int], list[int], tuple[int]],
+    patch_size: Union[int, tuple[int, int], list[int], tuple[int]],
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> tuple:
     """
@@ -109,9 +119,9 @@ def get_resize_output_image_size(
     Args:
         input_image (`ImageInput`):
             The image to resize.
-        size (`int` or `Tuple[int, int]`):
+        size (`int` or `tuple[int, int]`):
             Max image size an input image can be. Must be a dictionary with the key "longest_edge".
-        patch_size (`int` or `Tuple[int, int]`):
+        patch_size (`int` or `tuple[int, int]`):
             The patch_size as `(height, width)` to use for resizing the image. If patch_size is an integer, `(patch_size, patch_size)`
             will be used
         input_data_format (`ChannelDimension`, *optional*):
@@ -127,7 +137,7 @@ def get_resize_output_image_size(
     ratio = max(height / max_height, width / max_width)
 
     if ratio > 1:
-        # Orgiginal implementation uses `round` which utilises bankers rounding, which can lead to surprising results
+        # Original implementation uses `round` which utilises bankers rounding, which can lead to surprising results
         # Here we use floor to ensure the image is always smaller than the given "longest_edge"
         height = int(math.floor(height / ratio))
         width = int(math.floor(width / ratio))
@@ -144,10 +154,10 @@ class PixtralImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"longest_edge": 1024}`):
+        size (`dict[str, int]` *optional*, defaults to `{"longest_edge": 1024}`):
             Size of the maximum dimension of either the height or width dimension of the image. Used to control how
             images are resized. If either the height or width are greater than `size["longest_edge"]` then both the height and width are rescaled by `height / ratio`, `width /ratio` where `ratio = max(height / longest_edge, width / longest_edge)`
-        patch_size (`Dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+        patch_size (`dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
             Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
@@ -159,10 +169,10 @@ class PixtralImageProcessor(BaseImageProcessor):
             method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -170,19 +180,20 @@ class PixtralImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "image_sizes"]
+    valid_kwargs = PixtralImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        patch_size: Dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
@@ -221,8 +232,8 @@ class PixtralImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
-        patch_size: Dict[str, int],
+        size: dict[str, int],
+        patch_size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -235,9 +246,9 @@ class PixtralImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dict containing the longest possible edge of the image.
-            patch_size (`Dict[str, int]`):
+            patch_size (`dict[str, int]`):
                 Patch size used to calculate the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
@@ -275,17 +286,17 @@ class PixtralImageProcessor(BaseImageProcessor):
 
     def _pad_for_batching(
         self,
-        pixel_values: List[np.ndarray],
-        image_sizes: List[List[int]],
+        pixel_values: list[np.ndarray],
+        image_sizes: list[list[int]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
         Args:
-            pixel_values (`List[np.ndarray]`):
+            pixel_values (`list[np.ndarray]`):
                 An array of pixel values of each images of shape (`batch_size`, `height`, `width`, `channels`)
-            image_sizes (`List[List[int]]`):
+            image_sizes (`list[list[int]]`):
                 A list of sizes for each image in `pixel_values` in (height, width) format.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
@@ -298,12 +309,12 @@ class PixtralImageProcessor(BaseImageProcessor):
                     - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 If unset, will use the inferred format of the input image.
         Returns:
-            List[`np.ndarray`]: The padded images.
+            list[`np.ndarray`]: The padded images.
         """
 
         max_shape = (
-            max([size[0] for size in image_sizes]),
-            max([size[1] for size in image_sizes]),
+            max(size[0] for size in image_sizes),
+            max(size[1] for size in image_sizes),
         )
         pixel_values = [
             pad(
@@ -320,14 +331,14 @@ class PixtralImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        patch_size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
+        size: Optional[dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -343,9 +354,9 @@ class PixtralImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Describes the maximum input dimensions to the model.
-            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
+            patch_size (`dict[str, int]`, *optional*, defaults to `self.patch_size`):
                 Patch size in the model. Used to calculate the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
@@ -356,9 +367,9 @@ class PixtralImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
@@ -366,10 +377,8 @@ class PixtralImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -397,13 +406,11 @@ class PixtralImageProcessor(BaseImageProcessor):
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        images = make_list_of_images(images)
+        images = self.fetch_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images[0]):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

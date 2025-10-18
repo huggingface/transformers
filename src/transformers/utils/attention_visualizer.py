@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import io
 
-
-import requests
+import httpx
 from PIL import Image
 
+from ..masking_utils import create_causal_mask
 from ..models.auto.auto_factory import _get_model_class
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
@@ -36,7 +37,9 @@ BLACK_SQUARE = "■"
 WHITE_SQUARE = "⬚"
 
 
-def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_window=None, token_type_ids=None):
+def generate_attention_matrix_from_mask(
+    words, mask, img_token="<img>", sliding_window=None, token_type_ids=None, image_seq_length=None
+):
     """
     Generates an attention matrix from a given attention mask.
 
@@ -80,6 +83,14 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
         for j in range(n)
     )
 
+    if token_type_ids is not None:
+        is_special = token_type_ids == 1
+        token_type_buckets = torch.where(
+            (token_type_ids.cumsum(-1) % 5 + is_special).bool(), token_type_ids.cumsum(-1), 0
+        )
+        boundaries = torch.arange(0, image_seq_length + 1, image_seq_length)
+        token_type_buckets = torch.bucketize(token_type_buckets, boundaries=boundaries)
+
     # Print headers
     legend = f"{GREEN}{BLACK_SQUARE}{RESET}: i == j (diagonal)   {YELLOW}{BLACK_SQUARE}{RESET}: token_type_ids"
     output.append(" " + legend)
@@ -103,13 +114,12 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
             if sliding_window is not None
             else ""
         )
-
     for i, word in enumerate(words):
         word_repr = repr(word).ljust(max_word_length)
         colored_word = f"{YELLOW}{word_repr}{RESET}" if img_token in word else word_repr
         row_display = " ".join(
             f"{YELLOW}{BLACK_SQUARE}{RESET}"
-            if img_token in words[j] and mask[i, j] and img_token in words[i]
+            if img_token in words[j] and mask[i, j] and img_token in word
             else f"{GREEN}{BLACK_SQUARE}{RESET}"
             if i == j
             else BLACK_SQUARE
@@ -121,7 +131,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
         if sliding_window is not None:
             sliding_window_row = " ".join(
                 f"{YELLOW}{BLACK_SQUARE}{RESET}"
-                if img_token in words[j] and img_token in words[i]
+                if img_token in words[j] and img_token in word and token_type_buckets[0, i] == token_type_buckets[0, j]
                 else f"{GREEN}{BLACK_SQUARE}{RESET}"
                 if i == j
                 else BLACK_SQUARE
@@ -140,7 +150,7 @@ class AttentionMaskVisualizer:
         config = AutoConfig.from_pretrained(model_name)
         self.image_token = "<img>"
         if hasattr(config.get_text_config(), "sliding_window"):
-            config.sliding_window = 5
+            self.sliding_window = getattr(config.get_text_config(), "sliding_window", None)
         try:
             mapped_cls = _get_model_class(config, MODEL_MAPPING)
         except Exception:
@@ -157,7 +167,7 @@ class AttentionMaskVisualizer:
                 self.config = config
 
         self.model = _ModelWrapper(config, model_name)
-        self.model.to(config.torch_dtype)
+        self.model.to(config.dtype)
         self.repo_id = model_name
         self.config = config
 
@@ -167,10 +177,12 @@ class AttentionMaskVisualizer:
     def visualize_attention_mask(self, input_sentence: str, suffix=""):
         model = self.model
         kwargs = {}
+        image_seq_length = None
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
-            img = Image.open(requests.get(img, stream=True).raw)
-            processor = AutoProcessor.from_pretrained(self.repo_id, image_seq_length=5)
+            img = Image.open(io.BytesIO(httpx.get(img, follow_redirects=True).content))
+            image_seq_length = 5
+            processor = AutoProcessor.from_pretrained(self.repo_id, image_seq_length=image_seq_length)
             if hasattr(processor, "image_token"):
                 image_token = processor.image_token
             else:
@@ -179,7 +191,7 @@ class AttentionMaskVisualizer:
             if image_token:
                 input_sentence = input_sentence.replace("<img>", image_token)
 
-            inputs = processor(img, input_sentence, suffix=suffix, return_tensors="pt")
+            inputs = processor(images=img, text=input_sentence, suffix=suffix, return_tensors="pt")
 
             self.image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
 
@@ -196,13 +208,23 @@ class AttentionMaskVisualizer:
 
         model.config._attn_implementation = "eager"
         model.train()
-        attention_mask = ~model._update_causal_mask(
+
+        batch_size, seq_length = attention_mask.shape
+        input_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
+        cache_position = torch.arange(seq_length)
+
+        causal_mask = create_causal_mask(
+            config=model.config,
+            input_embeds=input_embeds,
             attention_mask=attention_mask,
-            input_tensor=attention_mask.to(self.model.dtype),
-            cache_position=torch.arange(attention_mask.shape[1]),
+            cache_position=cache_position,
             past_key_values=None,
-            **kwargs,
-        ).bool()
+        )
+
+        if causal_mask is not None:
+            attention_mask = ~causal_mask.bool()
+        else:
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, seq_length, seq_length)
         top_bottom_border = "##" * (
             len(f"Attention visualization for {self.config.model_type} | {self.mapped_cls}") + 4
         )  # Box width adjusted to text length
@@ -214,7 +236,7 @@ class AttentionMaskVisualizer:
                 len(top_bottom_border)
             )
             + "    "
-            + side_border
+            + side_border,
         )
         print(f"{top_bottom_border}")
         f_string = generate_attention_matrix_from_mask(
@@ -222,7 +244,8 @@ class AttentionMaskVisualizer:
             attention_mask,
             img_token=self.image_token,
             sliding_window=getattr(self.config, "sliding_window", None),
-            token_type_ids=kwargs.get("token_type_ids", None),
+            token_type_ids=kwargs.get("token_type_ids"),
+            image_seq_length=image_seq_length,
         )
         print(f_string)
         print(f"{top_bottom_border}")

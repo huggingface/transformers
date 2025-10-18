@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -143,10 +142,6 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertGreater(tokens[-3], tokens[-4])
                 self.assertEqual(tokens[0], tokenizer.eos_token_id)
                 self.assertEqual(tokens[-3], tokenizer.pad_token_id)
-
-    @unittest.skip
-    def test_pickle_subword_regularization_tokenizer(self):
-        pass
 
     @unittest.skip
     def test_subword_regularization_tokenizer(self):

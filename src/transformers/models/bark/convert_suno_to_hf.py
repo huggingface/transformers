@@ -109,7 +109,7 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     if not os.path.exists(ckpt_path):
         logger.info(f"{model_type} model not found, downloading into `{CACHE_DIR}`.")
         _download(model_info["repo_id"], model_info["file_name"])
-    checkpoint = torch.load(ckpt_path, map_location=device)
+    checkpoint = torch.load(ckpt_path, map_location=device, weights_only=True)
     # this is a hack
     model_args = checkpoint["model_args"]
     if "input_vocab_size" not in model_args:
@@ -130,12 +130,12 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     state_dict = checkpoint["model"]
     # fixup checkpoint
     unwanted_prefix = "_orig_mod."
-    for k, v in list(state_dict.items()):
+    for k in state_dict:
         if k.startswith(unwanted_prefix):
             # replace part of the key with corresponding layer name in HF implementation
             new_k = k[len(unwanted_prefix) :]
-            for old_layer_name in new_layer_name_dict:
-                new_k = new_k.replace(old_layer_name, new_layer_name_dict[old_layer_name])
+            for old_layer_name, new_layer_name in new_layer_name_dict.items():
+                new_k = new_k.replace(old_layer_name, new_layer_name)
 
             state_dict[new_k] = state_dict.pop(k)
 
@@ -229,11 +229,9 @@ def load_whole_bark_model(
     fineAcoustic = BarkFineModel.from_pretrained(fine_path)
     codec = EncodecModel.from_pretrained("facebook/encodec_24khz")
 
-    bark_config = BarkConfig.from_sub_model_configs(
-        semanticConfig, coarseAcousticConfig, fineAcousticConfig, codecConfig
-    )
+    bark_config = BarkConfig(semanticConfig, coarseAcousticConfig, fineAcousticConfig, codecConfig)
 
-    bark_generation_config = BarkGenerationConfig.from_sub_model_configs(
+    bark_generation_config = BarkGenerationConfig(
         semantic.generation_config, coarseAcoustic.generation_config, fineAcoustic.generation_config
     )
 
