@@ -562,6 +562,8 @@ class LwDetrAttention(nn.Module):
             hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
 
         if self.training:
+            # at training, we use group detr technique to add more supervision by using multiple weight-sharing decoders at once for faster convergence
+            # at inference, we only use one decoder
             hidden_states_original = torch.cat(
                 hidden_states_original.split(seq_len // self.config.group_detr, dim=1), dim=0
             )
