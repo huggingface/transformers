@@ -15,11 +15,14 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
-class PixtralProcessorKwargs(ProcessingKwargs, total=False):
+class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
             "return_mm_token_type_ids": False,
+        },
+        "images_kwargs": {
+            "patch_size": None,  # Will be set from processor config
         },
         "common_kwargs": {
             "return_tensors": "pt",
@@ -106,6 +109,8 @@ class LightOnOCRProcessor(ProcessorMixin):
     ):
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
+        # Calculate effective patch size for image processing
+        self.effective_patch_size = patch_size * spatial_merge_size
         self.image_token = image_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.image_break_token = image_break_token
@@ -114,6 +119,10 @@ class LightOnOCRProcessor(ProcessorMixin):
         self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
         self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
         self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
+
+        # Set the default patch_size for images_kwargs
+        LightOnOCRProcessorKwargs._defaults["images_kwargs"]["patch_size"] = self.effective_patch_size
+
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -125,14 +134,12 @@ class LightOnOCRProcessor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You must provide either text or images")
         output_kwargs = self._merge_kwargs(
-            PixtralProcessorKwargs,
+            LightOnOCRProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        patch_size = self.patch_size * self.spatial_merge_size
         if images is not None:
-            output_kwargs["images_kwargs"]["patch_size"] = patch_size
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
@@ -145,8 +152,8 @@ class LightOnOCRProcessor(ProcessorMixin):
         # Expand image token if image is present
         if image_inputs.get("pixel_values") is not None:
             height, width = image_inputs["image_sizes"][0]
-            num_height_tokens = height // patch_size
-            num_width_tokens = width // patch_size
+            num_height_tokens = height // self.effective_patch_size
+            num_width_tokens = width // self.effective_patch_size
             num_patches = num_height_tokens * num_width_tokens
 
             # Replace single image token with repeated tokens
@@ -182,33 +189,26 @@ class LightOnOCRProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = PixtralProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs = LightOnOCRProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
             size = images_kwargs.get("size", None) or self.image_processor.size
-            patch_size = self.patch_size * self.spatial_merge_size
 
             num_image_tokens = []
             for height, width in image_sizes:
                 resized_height, resized_width = get_resize_output_image_size(
                     np.zeros((height, width, 3)),
                     size=(size["longest_edge"], size["longest_edge"]),
-                    patch_size=(patch_size, patch_size),
+                    patch_size=(self.effective_patch_size, self.effective_patch_size),
                 )
-                num_height_tokens = resized_height // patch_size
-                num_width_tokens = resized_width // patch_size
+                num_height_tokens = resized_height // self.effective_patch_size
+                num_width_tokens = resized_width // self.effective_patch_size
                 num_image_tokens.append((num_width_tokens + 1) * num_height_tokens)
 
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return tokenizer_input_names + image_processor_input_names + ["image_sizes"]
 
 
 __all__ = ["LightOnOCRProcessor"]
