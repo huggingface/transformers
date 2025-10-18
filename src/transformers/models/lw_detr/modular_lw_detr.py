@@ -571,8 +571,9 @@ class LwDetrAttention(LlamaAttention):
         position_embeddings: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        batch_size, seq_len, embed_dim = hidden_states.shape
+        batch_size, seq_len, _ = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         hidden_states_original = hidden_states
         if position_embeddings is not None:
@@ -584,9 +585,9 @@ class LwDetrAttention(LlamaAttention):
             )
             hidden_states = torch.cat(hidden_states.split(seq_len // self.config.group_detr, dim=1), dim=0)
 
-        query_states = self.q_proj(hidden_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
-        value_states = self.v_proj(hidden_states_original).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states_original).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
