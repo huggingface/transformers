@@ -239,6 +239,13 @@ _VARIANTS = {
 
 # ==== Flags ====
 
+_CHAT_TEMPLATE_PATH = flags.DEFINE_string(
+    name="chat_template_path",
+    default=None,
+    help="Path to the chat template.",
+    required=False,
+)
+
 _CHECKPOINT_PATH = flags.DEFINE_string(
     name="checkpoint_path",
     default=None,
@@ -305,6 +312,17 @@ _VISION_DTYPE = flags.DEFINE_enum(
     help="The floating point precision (aka dtype) of the model.",
     enum_values=_DTYPES,
 )
+
+
+def get_chat_template() -> Optional[str]:
+    if not _INCLUDE_CHAT_TEMPLATE.value:
+        return None
+
+    if _CHAT_TEMPLATE_PATH.value:
+        with open(_CHAT_TEMPLATE_PATH.value, "r") as f:
+            return f.read()
+
+    return _CHAT_TEMPLATE
 
 
 def convert_siglip_weight(
@@ -626,7 +644,7 @@ def main(*args):
             "boi_token": "<start_of_image>",  # Should be ID=255_999
             "eoi_token": "<end_of_image>",  # Should be ID=256_000
         },
-        chat_template=_CHAT_TEMPLATE if _INCLUDE_CHAT_TEMPLATE.value else None,
+        chat_template=get_chat_template(),
     )
     tokenizer.save_pretrained(output_path)
     logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
