@@ -478,6 +478,7 @@ def _get_tied_weight_keys(module: nn.Module, prefix=""):
     for name, submodule in module.named_children():
         local_prefix = f"{prefix}.{name}" if prefix else name
         tied_weight_keys.extend(_get_tied_weight_keys(submodule, prefix=local_prefix))
+    print(f"tied_weight_keys : {tied_weight_keys}")
     return tied_weight_keys
 
 
