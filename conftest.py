@@ -95,7 +95,17 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if any(test_name in item.nodeid for test_name in NOT_DEVICE_TESTS):
             item.add_marker(pytest.mark.not_device_test)
+            
+def pytest_configure(config):
+    # existing lines...
+    config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
+    # ... other markers ...
+    config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
 
+    # Add slow/integration marker description
+    config.addinivalue_line("markers", "slow: mark a test as slow (needs --runslow to execute)")
+
+    os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
 
 def pytest_addoption(parser):
     from transformers.testing_utils import pytest_addoption_shared
