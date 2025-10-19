@@ -13,9 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Core helpers for loading model checkpoints."""
-
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass, field
+from typing import Optional, Union, List, Dict, Tuple, Iterable
+from collections import defaultdict
 import math
 import re
 import time
@@ -32,7 +35,7 @@ import torch
 from torch import Tensor
 
 from .utils import logging
-
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 
 logger = logging.get_logger(__name__)
 
@@ -153,7 +156,7 @@ class ConversionOps:
         self._buffer = None
 
     @abstractmethod
-    def convert(self, value: Union[Sequence[torch.Tensor], torch.Tensor], *, context: dict[str, Any]) -> torch.Tensor:
+    def convert(self, value: Union[Sequence[torch.Tensor], torch.Tensor], *args, **kwargs) -> torch.Tensor:
         raise NotImplementedError
 
     def __call__(
@@ -331,7 +334,7 @@ class To(ConversionOps):
     def __init__(self, device):
         self.device = device
 
-class DistributedOp(ConversionOps): # all `distributed_operations` need to respect this
+class DistributedOp(ConversionOps): # all `distributed_operation` need to respect this
     pass
 
 class Shard(DistributedOp):
@@ -492,29 +495,50 @@ class Fp8Dequantize(QuantizationOp):
         return dequantized.reshape(quantized_fp32.shape)
 
 
-@dataclass(frozen=True)
+@dataclass
 class WeightConversion:
-    """Describe how a serialized weight maps to a model parameter.
-    if people need to use a custom op, they just have to make it inherit from ConversionOps
-    We need to allow going from a list of keys to a unique key and vice versa.
-    This will also allow us to write quantization as WeightConversion("weight", ["weight_blocks", "weight_scales"], Fp8Quantize)
-    potentially with filtering?
-
-    YES because we can check nn.
-    And sharding written as WeightConversion("weight", operations = Shard)?
-    This way we explicit the full operations
-
-    The operation can be "instantiated" this way we pass potential arguments.
     """
-
+    - source_keys: str | list[str] (wildcards '*' match digits)
+    - target_keys: str | list[str] | None
+    - distributed_operation / operations / quantization_operations are ALWAYS lists.
+    """
     source_keys: Union[str, list[str]]
     target_keys: Optional[Union[str, list[str]]] = None
-    operations: Optional[
-        Union[Union[type[ConversionOps], ConversionOps], list[Union[type[ConversionOps], ConversionOps]]]
-    ] = None
+
+    distributed_operation: Optional[ConversionOps] = None
+    quantization_operation: Optional[ConversionOps] = None
+    _operations: list[ConversionOps] = field(default_factory=list, repr=False)
+
+    _compiled: tuple[tuple[str, re.Pattern], ...] = field(default_factory=tuple, compare=False, repr=False)
+
+    def __post_init__(self):
+        if not isinstance(self.source_keys, list):
+            self.source_keys = [self.source_keys]
+        if not isinstance(self.target_keys, list):
+            if self.target_keys is None:
+                self.target_keys = self.source_keys
+            else:
+                self.target_keys = [self.target_keys]
+
+        regex_pat = r""
+        for p in self.source_keys:
+            pat = re.escape(p).replace(r"\*", r"\d+")
+            regex_pat += f"({re.compile(fr'^{pat}$')})|"
+        self._regex_pat = regex_pat[:-1]
+        self.operations = self._operations
+
+    @property
+    def operations(self) -> list[ConversionOps]:
+        return self._operations
+    @operations.setter
+    def operations(self, v: Union[None, ConversionOps, list[ConversionOps]]):
+        if v is None: self._operations = []
+        elif isinstance(v, list): self._operations = v
+        else: self._operations = [v]
 
 
-def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_config, profile: bool = False):
+
+def convert_and_load_state_dict_in_model(model, state_dict, weight_mapping, tp_plan, quantizer, device_map=None, keep_in_dtype=None, device_mesh=None, profile: bool = False):
     """Convert a state dict according to a weight mapping.
 
     Given that the model might be sharded, and that some patterns might fuse experts, there will
@@ -551,62 +575,83 @@ def convert_state_dict(model, state_dict, weight_mapping, tp_plan, quantization_
         - list[ConversionOps]: The list of operations used during the conversion. This is useful if the model needs to be saved
           in its legacy format later on.
     """
-    if state_dict is None:
-        raise ValueError("`state_dict` must be provided for conversion.")
+    tp_plan = tp_plan or {} # keys are * patterns, exact match with model.state_dict().keys()
+    device_map = device_map or {} # keys are the `target` obtained from the model
+    keep_in_dtype = keep_in_dtype or {} # keys are * pattern model.state_dict().keys()
+    weight_mapping = weight_mapping or {} # keys are * patterns model.state_dict().keys()
 
-    collected_keys: dict[str, dict[str, list[torch.Tensor]]] = defaultdict(lambda: defaultdict(list))
-
-    # 1. we need to find which key we have (so we keep track of which pattern was matched)
-    converted_state_dict: dict[str, torch.Tensor] = {}
+    tp_regex_pattern = f"""({')|()'.join(tp_plan.keys()).replace("*", "d+")})"""
+    keep_in_dtype_pattern = f"""({')|()'.join(keep_in_dtype.keys()).replace("*", "d+")})"""
+    weight_mapping_pattern = weight_mapping._regex_pat
+    # Store which ops were applied for saving
     used_operations: list[ConversionOps] = []
-    keys_to_convert = [
-        rf"{'|'.join(k.source_keys) if isinstance(k.source_keys, list) else k.source_keys}" for k in weight_mapping
-    ]
+    # Let's create a mapping from the keys we will read -> the operations to perform
     # tensor parallel is also a conversion scheme! So add it to the keys to convert!
     # quantization as well! But for quantization we would need to get the module, check if its a linear?
 
-    for k, v in state_dict.items():
-        if re.sub(rf"^({'|'.join(keys_to_convert)})$", "", k) == k:
-            converted_state_dict[k] = v
+    # 1. We figure out whatever needs to happen to each weights!
+    #   - we need to take care of `device_map="auto"` -> add To(device_map[layer_name])
+    #   - we need to take care of `tp_plan`           -> add Shard() and etc automatically
+    #   - we need to take care of the `keep_in_dtype` -> add Cast(keep_in_dtype[layer_name])
+    #   - we need to take care of `quantization`      -> add target keys created by the method + update TP plan?
+    #   - we need to take care of lora later on.
+    collected_target_keys = defaultdict(list)
+    for original_key, tensor in state_dict.items():
+        default_op = re.sub(weight_mapping_pattern, r"\1", original_key)
+        if default_op is not None:
+            converter: WeightConversion =  weight_mapping[default_op] # forget about this
         else:
-            # we replace the whole key by the matched pattern so that we can find it later
-            pattern = re.sub(rf"^({'|'.join(keys_to_convert)})$", r"\1", k)
-            collected_keys[pattern][k] += [v]  # we collect all tensors that match the pattern
-        converter = weight_mapping[pattern]
-        if pattern in tp_plan:  # If we want this to work conversion needs to be explicit no?
-            if converter.distributed_operation is None:
-                converter.distributed_operation = Shard(0)  # for now
-        # TODO: use `param_needs_quantization` !
-        if pattern in quantization_config.conversion_mapping:
-            if converter.quantize_operations is None:
-                converter.quantize_operations = Fp8Quantize()
-        # if pattern in device_map:
-        #     converter.operations.append(To(device_map[pattern]))
-        # TODO: always call .contiguous()
-        # TODO: the only missing part now is to update the TP plan for quantized weights
-        # TODO: AND quantization that updates the keys (adds some). THIS IS FOR THE HOOKS
-        # NOT FOR THE WEIGHTS
+            converter : WeightConversion = WeightConversion(default_op) # source and target are the same!
+            weight_mapping[default_op] = converter
 
-    # 2. now that we collectedd the tensors, we iterate over the "patterns" that were matched
-    # Cuz remember we have to add TP and QUANT to the ops of some keys. but we do it on the renamed!
-    for key, current_value in collected_keys:
-        # 1. Distributed, equivalent to our `shard_and_distribute_module`
-        used_operations.append(weight_mapping[key].distributed_operation)
-        current_value = weight_mapping[key].distributed_operation(current_value)
+        current_key = converter.target_keys if isinstance(converter.target_keys, str) else "|".join(converter.target_keys)
+        collected_target_keys[current_key] += [tensor]
 
-        # 2. Other opérations
-        for operation in weight_mapping[key].operations:
-            used_operations.append(operation)
-            current_value = operation(current_value, profile=profile)
+    for collected_keys, collected_tensors in collected_target_keys.items(): # a single key indexes many target keys
+        target_keys = collected_keys.split('|')
+        for target_key in target_keys: # some of these can be newly created by quantizer / merge or chunk op
+            if plan:=re.sub(target_key, r"\1", tp_regex_pattern):
+                if converter.distributed_operation is None:
+                    converter.distributed_operation = ALL_PARALLEL_STYLES[plan].distributed_op
+                # TODO: here we need to translate the sharding as we have a collection of tensors
+                # so shard[0] would mean we split the list of tensor, shard(1) we split each tensor along dim 1
+                # but that's only if we collected more than 1 key
+                rank = device_mesh.get_local_rank()
+                final_target = converter.distributed_operation.convert(tensor, empty_tensor, tensor_type, rank, device_mesh)
+            else:
+                final_target = [ k[:] for k in collected_tensors] # we materialize the weights on device?
 
-        # 3. Quantization equivalent to `create_quantized_param`
-        used_operations.append(weight_mapping[key].quantization_operation)
-        current_value = weight_mapping[key].quantization_operation(current_value)
-        converted_state_dict[key] = current_value
+            # Now we need to add the standard operations
+            for op in converter.operations:
+                final_target = op.convert(final_target)
+
+            # Finaly the quantizer comes into play!
+            if quantizer is not None:
+                if converter.quantize_operation is None:
+                    converter.quantize_operation = quantizer.quantize_op
+                final_target = converter.quantize_operation(final_target, ...)
+
+
+            # Finally, once we have the final keys, some might be new -> we move them to the operation's device
+            # and we cast to the correct dype if provided.
+            if target_key in device_map:
+                op = To(device_map[target_key])
+                converter.operations.append(op)
+                for k,v in final_target.items():op.convert(final_target)
+            if match:= re.sub(keep_in_dtype_pattern, "\1", target_key):
+                op = Cast(keep_in_dtype[match])
+                converter.operations.append(op)
+                for k,v in final_target.items():op.convert(final_target)
+
+            for k,v in final_target.items():
+                module_to_tp = model.get_submodule(k)
+                param_type = k.rsplit('.')[:-1]
+                if not isinstance(tensor, torch.nn.Parameter):
+                    param = torch.nn.Parameter(k, requires_grad=k.is_floating_point())
+                setattr(module_to_tp, param_type, param)
 
         # Clear cached buffers in unique operations
     for op in {op for op in used_operations if hasattr(op, "clear_cache")}:
         op.clear_cache()
 
-    return converted_state_dict, used_operations
-
+    return used_operations

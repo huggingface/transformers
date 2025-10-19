@@ -46,7 +46,7 @@ from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import _checkpoint_conversion_mapping as DEFAULT_WEIGHT_CONVERSION_MAPPING
-from .core_model_loading import WeightConversion, convert_state_dict
+from .core_model_loading import WeightConversion, convert_and_load_state_dict_in_model
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -4464,7 +4464,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model.upcast_modules_in_fp32(hf_quantizer, dtype)
         # Make sure to tie the weights correctly
         model.tie_weights()
-
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
@@ -4526,7 +4525,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         # for device_map="auto" : dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
-        # harm performances).
+        # harm performances). TODO: replace with native PP
         if device_map is not None and device_mesh is None:
             accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers)
 
@@ -4688,44 +4687,58 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_mapping: Optional[Sequence[WeightConversion]] = None,
         profile_weight_conversion: bool = False,
     ):
-        # TODO: we should only be calling hf_quantizer.skip_placement or something like that
         is_quantized = hf_quantizer is not None
         is_hqq_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
+        # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
+        expected_keys = model.state_dict().keys()
+        if logger.level >= logging.WARNING:
+            verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
 
-        if weight_mapping:
-            merged_state_dict = {}
-            for file in checkpoint_files:  # TODO this is sequential but supposed to be fast
-                merged_state_dict.update(
-                    load_state_dict(file, is_quantized=is_quantized, map_location="meta", weights_only=weights_only)
-                )
+
+        # Warmup cuda to load the weights much faster on devices
+        if device_map is not None and not is_hqq_or_quark:
+            expanded_device_map = expand_device_map(device_map, expected_keys)
+            caching_allocator_warmup(model, expanded_device_map, hf_quantizer)
+
+        # Now we read all the files to get a pointer on each physical weights
+        merged_state_dict = {}
+        for file in checkpoint_files:
+            merged_state_dict.update(
+                load_state_dict(file, is_quantized=False, map_location="meta", weights_only=True)
+            )
             tp_plan = getattr(model, "_tp_plan", None)
-            new_state_dict, conversion_ops = convert_state_dict(
-                model, merged_state_dict, weight_mapping, tp_plan, hf_quantizer, profile=profile_weight_conversion
-            )
 
-        # Get all the keys of the state dicts that we have to initialize the model with
-        if sharded_metadata is not None and not weight_mapping:
-            original_checkpoint_keys = sharded_metadata["all_checkpoint_keys"]
-        elif state_dict is not None:
-            original_checkpoint_keys = list(state_dict.keys())
+        # TODO: We don't have the buffers at this point....
+        # But we want to process them as if they were weights
+        # Now we apply the weight materialization operations (by default mostly send to device, cast to a dtype)
+        error_msgs = []
+        if is_deepspeed_zero3_enabled() and not is_quantized:
+            error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
-            original_checkpoint_keys = list(
-                load_state_dict(checkpoint_files[0], map_location="meta", weights_only=weights_only).keys()
+            _conversion_ops = convert_and_load_state_dict_in_model(
+                model, merged_state_dict, weight_mapping, tp_plan, hf_quantizer, device_map, device_mesh=device_mesh, keep_in_dtype, profile=profile_weight_conversion
             )
+            model._conversion_ops = _conversion_ops
 
+        new_state_dict = model.state_dict()
+
+        #!!!!!!!!!!!!!!!!!!!!!!! POST PROCESS!!!!!!!!!!!!!!!!!!
+        # TODO: i remove the buffer processing, add it back
+        # TODO: shard and distribute still useful for layers that were missing!
         # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
         prefix = model.base_model_prefix
-        has_prefix_module = any(s.startswith(prefix) for s in original_checkpoint_keys) if len(prefix) > 0 else False
+        has_prefix_module = any(s.startswith(prefix) for s in new_state_dict.keys()) if len(prefix) > 0 else False
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
         loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
         checkpoint_keys = new_state_dict.keys()
+
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
-            model, original_checkpoint_keys, checkpoint_keys, loading_base_model_from_task_state_dict, hf_quantizer
+            model, expected_keys, checkpoint_keys, loading_base_model_from_task_state_dict, hf_quantizer
         )
         # Find all the keys with shape mismatch (if we ignore the mismatch, the weights need to be newly initialized the
         # same way as missing keys)
@@ -4745,59 +4758,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(missing_keys + mismatched_keys, is_quantized)
-
-        is_offloaded_safetensors = False
-        # This offload index if for params explicitly on the "disk" in the device_map
-        disk_offload_index = None
-        disk_only_shard_files = []
-        # Prepare parameters offloading if needed
-        if device_map is not None and "disk" in device_map.values():
-            disk_offload_index, disk_only_shard_files, is_offloaded_safetensors = accelerate_disk_offload(
-                disk_offload_folder,
-                checkpoint_files,
-                device_map,
-                checkpoint_keys,
-                new_state_dict.keys(),
-                sharded_metadata,
-                dtype,
-            )
-        # To be able to iterate, even if we don't use it if the state_dict is already provided
-        elif state_dict is not None:
-            checkpoint_files = [""]
-
-        # Compute expected model keys
-        expected_keys = list(model.state_dict().keys())
-        if hf_quantizer is not None:
-            expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, checkpoint_keys)
-
-        if logger.level >= logging.WARNING:
-            verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
-
-        # Warmup cuda to load the weights much faster on devices
-        if device_map is not None and not is_hqq_or_quark:
-            expanded_device_map = expand_device_map(device_map, expected_keys)
-            caching_allocator_warmup(model, expanded_device_map, hf_quantizer)
-
-        error_msgs = []
-        if is_deepspeed_zero3_enabled() and not is_quantized:
-            error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
-        # Skip it with fsdp on ranks other than 0
-        elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
-            disk_offload_index = _load_state_dict_into_meta_model(
-                model,
-                state_dict,
-                shard_file,
-                device_map=device_map,
-                disk_offload_folder=disk_offload_folder,
-                disk_offload_index=disk_offload_index,
-                hf_quantizer=hf_quantizer,
-                device_mesh=device_mesh,
-            )
-
-        # Save offloaded index if needed
-        if disk_offload_index is not None and len(disk_offload_index) > 0 and not is_offloaded_safetensors:
-            save_offload_index(disk_offload_index, disk_offload_folder)
-            disk_offload_index = None
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
@@ -4837,8 +4797,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict
         )
 
-        # TODO: separate this in another function: it's not core....
-        # All potential warnings/infos
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
             if "size mismatch" in error_msg:
