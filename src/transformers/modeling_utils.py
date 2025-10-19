@@ -4384,7 +4384,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _adapter_model_path, pretrained_model_name_or_path = maybe_load_adapters(
             pretrained_model_name_or_path,
             download_kwargs_with_commit,
-            adapter_kwargs,
+            **adapter_kwargs,
         )
         device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
