@@ -450,7 +450,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
-        # Track whether decoder_input_ids was provided by user (deprecated) or auto-generated (correct)
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(
                 labels, self.config.pad_token_id, self.config.decoder_start_token_id
