@@ -66,7 +66,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 </hfoption>
 <hfoption id="transformers CLI">
 ```bash
-echo -e "人とAIが協調するためには、" | transformers run --task text-generation --model abeja/gpt-neox-japanese-2.7b --device 0
+echo -e "人とAIが協調するためには、" | transformers run text-generation --model abeja/gpt-neox-japanese-2.7b --device 0
 ```
 
 </hfoption>

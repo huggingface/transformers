@@ -81,7 +81,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "LLMs generate text through a process known as" | transformers run --task text-generation --model google/gemma-2b --device 0
+echo -e "LLMs generate text through a process known as" | transformers run text-generation --model google/gemma-2b --device 0
 ```
 
 </hfoption>

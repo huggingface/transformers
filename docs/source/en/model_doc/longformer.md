@@ -79,7 +79,7 @@ tokenizer.decode(predictions).split()
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee." | transformers run --task fill-mask --model allenai/longformer-base-4096 --device 0
+echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee." | transformers run fill-mask --model allenai/longformer-base-4096 --device 0
 ```
 
 </hfoption>

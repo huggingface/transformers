@@ -81,7 +81,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants are remarkable organisms that produce their own food using a method called photosynthesis." | transformers run --task text2text-generation --model csebuetnlp/mT5_multilingual_XLSum --device 0
+echo -e "Plants are remarkable organisms that produce their own food using a method called photosynthesis." | transformers run text2text-generation --model csebuetnlp/mT5_multilingual_XLSum --device 0
 ```
 
 </hfoption>

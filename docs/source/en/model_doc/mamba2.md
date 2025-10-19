@@ -69,7 +69,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model mistralai/Mamba-Codestral-7B-v0.1 --device 0
+echo -e "Plants create energy through a process known as" | transformers run text-generation --model mistralai/Mamba-Codestral-7B-v0.1 --device 0
 ```
 
 </hfoption>

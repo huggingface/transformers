@@ -82,7 +82,7 @@ print(f"Predicted label: {predicted_label}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "DeBERTa-v2 is great at understanding context!" | transformers run --task fill-mask --model microsoft/deberta-v2-xlarge-mnli --device 0
+echo -e "DeBERTa-v2 is great at understanding context!" | transformers run fill-mask --model microsoft/deberta-v2-xlarge-mnli --device 0
 ```
 
 </hfoption>
