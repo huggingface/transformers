@@ -1,0 +1,52 @@
+{
+  "items": [
+    {
+      "name": "burger",
+      "image_path": "burger_20250913_195714.jpg",
+      "timestamp": "2025-09-13T19:57:14.442204",
+      "confidence": 0.0
+    },
+    {
+      "name": "phone",
+      "image_path": "phone_20250913_195737.jpg",
+      "timestamp": "2025-09-13T19:57:37.256582",
+      "confidence": 0.0
+    },
+    {
+      "name": "phone",
+      "image_path": "phone_20250913_195740.jpg",
+      "timestamp": "2025-09-13T19:57:40.857093",
+      "confidence": 0.0
+    },
+    {
+      "name": "burger",
+      "image_path": "burger_20250913_201609.jpg",
+      "timestamp": "2025-09-13T20:16:09.188405",
+      "bbox": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "phone",
+      "image_path": "phone_20250913_201616.jpg",
+      "timestamp": "2025-09-13T20:16:16.749726",
+      "bbox": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    }
+  ],
+  "class_names": [
+    "burger",
+    "phone"
+  ],
+  "class_mapping": {
+    "burger": 0,
+    "phone": 1
+  }
+}

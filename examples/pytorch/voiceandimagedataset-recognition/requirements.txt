@@ -1,0 +1,9 @@
+torch
+torchvision
+timm
+opencv-python
+speechrecognition
+pyaudio
+Pillow
+numpy
+matplotlib
