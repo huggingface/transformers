@@ -380,7 +380,10 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     slice_indices = [slice(None)] * param_dim
     if start < empty_param.shape[dim]:
         slice_indices[dim] = slice(start, end)
-        return param[tuple(slice_indices)]
+        param = param[tuple(slice_indices)]
+        if isinstance(param, list):
+            param = [ p[:] for p in param]
+        return param
     dimensions = list(param.shape)
     dimensions[dim] = 0
     return torch.empty(tuple(dimensions), dtype=torch.int64)
@@ -537,6 +540,9 @@ class ReplicateParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
+    def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        return param[...].to(param_casting_dtype)
+
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         param = param[...].to(param_casting_dtype)
         if to_contiguous:
@@ -578,17 +584,20 @@ class ColwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
-        # means Colwise as Linear is input * weight^T + bias, where
-        # weight would become Shard(1)
+    def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         if param_type == "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
             shard = [Shard(-1)]
         else:
             shard = [Shard(-2)]
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
+        return parameter, shard
 
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
+        # means Colwise as Linear is input * weight^T + bias, where
+        # weight would become Shard(1)
+        parameter, shard = self.shard_tensor(param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh)
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
@@ -608,6 +617,12 @@ class ColwiseParallel(TensorParallelLayer):
 
 
 class PackedColwiseParallel(ColwiseParallel):
+    def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        return get_packed_weights(param, empty_param, device_mesh, rank, -2)
+
+    def create_nn_parameter(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        return nn.Parameter(param, requires_grad=param.is_floating_point())
+
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where

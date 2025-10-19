@@ -364,6 +364,9 @@ class Shard(DistributedOp):
         self.return_all = return_all
 
     def convert(self, value: Union[Tensor, Sequence], *, context: dict[str, Any]) -> Union[Tensor, list[Tensor]]:
+        """
+        This is akin to a normal sharding, BUT we handle a list of tensor inputs (which are gonna be merged later on)
+        """
         def _shard_tensor(tensor: Tensor, rank: int) -> Tensor:
             dim_size = tensor.shape[self.dim]
             local_world_size = max(world_size, 1)
@@ -607,7 +610,16 @@ def convert_and_load_state_dict_in_model(model, state_dict, weight_mapping, tp_p
 
         # ------------- PROCESS TARGET KEY TO MAKE IT EXACT wrt device_map and state_dict ---------
         # =========================================================================================
-
+        # WHAT if we do the ROPE permutation and reshape?
+        # q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d) ?
+        # should i just pass torch ops? ops on empty tensor? Partial? NO! -> A custom operation.
+        # FOR now don't support permute / transpose but its an absolute TODO!
+        # FIXME: If someone wants to "permute(0,1,2)" on all keys
+        # FIXME: then we are fucked for automatic TP because shard dims will be wrong
+        # FIXME: tho we could find a solution with good functional programming?
+        # Like having default indexes 0, 1, 2
+        #                    physical 2, 1, 0 for example! And in that case, an op need to define which
+        # axis it changed / moved and maps them. -> before the op we know the final new index.
         for target_key in target_keys: # some of these can be newly created by quantizer / merge or chunk op
             # TODO: here if we get the exact key from the state_dict, our key needs to be exact :sweat:
             # so solve prefix and etc
@@ -617,13 +629,13 @@ def convert_and_load_state_dict_in_model(model, state_dict, weight_mapping, tp_p
 
             if plan:=re.sub(target_key, r"\1", tp_regex_pattern):
                 if converter.distributed_operation is None:
-                    converter.distributed_operation = ALL_PARALLEL_STYLES[plan].distributed_op
+                    converter.distributed_operation = ALL_PARALLEL_STYLES[plan].shard_tensor
                 rank = device_mesh.get_local_rank()
-                final_target = converter.distributed_operation.convert(tensor, empty_tensor, tensor_type, rank, device_mesh)
+                final_target = converter.distributed_operation(tensor, empty_tensor, tensor_type, rank, device_mesh)
             else:
-                final_target = [ k[:] for k in collected_tensors] # we materialize the weights on device?
+                final_target = [ k[:] for k in collected_tensors] # we materialize the weights here
 
-            # Now we need to add the standard operations
+            # Now we need to add the standard operations. Some of this can play with TP....
             for op in converter.operations:
                 final_target = op.convert(final_target)
 
@@ -647,6 +659,8 @@ def convert_and_load_state_dict_in_model(model, state_dict, weight_mapping, tp_p
                 op.convert(final_target)
                 module_to_tp = model.get_submodule(k)
                 param_type = k.rsplit('.')[:-1]
+
+                # TODO: if DTENSOR -> need to cast to DTensor fuck it
                 if not isinstance(tensor, torch.nn.Parameter):
                     param = torch.nn.Parameter(k, requires_grad=k.is_floating_point())
                 if not (
