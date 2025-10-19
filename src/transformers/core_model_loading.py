@@ -575,26 +575,16 @@ def convert_and_load_state_dict_in_model(model, state_dict, weight_mapping, tp_p
         - list[ConversionOps]: The list of operations used during the conversion. This is useful if the model needs to be saved
           in its legacy format later on.
     """
-    tp_plan = tp_plan or {} # keys are * patterns, exact match with model.state_dict().keys()
+    tp_plan = tp_plan or{} # keys are * patterns, exact match with model.state_dict().keys()
     device_map = device_map or {} # keys are the `target` obtained from the model
     keep_in_dtype = keep_in_dtype or {} # keys are * pattern model.state_dict().keys()
     weight_mapping = weight_mapping or {} # keys are * patterns model.state_dict().keys()
 
+    meta_model_state_dict = model.state_dict()
     tp_regex_pattern = f"""({')|()'.join(tp_plan.keys()).replace("*", "d+")})"""
     keep_in_dtype_pattern = f"""({')|()'.join(keep_in_dtype.keys()).replace("*", "d+")})"""
     weight_mapping_pattern = weight_mapping._regex_pat
-    # Store which ops were applied for saving
     used_operations: list[ConversionOps] = []
-    # Let's create a mapping from the keys we will read -> the operations to perform
-    # tensor parallel is also a conversion scheme! So add it to the keys to convert!
-    # quantization as well! But for quantization we would need to get the module, check if its a linear?
-
-    # 1. We figure out whatever needs to happen to each weights!
-    #   - we need to take care of `device_map="auto"` -> add To(device_map[layer_name])
-    #   - we need to take care of `tp_plan`           -> add Shard() and etc automatically
-    #   - we need to take care of the `keep_in_dtype` -> add Cast(keep_in_dtype[layer_name])
-    #   - we need to take care of `quantization`      -> add target keys created by the method + update TP plan?
-    #   - we need to take care of lora later on.
     collected_target_keys = defaultdict(list)
     for original_key, tensor in state_dict.items():
         default_op = re.sub(weight_mapping_pattern, r"\1", original_key)
@@ -605,17 +595,29 @@ def convert_and_load_state_dict_in_model(model, state_dict, weight_mapping, tp_p
             weight_mapping[default_op] = converter
 
         current_key = converter.target_keys if isinstance(converter.target_keys, str) else "|".join(converter.target_keys)
+        # current_key = re.sub(original_key, "", current_key) # get the full key name from ckpt?
         collected_target_keys[current_key] += [tensor]
+
+    missing_keys = meta_model_state_dict.keys() # we'll pop from this one
+    missmatch_keys = []                   # we'll add into this one
+    unexpected_keys = []                  # we'll add into this one as well
 
     for collected_keys, collected_tensors in collected_target_keys.items(): # a single key indexes many target keys
         target_keys = collected_keys.split('|')
+
+        # ------------- PROCESS TARGET KEY TO MAKE IT EXACT wrt device_map and state_dict ---------
+        # =========================================================================================
+
         for target_key in target_keys: # some of these can be newly created by quantizer / merge or chunk op
+            # TODO: here if we get the exact key from the state_dict, our key needs to be exact :sweat:
+            # so solve prefix and etc
+            empty_tensor = meta_model_state_dict.get(target_key)
+            if empty_tensor is None:
+                unexpected_keys.append(empty_tensor)
+
             if plan:=re.sub(target_key, r"\1", tp_regex_pattern):
                 if converter.distributed_operation is None:
                     converter.distributed_operation = ALL_PARALLEL_STYLES[plan].distributed_op
-                # TODO: here we need to translate the sharding as we have a collection of tensors
-                # so shard[0] would mean we split the list of tensor, shard(1) we split each tensor along dim 1
-                # but that's only if we collected more than 1 key
                 rank = device_mesh.get_local_rank()
                 final_target = converter.distributed_operation.convert(tensor, empty_tensor, tensor_type, rank, device_mesh)
             else:
@@ -627,31 +629,35 @@ def convert_and_load_state_dict_in_model(model, state_dict, weight_mapping, tp_p
 
             # Finaly the quantizer comes into play!
             if quantizer is not None:
-                if converter.quantize_operation is None:
-                    converter.quantize_operation = quantizer.quantize_op
-                final_target = converter.quantize_operation(final_target, ...)
+                if converter.quantize_operation is None: # just for now
+                    converter.quantize_operation = Fp8Quantize()
+                final_target = converter.quantize_operation(final_target)
 
 
             # Finally, once we have the final keys, some might be new -> we move them to the operation's device
             # and we cast to the correct dype if provided.
-            if target_key in device_map:
-                op = To(device_map[target_key])
-                converter.operations.append(op)
-                for k,v in final_target.items():op.convert(final_target)
-            if match:= re.sub(keep_in_dtype_pattern, "\1", target_key):
-                op = Cast(keep_in_dtype[match])
-                converter.operations.append(op)
-                for k,v in final_target.items():op.convert(final_target)
-
             for k,v in final_target.items():
+                if target_key in device_map:
+                    op = To(device_map[target_key])
+                    converter.operations.append(op)
+                if match:= re.sub(keep_in_dtype_pattern, "\1", target_key):
+                    op = Cast(keep_in_dtype[match])
+                    converter.operations.append(op)
+
+                op.convert(final_target)
                 module_to_tp = model.get_submodule(k)
                 param_type = k.rsplit('.')[:-1]
                 if not isinstance(tensor, torch.nn.Parameter):
                     param = torch.nn.Parameter(k, requires_grad=k.is_floating_point())
+                if not (
+                    converter.quantize_operation is None and tensor.shape[-1] == 1 and tensor.numel() * 2 == empty_tensor.numel()
+                ):
+                    missmatch_keys.append((k, param.shape, empty_tensor.shape))
+                missing_keys.pop(target_key)
                 setattr(module_to_tp, param_type, param)
 
         # Clear cached buffers in unique operations
     for op in {op for op in used_operations if hasattr(op, "clear_cache")}:
         op.clear_cache()
 
-    return used_operations
+    return used_operations, missing_keys, unexpected_keys, missmatch_keys

@@ -4693,10 +4693,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.QUARK,
         }
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
-        expected_keys = model.state_dict().keys()
+        expected_keys = list(model.state_dict().keys())
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
-
 
         # Warmup cuda to load the weights much faster on devices
         if device_map is not None and not is_hqq_or_quark:
@@ -4705,23 +4704,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Now we read all the files to get a pointer on each physical weights
         merged_state_dict = {}
-        for file in checkpoint_files:
-            merged_state_dict.update(
-                load_state_dict(file, is_quantized=False, map_location="meta", weights_only=True)
-            )
+        all_pointer = {}
+        for k,v in sharded_metadata["weight_map"]:
+            if v not in all_pointer:
+                file_pointer = safe_open(v, framework="pt", device="meta")
+                all_pointer[v] = file_pointer
+            merged_state_dict[k] = all_pointer[v].get_slice(k, device="meta") # don't meterialize yet
             tp_plan = getattr(model, "_tp_plan", None)
 
-        # TODO: We don't have the buffers at this point....
-        # But we want to process them as if they were weights
-        # Now we apply the weight materialization operations (by default mostly send to device, cast to a dtype)
+        keep_in_dtype = None
         error_msgs = []
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
-            _conversion_ops = convert_and_load_state_dict_in_model(
-                model, merged_state_dict, weight_mapping, tp_plan, hf_quantizer, device_map, device_mesh=device_mesh, keep_in_dtype, profile=profile_weight_conversion
+            _conversion_ops, missing_keys, unexpected_keys, mismatched_keys = convert_and_load_state_dict_in_model(
+                model, merged_state_dict, weight_mapping, tp_plan, hf_quantizer, device_map, keep_in_dtype, profile=profile_weight_conversion
             )
             model._conversion_ops = _conversion_ops
+
+        for k in all_pointer: # finally close all opened file pointeres
+            k.__exit__(None, None, None)
 
         new_state_dict = model.state_dict()
 
@@ -4734,23 +4736,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
         loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
-        checkpoint_keys = new_state_dict.keys()
-
-        # Find missing and unexpected keys from the state dict
-        missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
-            model, expected_keys, checkpoint_keys, loading_base_model_from_task_state_dict, hf_quantizer
-        )
-        # Find all the keys with shape mismatch (if we ignore the mismatch, the weights need to be newly initialized the
-        # same way as missing keys)
-        mismatched_keys, mismatched_shapes = _find_mismatched_keys(
-            model,
-            state_dict,
-            new_state_dict,
-            checkpoint_files,
-            ignore_mismatched_sizes,
-            is_quantized,
-            weights_only,
-        )
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
