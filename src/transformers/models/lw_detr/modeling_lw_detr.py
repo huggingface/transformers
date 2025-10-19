@@ -461,27 +461,6 @@ class LwDetrConvEncoder(nn.Module):
         return out
 
 
-class LwDetrConvModel(nn.Module):
-    """
-    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
-    """
-
-    def __init__(self, conv_encoder, position_embedding):
-        super().__init__()
-        self.conv_encoder = conv_encoder
-        self.position_embedding = position_embedding
-
-    def forward(self, pixel_values, pixel_mask):
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        out = self.conv_encoder(pixel_values, pixel_mask)
-        pos = []
-        for feature_map, mask in out:
-            # position encoding
-            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
-
-        return out, pos
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -846,29 +825,6 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class LwDetrLearnedPositionEmbedding(nn.Module):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
-
-    def __init__(self, embedding_dim=256):
-        super().__init__()
-        self.row_embeddings = nn.Embedding(50, embedding_dim)
-        self.column_embeddings = nn.Embedding(50, embedding_dim)
-
-    def forward(self, pixel_values, pixel_mask=None):
-        height, width = pixel_values.shape[-2:]
-        width_values = torch.arange(width, device=pixel_values.device)
-        height_values = torch.arange(height, device=pixel_values.device)
-        x_emb = self.column_embeddings(width_values)
-        y_emb = self.row_embeddings(height_values)
-        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
-        pos = pos.permute(2, 0, 1)
-        pos = pos.unsqueeze(0)
-        pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
-        return pos
-
-
 class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
@@ -889,10 +845,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.init_std
 
-        if isinstance(module, LwDetrLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
-        elif isinstance(module, LwDetrMultiscaleDeformableAttention):
+        if isinstance(module, LwDetrMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
@@ -931,7 +884,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "class_embed") and module.class_embed is not None:
             prior_prob = 0.01
             bias_value = -math.log((1 - prior_prob) / prior_prob)
-            self.class_embed.bias.data = torch.ones(self.config.num_labels) * bias_value
+            nn.init.constant_(module.class_embed.bias.data, bias_value)
         if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
             nn.init.constant_(module.bbox_embed.layers[-1].weight.data, 0)
             nn.init.constant_(module.bbox_embed.layers[-1].bias.data, 0)
@@ -1048,43 +1001,6 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         )
 
 
-class LwDetrSinePositionEmbedding(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
-    need paper, generalized to work on images.
-    """
-
-    def __init__(self, embedding_dim=64, temperature=10000, normalize=False, scale=None):
-        super().__init__()
-        self.embedding_dim = embedding_dim
-        self.temperature = temperature
-        self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
-
-    def forward(self, pixel_values, pixel_mask):
-        if pixel_mask is None:
-            raise ValueError("No pixel mask provided")
-        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
-        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
-        if self.normalize:
-            y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
-
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
-
-
 def refine_bboxes(reference_points, deltas):
     new_reference_points_cxcy = deltas[..., :2] * reference_points[..., 2:] + reference_points[..., :2]
     new_reference_points_wh = deltas[..., 2:].exp() * reference_points[..., 2:]
@@ -1103,9 +1019,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = LwDetrConvEncoder(config)
-        position_embeddings = LwDetrSinePositionEmbedding(config.d_model // 2, normalize=True)
-        self.backbone = LwDetrConvModel(backbone, position_embeddings)
+        self.backbone = LwDetrConvEncoder(config)
 
         self.group_detr = config.group_detr
         self.num_queries = config.num_queries
@@ -1265,7 +1179,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
         # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # which is a list of tuples
-        features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
+        features = self.backbone(pixel_values, pixel_mask)
 
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         sources = []
@@ -1288,13 +1202,12 @@ class LwDetrModel(LwDetrPreTrainedModel):
         source_flatten = []
         mask_flatten = []
         spatial_shapes_list = []
-        for source, mask, pos_embed in zip(sources, masks, position_embeddings_list):
+        for source, mask in zip(sources, masks):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
             spatial_shapes_list.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)
             source_flatten.append(source)
             mask_flatten.append(mask)
         source_flatten = torch.cat(source_flatten, 1)
@@ -1343,7 +1256,6 @@ class LwDetrModel(LwDetrPreTrainedModel):
         topk_coords_logits_undetach = torch.cat(topk_coords_logits_undetach, 1)
         object_query_undetach = torch.cat(object_query_undetach, 1)
 
-        topk_coords_logits = topk_coords_logits.sigmoid()
         enc_outputs_class = object_query_undetach
         enc_outputs_coord_logits = topk_coords_logits
 
@@ -1488,7 +1400,6 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
 
         outputs_coord_delta = self.bbox_embed(hidden_states)
         outputs_coord = refine_bboxes(reference_points, outputs_coord_delta)
-        outputs_coord = outputs_coord.sigmoid()
 
         outputs_class = self.class_embed(hidden_states)
 
