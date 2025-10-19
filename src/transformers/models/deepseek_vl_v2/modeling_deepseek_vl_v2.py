@@ -108,7 +108,7 @@ class MlpProjector(nn.Module):
         return self.layers(x)
 
 
-#@auto_docstring
+# @auto_docstring
 class DeepseekVLV2PreTrainedModel(PreTrainedModel):
     config: DeepseekVLV2Config
     base_model_prefix = "deepseek_vl_v2"
@@ -132,7 +132,7 @@ class DeepseekVLV2PreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-#@auto_docstring(
+# @auto_docstring(
 #     custom_intro="""
 #     Base class for DeepseekVLV2 model's outputs that may also contain a past key/values (to speed up sequential decoding).
 #     """
@@ -164,7 +164,7 @@ class DeepseekVLV2BaseModelOutputWithPast(ModelOutput):
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
-#@auto_docstring
+# @auto_docstring
 class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
     def __init__(self, config: DeepseekVLV2Config):
         super().__init__(config)
@@ -310,7 +310,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
         raise AttributeError("Not needed for DeepseekVLV2")
 
     @can_return_tuple
-    #@auto_docstring
+    # @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -327,6 +327,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ):
         r"""
         images_seq_mask (<fill_type>):
@@ -338,6 +339,8 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
+        kwargs.pop("num_logits_to_keep", None)
+        
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -356,7 +359,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-        outputs = self.language.forward(
+        outputs = self.language_model.forward(
             input_ids=None,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -368,6 +371,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         return outputs
@@ -387,7 +391,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
         num_logits_to_keep=None,
         **kwargs,
     ):
-        model_inputs = self.language.prepare_inputs_for_generation(
+        model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -530,5 +534,5 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
                 inputs_embeds[idx].masked_scatter_(images_seq_mask[idx].unsqueeze(-1), images_in_this_batch)
 
         return inputs_embeds
-    
+
 __all__ = ["DeepseekVLV2Model", "DeepseekVLV2ForCausalLM"]

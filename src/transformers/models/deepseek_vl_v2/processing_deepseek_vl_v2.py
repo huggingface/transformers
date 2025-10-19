@@ -9,6 +9,38 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 
+chat_template = """
+{%- set sep = "\n\n" -%}
+{%- set sep2 = "<｜end▁of▁sentence｜>" -%}
+
+{%- if messages[0].role == "system" %}
+{{ messages[0].content + sep }}
+{%- else %}
+{%- set system_message = "" %}
+{%- endif %}
+
+{%- for message in messages if message.role != "system" %}
+    {%- set role = "<|User|>" if message.role == "user" else "<|Assistant|>" %}
+    {%- if message.content %}
+        {%- set content = message.content -%}
+        {%- if content is not string -%}
+            {%- set text_content = [] -%}
+            {%- for part in content -%}
+                {%- set text_content = text_content + [part.text] -%}
+            {%- endfor -%}
+            {%- set content = "".join(text_content) -%}
+        {%- endif -%}
+        {{ role + ": " + content }}
+        {{ sep if loop.index0 is even else sep2 }}
+    {%- else %}
+        {{ role + ":" }}
+    {%- endif %}
+{%- endfor %}
+
+{%- if add_generation_prompt %}
+<|Assistant|>:
+{%- endif %}
+"""
 
 class DeepseekVLV2Processor(ProcessorMixin):
     r"""
@@ -30,19 +62,22 @@ class DeepseekVLV2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "num_image_tokens"]
-    image_processor_class = "AutoImageProcessor"
+    image_processor_class = "DeepseekVLV2ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
         image_processor,
         tokenizer,
-        chat_template=None,
+        chat_template=chat_template,
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.image_token = "<image>"
         self.image_token_id = self.tokenizer.vocab.get(self.image_token)
+        self.tokenizer.chat_template = chat_template
+        special_tokens = ["<|ref|>", "<|/ref|>", "<|det|>", "<|/det|>", "<|grounding|>"]
+        special_tokens_dict = {"additional_special_tokens": special_tokens}
+        self.tokenizer.add_special_tokens(special_tokens_dict)
 
     def __call__(
         self,
@@ -92,21 +127,29 @@ class DeepseekVLV2Processor(ProcessorMixin):
         for img in images:
             out = self.image_processor.preprocess(img)
             batch_pixel_values.append(out["pixel_values"])
-            batch_spatial_crops.append([out["num_width_tiles"], out["num_height_tiles"]])
+            batch_spatial_crops.append(
+                [out["num_width_tiles"], out["num_height_tiles"]]
+            )
 
         max_tiles = max(pv.shape[0] for pv in batch_pixel_values)
-        padded_pixel_values = torch.zeros(len(batch_pixel_values), max_tiles, 3, 384, 384)
+        padded_pixel_values = torch.zeros(
+            len(batch_pixel_values), max_tiles, 3, 384, 384
+        )
         for i, pv in enumerate(batch_pixel_values):
             padded_pixel_values[i, : pv.shape[0]] = pv
 
-        images_spatial_crop = torch.zeros(len(batch_spatial_crops), max_tiles, 2, dtype=torch.long)
+        images_spatial_crop = torch.zeros(
+            len(batch_spatial_crops), max_tiles, 2, dtype=torch.long
+        )
         for i, (w, h) in enumerate(batch_spatial_crops):
             images_spatial_crop[i, 0] = torch.tensor([w, h])
 
         expanded_prompt = prompt
         for w, h in batch_spatial_crops:
             num_tokens = (h * 14) * (w * 14 + 1) + 210 + 1
-            expanded_prompt = expanded_prompt.replace(self.image_token, self.image_token * num_tokens, 1)
+            expanded_prompt = expanded_prompt.replace(
+                self.image_token, self.image_token * num_tokens, 1
+            )
 
         enc = self.tokenizer(expanded_prompt, return_tensors=return_tensors)
 
@@ -146,15 +189,6 @@ class DeepseekVLV2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    def apply_chat_template(self, conversation, **kwargs):
-        if "chat_template" not in kwargs:
-            if self.chat_template is not None:
-                kwargs["chat_template"] = self.chat_template
-            elif self.tokenizer.chat_template is not None:
-                kwargs["chat_template"] = self.tokenizer.chat_template
-
-        return super().apply_chat_template(conversation, **kwargs)
 
 
 __all__ = ["DeepseekVLV2Processor"]

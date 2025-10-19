@@ -72,6 +72,7 @@ class DeepseekVLV2Config(PretrainedConfig):
         self.tile_tag = tile_tag
         self.global_view_pos = global_view_pos
         self.candidate_resolutions = candidate_resolutions
+        self.num_hidden_layers = 30
         self.n_embed = n_embed
 
         if language_config is None:

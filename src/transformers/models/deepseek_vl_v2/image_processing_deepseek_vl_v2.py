@@ -8,7 +8,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageOps
 from torchvision import transforms
 
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
@@ -119,6 +119,7 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
         else:
             self.background_color = tuple(int(x * 255) for x in image_mean)
         self.candidate_resolutions = candidate_resolutions
+        self.image_size = candidate_resolutions[0][0]
         self.patch_size = patch_size
         self.downsample_ratio = downsample_ratio
 
@@ -258,12 +259,11 @@ class DeepseekVLV2ImageProcessor(BaseImageProcessor):
         if not isinstance(image, Image.Image):
             image = Image.fromarray(image)
 
-        w, h = image.size
-        best_w, best_h = self._select_best_resolution(w, h)
+        best_w, best_h = self.select_best_resolution(image.size,self.candidate_resolutions)
 
-        global_img = self.pad(image, (self.image_size, self.image_size))
+        global_img = ImageOps.pad(image, (self.image_size, self.image_size))
 
-        padded_img = self.pad(image, (best_w, best_h))
+        padded_img = ImageOps.pad(image, (best_w, best_h))
 
         local_tiles = []
         for i in range(0, best_h, self.image_size):
