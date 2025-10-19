@@ -15,6 +15,7 @@
 
 import tempfile
 import unittest
+import warnings
 
 from transformers import is_torch_available, logging
 from transformers.testing_utils import (
@@ -365,6 +366,59 @@ class EncoderDecoderMixin:
             outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
         )
 
+    def check_encoder_decoder_model_warning(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        labels,
+        **kwargs,
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
+
+        # Test that only one warning is raised when only labels are provided
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            # Set decoder_start_token_id 0 because the tokenizer.cls_token_id can't be accessed from here
+            enc_dec_model.config.decoder_start_token_id = 0
+            enc_dec_model.config.pad_token_id = decoder_config.pad_token_id
+            enc_dec_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+                labels=labels,
+            )
+
+            self.assertEqual(len(w), 1)
+            self.assertIn(
+                "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss",
+                str(w[0].message),
+            )
+
+        # Test that two warnings are raised when both labels and decoder_input_ids are provided
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            enc_dec_model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+                labels=labels,
+            )
+
+            self.assertEqual(len(w), 2)
+            self.assertIn("The decoder_input_ids are created based on the labels", str(w[0].message))
+            self.assertIn(
+                "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss",
+                str(w[1].message),
+            )
+
     def _check_output_with_attentions(
         self, outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
     ):
@@ -621,6 +675,81 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model_labels(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_labels(**input_ids_dict)
+
+    def test_encoder_decoder_model_warning(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_warning(**input_ids_dict)
+
+    # def test_encoder_decoder_model_labels_no_warning(self):
+    #     """Test that no warning is issued when only labels are provided (new v4.12+ path)"""
+    #     input_ids_dict = self.prepare_config_and_inputs()
+    #     config = input_ids_dict["config"]
+    #     decoder_config = input_ids_dict["decoder_config"]
+    #     input_ids = input_ids_dict["input_ids"]
+    #     attention_mask = input_ids_dict["attention_mask"]
+    #     labels = input_ids_dict["labels"]
+
+    #     encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+    #     model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+    #     model.to(torch_device)
+    #     model.config.decoder_start_token_id = decoder_config.bos_token_id
+    #     model.config.pad_token_id = decoder_config.pad_token_id
+
+    #     # Test that no warning is issued when only labels are provided
+    #     import warnings
+
+    #     with warnings.catch_warnings(record=True) as w:
+    #         warnings.simplefilter("always")
+    #         outputs = model(
+    #             input_ids=input_ids,
+    #             attention_mask=attention_mask,
+    #             labels=labels,
+    #         )
+    #         # Check that no FutureWarning was issued
+    #         future_warnings = [warning for warning in w if issubclass(warning.category, FutureWarning)]
+    #         self.assertEqual(len(future_warnings), 0, "No warning should be issued when only labels are provided")
+
+    #     # Verify the model still works correctly
+    #     self.assertIsNotNone(outputs.loss)
+    #     self.assertEqual(outputs.logits.shape[0], input_ids.shape[0])
+
+    # def test_encoder_decoder_model_labels_with_decoder_input_ids_warning(self):
+    #     """Test that warning IS issued when both labels and decoder_input_ids are provided (deprecated path)"""
+    #     input_ids_dict = self.prepare_config_and_inputs()
+    #     config = input_ids_dict["config"]
+    #     decoder_config = input_ids_dict["decoder_config"]
+    #     input_ids = input_ids_dict["input_ids"]
+    #     attention_mask = input_ids_dict["attention_mask"]
+    #     decoder_input_ids = input_ids_dict["decoder_input_ids"]
+    #     labels = input_ids_dict["labels"]
+
+    #     encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+    #     model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+    #     model.to(torch_device)
+    #     model.config.decoder_start_token_id = decoder_config.bos_token_id
+    #     model.config.pad_token_id = decoder_config.pad_token_id
+
+    #     # Test that warning IS issued when both labels and decoder_input_ids are provided
+    #     import warnings
+
+    #     with warnings.catch_warnings(record=True) as w:
+    #         warnings.simplefilter("always")
+    #         outputs = model(
+    #             input_ids=input_ids,
+    #             attention_mask=attention_mask,
+    #             decoder_input_ids=decoder_input_ids,
+    #             labels=labels,
+    #         )
+    #         # Check that FutureWarning was issued
+    #         future_warnings = [warning for warning in w if issubclass(warning.category, FutureWarning)]
+    #         self.assertEqual(
+    #             len(future_warnings), 1, "Warning should be issued when both labels and decoder_input_ids are provided"
+    #         )
+    #         self.assertIn("v4.12.0", str(future_warnings[0].message))
+
+    #     # Verify the model still works correctly
+    #     self.assertIsNotNone(outputs.loss)
+    #     self.assertEqual(outputs.logits.shape[0], input_ids.shape[0])
 
     def test_encoder_decoder_model_output_attentions(self):
         input_ids_dict = self.prepare_config_and_inputs()
