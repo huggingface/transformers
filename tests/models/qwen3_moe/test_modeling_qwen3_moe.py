@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, is_torch_available, set_seed
+from transformers import AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
@@ -34,10 +34,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Qwen3ForQuestionAnswering,
         Qwen3MoeForCausalLM,
-        Qwen3MoeForSequenceClassification,
-        Qwen3MoeForTokenClassification,
         Qwen3MoeModel,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -50,18 +47,6 @@ class Qwen3MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Qwen3MoeModel,
-            "text-classification": Qwen3MoeForSequenceClassification,
-            "token-classification": Qwen3MoeForTokenClassification,
-            "text-generation": Qwen3MoeForCausalLM,
-            "question-answering": Qwen3ForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     test_all_params_have_gradient = False
     model_tester_class = Qwen3MoeModelTester
 
@@ -137,7 +122,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = Qwen3MoeForCausalLM.from_pretrained(
-                "Qwen/Qwen3-30B-A3B-Base", device_map="auto", load_in_4bit=True
+                "Qwen/Qwen3-30B-A3B-Base", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
             )
 
         return cls.model
@@ -182,7 +167,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         model = Qwen3MoeForCausalLM.from_pretrained(
             "Qwen/Qwen3-30B-A3B-Base",
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)

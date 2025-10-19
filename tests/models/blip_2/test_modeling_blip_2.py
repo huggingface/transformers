@@ -156,8 +156,7 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Blip2VisionModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -427,7 +426,7 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
@@ -461,11 +460,9 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["input_ids"]
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -733,7 +730,7 @@ class Blip2ModelTester:
         return config, input_ids, attention_mask, pixel_values, decoder_input_ids, decoder_attention_mask, lm_labels
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
@@ -792,11 +789,9 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     # TODO: Fix the failed tests
@@ -1010,7 +1005,7 @@ class Blip2TextModelWithProjectionTester:
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1072,12 +1067,9 @@ class Blip2TextModelWithProjectionTester:
 @require_torch
 class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2TextModelWithProjection,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2TextModelWithProjectionTester(self)
@@ -1169,7 +1161,7 @@ class Blip2VisionModelWithProjectionTester:
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1231,11 +1223,8 @@ class Blip2VisionModelWithProjectionTester:
 @require_torch
 class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2VisionModelWithProjection,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
 
     test_resize_embeddings = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2VisionModelWithProjectionTester(self)
@@ -1332,7 +1321,7 @@ class Blip2TextRetrievalModelTester:
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1381,11 +1370,9 @@ class Blip2TextRetrievalModelTester:
 class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForImageTextRetrieval,) if is_torch_available() else ()
     additional_model_inputs = ["input_ids"]
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2TextRetrievalModelTester(self)

@@ -141,10 +141,6 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
-    def test_pickle_subword_regularization_tokenizer(self):
-        pass
-
-    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_subword_regularization_tokenizer(self):
         pass
 

@@ -18,8 +18,9 @@ PyTorch XLNet model.
 """
 
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -64,9 +65,6 @@ class XLNetRelativeAttention(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.dropout)
-
-    def prune_heads(self, heads):
-        raise NotImplementedError
 
     @staticmethod
     def rel_shift(x, klen=-1):
@@ -892,9 +890,6 @@ class XLNetModel(XLNetPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.word_embedding = new_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        raise NotImplementedError
-
     def create_mask(self, qlen, mlen):
         """
         Creates causal attention mask. Float mask where 1.0 indicates masked, 0.0 indicates not-masked.
@@ -1326,6 +1321,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ) -> Union[tuple, XLNetLMHeadModelOutput]:
         r"""
@@ -1444,7 +1440,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        logits = self.lm_loss(transformer_outputs[0])
+        hidden_states = transformer_outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_loss(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

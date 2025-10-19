@@ -362,8 +362,6 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = UniSpeechSatModelTester(self)
@@ -536,8 +534,6 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_pruning = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = UniSpeechSatModelTester(

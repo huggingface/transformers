@@ -20,7 +20,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, DynamicCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, BitsAndBytesConfig, DynamicCache, is_torch_available, set_seed
 from transformers.cache_utils import DynamicSlidingWindowLayer
 from transformers.testing_utils import (
     DeviceProperties,
@@ -43,9 +43,6 @@ if is_torch_available():
 
     from transformers import (
         MistralForCausalLM,
-        MistralForQuestionAnswering,
-        MistralForSequenceClassification,
-        MistralForTokenClassification,
         MistralModel,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -58,17 +55,6 @@ class MistralModelTester(CausalLMModelTester):
 
 @require_torch
 class MistralModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MistralModel,
-            "text-classification": MistralForSequenceClassification,
-            "token-classification": MistralForTokenClassification,
-            "text-generation": MistralForCausalLM,
-            "question-answering": MistralForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = MistralModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -136,7 +122,9 @@ class MistralIntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map={"": torch_device}, load_in_4bit=True
+            "mistralai/Mistral-7B-v0.1",
+            device_map={"": torch_device},
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -185,7 +173,7 @@ class MistralIntegrationTest(unittest.TestCase):
         model = MistralForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-v0.1",
             device_map={"": torch_device},
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
