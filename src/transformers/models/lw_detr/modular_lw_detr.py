@@ -16,15 +16,12 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.generic import check_model_inputs
 from ..conditional_detr.modeling_conditional_detr import (
     ConditionalDetrConvEncoder,
-    ConditionalDetrConvModel,
-    ConditionalDetrSinePositionEmbedding,
 )
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..dab_detr.modeling_dab_detr import gen_sine_position_embeddings
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderOutput,
     DeformableDetrForObjectDetection,
-    DeformableDetrLearnedPositionEmbedding,
     DeformableDetrMLPPredictionHead,
     DeformableDetrModel,
     DeformableDetrMultiscaleDeformableAttention,
@@ -552,18 +549,6 @@ class LwDetrConvEncoder(ConditionalDetrConvEncoder):
         return out
 
 
-class LwDetrConvModel(ConditionalDetrConvModel):
-    def forward(self, pixel_values, pixel_mask):
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        out = self.conv_encoder(pixel_values, pixel_mask)
-        pos = []
-        for feature_map, mask in out:
-            # position encoding
-            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
-
-        return out, pos
-
-
 class LwDetrAttention(LlamaAttention):
     def forward(
         self,
@@ -727,10 +712,6 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class LwDetrLearnedPositionEmbedding(DeformableDetrLearnedPositionEmbedding):
-    pass
-
-
 class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
@@ -751,10 +732,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.init_std
 
-        if isinstance(module, LwDetrLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
-        elif isinstance(module, LwDetrMultiscaleDeformableAttention):
+        if isinstance(module, LwDetrMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
@@ -878,18 +856,12 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         )
 
 
-class LwDetrSinePositionEmbedding(ConditionalDetrSinePositionEmbedding):
-    pass
-
-
 class LwDetrModel(DeformableDetrModel):
     def __init__(self, config: LwDetrConfig):
         LwDetrPreTrainedModel.__init__(config)
 
         # Create backbone + positional encoding
-        backbone = LwDetrConvEncoder(config)
-        position_embeddings = LwDetrSinePositionEmbedding(config.d_model // 2, normalize=True)
-        self.backbone = LwDetrConvModel(backbone, position_embeddings)
+        self.backbone = LwDetrConvEncoder(config)
 
         self.group_detr = config.group_detr
         self.num_queries = config.num_queries
@@ -1011,7 +983,7 @@ class LwDetrModel(DeformableDetrModel):
         # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # which is a list of tuples
-        features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
+        features = self.backbone(pixel_values, pixel_mask)
 
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         sources = []
@@ -1034,13 +1006,12 @@ class LwDetrModel(DeformableDetrModel):
         source_flatten = []
         mask_flatten = []
         spatial_shapes_list = []
-        for source, mask, pos_embed in zip(sources, masks, position_embeddings_list):
+        for source, mask in zip(sources, masks):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
             spatial_shapes_list.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)
             source_flatten.append(source)
             mask_flatten.append(mask)
         source_flatten = torch.cat(source_flatten, 1)

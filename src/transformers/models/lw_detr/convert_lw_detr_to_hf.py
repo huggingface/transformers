@@ -147,26 +147,26 @@ MODEL_CONFIGS = {
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # backbone encoder
-    r"backbone.0.encoder.pos_embed":                            r"backbone.conv_encoder.model.embeddings.position_embeddings",
-    r"backbone.0.encoder.patch_embed.proj":                     r"backbone.conv_encoder.model.embeddings.projection",
-    r"backbone.0.encoder.blocks.(\d+).gamma_1":                 r"backbone.conv_encoder.model.encoder.layer.\1.gamma_1",
-    r"backbone.0.encoder.blocks.(\d+).gamma_2":                 r"backbone.conv_encoder.model.encoder.layer.\1.gamma_2",
-    r"backbone.0.encoder.blocks.(\d+).norm1.(weight|bias)":     r"backbone.conv_encoder.model.encoder.layer.\1.layernorm_before.\2",
-    r"backbone.0.encoder.blocks.(\d+).attn.proj.(weight|bias)": r"backbone.conv_encoder.model.encoder.layer.\1.attention.output.\2",
-    r"backbone.0.encoder.blocks.(\d+).norm2.(weight|bias)":     r"backbone.conv_encoder.model.encoder.layer.\1.layernorm_after.\2",
-    r"backbone.0.encoder.blocks.(\d+).mlp.fc1.(weight|bias)":   r"backbone.conv_encoder.model.encoder.layer.\1.intermediate.fc1.\2",
-    r"backbone.0.encoder.blocks.(\d+).mlp.fc2.(weight|bias)":   r"backbone.conv_encoder.model.encoder.layer.\1.intermediate.fc2.\2",
+    r"backbone.0.encoder.pos_embed":                            r"backbone.model.embeddings.position_embeddings",
+    r"backbone.0.encoder.patch_embed.proj":                     r"backbone.model.embeddings.projection",
+    r"backbone.0.encoder.blocks.(\d+).gamma_1":                 r"backbone.model.encoder.layer.\1.gamma_1",
+    r"backbone.0.encoder.blocks.(\d+).gamma_2":                 r"backbone.model.encoder.layer.\1.gamma_2",
+    r"backbone.0.encoder.blocks.(\d+).norm1.(weight|bias)":     r"backbone.model.encoder.layer.\1.layernorm_before.\2",
+    r"backbone.0.encoder.blocks.(\d+).attn.proj.(weight|bias)": r"backbone.model.encoder.layer.\1.attention.output.\2",
+    r"backbone.0.encoder.blocks.(\d+).norm2.(weight|bias)":     r"backbone.model.encoder.layer.\1.layernorm_after.\2",
+    r"backbone.0.encoder.blocks.(\d+).mlp.fc1.(weight|bias)":   r"backbone.model.encoder.layer.\1.intermediate.fc1.\2",
+    r"backbone.0.encoder.blocks.(\d+).mlp.fc2.(weight|bias)":   r"backbone.model.encoder.layer.\1.intermediate.fc2.\2",
 
     # backbone projector scaling layers, sampling layers are dealt with seperately depending on the config
-    r"backbone.0.projector.stages.(\d+).0.cv1.conv.(weight|bias)":                                                      r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.conv1.conv.\2",
-    r"backbone.0.projector.stages.(\d+).0.cv1.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":           r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.conv1.norm.\2",
-    r"backbone.0.projector.stages.(\d+).0.cv2.conv.(weight|bias)":                                                      r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.conv2.conv.\2",
-    r"backbone.0.projector.stages.(\d+).0.cv2.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":           r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.conv2.norm.\2",
-    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv1.conv.(weight|bias)":                                              r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv1.conv.\3",
-    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv1.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":   r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv1.norm.\3",
-    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv2.conv.(weight|bias)":                                              r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv2.conv.\3",
-    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv2.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":   r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv2.norm.\3",
-    r"backbone.0.projector.stages.(\d+).1.(weight|bias)":                                                               r"backbone.conv_encoder.projector.scale_layers.\1.layer_norm.\2",
+    r"backbone.0.projector.stages.(\d+).0.cv1.conv.(weight|bias)":                                                      r"backbone.projector.scale_layers.\1.projector_layer.conv1.conv.\2",
+    r"backbone.0.projector.stages.(\d+).0.cv1.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":           r"backbone.projector.scale_layers.\1.projector_layer.conv1.norm.\2",
+    r"backbone.0.projector.stages.(\d+).0.cv2.conv.(weight|bias)":                                                      r"backbone.projector.scale_layers.\1.projector_layer.conv2.conv.\2",
+    r"backbone.0.projector.stages.(\d+).0.cv2.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":           r"backbone.projector.scale_layers.\1.projector_layer.conv2.norm.\2",
+    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv1.conv.(weight|bias)":                                              r"backbone.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv1.conv.\3",
+    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv1.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":   r"backbone.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv1.norm.\3",
+    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv2.conv.(weight|bias)":                                              r"backbone.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv2.conv.\3",
+    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv2.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":   r"backbone.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv2.norm.\3",
+    r"backbone.0.projector.stages.(\d+).1.(weight|bias)":                                                               r"backbone.projector.scale_layers.\1.layer_norm.\2",
 
     # transformer decoder
     r"transformer.decoder.layers.(\d+).self_attn.out_proj.(weight|bias)":               r"decoder.layers.\1.self_attn.o_proj.\2",
@@ -190,6 +190,12 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"refpoint_embed.weight": r"reference_point_embed.weight",
 }
 
+def delete_positional_embeddings_keys(state_dict):
+    key_prefix = "backbone.0.encoder.pos_embed"
+    keys_to_delete = [key for key in state_dict.keys() if key.startswith(key_prefix)]
+    for key in keys_to_delete:
+        del state_dict[key]
+    return state_dict
 
 def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None, key_mapping: Optional[dict] = None):
     """
@@ -214,25 +220,17 @@ def backbone_read_in_q_k_v(state_dict, config):
     for i in range(config.backbone_config.num_hidden_layers):
         # read in weights + bias of input projection layer of self-attention
         in_proj_weight = state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.qkv.weight")
-        if config.backbone_config.use_cae:
-            in_proj_bias = torch.cat([
-                state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.q_bias"),
-                state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.v_bias"),
-            ])
-        else:
-            in_proj_bias = state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.qkv.bias")
+        in_proj_bias = torch.cat([
+            state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.q_bias"),
+            state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.v_bias"),
+        ])
 
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size:2*hidden_size, :]
-        state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        if config.backbone_config.use_cae:
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
-        else:
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[hidden_size:2*hidden_size]
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size:2*hidden_size, :]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
     return state_dict
 
 def read_in_q_k_v(state_dict, config):
@@ -281,18 +279,18 @@ def get_backbone_projector_sampling_key_mapping(config: LwDetrConfig):
         if scale == 2.0:
             if config.backbone_config.hidden_size > 512:
                 key_mapping.update({
-                    fr"backbone.0.projector.stages_sampling.{i}.(\d+).0.conv.weight": fr"backbone.conv_encoder.projector.scale_layers.{i}.sampling_layers.\1.layers.0.conv.weight",
-                    fr"backbone.0.projector.stages_sampling.{i}.(\d+).0.bn.(weight|bias|running_mean|running_var|num_batches_tracked)": fr"backbone.conv_encoder.projector.scale_layers.{i}.sampling_layers.\1.layers.0.norm.\2",
-                    fr"backbone.0.projector.stages_sampling.{i}.(\d+).1.(weight|bias)": fr"backbone.conv_encoder.projector.scale_layers.{i}.sampling_layers.\1.layers.1.\2",
+                    fr"backbone.0.projector.stages_sampling.{i}.(\d+).0.conv.weight": fr"backbone.projector.scale_layers.{i}.sampling_layers.\1.layers.0.conv.weight",
+                    fr"backbone.0.projector.stages_sampling.{i}.(\d+).0.bn.(weight|bias|running_mean|running_var|num_batches_tracked)": fr"backbone.projector.scale_layers.{i}.sampling_layers.\1.layers.0.norm.\2",
+                    fr"backbone.0.projector.stages_sampling.{i}.(\d+).1.(weight|bias)": fr"backbone.projector.scale_layers.{i}.sampling_layers.\1.layers.1.\2",
                 })
             else:
                 key_mapping.update({
-                    fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).(weight|bias)": fr"backbone.conv_encoder.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.\3",
+                    fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).(weight|bias)": fr"backbone.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.\3",
                 })
         elif scale == 0.5:
             key_mapping.update({
-                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).conv.weight":                                                   fr"backbone.conv_encoder.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.conv.weight",
-                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).bn.(weight|bias|running_mean|running_var|num_batches_tracked)": fr"backbone.conv_encoder.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.norm.\3",
+                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).conv.weight":                                                   fr"backbone.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.conv.weight",
+                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).bn.(weight|bias|running_mean|running_var|num_batches_tracked)": fr"backbone.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.norm.\3",
             })
     return key_mapping
 
