@@ -378,3 +378,4 @@ for prompt in prompts:
     print("Prompt:", prompt)
     print("Generated:", out[0]["generated_text"])
     print("-" * 60)
+
