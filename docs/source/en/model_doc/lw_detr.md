@@ -112,18 +112,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] LwDetrViTConfig
 
-## LwDetrImageProcessor
-
-[[autodoc]] LwDetrImageProcessor
-    - preprocess
-    - post_process_object_detection
-
-## LwDetrImageProcessorFast
-
-[[autodoc]] LwDetrImageProcessorFast
-    - preprocess
-    - post_process_object_detection
-
 ## LwDetrModel
 
 [[autodoc]] LwDetrModel

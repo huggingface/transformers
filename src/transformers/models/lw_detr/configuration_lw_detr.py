@@ -74,8 +74,6 @@ class LwDetrConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         group_detr (`int`, *optional*, defaults to 13):
             Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
         init_std (`float`, *optional*, defaults to 0.02):
@@ -153,7 +151,6 @@ class LwDetrConfig(PretrainedConfig):
         attention_bias=True,
         attention_dropout=0.0,
         activation_dropout=0.0,
-        position_embedding_type="sine",
         group_detr: int = 13,
         init_std=0.02,
         disable_custom_kernels=True,
@@ -228,7 +225,6 @@ class LwDetrConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         # model
-        self.position_embedding_type = position_embedding_type
         self.init_std = init_std
         self.group_detr = group_detr
         # Loss
