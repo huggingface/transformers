@@ -355,3 +355,26 @@ pipeline = pipeline(model="google/gemma-7b", dtype=torch.bfloat16, device_map="a
 pipeline("the secret to baking a good cake is ")
 [{'generated_text': 'the secret to baking a good cake is 1. the right ingredients 2. the right'}]
 ```
+### Multilingual text generation (example)
+
+This example shows how to generate text for prompts in multiple languages using a single text-generation pipeline. It also demonstrates using `accelerate` to select GPU automatically if available.
+
+```python
+from transformers import pipeline
+from accelerate import Accelerator
+
+# Automatically use GPU if available (falls back to CPU)
+device = Accelerator().device
+generator = pipeline("text-generation", model="google/gemma-2-2b", device=device)
+
+prompts = [
+    "The secret to a really good cake is ",          # English
+    "एक अच्छे केक का रहस्य है ",                       # Hindi
+    "చిన్న కేక్ బాగా తయారుచేసే రహస్యం ఏమిటి ",        # Telugu
+]
+
+for prompt in prompts:
+    out = generator(prompt, max_new_tokens=50)
+    print("Prompt:", prompt)
+    print("Generated:", out[0]["generated_text"])
+    print("-" * 60)
