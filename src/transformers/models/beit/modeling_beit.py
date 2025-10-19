@@ -15,8 +15,8 @@
 """PyTorch BEiT model."""
 
 import collections.abc
-import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -25,6 +25,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
@@ -34,10 +35,12 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     SemanticSegmenterOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_beit import BeitConfig
 
 
@@ -57,35 +60,6 @@ class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
         *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
         will be returned.
     """
-
-
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class BeitDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 # Based on timm implementation, which can be found here:
@@ -230,302 +204,6 @@ class BeitPatchEmbeddings(nn.Module):
         return embeddings, (patch_height, patch_width)
 
 
-class BeitSelfAttention(nn.Module):
-    def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None) -> None:
-        super().__init__()
-        self.config = config
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-        self.has_relative_position_bias = bool(window_size)
-        if self.has_relative_position_bias:
-            self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        relative_position_bias: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
-        resolution: Optional[tuple[int]] = None,
-    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Add relative position bias if present.
-        if self.has_relative_position_bias:
-            height, width = resolution
-            window_size = (height // self.config.patch_size, width // self.config.patch_size)
-            attention_scores = attention_scores + self.relative_position_bias(
-                window_size, interpolate_pos_encoding, dim_size=hidden_states.shape[1]
-            )
-
-        # Add shared relative position bias if provided.
-        if relative_position_bias is not None:
-            attention_scores = attention_scores + relative_position_bias
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-class BeitSdpaSelfAttention(BeitSelfAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        relative_position_bias: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
-        resolution: Optional[tuple[int]] = None,
-    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        if output_attentions:
-            logger.warning_once(
-                "`BeitSdpaSelfAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
-                "support `output_attentions=True`. Falling back to the manual attention implementation, "
-                "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                output_attentions=output_attentions,
-                relative_position_bias=relative_position_bias,
-                interpolate_pos_encoding=interpolate_pos_encoding,
-                resolution=resolution,
-            )
-
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-
-        attn_bias = None
-        if self.has_relative_position_bias:
-            height, width = resolution
-            window_size = (height // self.config.patch_size, width // self.config.patch_size)
-            attn_bias = self.relative_position_bias(
-                window_size, interpolate_pos_encoding, dim_size=hidden_states.shape[1]
-            )
-
-        # Add shared relative position bias if provided.
-        if relative_position_bias is not None:
-            if attn_bias is None:
-                attn_bias = relative_position_bias
-            else:
-                attn_bias += relative_position_bias
-
-        scaling = 1 / math.sqrt(self.attention_head_size)
-        context_layer = torch.nn.functional.scaled_dot_product_attention(
-            query_layer,
-            key_layer,
-            value_layer,
-            attn_mask=attn_bias,
-            dropout_p=self.config.attention_probs_dropout_prob if self.training else 0.0,
-            is_causal=False,
-            scale=scaling,
-        )
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-        return context_layer, None
-
-
-class BeitSelfOutput(nn.Module):
-    """
-    The residual connection is defined in BeitLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
-    """
-
-    def __init__(self, config: BeitConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor, gamma=None) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return hidden_states
-
-
-BEIT_SELF_ATTENTION_CLASSES = {
-    "eager": BeitSelfAttention,
-    "sdpa": BeitSdpaSelfAttention,
-}
-
-
-class BeitAttention(nn.Module):
-    def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None) -> None:
-        super().__init__()
-        self.attention = BEIT_SELF_ATTENTION_CLASSES[config._attn_implementation](config, window_size=window_size)
-        self.output = BeitSelfOutput(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        relative_position_bias: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
-        resolution: Optional[tuple[int]] = None,
-    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        self_outputs = self.attention(
-            hidden_states, output_attentions, relative_position_bias, interpolate_pos_encoding, resolution
-        )
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
-
-
-class BeitIntermediate(nn.Module):
-    def __init__(self, config: BeitConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-
-        return hidden_states
-
-
-class BeitOutput(nn.Module):
-    def __init__(self, config: BeitConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return hidden_states
-
-
-class BeitLayer(GradientCheckpointingLayer):
-    """This corresponds to the Block class in the timm implementation."""
-
-    def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0) -> None:
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = BeitAttention(config, window_size=window_size)
-        self.intermediate = BeitIntermediate(config)
-        self.output = BeitOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.drop_path = BeitDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        init_values = config.layer_scale_init_value
-        if init_values > 0:
-            self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-            self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-        else:
-            self.lambda_1, self.lambda_2 = None, None
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        relative_position_bias: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
-        resolution: Optional[tuple[int, int]] = None,
-    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
-            output_attentions=output_attentions,
-            relative_position_bias=relative_position_bias,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            resolution=resolution,
-        )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        # apply lambda_1 if present
-        if self.lambda_1 is not None:
-            attention_output = self.lambda_1 * attention_output
-
-        # first residual connection
-        hidden_states = self.drop_path(attention_output) + hidden_states
-
-        # in BEiT, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-
-        layer_output = self.intermediate(layer_output)
-        layer_output = self.output(layer_output)
-
-        if self.lambda_2 is not None:
-            layer_output = self.lambda_2 * layer_output
-
-        # second residual connection
-        layer_output = self.drop_path(layer_output) + hidden_states
-
-        outputs = (layer_output,) + outputs
-
-        return outputs
-
-
 class BeitRelativePositionBias(nn.Module):
     def __init__(self, config: BeitConfig, window_size: tuple) -> None:
         super().__init__()
@@ -609,6 +287,166 @@ class BeitRelativePositionBias(nn.Module):
         return relative_position_bias.unsqueeze(0)
 
 
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: Optional[float] = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class BeitAttention(nn.Module):
+    def __init__(self, config: BeitConfig):
+        super().__init__()
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.attention_dropout = config.attention_probs_dropout_prob
+        self.hidden_dropout = config.hidden_dropout_prob
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        attn_output = nn.functional.dropout(attn_output, p=self.hidden_dropout, training=self.training)
+
+        return attn_output, attn_weights
+
+
+class BeitMLP(nn.Module):
+    def __init__(self, config: BeitConfig):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        return hidden_states
+
+
+class BeitLayer(GradientCheckpointingLayer):
+    """This corresponds to the Block class in the timm implementation."""
+
+    def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None):
+        super().__init__()
+        self.config = config
+        self.attention = BeitAttention(config)
+        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = BeitMLP(config)
+        init_values = config.layer_scale_init_value
+        if init_values > 0:
+            self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
+            self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
+        else:
+            self.lambda_1, self.lambda_2 = None, None
+        # Create per-layer relative position bias if needed
+        self.has_relative_position_bias = bool(window_size)
+        if self.has_relative_position_bias:
+            self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        interpolate_pos_encoding: bool = False,
+        resolution: Optional[tuple[int, int]] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        # Compute per-layer relative position bias if present
+        layer_attention_mask = attention_mask
+        if self.has_relative_position_bias:
+            height, width = resolution
+            window_size = (height // self.config.patch_size, width // self.config.patch_size)
+            relative_position_bias = self.relative_position_bias(
+                window_size, interpolate_pos_encoding, dim_size=hidden_states.shape[1]
+            )
+            layer_attention_mask = (
+                relative_position_bias + attention_mask if attention_mask is not None else relative_position_bias
+            )
+
+        residual = hidden_states
+        hidden_states = self.layernorm_before(hidden_states)
+        hidden_states, _ = self.attention(
+            hidden_states,
+            attention_mask=layer_attention_mask,
+            **kwargs,
+        )
+        if self.lambda_1 is not None:
+            hidden_states = self.lambda_1 * hidden_states
+        hidden_states = hidden_states + residual
+        residual = hidden_states
+        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        if self.lambda_2 is not None:
+            hidden_states = self.lambda_2 * hidden_states
+        hidden_states = hidden_states + residual
+
+        return hidden_states
+
+
 class BeitEncoder(nn.Module):
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None) -> None:
         super().__init__()
@@ -617,16 +455,10 @@ class BeitEncoder(nn.Module):
         if self.has_relative_position_bias:
             self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
 
-        # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
         self.layer = nn.ModuleList(
             [
-                BeitLayer(
-                    config,
-                    window_size=window_size if config.use_relative_position_bias else None,
-                    drop_path_rate=dpr[i],
-                )
-                for i in range(config.num_hidden_layers)
+                BeitLayer(config, window_size=window_size if config.use_relative_position_bias else None)
+                for _ in range(config.num_hidden_layers)
             ]
         )
         self.gradient_checkpointing = False
@@ -634,51 +466,35 @@ class BeitEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
         interpolate_pos_encoding: bool = False,
         resolution: Optional[tuple[int, int]] = None,
-        return_dict: bool = True,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.has_relative_position_bias:
-                height, width = resolution
-                window_size = (height // self.config.patch_size, width // self.config.patch_size)
-                relative_position_bias = self.relative_position_bias(
-                    window_size, interpolate_pos_encoding=interpolate_pos_encoding, dim_size=hidden_states.shape[1]
-                )
-            else:
-                relative_position_bias = None
-
-            layer_outputs = layer_module(
-                hidden_states,
-                output_attentions=output_attentions,
-                relative_position_bias=relative_position_bias,
-                interpolate_pos_encoding=interpolate_pos_encoding,
-                resolution=resolution,
+        # Compute shared relative position bias once if enabled
+        encoder_attention_mask = attention_mask
+        if self.has_relative_position_bias:
+            height, width = resolution
+            window_size = (height // self.config.patch_size, width // self.config.patch_size)
+            shared_relative_position_bias = self.relative_position_bias(
+                window_size, interpolate_pos_encoding=interpolate_pos_encoding, dim_size=hidden_states.shape[1]
+            )
+            encoder_attention_mask = (
+                shared_relative_position_bias + attention_mask
+                if attention_mask is not None
+                else shared_relative_position_bias
             )
 
-            hidden_states = layer_outputs[0]
+        for layer_module in self.layer:
+            hidden_states = layer_module(
+                hidden_states,
+                attention_mask=encoder_attention_mask,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                resolution=resolution,
+                **kwargs,
+            )
 
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -691,6 +507,22 @@ class BeitPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BeitLayer"]
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": BeitLayer,
+        "attentions": BeitAttention,
+    }
+    _checkpoint_conversion_mapping = {
+        "attention.query": "q_proj",
+        "attention.key": "k_proj",
+        "attention.value": "v_proj",
+        "attention.output.dense": "attention.o_proj",
+        "intermediate.dense": "mlp.fc1",
+        "output.dense": "mlp.fc2",
+        "attention.attention.relative_position_bias": "relative_position_bias",
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -743,51 +575,41 @@ class BeitModel(BeitPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BeitModelOutputWithPooling]:
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BeitModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         resolution = pixel_values.shape[2:]
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             resolution=resolution,
-            return_dict=return_dict,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            attention_mask=attention_mask,
+            **kwargs,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
-
-        return BeitModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return BeitModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
 
 
 class BeitPooler(nn.Module):
@@ -834,16 +656,16 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def get_output_embeddings(self):
         return None
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
@@ -877,18 +699,16 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> list(logits.shape)
         [1, 196, 8192]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.beit(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            attention_mask=attention_mask,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
         prediction_scores = self.lm_head(sequence_output[:, 1:])
 
@@ -896,10 +716,6 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores[bool_masked_pos], labels)
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -928,15 +744,14 @@ class BeitForImageClassification(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -944,26 +759,19 @@ class BeitForImageClassification(BeitPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.beit(
             pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        pooled_output = outputs.pooler_output
 
         logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
             loss=loss,
@@ -1261,15 +1069,14 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         return loss
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, SemanticSegmenterOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
@@ -1294,23 +1101,17 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
-
+        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
         outputs = self.beit(
             pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=True,  # we need the intermediate hidden states
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            output_hidden_states=True,
+            **kwargs,
         )
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        encoder_hidden_states = outputs.hidden_states
 
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
@@ -1336,13 +1137,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         if labels is not None:
             loss = self.compute_loss(logits, auxiliary_logits, labels)
 
-        if not return_dict:
-            if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
-                output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
@@ -1357,13 +1151,23 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     """
 )
 class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
+    _checkpoint_conversion_mapping = {
+        "attention.query": "q_proj",
+        "attention.key": "k_proj",
+        "attention.value": "v_proj",
+        "attention.output.dense": "attention.o_proj",
+        "intermediate.dense": "mlp.fc1",
+        "output.dense": "mlp.fc2",
+        "attention.attention.relative_position_bias": "relative_position_bias",
+        "^embeddings": "encoder.embeddings",
+    }
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embeddings = BeitEmbeddings(config)
-        self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
+        self.encoder = BeitModel(config, add_pooling_layer=False)
 
         if config.add_fpn:
             if len(self.config.out_indices) != 4:
@@ -1388,15 +1192,14 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
+        return self.encoder.embeddings.patch_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -1422,26 +1225,13 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 768, 14, 14]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        batch_size, _, height, width = pixel_values.shape
+        patch_height = height // self.config.patch_size
+        patch_width = width // self.config.patch_size
+        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
+        outputs = self.encoder(pixel_values, output_hidden_states=True, **kwargs)
 
-        batch_size = pixel_values.shape[0]
-        embedding_output, (patch_height, patch_width) = self.embeddings(pixel_values)
-        resolution = pixel_values.shape[2:]
-
-        outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=True,
-            output_attentions=output_attentions,
-            resolution=resolution,
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
-
+        hidden_states = outputs.hidden_states
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
@@ -1460,13 +1250,6 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
                 self.fpn4(feature_maps[3]),
             ]
             feature_maps = tuple(feature_maps)
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (feature_maps,) + outputs[1:]
-            else:
-                output = (feature_maps,) + outputs[2:]
-            return output
 
         return BackboneOutput(
             feature_maps=feature_maps,

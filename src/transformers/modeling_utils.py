@@ -206,6 +206,7 @@ VLMS = [
     "vipllava",
     "vit",
     "deit",
+    "beit",
 ]
 
 

@@ -183,7 +183,8 @@ class DeiTForMaskedImageModeling(ViTForMaskedImageModeling):
         sequence_output = outputs.last_hidden_state
 
         # Reshape to (batch_size, num_channels, height, width)
-        sequence_output = sequence_output[:, 1:-1]
+        # Remove the [CLS] token (index 0) and distillation token (index 1), keep only patch embeddings
+        sequence_output = sequence_output[:, 2:]
         batch_size, sequence_length, num_channels = sequence_output.shape
         height = width = int(sequence_length**0.5)
         sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
