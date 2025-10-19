@@ -26,17 +26,11 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from ..llama.modeling_llama import (
-    LlamaPreTrainedModel,
-    LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-)
+from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from .configuration_nanochat import NanoChatConfig
 
@@ -53,33 +47,7 @@ class NanoChatRMSNorm(Llama4TextL2Norm):
 
 
 class NanoChatRotaryEmbedding(LlamaRotaryEmbedding):
-    """
-    NanoChat's Rotary Position Embedding.
-    Inherits from LlamaRotaryEmbedding but produces cos/sin tensors with shape
-    [batch, seq_len, 1, head_dim//2] instead of duplicating to full head_dim.
-    """
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        """
-        Returns cos and sin tensors for NanoChat's RoPE.
-
-        Unlike LlamaRotaryEmbedding which duplicates freqs to full head_dim,
-        NanoChat keeps only head_dim//2 for memory efficiency.
-        """
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            # NanoChat-specific: Don't duplicate freqs - keep as head_dim//2
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
-
-        # Add extra dimension for NanoChat's broadcasting: [batch, seq_len] -> [batch, seq_len, 1, head_dim//2]
-        return cos.unsqueeze(2).to(dtype=x.dtype), sin.unsqueeze(2).to(dtype=x.dtype)
+    pass
 
 
 class NanoChatAttention(nn.Module):
@@ -141,11 +109,9 @@ class NanoChatAttention(nn.Module):
         )
 
         # Apply Rotary Embeddings to queries and keys to get relative positional encoding
-        cos, sin = position_embeddings  # [batch, seq_len, 1, head_dim//2]
-        cos = cos.squeeze(2)
-        sin = sin.squeeze(2)
-        cos = torch.cat([cos, cos], dim=-1)
-        sin = torch.cat([-sin, -sin], dim=-1)
+        cos, sin = position_embeddings
+        # NanoChat uses a negative sine for the rotary embedding
+        sin = -sin
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         # Apply QK normalization (RMSNorm)

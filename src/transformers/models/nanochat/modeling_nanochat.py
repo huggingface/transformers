@@ -62,12 +62,6 @@ class NanoChatRMSNorm(torch.nn.Module):
 
 
 class NanoChatRotaryEmbedding(nn.Module):
-    """
-    NanoChat's Rotary Position Embedding.
-    Inherits from LlamaRotaryEmbedding but produces cos/sin tensors with shape
-    [batch, seq_len, 1, head_dim//2] instead of duplicating to full head_dim.
-    """
-
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: NanoChatConfig, device=None):
@@ -90,24 +84,17 @@ class NanoChatRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        """
-        Returns cos and sin tensors for NanoChat's RoPE.
-
-        Unlike LlamaRotaryEmbedding which duplicates freqs to full head_dim,
-        NanoChat keeps only head_dim//2 for memory efficiency.
-        """
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            # NanoChat-specific: Don't duplicate freqs - keep as head_dim//2
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
-        # Add extra dimension for NanoChat's broadcasting: [batch, seq_len] -> [batch, seq_len, 1, head_dim//2]
-        return cos.unsqueeze(2).to(dtype=x.dtype), sin.unsqueeze(2).to(dtype=x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def rotate_half(x):
@@ -241,11 +228,9 @@ class NanoChatAttention(nn.Module):
         )
 
         # Apply Rotary Embeddings to queries and keys to get relative positional encoding
-        cos, sin = position_embeddings  # [batch, seq_len, 1, head_dim//2]
-        cos = cos.squeeze(2)
-        sin = sin.squeeze(2)
-        cos = torch.cat([cos, cos], dim=-1)
-        sin = torch.cat([-sin, -sin], dim=-1)
+        cos, sin = position_embeddings
+        # NanoChat uses a negative sine for the rotary embedding
+        sin = -sin
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         # Apply QK normalization (RMSNorm)
@@ -387,12 +372,6 @@ class NanoChatModel(NanoChatPreTrainedModel):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, new_embeddings: nn.Embedding) -> None:
-        self.embed_tokens = new_embeddings
-
     @check_model_inputs()
     @auto_docstring
     def forward(
@@ -514,18 +493,25 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, NanoChatForCausalLM
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-        >>> model = NanoChatForCausalLM.from_pretrained("meta-nanochat/NanoChat-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-nanochat/NanoChat-2-7b-hf")
+        >>> model = AutoModelForCausalLM.from_pretrained(model_id"karpathy/nanochat-d32")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> tokenizer = AutoTokenizer.from_pretrained("karpathy/nanochat-d32")
 
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        >>> conversation = [
+                {"role": "user", "content": "What is the capital of France?"},
+            ]
+
+        >>> inputs = tokenizer.apply_chat_template(
+                conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            ).to(device)
+
+        >>> with torch.no_grad():
+            >>> outputs = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+
+        >>> generated_tokens = outputs[0, inputs["input_ids"].shape[1] :]
+        >>> output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         ```"""
         outputs = self.model(
             input_ids=input_ids,
