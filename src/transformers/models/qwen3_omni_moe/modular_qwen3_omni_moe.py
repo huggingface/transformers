@@ -1243,10 +1243,6 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
         )
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
 
-    def _deepstack_process(self, hidden_states, visual_pos_masks, visual_embeds):
-        visual_pos_masks = visual_pos_masks[..., 0]
-        return super()._deepstack_process(hidden_states, visual_pos_masks, visual_embeds)
-
 
 @dataclass
 class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
@@ -1274,6 +1270,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         super().__init__(config)
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
     def get_audio_features(
         self,
@@ -1342,6 +1339,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
 
         visual_embeds_multiscale = None
         visual_pos_masks = None
+        image_mask, video_mask = None, None
         # 2. Merge text , audios , image and video
         if input_features is not None:
             audio_features = self.get_audio_features(
@@ -1361,9 +1359,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-            visual_pos_masks = image_mask
-            visual_embeds_multiscale = image_embeds_multiscale
-
         if pixel_values_videos is not None:
             video_embeds, video_embeds_multiscale = self.get_video_features(pixel_values_videos, video_grid_thw)
 
@@ -1373,20 +1368,27 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-            if visual_embeds_multiscale is None:
-                visual_embeds_multiscale = video_embeds_multiscale
-                visual_pos_masks = video_mask
-            else:
-                visual_pos_masks = video_mask | image_mask
-                visual_embeds_multiscale_joint = ()
-                image_mask_joint = image_mask[visual_pos_masks]
-                video_mask_joint = video_mask[visual_pos_masks]
-                for img_embed, vid_embed in zip(visual_embeds_multiscale, video_embeds_multiscale):
-                    embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
-                    embed_joint[image_mask_joint, :] = img_embed
-                    embed_joint[video_mask_joint, :] = vid_embed
-                    visual_embeds_multiscale_joint = visual_embeds_multiscale_joint + (embed_joint,)
-                visual_embeds_multiscale = visual_embeds_multiscale_joint
+        if image_mask is not None and video_mask is not None:
+            image_mask = image_mask[..., 0]
+            video_mask = video_mask[..., 0]
+            visual_pos_masks = video_mask | image_mask
+            visual_embeds_multiscale_joint = ()
+            image_mask_joint = image_mask[visual_pos_masks]
+            video_mask_joint = video_mask[visual_pos_masks]
+            for img_embed, vid_embed in zip(image_embeds_multiscale, video_embeds_multiscale):
+                embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
+                embed_joint[image_mask_joint, :] = img_embed
+                embed_joint[video_mask_joint, :] = vid_embed
+                visual_embeds_multiscale_joint = visual_embeds_multiscale_joint + (embed_joint,)
+            visual_embeds_multiscale = visual_embeds_multiscale_joint
+        elif image_mask is not None:
+            image_mask = image_mask[..., 0]
+            visual_embeds_multiscale = image_embeds_multiscale
+            visual_pos_masks = image_mask
+        elif video_mask is not None:
+            video_mask = video_mask[..., 0]
+            visual_embeds_multiscale = video_embeds_multiscale
+            visual_pos_masks = video_mask
 
         if feature_attention_mask is not None:
             audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
