@@ -141,10 +141,8 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Sam2VisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -464,10 +462,8 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": Sam2Model, "mask-generation": Sam2Model} if is_torch_available() else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):

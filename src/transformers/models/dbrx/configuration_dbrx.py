@@ -17,6 +17,7 @@
 from typing import Any, Optional
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -37,8 +38,8 @@ class DbrxAttentionConfig(PreTrainedConfig):
             The dropout probability for the attention layers.
         clip_qkv (`float`, *optional*):
             If set, clip the queries, keys, and values in the attention layer to this value.
-        kv_n_heads (`int`, *optional*, defaults to 1): For grouped_query_attention only, allow user to specify number of kv heads.
-        rope_theta (`float`, *optional*, defaults to 10000.0): The base frequency for rope.
+        kv_n_heads (`int`, *optional*, defaults to 1):
+            For grouped_query_attention only, allow user to specify number of kv heads.
     """
 
     base_config_key = "attn_config"
@@ -176,18 +177,19 @@ class DbrxConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        d_model: int = 2048,
-        n_heads: int = 16,
-        n_layers: int = 24,
-        max_seq_len: int = 2048,
-        vocab_size: int = 32000,
-        resid_pdrop: float = 0.0,
-        emb_pdrop: float = 0.0,
+        d_model: Optional[int] = 2048,
+        n_heads: Optional[int] = 16,
+        n_layers: Optional[int] = 24,
+        max_seq_len: Optional[int] = 2048,
+        vocab_size: Optional[int] = 32000,
+        resid_pdrop: Optional[float] = 0.0,
+        emb_pdrop: Optional[float] = 0.0,
         attn_config: Optional[DbrxAttentionConfig] = None,
         ffn_config: Optional[DbrxFFNConfig] = None,
-        use_cache: bool = True,
-        initializer_range: float = 0.02,
-        output_router_logits: bool = False,
+        use_cache: Optional[bool] = True,
+        initializer_range: Optional[float] = 0.02,
+        output_router_logits: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs: Any,
     ):
         if attn_config is None:
@@ -215,10 +217,17 @@ class DbrxConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
-        self.rope_theta: float = 10000.0
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        standardize_rope_params(self, rope_theta=10000.0)
+        rope_config_validation(self)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

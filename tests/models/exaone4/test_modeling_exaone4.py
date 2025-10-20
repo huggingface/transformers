@@ -52,7 +52,6 @@ class Exaone4ModelTester(CausalLMModelTester):
 
 @require_torch
 class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Exaone4ModelTester
     model_split_percents = [0.5, 0.6]
 
