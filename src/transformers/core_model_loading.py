@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import itertools
 import math
 import re
 import time
@@ -24,7 +25,6 @@ from collections import defaultdict
 from collections.abc import Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-import itertools
 from typing import Any, Optional, Union
 
 import torch
@@ -258,7 +258,7 @@ class Chunk(ConversionOps):
         self.sizes = list(sizes) if sizes is not None else None
         self._inverse_op = Concatenate
 
-    def convert(self, value: torch.Tensor, *, context: dict[str, Any]) -> list[torch.Tensor]:
+    def convert(self, value: torch.Tensor) -> list[torch.Tensor]:
         if not isinstance(value, torch.Tensor):
             raise TypeError("Chunk expects a torch.Tensor as input.")
         if self.sizes is not None:
@@ -275,7 +275,7 @@ class Concatenate(ConversionOps):
         self.dim = dim
         self._inverse_op = Chunk
 
-    def convert(self, value: Sequence[torch.Tensor], *, context: dict[str, Any]) -> torch.Tensor:
+    def convert(self, value: Sequence[torch.Tensor]) -> torch.Tensor:
         tensors = tuple(value)
         if not tensors:
             raise ValueError("Fuse requires at least one tensor to concatenate.")
@@ -305,7 +305,7 @@ class MergeModulelist(Concatenate):
         super().__init__(dim=dim)
         self._inverse_op = SplitModulelist
 
-    def convert(self, value: Sequence[Sequence[torch.Tensor]], *, context: dict[str, Any]) -> list[torch.Tensor]:
+    def convert(self, value: Sequence[torch.Tensor]) -> list[torch.Tensor]:
         if not isinstance(value, Sequence):
             raise TypeError("MergeModulelist expects a sequence of sequences of tensors.")
         merged: list[torch.Tensor] = []
@@ -349,6 +349,9 @@ class Cast(ConversionOps):
     def __init__(self, dtype):
         self.dtype = dtype
 
+    def convert(self, realized_value):
+        return realized_value.to(self.dtype)
+
 
 class To(ConversionOps):
     """
@@ -364,6 +367,9 @@ class To(ConversionOps):
 
     def __init__(self, device):
         self.device = device
+
+    def convert(self, realized_value):
+        return realized_value.to(self.device)
 
 
 class DistributedOp(ConversionOps):  # all `distributed_operation` need to respect this
@@ -538,10 +544,10 @@ class WeightConverter:
     A weight convert that acts on a pattern of source keys.
     The keys need to be collected based on the target keys.
 
-    With wild card, glob patterns are matched, so you have to be detailed with what to match. If you match: 
+    With wild card, glob patterns are matched, so you have to be detailed with what to match. If you match:
     `model.layers.*.experts.*` -> it will act on all of them
     {"model.layers.*.experts.*": []}
-    but 
+    but
     `experts.*.mlp` will be layer specific.
     {"model.layers.1.experts.*": [], }
     - source_keys: str | list[str] (wildcards '*' match digits)
@@ -607,7 +613,7 @@ def convert_and_load_state_dict_in_model(
     meta_model_state_dict = model.state_dict()
 
     # Fast alternations; allow prefixes (e.g., "model.model.layers..." should match "model.layers.*...")
-    _patterns = list(itertools.chain.from_iterable( [k.source_keys for k in weight_mapping]))
+    _patterns = list(itertools.chain.from_iterable([k.source_keys for k in weight_mapping]))
     source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
     weight_pattern_alt, weight_pattern_by_group_name = build_glob_alt(_patterns)
     tp_plan_alt, tp_plan_by_group_name = build_glob_alt(list(tp_plan.keys()))
@@ -630,9 +636,15 @@ def convert_and_load_state_dict_in_model(
             extractor = _compile_single_glob_for_extract(matched_pattern)
             converter_key = re.sub(extractor, matched_pattern, original_key)
             entry = by_conversion_pattern.setdefault(
-                matched_pattern, {"conversion": conversion, "tensors_per_layer": defaultdict(list)}
+                "|".join(conversion.target_keys), {"conversion": conversion, "tensors_per_layer": defaultdict(dict), "matched_pattern":defaultdict(str) }
             )
-            entry["tensors_per_layer"][converter_key].append(tensor)
+            target_unique_key = re.sub(extractor, "|".join(conversion.target_keys), original_key)
+            if converter_key in entry["tensors_per_layer"][target_unique_key]:
+                entry["tensors_per_layer"][target_unique_key][converter_key].append(tensor)
+            else:
+                entry["tensors_per_layer"][target_unique_key][converter_key] = [tensor]
+
+            entry["matched_pattern"][converter_key] = matched_pattern
         else:
             # No pattern matched -> identity conversion keyed by the exact key (no '*', single "layer" = empty tuple)
             conversion = WeightConverter(original_key)
@@ -652,10 +664,12 @@ def convert_and_load_state_dict_in_model(
 
         for layer_name, tensors_for_this_layer in tensors_per_layer.items():
             # Materialize concrete target keys for this specific layer instance
-            target_patterns = conversion.target_keys
-            concrete_target_keys = [re.sub(conversion_pattern, p, layer_name) for p in target_patterns]
 
-            for target_key in concrete_target_keys:
+            # 1. first  prepare the tensors_for_this_layers
+            # 2l then you iterate
+            concrete_target_keys = layer_name.split('|') # FIXME: now chunking is hard!
+
+            for key_idx, target_key in enumerate(concrete_target_keys):
                 empty_tensor = meta_model_state_dict.get(target_key)
                 if empty_tensor is None:
                     unexpected_keys.append(target_key)
@@ -667,60 +681,54 @@ def convert_and_load_state_dict_in_model(
                     if getattr(conversion, "distributed_operation", None) is None:
                         conversion.distributed_operation = ALL_PARALLEL_STYLES[matched_tp_pattern].shard_tensor
                     rank = device_mesh.get_local_rank() if device_mesh is not None else 0
-                    realized_value = conversion.distributed_operation(
-                        tensors_for_this_layer[0],
-                        context={"tp_world_size": None, "tp_rank": rank},
-                    )
+                    for k in tensors_for_this_layer.values():
+                        # TODO make it return a new dict?
+                        conversion.distributed_operation(
+                            tensors_for_this_layer.values(),
+                            context={"tp_world_size": None, "tp_rank": rank},
+                        )
                 else:
-                    realized_value = [t[:] for t in tensors_for_this_layer]
+                    values = tensors_for_this_layer.values()
+                    realized_value = [t[:] for t in values] if len(values) > 1 else next(iter(values))[0] # can be a list of lists
 
-                for op in conversion.operations:
-                    realized_value = op.convert(realized_value, context={})
-                    used_operations.append(op)
+            # OPS are applied on all collected tensors after sharding
+            for op in conversion.operations:
+                realized_value = op.convert(realized_value)
+                used_operations.append(op)
 
+            realized_value = {k:t[:] for t,k in zip(realized_value, concrete_target_keys)} # FIXME: make helpful errors here (ex: 2 target, single output tensor)
+
+            # at this point the format is final
+            for k, v in realized_value.items():
                 # Quantization (may produce a dict of tensors)
-                if quantizer is not None:
+                if quantizer is not None and quantizer.param_needs_quantization(k):
                     if getattr(conversion, "quantization_operation", None) is None:
                         conversion.quantization_operation = Fp8Quantize()
-                    realized_value = conversion.quantization_operation(
-                        realized_value if isinstance(realized_value, torch.Tensor) else realized_value[0],
-                        context={},
-                    )
+                    realized_value = conversion.quantization_operation(v)
                     used_operations.append(conversion.quantization_operation)
 
-                # Device & dtype policies
-                output_value = realized_value
-                if target_key in device_map:
+                if k in device_map:
                     op = To(device_map[target_key])
-                    conversion.operations.append(op)
-                    output_value = op.convert(output_value, context={})
-                    used_operations.append(op)
+                    output_value = op.convert(v)
+                    # used_operations.append(op) op for this target, not for all, fix this
 
-                matched_dtype_pattern = match_glob(target_key, dtype_policy_alt, dtype_policy_by_group_name)
+                matched_dtype_pattern = match_glob(v, dtype_policy_alt, dtype_policy_by_group_name)
                 if matched_dtype_pattern is not None:
                     op = Cast(keep_in_dtype[matched_dtype_pattern])
-                    conversion.operations.append(op)
-                    output_value = op.convert(output_value, context={})
-                    used_operations.append(op)
+                    output_value = op.convert(output_value)
+                    # used_operations.append(op) op for this target, not for all, fix this
 
-                # Install into the module
-                to_install = output_value.items() if isinstance(output_value, dict) else [(target_key, output_value)]
-                for install_key, value_like in to_install:
-                    module_path, _, param_name = install_key.rpartition(".")
-                    module_obj = model.get_submodule(module_path) if module_path else model
-
-                    param_value = value_like
-                    if not isinstance(param_value, torch.nn.Parameter):
-                        param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-
-                    ref = meta_model_state_dict.get(install_key, empty_tensor if install_key == target_key else None)
-                    if ref is not None and ref.shape != param_value.shape:
-                        mismatch_keys.append((install_key, param_value.shape, ref.shape))
-
-                    if install_key in missing_keys:
-                        missing_keys.remove(install_key)
-
-                    setattr(module_obj, param_name, param_value)
+                module_path, _, param_name = k.rpartition(".")
+                module_obj = model.get_submodule(module_path) if module_path else model
+                param_value = v
+                if not isinstance(param_value, torch.nn.Parameter):
+                    param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+                ref = meta_model_state_dict.get(k, empty_tensor if k == target_key else None)
+                if ref is not None and ref.shape != param_value.shape:
+                    mismatch_keys.append((k, param_value.shape, ref.shape))
+                if k in missing_keys:
+                    missing_keys.remove(k)
+                setattr(module_obj, param_name, param_value)
 
     # Clear any cached buffers on unique ops
     for op in {op for op in used_operations if hasattr(op, "clear_cache")}:
