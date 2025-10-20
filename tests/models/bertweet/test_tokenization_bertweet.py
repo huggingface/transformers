@@ -14,11 +14,10 @@
 
 import os
 import unittest
-from functools import lru_cache
 
 from transformers.models.bertweet.tokenization_bertweet import VOCAB_FILES_NAMES, BertweetTokenizer
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -39,14 +38,11 @@ class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
         with open(cls.vocab_file, "w", encoding="utf-8") as fp:
-            for token in vocab_tokens:
-                fp.write(f"{token} {vocab_tokens[token]}\n")
+            fp.writelines(f"{token} {vocab_tokens[token]}\n" for token in vocab_tokens)
         with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname

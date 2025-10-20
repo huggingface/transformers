@@ -22,7 +22,7 @@ from transformers.testing_utils import (
     require_torchvision,
     require_vision,
 )
-from transformers.utils import is_tf_available, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 
 if is_vision_available():
@@ -30,9 +30,6 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
-
-if is_tf_available():
-    pass
 
 
 @require_vision
@@ -143,5 +140,5 @@ class Sam2ProcessorTest(unittest.TestCase):
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         dummy_masks = [[1, 0], [0, 1]]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes))

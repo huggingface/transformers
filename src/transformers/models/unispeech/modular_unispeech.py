@@ -141,6 +141,7 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
     config: UniSpeechConfig
     base_model_prefix = "unispeech"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -215,7 +216,7 @@ UniSpeechBaseModelOutput = Wav2Vec2BaseModelOutput
 
 class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: UniSpeechConfig):
-        UniSpeechPreTrainedModel.__init__(config)
+        UniSpeechPreTrainedModel.__init__(self, config)
         self.config = config
         self.feature_extractor = UniSpeechFeatureEncoder(config)
         self.feature_projection = UniSpeechFeatureProjection(config)

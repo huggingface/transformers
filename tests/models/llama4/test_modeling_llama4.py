@@ -74,7 +74,10 @@ class Llama4IntegrationTest(unittest.TestCase):
                         "type": "image",
                         "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
                     },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
             },

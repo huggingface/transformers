@@ -78,3 +78,27 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(image_input, return_tensors="pt", crop_to_patches=True, max_patches=6)
         self.assertEqual(inputs["input_ids"].shape, (1, 1826))
         self.assertEqual(inputs["pixel_values"].shape, (7, 3, 384, 384))
+
+    def test_processor_text_has_no_visual(self):
+        # Overwritten: requires `multi_page` kwarg to process nested vision inputs
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(batch_size=3, modalities="image")
+        image_inputs = self.prepare_image_inputs(batch_size=3)
+        processing_kwargs = {"return_tensors": "pt", "padding": True, "multi_page": True}
+
+        # Call with nested list of vision inputs
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        inputs_dict_nested = {"text": text, "images": image_inputs_nested}
+        inputs = processor(**inputs_dict_nested, **processing_kwargs)
+        self.assertTrue(self.text_input_name in inputs)
+
+        # Call with one of the samples with no associated vision input
+        plain_text = "lower newer"
+        image_inputs_nested[0] = []
+        text[0] = plain_text
+        inputs_dict_no_vision = {"text": text, "images": image_inputs_nested}
+        inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
+        self.assertListEqual(
+            inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
+        )

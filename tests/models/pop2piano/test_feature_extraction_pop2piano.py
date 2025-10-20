@@ -138,8 +138,8 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         speech_samples = ds.sort("id").select([0])["audio"]
         input_speech = [x["array"] for x in speech_samples][0]
         sampling_rate = [x["sampling_rate"] for x in speech_samples][0]
-        feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
-        input_features = feaure_extractor(
+        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+        input_features = feature_extractor(
             input_speech, sampling_rate=sampling_rate, return_tensors="pt"
         ).input_features
 

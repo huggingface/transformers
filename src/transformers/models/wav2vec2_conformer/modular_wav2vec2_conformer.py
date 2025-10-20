@@ -410,8 +410,6 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
         relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
-        hidden_states = hidden_states
-
         # 1. Feed-Forward 1 layer
         residual = hidden_states
         hidden_states = self.ffn1_layer_norm(hidden_states)
@@ -549,6 +547,7 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2ConformerConfig
     base_model_prefix = "wav2vec2_conformer"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -647,7 +646,7 @@ Wav2Vec2ConformerBaseModelOutput = Wav2Vec2BaseModelOutput
 
 class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: Wav2Vec2ConformerConfig):
-        Wav2Vec2ConformerPreTrainedModel.__init__(config)
+        Wav2Vec2ConformerPreTrainedModel.__init__(self, config)
         self.config = config
         self.feature_extractor = Wav2Vec2ConformerFeatureEncoder(config)
         self.feature_projection = Wav2Vec2ConformerFeatureProjection(config)

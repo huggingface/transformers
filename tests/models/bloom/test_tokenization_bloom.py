@@ -14,14 +14,13 @@
 
 import copy
 import unittest
-from functools import lru_cache
 
 from datasets import load_dataset
 
 from transformers import BloomTokenizerFast
 from transformers.testing_utils import require_jinja, require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
@@ -42,8 +41,6 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         _kwargs = copy.deepcopy(cls.special_tokens_map)
         _kwargs.update(kwargs)

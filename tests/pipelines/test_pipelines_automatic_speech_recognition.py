@@ -160,7 +160,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_pt_defaults(self):
-        pipeline("automatic-speech-recognition", framework="pt")
+        pipeline("automatic-speech-recognition")
 
     @require_torch
     def test_small_model_pt(self):
@@ -168,7 +168,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
-            framework="pt",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -188,7 +187,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
-            framework="pt",
             dtype=torch.float16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -209,7 +207,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
-            framework="pt",
             dtype=torch.bfloat16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -239,7 +236,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_small_model_pt_seq2seq(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/tiny-random-speech-encoder-decoder",
-            framework="pt",
             max_new_tokens=19,
             num_beams=1,
         )
@@ -252,7 +248,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_small_model_pt_seq2seq_gen_kwargs(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/tiny-random-speech-encoder-decoder",
-            framework="pt",
             max_new_tokens=10,
         )
 
@@ -269,7 +264,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm",
-            framework="pt",
         )
         self.assertEqual(speech_recognizer.type, "ctc_with_lm")
 
@@ -333,7 +327,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             pipeline(
                 task="automatic-speech-recognition",
                 model="patrickvonplaten/tiny-wav2vec2-no-tokenizer",
-                framework="pt",
             )
 
     @require_torch
@@ -343,7 +336,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-base-960h",
             tokenizer="facebook/wav2vec2-base-960h",
-            framework="pt",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -360,7 +352,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="hf-audio/wav2vec2-bert-CV16-en",
-            framework="pt",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -600,7 +591,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            framework="pt",
             num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -617,7 +607,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            framework="pt",
             num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:2]")
@@ -626,7 +615,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             {"text": " Nor is Mr. Quilters' manner less interesting than his matter."},
         ]
 
-        output = speech_recognizer(ds["audio"], batch_size=2)
+        audio_arrays = [x.get_all_samples().data for x in ds["audio"]]
+        output = speech_recognizer(audio_arrays, batch_size=2)
         self.assertEqual(output, EXPECTED_OUTPUT)
 
     @slow
@@ -913,7 +903,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-wav2vec2-large-en-de",
             feature_extractor="facebook/s2t-wav2vec2-large-en-de",
-            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -977,7 +966,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
-            framework="pt",
             num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1047,7 +1035,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-large",
-            framework="pt",
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         audio = ds[40]["audio"]
@@ -1083,7 +1070,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
-            framework="pt",
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio = ds[0]["audio"]
@@ -1107,7 +1093,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            framework="pt",
         )
         output = speech_recognizer(ds[0]["audio"], generate_kwargs={"language": "en"})
         self.assertEqual(
@@ -1119,7 +1104,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_speculative_decoding_whisper_non_distil(self):
         # Load data:
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
-        sample = dataset[0]["audio"]
+        sample = dataset[0]["audio"].get_all_samples().data
 
         # Load model:
         model_id = "openai/whisper-large-v2"
@@ -1148,8 +1133,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             num_beams=1,
         )
 
-        transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
-        transcription_ass = pipe(sample)["text"]
+        transcription_ass = pipe(sample.clone().detach(), generate_kwargs={"assistant_model": assistant_model})["text"]
+        transcription_non_ass = pipe(sample)["text"]
 
         self.assertEqual(transcription_ass, transcription_non_ass)
         self.assertEqual(
@@ -1207,7 +1192,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-xls-r-1b-21-to-en",
             feature_extractor="facebook/wav2vec2-xls-r-1b-21-to-en",
-            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -1223,7 +1207,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-xls-r-1b-en-to-15",
             feature_extractor="facebook/wav2vec2-xls-r-1b-en-to-15",
-            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -1240,7 +1223,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="patrickvonplaten/wav2vec2-2-bart-base",
             feature_extractor="patrickvonplaten/wav2vec2-2-bart-base",
             tokenizer=AutoTokenizer.from_pretrained("patrickvonplaten/wav2vec2-2-bart-base"),
-            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -1256,7 +1238,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="facebook/wav2vec2-conformer-rope-large-960h-ft",
             device=torch_device,
             dtype=torch.float16,
-            framework="pt",
         )
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1441,13 +1422,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
         dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
-        sample = dataset[0]["audio"]
+        sample = dataset[0]["audio"].get_all_samples().data
 
         # prompt the model to misspell "Mr Quilter" as "Mr Quillter"
         whisper_prompt = "Mr. Quillter."
         prompt_ids = pipe.tokenizer.get_prompt_ids(whisper_prompt, return_tensors="pt").to(torch_device)
 
-        unprompted_result = pipe(sample.copy())["text"]
+        unprompted_result = pipe(sample.clone().detach())["text"]
         prompted_result = pipe(sample, generate_kwargs={"prompt_ids": prompt_ids})["text"]
 
         # fmt: off
@@ -1516,7 +1497,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
-            framework="pt",
             chunk_length_s=10.0,
         )
 
@@ -1784,12 +1764,38 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe = pipeline("automatic-speech-recognition", model=model, assistant_model=model)
 
         # We can run the pipeline
-        prompt = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")["audio"]
-        _ = pipe(prompt)
+        prompt = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")[0]["audio"]
+        _ = pipe(prompt, generate_kwargs={"num_beams": 1})
 
         # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             _ = pipe(prompt, generate_kwargs={"num_beams": 2})
+
+    @require_torch
+    def test_pipeline_generation_kwargs(self):
+        """Tests that we can pass kwargs to `generate`, as in the text generation pipelines"""
+        model = "openai/whisper-tiny"
+        asr = pipeline("automatic-speech-recognition", model=model)
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
+
+        # BC: with `generate_kwargs` as a dictionary
+        res = asr(
+            dataset[0]["audio"],
+            generate_kwargs={"task": "transcribe", "max_new_tokens": 256},
+        )
+        self.assertEqual(
+            res["text"], " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
+        )
+
+        # New: kwargs forwarded to `generate`
+        res = asr(
+            dataset[0]["audio"],
+            max_new_tokens=256,
+            task="transcribe",
+        )
+        self.assertEqual(
+            res["text"], " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
+        )
 
 
 def require_ffmpeg(test_case):

@@ -300,6 +300,7 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     config: RTDetrResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
 
     def _init_weights(self, module):
@@ -323,6 +324,8 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     """
 )
 class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)

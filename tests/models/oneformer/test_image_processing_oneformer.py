@@ -224,7 +224,6 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             annotations,
             return_tensors="pt",
             instance_id_to_semantic_id=instance_id_to_semantic_id,
-            pad_and_return_pixel_mask=True,
         )
 
         return inputs
@@ -273,7 +272,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_post_process_semantic_segmentation(self):
         for image_processing_class in self.image_processor_list:
-            fature_extractor = image_processing_class(
+            feature_extractor = image_processing_class(
                 num_labels=self.image_processor_tester.num_classes,
                 max_seq_length=77,
                 task_seq_length=77,
@@ -283,7 +282,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
             outputs = self.image_processor_tester.get_fake_oneformer_outputs()
 
-            segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
+            segmentation = feature_extractor.post_process_semantic_segmentation(outputs)
 
             self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
             self.assertEqual(
@@ -295,7 +294,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
             target_sizes = [(1, 4) for i in range(self.image_processor_tester.batch_size)]
-            segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+            segmentation = feature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
 
             self.assertEqual(segmentation[0].shape, target_sizes[0])
 

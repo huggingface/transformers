@@ -53,7 +53,6 @@ Tips:
 - This model was contributed by [THUDM](https://huggingface.co/THUDM). The most recent code can be
   found [here](https://github.com/thudm/GLM-4).
 
-  
 ## Usage tips
 
 `GLM-4` can be found on the [Huggingface Hub](https://huggingface.co/collections/THUDM/glm-4-665fcf188c414b03c2f7e3b7)
@@ -61,8 +60,9 @@ Tips:
 In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
->>> device = infer_device() # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
+>>> device = Accelerator().device # the device to load the model onto
 
 >>> model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
 >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")

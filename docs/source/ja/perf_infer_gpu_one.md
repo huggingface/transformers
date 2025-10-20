@@ -19,12 +19,6 @@ rendered properly in your Markdown viewer.
 
 ## Flash Attention 2
 
-<Tip>
-
-この機能は実験的であり、将来のバージョンで大幅に変更される可能性があります。たとえば、Flash Attention 2 APIは近い将来`BetterTransformer` APIに移行するかもしれません。
-
-</Tip>
-
 Flash Attention 2は、トランスフォーマーベースのモデルのトレーニングと推論速度を大幅に高速化できます。Flash Attention 2は、Tri Dao氏によって[公式のFlash Attentionリポジトリ](https://github.com/Dao-AILab/flash-attention)で導入されました。Flash Attentionに関する科学論文は[こちら](https://huggingface.co/papers/2205.14135)で見ることができます。
 
 Flash Attention 2を正しくインストールするには、上記のリポジトリに記載されているインストールガイドに従ってください。
@@ -33,8 +27,6 @@ Flash Attention 2を正しくインストールするには、上記のリポジ
 
 - Llama
 - Falcon
-
-さらに多くのモデルにFlash Attention 2のサポートを追加することをGitHubで提案することもでき、変更を統合するためにプルリクエストを開くこともできます。サポートされているモデルは、パディングトークンを使用してトレーニングを含む、推論とトレーニングに使用できます（現在の`BetterTransformer` APIではサポートされていない）。
 
 <Tip>
 
@@ -124,14 +116,14 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ```python
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LlamaForCausalLM
 
 model_id = "tiiuae/falcon-7b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    load_in_4bit=True,
+    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
     attn_implementation="flash_attention_2",
 )
 ```
@@ -142,7 +134,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ```python
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LlamaForCausalLM
 from peft import LoraConfig
 
 model_id = "tiiuae/falcon-7b"
@@ -150,7 +142,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    load_in_4bit=True,
+    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
     attn_implementation="flash_attention_2",
 )
 
@@ -163,98 +155,6 @@ model.add_adapter(lora_config)
 
 ... # train your model
 ```
-
-## BetterTransformer
-
-[BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview)は、🤗 TransformersモデルをPyTorchネイティブの高速パス実行に変換します。これにより、Flash Attentionなどの最適化されたカーネルが内部で呼び出されます。
-
-BetterTransformerは、テキスト、画像、およびオーディオモデルの単一およびマルチGPUでの高速な推論をサポートしています。
-
-<Tip>
-
-Flash Attentionは、fp16またはbf16のdtypeを使用するモデルにのみ使用できます。BetterTransformerを使用する前に、モデルを適切なdtypeにキャストしてください。
-
-</Tip>
-
-### Encoder models
-
-PyTorchネイティブの[`nn.MultiHeadAttention`](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/)アテンション高速パス、BetterTransformerと呼ばれるものは、[🤗 Optimumライブラリ](https://huggingface.co/docs/optimum/bettertransformer/overview)の統合を通じてTransformersと一緒に使用できます。
-
-PyTorchのアテンション高速パスを使用すると、カーネルフュージョンと[ネストされたテンソル](https://pytorch.org/docs/stable/nested.html)の使用により、推論を高速化できます。詳細なベンチマーク情報は[このブログ記事](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2)にあります。
-
-[`optimum`](https://github.com/huggingface/optimum)パッケージをインストールした後、推論中にBetter Transformerを使用するには、関連する内部モジュールを呼び出すことで置き換える必要があります[`~PreTrainedModel.to_bettertransformer`]:
-
-
-```python
-model = model.to_bettertransformer()
-```
-
-メソッド [`~PreTrainedModel.reverse_bettertransformer`] は、モデルを保存する前に使用すべきで、標準のトランスフォーマーモデリングを使用するためのものです：
-
-```python
-model = model.reverse_bettertransformer()
-model.save_pretrained("saved_model")
-```
-
-BetterTransformer APIを使ったエンコーダーモデルの可能性について詳しく知るには、[このブログポスト](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2)をご覧ください。
-
-### Decoder models
-
-テキストモデル、特にデコーダーベースのモデル（GPT、T5、Llamaなど）にとって、BetterTransformer APIはすべての注意操作を[`torch.nn.functional.scaled_dot_product_attention`オペレーター](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention)（SDPA）を使用するように変換します。このオペレーターはPyTorch 2.0以降でのみ利用可能です。
-
-モデルをBetterTransformerに変換するには、以下の手順を実行してください：
-
-```python
-from transformers import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m")
-# convert the model to BetterTransformer
-model.to_bettertransformer()
-
-# Use it for training or inference
-```
-
-SDPAは、ハードウェアや問題のサイズに応じて[Flash Attention](https://huggingface.co/papers/2205.14135)カーネルを使用することもできます。Flash Attentionを有効にするか、特定の設定（ハードウェア、問題サイズ）で使用可能かどうかを確認するには、[`torch.nn.attention.sdpa_kernel`](https://pytorch.org/docs/stable/generated/torch.nn.attention.sdpa_kernel.html)をコンテキストマネージャとして使用します。
-
-
-```diff
-import torch
-+ from torch.nn.attention import SDPBackend, sdpa_kernel
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", dtype=torch.float16).to("cuda")
-# convert the model to BetterTransformer
-model.to_bettertransformer()
-
-input_text = "Hello my dog is cute and"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
-
-+ with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-    outputs = model.generate(**inputs)
-
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
-
-もしトレースバックにバグが表示された場合
-
-```bash
-RuntimeError: No available kernel.  Aborting execution.
-```
-
-Flash Attention の広範なカバレッジを持つかもしれない PyTorch のナイトリーバージョンを試してみることをお勧めします。
-
-```bash
-pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
-```
-
-Or make sure your model is correctly casted in float16 or bfloat16
-
-モデルが正しくfloat16またはbfloat16にキャストされていることを確認してください。
-
-Have a look at [this detailed blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to read more about what is possible to do with `BetterTransformer` + SDPA API.
-
-`BetterTransformer` + SDPA APIを使用して何が可能かについて詳しく読むには、[この詳細なブログポスト](https://pytorch.org/blog/out-of-the-box-acceleration/)をご覧ください。
 
 ## `bitsandbytes` integration for FP4 mixed-precision inference
 
@@ -290,10 +190,10 @@ Note that this feature can also be used in a multi GPU setup.
 
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
-model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 
 注意: `device_map`はオプションですが、推論時に `device_map = 'auto'` を設定することが推奨されています。これにより、利用可能なリソースに効率的にモデルがディスパッチされます。
@@ -304,7 +204,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 
 ```py
 model_name = "bigscience/bloom-2b5"
-model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 
 しかし、`accelerate`を使用して、各GPUに割り当てるGPU RAMを制御することができます。以下のように、`max_memory`引数を使用します：
@@ -314,7 +214,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 max_memory_mapping = {0: "600MB", 1: "1GB"}
 model_name = "bigscience/bloom-3b"
 model_4bit = AutoModelForCausalLM.from_pretrained(
-    model_name, device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
+    model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True), max_memory=max_memory_mapping
 )
 ```
 
@@ -415,29 +315,3 @@ In this example, the first GPU will use 1GB of memory and the second 2GB.
 
 [![Open In Colab: BLOOM-3b demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qOjXfQIAULfKvZqwCen8-MoWKGdSatZ4?usp=sharing)
 
-## Advanced usage: mixing FP4 (or Int8) and BetterTransformer
-
-異なる方法を組み合わせて、モデルの最適なパフォーマンスを得ることができます。例えば、BetterTransformerを使用してFP4ミックスプレシジョン推論とフラッシュアテンションを組み合わせることができます。
-
-
-```py
-import torch
-from torch.nn.attention import SDPBackend, sdpa_kernel
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16
-)
-
-tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=quantization_config)
-
-input_text = "Hello my dog is cute and"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
-
-with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-    outputs = model.generate(**inputs)
-
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```

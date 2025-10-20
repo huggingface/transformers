@@ -967,6 +967,7 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
     config: ConditionalDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [r"ConditionalDetrConvEncoder", r"ConditionalDetrEncoderLayer", r"ConditionalDetrDecoderLayer"]
 
     def _init_weights(self, module):
@@ -982,8 +983,6 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1325,9 +1324,6 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(False)
@@ -1517,11 +1513,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         self.post_init()
 
     # taken from https://github.com/Atten4Vis/conditionalDETR/blob/master/models/conditional_detr.py
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @auto_docstring

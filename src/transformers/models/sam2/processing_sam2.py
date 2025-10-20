@@ -62,8 +62,8 @@ class Sam2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
-        segmentation_maps: ImageInput = None,
+        images: Optional[ImageInput] = None,
+        segmentation_maps: Optional[ImageInput] = None,
         input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
         input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
@@ -258,7 +258,7 @@ class Sam2Processor(ProcessorMixin):
         elif isinstance(data, (int, float)):
             return data
         else:
-            raise ValueError(f"Unsupported data type: {type(data)}")
+            raise TypeError(f"Unsupported data type: {type(data)}")
 
     def _get_nested_dimensions(self, nested_list, max_dims=None):
         """

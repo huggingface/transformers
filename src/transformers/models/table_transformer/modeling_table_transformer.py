@@ -687,6 +687,7 @@ class TableTransformerPreTrainedModel(PreTrainedModel):
     config: TableTransformerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [
         r"TableTransformerConvEncoder",
         r"TableTransformerEncoderLayer",
@@ -700,8 +701,6 @@ class TableTransformerPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1023,9 +1022,6 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():

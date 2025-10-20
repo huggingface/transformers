@@ -34,13 +34,15 @@ The abstract from the paper is the following:
 This model was contributed by [jadechoghari](https://huggingface.co/jadechoghari).
 The original code can be found [here](https://github.com/lyuwenyu/RT-DETR).
 
-## Usage tips 
+## Usage tips
 
-This second version of RT-DETR improves how the decoder finds objects in an image. 
+This second version of RT-DETR improves how the decoder finds objects in an image.
 
 - **better sampling** – adjusts offsets so the model looks at the right areas
 - **flexible attention** – can use smooth (bilinear) or fixed (discrete) sampling
 - **optimized processing** – improves how attention weights mix information
+
+The model is meant to be used on images resized to a size 640x640 with the corresponding ImageProcessor. Reshaping to other sizes will generally degrade performance.
 
 ```py
 >>> import torch
@@ -85,17 +87,15 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - See also: [Object detection task guide](../tasks/object_detection).
 - Notebooks for [inference](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/RT_DETR_v2_inference.ipynb) and [fine-tuning](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/RT_DETR_v2_finetune_on_a_custom_dataset.ipynb) RT-DETRv2 on a custom dataset (🌎).
 
-
 ## RTDetrV2Config
 
 [[autodoc]] RTDetrV2Config
-
 
 ## RTDetrV2Model
 
 [[autodoc]] RTDetrV2Model
     - forward
- 
+
 ## RTDetrV2ForObjectDetection
 
 [[autodoc]] RTDetrV2ForObjectDetection

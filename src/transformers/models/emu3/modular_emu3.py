@@ -21,7 +21,6 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -29,7 +28,6 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..chameleon.modeling_chameleon import (
     ChameleonPreTrainedModel,
     ChameleonVQVAEEncoderConvDownsample,
@@ -52,7 +50,6 @@ class Emu3DecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.dropout = nn.Dropout(config.attention_dropout)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -679,6 +676,7 @@ class Emu3VQVAE(PreTrainedModel):
     config: Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -971,7 +969,7 @@ class Emu3Model(Emu3PreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -995,9 +993,9 @@ class Emu3Model(Emu3PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        image_sizes: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        image_sizes: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1044,6 +1042,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     base_model_prefix = ""
+    output_modalities = ["image", "text"]
     _tied_weights_keys = ["lm_head.weight"]
     _checkpoint_conversion_mapping = {
         "^text_model.model": "model.text_model",
@@ -1093,9 +1092,9 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        image_sizes: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        image_sizes: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

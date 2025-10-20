@@ -305,9 +305,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_head_masking = False
-    test_torchscript = False
 
     maxDiff = None
 
