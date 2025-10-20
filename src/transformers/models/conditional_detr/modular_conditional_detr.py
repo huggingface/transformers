@@ -76,14 +76,4 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
 
         return results
 
-    def post_process_segmentation(self):
-        raise NotImplementedError("Segmentation post-processing is not implemented for Conditional DETR yet.")
-
-    def post_process_instance(self):
-        raise NotImplementedError("Instance post-processing is not implemented for Conditional DETR yet.")
-
-    def post_process_panoptic(self):
-        raise NotImplementedError("Panoptic post-processing is not implemented for Conditional DETR yet.")
-
-
 __all__ = ["ConditionalDetrImageProcessorFast"]

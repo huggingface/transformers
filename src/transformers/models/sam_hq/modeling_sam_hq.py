@@ -37,8 +37,11 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -278,6 +281,11 @@ class SamHQVisionSdpaAttention(SamHQVisionAttention):
         super().__init__(config, window_size)
 
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+        if output_attentions:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
+            )
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (

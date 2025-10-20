@@ -16,7 +16,7 @@
 
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -55,10 +55,6 @@ from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
-
-
-if TYPE_CHECKING:
-    pass
 
 
 if is_torch_available():

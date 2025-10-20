@@ -315,6 +315,11 @@ class BeitSdpaSelfAttention(BeitSelfAttention):
         interpolate_pos_encoding: bool = False,
         resolution: Optional[tuple[int]] = None,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        if output_attentions:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
+            )
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
             self.query(hidden_states)

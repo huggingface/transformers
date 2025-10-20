@@ -614,8 +614,7 @@ class MoshiFlashAttention2(MoshiAttention):
         return attn_output, attn_weights
 
 
-# NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaSdpaAttention with Gemma->Moshi
-# TODO cyril: modular
+# Copied from transformers.models.mimi.modeling_mimi.MimiSdpaAttention with Mimi->Moshi
 class MoshiSdpaAttention(MoshiAttention):
     """
     Moshi attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -635,6 +634,11 @@ class MoshiSdpaAttention(MoshiAttention):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        if output_attentions:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
+            )
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states, cache_position)  # Ignore copy
