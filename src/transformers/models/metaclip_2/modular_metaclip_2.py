@@ -786,7 +786,9 @@ __all__ = [
     "MetaClip2PreTrainedModel",
     "MetaClip2TextModel",
     "MetaClip2TextModelWithProjection",
+    "MetaClip2TextTransformer",
     "MetaClip2VisionModel",
     "MetaClip2VisionModelWithProjection",
+    "MetaClip2VisionTransformer",  # noqa: F822
     "MetaClip2ForImageClassification",
 ]

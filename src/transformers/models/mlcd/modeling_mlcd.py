@@ -552,4 +552,4 @@ class MLCDVisionModel(MLCDPreTrainedModel):
         )
 
 
-__all__ = ["MLCDPreTrainedModel", "MLCDVisionModel"]
+__all__ = ["MLCDPreTrainedModel", "MLCDVisionTransformer", "MLCDVisionModel"]

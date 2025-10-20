@@ -191,6 +191,11 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "CLIPTextTransformer",  # Building part of bigger (tested) model. Tested implicitly through CLIPTextModel.
+        "CLIPVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through CLIPVisionModel.
+        "MetaClip2TextTransformer",  # Building part of bigger (tested) model. Tested implicitly through MetaClip2TextModel.
+        "MetaClip2VisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through MetaClip2VisionModel.
+        "MLCDVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through MLCDVisionModel.
     ]
 )
 
@@ -393,6 +398,11 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+    "CLIPTextTransformer",  # Building part of bigger (tested) model. Tested implicitly through CLIPTextModel.
+    "CLIPVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through CLIPVisionModel.
+    "MetaClip2TextTransformer",  # Building part of bigger (tested) model. Tested implicitly through MetaClip2TextModel.
+    "MetaClip2VisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through MetaClip2VisionModel.
+    "MLCDVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through MLCDVisionModel.
 ]
 
 

@@ -468,5 +468,6 @@ class MLCDVisionModel(CLIPVisionModel):
 __all__ = [
     "MLCDVisionConfig",
     "MLCDPreTrainedModel",
+    "MLCDVisionTransformer",
     "MLCDVisionModel",
 ]
