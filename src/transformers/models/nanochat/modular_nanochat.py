@@ -36,11 +36,6 @@ from .configuration_nanochat import NanoChatConfig
 
 
 class NanoChatRMSNorm(Llama4TextL2Norm):
-    """
-    NanoChatRMSNorm inherits from Llama4TextL2Norm (weight-less RMS normalization).
-    Overrides __init__ to match NanoChat's API with hidden_size parameter.
-    """
-
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__(eps=eps)
         self.hidden_size = hidden_size
@@ -91,7 +86,6 @@ class NanoChatAttention(nn.Module):
         batch, seq_len, _ = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
 
-        # Project the input to get queries, keys, and values [batch, num_heads, seq_len, head_dim]
         query_states = (
             self.q_proj(hidden_states).view(batch, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
         )
@@ -108,22 +102,17 @@ class NanoChatAttention(nn.Module):
             .contiguous()
         )
 
-        # Apply Rotary Embeddings to queries and keys to get relative positional encoding
         cos, sin = position_embeddings
-        # NanoChat uses a negative sine for the rotary embedding
         sin = -sin
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        # Apply QK normalization (RMSNorm)
         query_states = self.query_norm(query_states)
         key_states = self.key_norm(key_states)
 
-        # Apply KV cache: insert current k,v into cache, get the full view so far
         if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # Use attention interface pattern for vLLM compatibility
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -139,7 +128,6 @@ class NanoChatAttention(nn.Module):
             **kwargs,
         )
 
-        # Reshape and project output
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -224,7 +212,6 @@ class NanoChatPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
 
-        # NanoChat-specific: scaled initialization for output projection
         for name, param in module.named_parameters():
             if name == "o_proj.weight":
                 nn.init.normal_(
