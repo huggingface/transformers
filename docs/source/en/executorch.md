@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [ExecuTorch](https://pytorch.org/executorch/stable/index.html) runs PyTorch models on mobile and edge devices. Export your Transformers models to the ExecuTorch format with [Optimum ExecuTorch](https://github.com/huggingface/optimum-executorch) with the command below.
 
-```
+```bash
 optimum-cli export executorch \
     --model "HuggingFaceTB/SmolLM2-135M-Instruct" \
     --task "text-generation" \

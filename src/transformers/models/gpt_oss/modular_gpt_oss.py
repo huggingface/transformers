@@ -170,8 +170,6 @@ class GptOssMLP(nn.Module):
 
 
 class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
-    pass
-
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
