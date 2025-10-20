@@ -104,6 +104,11 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
     - get_text_features
     - get_image_features
 
+## MetaClip2TextTransformer
+
+[[autodoc]] MetaClip2TextTransformer
+    - forward
+
 ## MetaClip2TextModel
 
 [[autodoc]] MetaClip2TextModel
@@ -117,6 +122,11 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 ## MetaClip2VisionModelWithProjection
 
 [[autodoc]] MetaClip2VisionModelWithProjection
+    - forward
+
+## MetaClip2VisionTransformer
+
+[[autodoc]] MetaClip2VisionTransformer
     - forward
 
 ## MetaClip2VisionModel

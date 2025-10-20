@@ -1151,8 +1151,10 @@ __all__ = [
     "CLIPModel",
     "CLIPPreTrainedModel",
     "CLIPTextModel",
+    "CLIPTextTransformer",
     "CLIPTextModelWithProjection",
     "CLIPVisionModel",
+    "CLIPVisionTransformer",
     "CLIPVisionModelWithProjection",
     "CLIPForImageClassification",
 ]
