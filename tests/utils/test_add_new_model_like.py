@@ -621,11 +621,11 @@ class TestAddNewModelLike(unittest.TestCase):
                 pass
 
 
-            class MyTest2RotaryEmbedding(Phi4MultimodalRotaryEmbedding):
+            class MyTest2PreTrainedModel(Phi4MultimodalPreTrainedModel):
                 pass
 
 
-            class MyTest2PreTrainedModel(Phi4MultimodalPreTrainedModel):
+            class MyTest2RotaryEmbedding(Phi4MultimodalRotaryEmbedding):
                 pass
 
 

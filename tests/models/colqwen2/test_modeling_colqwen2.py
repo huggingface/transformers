@@ -70,7 +70,7 @@ class ColQwen2ForRetrievalModelTester:
             "num_hidden_layers": 2,
             "num_key_value_heads": 2,
             "rms_norm_eps": 1e-06,
-            "rope_scaling": {"mrope_section": [4, 6, 6], "rope_type": "default", "type": "default"},
+            "rope_parameters": {"mrope_section": [4, 6, 6], "rope_type": "default", "type": "default"},
             "sliding_window": 32768,
             "tie_word_embeddings": True,
             "vision_config": {
@@ -200,8 +200,6 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
-    fx_compatible = False
-    test_torchscript = False
 
     test_resize_embeddings = True
 

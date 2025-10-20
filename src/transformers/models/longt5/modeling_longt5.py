@@ -39,7 +39,6 @@ from ...utils import (
     DUMMY_MASK,
     auto_docstring,
     is_torch_flex_attn_available,
-    is_torch_fx_proxy,
     is_torchdynamo_compiling,
     logging,
 )
@@ -1186,7 +1185,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
                 return
             module = getattr(module, sub_key)
 
-        self._tie_or_clone_weights(module, self.shared)
+        self._tie_embedding_weights(module, self.shared)
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
@@ -1259,15 +1258,9 @@ class LongT5PreTrainedModel(PreTrainedModel):
                 "See LongT5 docs for more information."
             )
 
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
             raise ValueError("self.model.config.pad_token_id has to be defined.")
@@ -1638,8 +1631,8 @@ class LongT5Model(LongT5PreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1806,8 +1799,8 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1984,7 +1977,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder

@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 from collections.abc import Callable
 from typing import Any, Optional, Union
 
@@ -26,7 +25,13 @@ from ...masking_utils import create_causal_mask, create_masks_for_generate, crea
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import (
+    ROPE_INIT_FUNCTIONS,
+    RopeParameters,
+    dynamic_rope_update,
+    rope_config_validation,
+    standardize_rope_params,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -106,8 +111,6 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -122,45 +125,10 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
             Scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the attention scores.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings used in global attention. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        rope_local_base_freq (float, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings for local attention.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
             If True, the model will attend to all text tokens instead of using a causal mask. This does not change
             behavior for vision tokens.
@@ -180,33 +148,31 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=262_208,
-        hidden_size=2304,
-        intermediate_size=9216,
-        num_hidden_layers=26,
-        num_attention_heads=8,
-        num_key_value_heads=4,
-        head_dim=256,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=131_072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
-        tie_word_embeddings=True,
-        rope_theta=1_000_000.0,
-        attention_bias=False,
-        attention_dropout=0.0,
-        query_pre_attn_scalar=256,
-        sliding_window=4096,
-        layer_types=None,
-        final_logit_softcapping=None,
-        attn_logit_softcapping=None,
-        rope_scaling=None,
-        rope_local_base_freq=10_000.0,
-        use_bidirectional_attention=False,
+        vocab_size: Optional[int] = 262_208,
+        hidden_size: Optional[int] = 2304,
+        intermediate_size: Optional[int] = 9216,
+        num_hidden_layers: Optional[int] = 26,
+        num_attention_heads: Optional[int] = 8,
+        num_key_value_heads: Optional[int] = 4,
+        head_dim: Optional[int] = 256,
+        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
+        max_position_embeddings: Optional[int] = 131_072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 1,
+        bos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        query_pre_attn_scalar: Optional[int] = 256,
+        sliding_window: Optional[int] = 4096,
+        layer_types: Optional[list[str]] = None,
+        final_logit_softcapping: Optional[float] = None,
+        attn_logit_softcapping: Optional[float] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        use_bidirectional_attention: Optional[bool] = False,
         **kwargs,
     ):
         PreTrainedConfig.__init__(
@@ -227,7 +193,6 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
@@ -236,13 +201,14 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        if rope_scaling is not None:
+            rope_parameters = {"sliding_attention": {"rope_type": "default"}, "full_attention": rope_scaling}
+        self.rope_parameters = rope_parameters
         self.use_bidirectional_attention = use_bidirectional_attention
         if use_bidirectional_attention:
             self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
-
-        self.rope_local_base_freq = rope_local_base_freq
-        self.rope_scaling = rope_scaling
-        rope_config_validation(self)
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
@@ -253,6 +219,14 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = getattr(self, "rope_theta", 1_000_000.0)
+        rope_local_base_freq = getattr(self, "rope_local_base_freq", 10000.0)
+        standardize_rope_params(
+            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
+        )
+        rope_config_validation(self)
 
 
 class Gemma3Config(PreTrainedConfig):
@@ -381,17 +355,90 @@ class Gemma3RMSNorm(Gemma2RMSNorm):
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
-    def __init__(self, config: Gemma3TextConfig, device=None):
-        super().__init__(config)
+    def __init__(self, config: Gemma3TextConfig, device=None, layer_type=None):
+        nn.Module.__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.layer_types = list(set(config.layer_types))
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            rope_params = self.config.rope_parameters[layer_type]
+            if rope_params is None:
+                continue
+
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
+            setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Gemma3TextConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids, layer_type=None):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 # Weird way to inherit but otherwise the sliding window gets defined first and can't access `is_sliding`
 class Gemma3Attention(Gemma2Attention):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
-        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
-
         super().__init__(config, layer_idx)
-        self.sliding_window = config.sliding_window if self.is_sliding else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.is_sliding = self.layer_type == "sliding_attention"
         self.is_causal = not self.config.use_bidirectional_attention
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
@@ -400,8 +447,8 @@ class Gemma3Attention(Gemma2Attention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
+        position_embeddings: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -462,8 +509,7 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings_global: torch.Tensor,
-        position_embeddings_local: torch.Tensor,
+        position_embeddings: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -475,12 +521,6 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
-        # apply global RoPE to non-sliding layer only
-        if self.self_attn.is_sliding:
-            position_embeddings = position_embeddings_local
-        else:
-            position_embeddings = position_embeddings_global
 
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -557,13 +597,6 @@ class Gemma3TextModel(Gemma2Model):
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
 
-        # TODO: raushan fix this after RoPE refactor. For now we hack it by reassigning thetas
-        # when we want to create a local RoPE layer. Config defaults should hold values for global RoPE
-        config = copy.deepcopy(config)
-        config.rope_theta = config.rope_local_base_freq
-        config.rope_scaling = {"rope_type": "default"}
-        self.rotary_emb_local = Gemma3RotaryEmbedding(config=config)
-
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -601,9 +634,7 @@ class Gemma3TextModel(Gemma2Model):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device,
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
         if position_ids is None:
@@ -634,10 +665,9 @@ class Gemma3TextModel(Gemma2Model):
 
         # embed positions
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings_global = self.rotary_emb(hidden_states, position_ids)
-        position_embeddings_local = self.rotary_emb_local(hidden_states, position_ids)
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -649,9 +679,8 @@ class Gemma3TextModel(Gemma2Model):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings_global=position_embeddings_global,
-                position_embeddings_local=position_embeddings_local,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
