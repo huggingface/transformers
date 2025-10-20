@@ -56,6 +56,25 @@ class StoppingCriteria(ABC):
         raise NotImplementedError("StoppingCriteria needs to be subclassed")
 
 
+class SafetyCriteria(StoppingCriteria):
+    """
+    Generic stopping criteria that evaluates a user-provided callback to decide whether to stop generation.
+
+    The callback should accept `input_ids` and `scores` and return a boolean vector of shape (batch_size,)
+    indicating which sequences should stop.
+    """
+
+    def __init__(self, callback):
+        self.callback = callback
+
+    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        out = self.callback(input_ids=input_ids, scores=scores, **kwargs)
+        if not isinstance(out, torch.Tensor):
+            out = torch.tensor(out, device=input_ids.device)
+        return out.to(dtype=torch.bool)
+
+
 class MaxLengthCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever the full generated number of tokens exceeds `max_length`. Keep
