@@ -57,12 +57,12 @@ from .video_utils import (
     VideoInput,
     VideoMetadata,
     group_videos_by_shape,
+    infer_channel_dimension_format,
     is_valid_video,
     load_video,
     make_batched_metadata,
     make_batched_videos,
     reorder_videos,
-    to_channel_dimension_format,
 )
 
 
@@ -338,9 +338,15 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         for video in videos:
             # `make_batched_videos` always returns a 4D array per video
             if isinstance(video, np.ndarray):
-                video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_data_format)
                 # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
                 video = torch.from_numpy(video).contiguous()
+
+            # Infer the channel dimension format if not provided
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(video)
+
+            if input_data_format == ChannelDimension.LAST:
+                video = video.permute(0, 3, 1, 2).contiguous()
 
             if device is not None:
                 video = video.to(device)
@@ -533,18 +539,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         if token is not None:
             kwargs["token"] = token
 
@@ -567,19 +561,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -635,24 +616,12 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         force_download = kwargs.pop("force_download", False)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "video processor", "from_auto_class": from_auto_class}
         if from_pipeline is not None:

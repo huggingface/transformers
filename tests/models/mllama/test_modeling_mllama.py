@@ -72,7 +72,7 @@ class MllamaText2TextModelTester:
             "hidden_act": "gelu",
             "max_position_embeddings": 512,
             "initializer_range": 0.02,
-            "rope_scaling": {"rope_type": "default"},
+            "rope_parameters": {"rope_type": "default"},
             "pad_token_id": 0,
             "bos_token_id": 1,
             "eos_token_id": 2,
@@ -150,7 +150,7 @@ class MllamaVisionText2TextModelTester:
             "hidden_act": "gelu",
             "max_position_embeddings": 512,
             "initializer_range": 0.02,
-            "rope_scaling": {"rope_type": "default"},
+            "rope_parameters": {"rope_type": "default"},
             "pad_token_id": 0,
             "bos_token_id": 1,
             "eos_token_id": 2,
@@ -279,7 +279,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     )
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
 
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):

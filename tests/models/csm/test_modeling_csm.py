@@ -265,10 +265,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_model_get_set_embeddings(self):
         pass
 
-    @pytest.mark.skip(reason="CSM has custom embedding approach (text and audio embeddings).")
-    def test_tie_model_weights(self):
-        pass
-
     @pytest.mark.generate
     @unittest.skip(reason="CSM does not support beam search.")
     def test_generate_from_inputs_embeds_1_beam_search(self, _, num_beams):

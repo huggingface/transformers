@@ -265,7 +265,6 @@ class LayoutLMv2ModelTester:
 @require_torch
 @require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torchscript = True
     test_mismatched_shapes = False
 
     all_model_classes = (
@@ -473,7 +472,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
                 elif hasattr(value, "tensor"):
-                    # layoutlmv2uses ImageList instead of pixel values (needs for torchscript)
+                    # layoutlmv2uses ImageList instead of pixel values
                     single_row_input[key] = value.tensor[:single_batch_shape]
 
             with torch.no_grad():
