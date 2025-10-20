@@ -55,7 +55,7 @@ pipeline("the secret to baking a really good cake is ")
 [{'generated_text': 'the secret to baking a really good cake is 1) to use the right ingredients and 2) to follow the recipe exactly. the recipe for the cake is as follows: 1 cup of sugar, 1 cup of flour, 1 cup of milk, 1 cup of butter, 1 cup of eggs, 1 cup of chocolate chips. if you want to make 2 cakes, how much sugar do you need? To make 2 cakes, you will need 2 cups of sugar.'}]
 ஒரு மாதிரியுடன் அரட்டை அடிக்க, பயன்பாட்டு முறை அதேதான். ஒரே வித்தியாசம் என்னவென்றால், உங்களுக்கும் அமைப்புக்கும் இடையே ஒரு அரட்டை வரலாற்றை (Pipeline க்கான உள்ளீடு) நீங்கள் உருவாக்க வேண்டும்.
 
-[!TIP]
+> [!TIP]
 கட்டளை வரியிலிருந்து நேரடியாக ஒரு மாதிரியுடன் அரட்டை அடிக்கலாம்.
 
 shell
