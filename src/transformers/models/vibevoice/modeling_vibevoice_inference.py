@@ -129,7 +129,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
     def set_ddpm_inference_steps(self, num_steps=None):
         self.ddpm_inference_steps = num_steps or self.config.diffusion_head_config.ddpm_num_inference_steps
 
-    def _process_speech_inputs(self, speech_tensors, speech_masks, speech_type="audio"):
+    def _process_speech_inputs(self, speech_tensors, speech_masks):
         """Process speech inputs through tokenizers and connectors."""
         # TODO can remove unsqueeze since if we keep batch dim in processor?
         encoder_output = self.model.acoustic_tokenizer.encode(speech_tensors.unsqueeze(1))

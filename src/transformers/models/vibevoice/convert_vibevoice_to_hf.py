@@ -29,9 +29,22 @@ def update_state_dict_for_hf_model(state_dict):
     for key, value in state_dict.items():
         new_key = key
         
-        # Handle conv.conv -> conv mapping for semantic tokenizer SConv1d layers only
+        # Handle conv.conv -> conv mapping for semantic tokenizer SConv1d layers
         # This removes one level of .conv nesting
-        if "semantic_tokenizer" in key: # TODO remove when acoustic tokeniezer also updated!
+        if "semantic_tokenizer" in key:
+            # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
+            if "downsample_layers." in key and ".0.conv." in key:
+                new_key = new_key.replace(".0.conv.", ".conv.")
+            # Handle ConvNext1DLayer mixer simplification: mixer.conv.conv.conv.* -> mixer.*
+            if "mixer.conv.conv.conv." in key:
+                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
+            # Handle general conv.conv -> conv mapping (after mixer handling to avoid conflicts)
+            elif ".conv.conv." in key:
+                new_key = new_key.replace(".conv.conv.", ".conv.")
+        
+        # Handle conv.conv -> conv mapping for acoustic tokenizer encoder layers
+        # This removes one level of .conv nesting for the updated TokenizerEncoder
+        if "acoustic_tokenizer.encoder" in key:
             # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
             if "downsample_layers." in key and ".0.conv." in key:
                 new_key = new_key.replace(".0.conv.", ".conv.")
@@ -103,12 +116,47 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         # always True
         del model_config["semantic_tokenizer_config"]["causal"]
 
-    # TODO same for acoustic tokenizer
+    # clean up acoustic tokenizer config
     model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-")))
-    # if "std_dist_type" in model_config["acoustic_tokenizer_config"]:
-    #     model_config["acoustic_tokenizer_config"]["sample_latent"] = False if model_config["semantic_tokenizer_config"]["std_dist_type"] == "none" else True
-    #     del model_config["acoustic_tokenizer_config"]["std_dist_type"]
-
+    if "std_dist_type" in model_config["acoustic_tokenizer_config"]:
+        model_config["acoustic_tokenizer_config"]["sample_latent"] = False if model_config["acoustic_tokenizer_config"]["std_dist_type"] == "none" else True
+        del model_config["acoustic_tokenizer_config"]["std_dist_type"]
+    # -- reverse order of ratios here instead of in modeling
+    model_config["acoustic_tokenizer_config"]["downsampling_ratios"] = list(reversed(model_config["acoustic_tokenizer_config"]["encoder_ratios"]))
+    del model_config["acoustic_tokenizer_config"]["encoder_ratios"]
+    model_config["acoustic_tokenizer_config"]["n_filters"] = model_config["acoustic_tokenizer_config"].pop("encoder_n_filters")
+    model_config["acoustic_tokenizer_config"]["depths"] = model_config["acoustic_tokenizer_config"].pop("encoder_depths")
+    model_config["acoustic_tokenizer_config"]["hidden_size"] = model_config["acoustic_tokenizer_config"].pop("vae_dim")
+    model_config["acoustic_tokenizer_config"]["bias"] = model_config["acoustic_tokenizer_config"].pop("conv_bias")
+    # -- remove decoder parameters as they can be derived from encoder ones
+    if "decoder_depths" in model_config["acoustic_tokenizer_config"]:
+        del model_config["acoustic_tokenizer_config"]["decoder_depths"]
+    if "decoder_n_filters" in model_config["acoustic_tokenizer_config"]:
+        del model_config["acoustic_tokenizer_config"]["decoder_n_filters"]
+    if "decoder_ratios" in model_config["acoustic_tokenizer_config"]:
+        del model_config["acoustic_tokenizer_config"]["decoder_ratios"]
+    # -- remove unused / constant parameters that lead to unused code paths removed in HF model
+    if "mixer_layer" in model_config["acoustic_tokenizer_config"]:
+        del model_config["acoustic_tokenizer_config"]["mixer_layer"]
+    if "layernorm" in model_config["acoustic_tokenizer_config"]:
+        del model_config["acoustic_tokenizer_config"]["layernorm"]
+    if "disable_last_norm" in model_config["acoustic_tokenizer_config"]:
+        del model_config["acoustic_tokenizer_config"]["disable_last_norm"]
+    if "conv_norm" in model_config["acoustic_tokenizer_config"]:
+        del model_config["acoustic_tokenizer_config"]["conv_norm"]
+    if "corpus_normalize" in model_config["acoustic_tokenizer_config"]:
+        del model_config["acoustic_tokenizer_config"]["corpus_normalize"]
+    if "layernorm_elementwise_affine" in model_config["acoustic_tokenizer_config"]:
+        del model_config["acoustic_tokenizer_config"]["layernorm_elementwise_affine"]
+    if "layernorm_eps" in model_config["acoustic_tokenizer_config"]:
+        model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"]["layernorm_eps"]
+        del model_config["acoustic_tokenizer_config"]["layernorm_eps"]
+    if "pad_mode" in model_config["acoustic_tokenizer_config"]:
+        # always "constant"
+        del model_config["acoustic_tokenizer_config"]["pad_mode"]
+    if "causal" in model_config["acoustic_tokenizer_config"]:
+        # always True
+        del model_config["acoustic_tokenizer_config"]["causal"]
 
     # 3) Update state dict to match HF model structure
     updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
