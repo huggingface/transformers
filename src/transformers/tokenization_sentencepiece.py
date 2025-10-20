@@ -1238,11 +1238,12 @@ class SentencePieceExtractor:
         order the merges with respect to the piece scores instead.
         """
         sp = self.sp
-        vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+        vocab_ids = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
 
-        # let's get the vocab_scores
-        vocab_scores = {sp.id_to_piece(i): sp.get_score(i) for i in range(sp.GetPieceSize())}
+        vocab_scores_dict = {sp.id_to_piece(i): sp.get_score(i) for i in range(sp.GetPieceSize())}
 
-        merges = generate_merges(vocab, vocab_scores)
+        merges = generate_merges(vocab_ids, vocab_scores_dict)
 
-        return vocab, merges
+        vocab_scores_list = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.GetPieceSize())]
+
+        return vocab_ids, vocab_scores_list, merges

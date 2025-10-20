@@ -984,6 +984,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         "additional_special_tokens",
     ]
 
+    #TODO: rm additional_special_tokens from SPECIAL_TOKENS_ATTRIBUTES and use attribute_tokens + extra_special_tokens instead
+    # only for skipping
+    
     def __init__(self, **kwargs):
         self.init_inputs = ()
         for key in kwargs:
@@ -1873,7 +1876,52 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # Re-run post-initialization if the tokenizer has it
             if hasattr(tokenizer, '_post_init'):
                 tokenizer._post_init()
+            # If only SPM exists, try to get vocab and merges and init to load a tokenizers-backend
+        else:
+            from .utils import has_file
+            try:
+                spm_exists = has_file(
+                    pretrained_model_name_or_path,
+                    "tokenizer.model",
+                    revision=kwargs.get("revision"),
+                    token=kwargs.get("token"),
+                    cache_dir=kwargs.get("cache_dir"),
+                    local_files_only=kwargs.get("local_files_only", False),
+                )
+            except Exception:
+                spm_exists = False
+            if spm_exists:
+                try:
+                    resolved_spm = cached_file(
+                        pretrained_model_name_or_path,
+                        "tokenizer.model",
+                        cache_dir=kwargs.get("cache_dir"),
+                        force_download=kwargs.get("force_download", False),
+                        proxies=kwargs.get("proxies"),
+                        token=kwargs.get("token"),
+                        revision=kwargs.get("revision"),
+                        local_files_only=kwargs.get("local_files_only", False),
+                        subfolder=kwargs.get("subfolder", ""),
+                    )
+                except Exception:
+                    resolved_spm = None
+                if resolved_spm is not None:
+                    try:
+                        from ...create_fast_tokenizer import SentencePieceExtractor
 
+                        fast_sig = inspect.signature(
+                            getattr(fast_tokenizer_class, "__init__", fast_tokenizer_class)
+                        )
+                        if "vocab" in fast_sig.parameters and "merges" in fast_sig.parameters:
+                            try:
+                                vocab, merges = SentencePieceExtractor(resolved_spm).extract()
+                                return fast_tokenizer_class.from_pretrained(
+                                    pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
+                                )
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
         if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.info(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"

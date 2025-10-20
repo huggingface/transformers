@@ -56,14 +56,14 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_file = getattr(tok_auto, "vocab_file", None)
 
         extractor = SentencePieceExtractor(vocab_file)
-        vocab, merges = extractor.extract()
-        tok_from_vocab = LlamaTokenizer(vocab=vocab, merges=merges)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tok_from_vocab = LlamaTokenizer(vocab=vocab_ids, merges=merges)
         tok_from_vocab.pad_token = tok_from_vocab.eos_token
 
         cls.tokenizers = [tok_auto, tok_from_vocab]
 
     def get_tokenizers(self, **kwargs):
-        kwargs.update({"pad_token": "<PAD>"})
+        kwargs.setdefault("pad_token", "<PAD>")
         return super().get_tokenizers(**kwargs)
 
     def test_integration_expected_tokens(self):

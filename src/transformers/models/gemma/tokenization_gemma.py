@@ -104,13 +104,8 @@ class GemmaTokenizer(TokenizersBackend):
             add_eos_token=add_eos_token,
             **kwargs,
         )
-
+        
         self._post_init()
-
-    def _post_init(self):
-        """Post-initialization setup that needs to run after _tokenizer is set."""
-        self.add_tokens(list(self.all_special_tokens), special_tokens=True)
-        self.update_post_processor()
 
     def _unk_id(self) -> int:
         # Align with historical Gemma convention: pad, eos, bos, unk

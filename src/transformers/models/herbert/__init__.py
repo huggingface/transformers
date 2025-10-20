@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .tokenization_herbert import *
-    from .tokenization_herbert_fast import *
 else:
     import sys
 

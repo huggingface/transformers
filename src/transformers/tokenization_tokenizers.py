@@ -292,6 +292,22 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         self._add_bos_token = value
         self.update_post_processor()
 
+    def _post_init(self):
+        """
+        Post-initialization setup to ensure tokens are added correctly after setting self._tokenizer
+        """
+        # Ensure all special tokens are added to the vocabulary
+        tokens_to_add = []
+        for token in self.all_special_tokens:
+            if self._tokenizer.token_to_id(str(token)) is None:
+                tokens_to_add.append(AddedToken(str(token), special=True, normalized=False))
+        if tokens_to_add:
+            self.add_tokens(tokens_to_add)
+        
+        # Update post processor if using BOS/EOS tokens
+        if hasattr(self, '_add_bos_token') or hasattr(self, '_add_eos_token'):
+            self.update_post_processor()
+
     @property
     def vocab_size(self) -> int:
         """
