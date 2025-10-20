@@ -31,7 +31,7 @@ with open(dataset) as f_p:
             continue
 
         if (subword_len_counter + current_subwords_len) > max_len:
-            print("")
+            print()
             print(line)
             subword_len_counter = current_subwords_len
             continue

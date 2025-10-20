@@ -421,7 +421,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False  # Fix me Michael
 
     def setUp(self):
         self.model_tester = BartModelTester(self)
@@ -1504,8 +1503,6 @@ class BartStandaloneDecoderModelTester:
 @require_torch
 class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BartDecoder, BartForCausalLM) if is_torch_available() else ()
-    fx_comptatible = True
-
     is_encoder_decoder = False
     test_missing_keys = False
 

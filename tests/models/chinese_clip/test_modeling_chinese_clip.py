@@ -312,7 +312,6 @@ class ChineseCLIPVisionModelTester:
 @require_torch
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -405,7 +404,6 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ChineseCLIPVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -538,7 +536,6 @@ class ChineseCLIPModelTester:
 class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChineseCLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ChineseCLIPModel} if is_torch_available() else {}
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
