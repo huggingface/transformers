@@ -46,7 +46,9 @@ PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
 def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str] | bool:
     """Check if `pkg_name` exist, and optionally try to get its version"""
-    package_exists = importlib.util.find_spec(pkg_name) is not None
+    spec = importlib.util.find_spec(pkg_name)
+    # the spec might be not None but not importable
+    package_exists = spec is not None and spec.loader is not None
     package_version = "N/A"
     if package_exists and return_version:
         try:
