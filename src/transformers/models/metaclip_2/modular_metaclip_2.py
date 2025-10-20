@@ -13,6 +13,7 @@ from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConf
 from ..clip.modeling_clip import (
     CLIPMLP,
     CLIPAttention,
+    CLIPEncoderLayer,
     CLIPForImageClassification,
     CLIPModel,
     CLIPTextEmbeddings,
@@ -219,6 +220,10 @@ class MetaClip2MLP(CLIPMLP):
     pass
 
 
+class MetaClip2EncoderLayer(CLIPEncoderLayer):
+    pass
+
+
 @auto_docstring
 class MetaClip2PreTrainedModel(PreTrainedModel):
     config: MetaClip2Config
@@ -229,6 +234,10 @@ class MetaClip2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": MetaClip2EncoderLayer,
+        "attentions": MetaClip2Attention,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""

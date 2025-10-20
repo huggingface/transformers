@@ -261,6 +261,41 @@ class MetaClip2MLP(nn.Module):
         return hidden_states
 
 
+class MetaClip2EncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Union[MetaClip2VisionConfig, MetaClip2TextConfig]):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.self_attn = MetaClip2Attention(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = MetaClip2MLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        causal_attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
 @auto_docstring
 class MetaClip2PreTrainedModel(PreTrainedModel):
     config: MetaClip2Config
@@ -271,6 +306,10 @@ class MetaClip2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": MetaClip2EncoderLayer,
+        "attentions": MetaClip2Attention,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -327,41 +366,6 @@ class MetaClip2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-
-
-class MetaClip2EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Union[MetaClip2VisionConfig, MetaClip2TextConfig]):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = MetaClip2Attention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = MetaClip2MLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
 
 
 class MetaClip2Encoder(nn.Module):
