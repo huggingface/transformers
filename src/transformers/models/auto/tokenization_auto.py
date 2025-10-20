@@ -73,7 +73,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("align", "BertTokenizer" if is_tokenizers_available() else None),
         ("arcee", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("aria", "LlamaTokenizerFast" if is_tokenizers_available() else None),
-        ("aya_vision", "CohereTokenizerFast" if is_tokenizers_available() else None),
+        ("aya_vision", "CohereTokenizer" if is_tokenizers_available() else None),
         ("bark", "BertTokenizer" if is_tokenizers_available() else None),
         ("bart", "BartTokenizerFast"),
         ("barthez", "BarthezTokenizer" if is_tokenizers_available() else None),
@@ -90,7 +90,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("blenderbot-small", "BlenderbotSmallTokenizer"),
         ("blip", "BertTokenizer" if is_tokenizers_available() else None),
         ("blip-2", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("bloom", "BloomTokenizerFast" if is_tokenizers_available() else None),
+        ("bloom", "TokenizersBackend" if is_tokenizers_available() else None),
         ("blt", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ("bridgetower", "RobertaTokenizer"),
         ("bros", "BertTokenizer" if is_tokenizers_available() else None),
@@ -105,8 +105,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("clvp", "ClvpTokenizer"),
         ("code_llama", "CodeLlamaTokenizerFast" if is_tokenizers_available() else None),
         ("codegen", "CodeGenTokenizer" if is_tokenizers_available() else None),
-        ("cohere", "CohereTokenizerFast" if is_tokenizers_available() else None),
-        ("cohere2", "CohereTokenizerFast" if is_tokenizers_available() else None),
+        ("cohere", "CohereTokenizer" if is_tokenizers_available() else None),
+        ("cohere2", "CohereTokenizer" if is_tokenizers_available() else None),
         ("colpali", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("colqwen2", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("convbert", "ConvBertTokenizer" if is_tokenizers_available() else None),
@@ -159,7 +159,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("gpt2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_bigcode", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_neo", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("gpt_neox", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
+        ("gpt_neox", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
         ("gpt_oss", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
@@ -235,6 +235,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
         ("nllb", "NllbTokenizerFast" if is_tokenizers_available() else None),
         ("nllb-moe", "NllbTokenizerFast" if is_tokenizers_available() else None),
+        ("nougat", "NougatTokenizer" if is_tokenizers_available() else None),
         ("nystromformer", "AlbertTokenizerFast" if is_tokenizers_available() else None),
         ("olmo", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("olmo2", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
@@ -354,7 +355,7 @@ def load_merges(merges_file):
 
 def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
     if class_name == "PreTrainedTokenizerFast":
-        return PreTrainedTokenizerFast
+        return TokenizersBackend
 
     # V5: TOKENIZER_MAPPING_NAMES now maps to single strings, not tuples
     for module_name, tokenizer_class in TOKENIZER_MAPPING_NAMES.items():
@@ -834,7 +835,7 @@ class AutoTokenizer:
             if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
                 tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
-        if config_tokenizer_class is not None and "Fast" in config_tokenizer_class:
+        if config_tokenizer_class is not None and config_tokenizer_class != "PreTrainedTokenizerFast" and "Fast" in config_tokenizer_class:
             config_tokenizer_class = config_tokenizer_class[:-4]
 
         has_remote_code = tokenizer_auto_map is not None

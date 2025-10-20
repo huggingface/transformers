@@ -443,30 +443,21 @@ class TokenizerTesterMixin:
             # to make sure `tokenizer.pad(...)` works correctly
             self.assertTrue(tokenizer.model_input_names[0] in accepted_model_main_input_names)
 
-    def test_rust_tokenizer_signature(self):
-        if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
-
-        signature = inspect.signature(self.rust_tokenizer_class.__init__)
-
-        self.assertIn("tokenizer_file", signature.parameters)
-        self.assertIsNone(signature.parameters["tokenizer_file"].default)
 
     def test_tokenizer_slow_store_full_signature(self):
         self.skipTest(reason="Test removed for v5, slow only")
 
     def test_tokenizer_fast_store_full_signature(self):
-        if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
-
         signature = inspect.signature(self.rust_tokenizer_class.__init__)
-        tokenizer = self.get_rust_tokenizer()
+        tokenizer = self.get_tokenizer()
 
         for parameter_name, parameter in signature.parameters.items():
             if parameter.default != inspect.Parameter.empty and parameter_name not in [
                 "vocab_file",
                 "merges_file",
                 "tokenizer_file",
+                "vocab",
+                "merges",
             ]:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 

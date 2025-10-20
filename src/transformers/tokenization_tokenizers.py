@@ -100,7 +100,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
-        self.add_prefix_space = kwargs.get("add_prefix_space", False)
+        # Store add_prefix_space before super().__init__() to ensure it's not overridden
+        add_prefix_space = kwargs.get("add_prefix_space", False)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
@@ -174,6 +175,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
+        # Ensure add_prefix_space is set correctly after parent init
+        self.add_prefix_space = add_prefix_space
         self._tokenizer.encode_special_tokens = self.split_special_tokens
 
         added_tokens_decoder_hash = {hash(repr(token)) for token in self.added_tokens_decoder}
@@ -204,18 +207,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tokens.append(token)
             if tokens:
                 self.add_tokens(tokens)
-
-        try:
-            pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-            if pre_tok_state.get("add_prefix_space", self.add_prefix_space) != self.add_prefix_space:
-                pre_tok_class = getattr(pre_tokenizers_fast, pre_tok_state.pop("type"))
-                pre_tok_state["add_prefix_space"] = self.add_prefix_space
-                self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-        except Exception:
-            # We'll get an error if there is no pre_tokenizer, or if it's a custom pre_tokenizer that can
-            # not be serialized. In those cases, we just ignore the error as there's no pre_tokenizer
-            # for which we need to update the `add_prefix_space` attribute.
-            pass
 
     @property
     def is_fast(self) -> bool:
@@ -294,19 +285,56 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def _post_init(self):
         """
-        Post-initialization setup to ensure tokens are added correctly after setting self._tokenizer
+        Post-initialization hook that runs after the tokenizer is fully set up.
+        This is called by from_pretrained() after loading the tokenizer, which allows
+        us to add any special tokens that may have been passed as AddedToken objects.
+        
+        Child classes should call super()._post_init() if they override this method.
         """
-        # Ensure all special tokens are added to the vocabulary
         tokens_to_add = []
-        for token in self.all_special_tokens:
-            if self._tokenizer.token_to_id(str(token)) is None:
-                tokens_to_add.append(AddedToken(str(token), special=True, normalized=False))
+        for token_value in self._special_tokens_map.values():
+            if isinstance(token_value, (list, tuple)):
+                for token in token_value:
+                    if isinstance(token, AddedToken):
+                        if self._tokenizer.token_to_id(str(token)) is None:
+                            tokens_to_add.append(token)
+                    elif isinstance(token, str):
+                        if self._tokenizer.token_to_id(token) is None:
+                            tokens_to_add.append(AddedToken(token, special=True, normalized=False))
+            elif isinstance(token_value, AddedToken):
+                if self._tokenizer.token_to_id(str(token_value)) is None:
+                    tokens_to_add.append(token_value)
+            elif isinstance(token_value, str):
+                if self._tokenizer.token_to_id(token_value) is None:
+                    tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
+        
         if tokens_to_add:
             self.add_tokens(tokens_to_add)
         
-        # Update post processor if using BOS/EOS tokens
         if hasattr(self, '_add_bos_token') or hasattr(self, '_add_eos_token'):
             self.update_post_processor()
+        
+        # Update add_prefix_space in the pre_tokenizer if needed
+        if hasattr(self, 'add_prefix_space'):
+            try:
+                tokenizer_json = json.loads(self.backend_tokenizer.to_str())
+                pre_tok = tokenizer_json.get("pre_tokenizer", {})
+                
+                # Recursively update add_prefix_space in pretokenizers
+                def update_add_prefix_space(pretok_dict, value):
+                    updated = False
+                    if pretok_dict.get("type") == "Sequence":
+                        for nested in pretok_dict.get("pretokenizers", []):
+                            updated |= update_add_prefix_space(nested, value)
+                    elif "add_prefix_space" in pretok_dict and pretok_dict["add_prefix_space"] != value:
+                        pretok_dict["add_prefix_space"] = value
+                        updated = True
+                    return updated
+                
+                if update_add_prefix_space(pre_tok, self.add_prefix_space):
+                    self._tokenizer = TokenizerFast.from_str(json.dumps(tokenizer_json))
+            except Exception:
+                pass
 
     @property
     def vocab_size(self) -> int:

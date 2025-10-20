@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_gpt_neox import *
     from .modeling_gpt_neox import *
-    from .tokenization_gpt_neox_fast import *
+    from .tokenization_gpt_neox import *
 else:
     import sys
 

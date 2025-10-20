@@ -15,19 +15,40 @@
 import copy
 import unittest
 
-from transformers import NougatTokenizerFast
-from transformers.models.nougat.tokenization_nougat_fast import markdown_compatible, normalize_list_like_lines
+from transformers import AutoTokenizer, NougatTokenizer
+from transformers.models.nougat.tokenization_nougat import markdown_compatible, normalize_list_like_lines
 from transformers.testing_utils import require_levenshtein, require_nltk, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
+
+
+# Master input string of combined test cases
+input_string = """This is a test
+I was born in 92000, and this is falsé.
+生活的真谛是
+Hi  Hello
+Hi   Hello
+
+ 
+  
+ Hello
+<s>
+hi<s>there
+The following string should be properly encoded: Hello.
+But ird and ปี   ird   ด
+Hey how are you doing"""
+
+
+expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶ', 'Ł', 'æ', '´', '»', 'çļĦ', 'ç', 'ľ', 'Ł', 'è', '°', 'Ľ', 'æ', 'ĺ', '¯', 'Ċ', 'Hi', 'Ġ', 'ĠH', 'ello', 'Ċ', 'Hi', 'ĠĠ', 'ĠH', 'ello', 'Ċ', 'Ċ', 'Ġ', 'Ċ', 'ĠĠ', 'Ċ', 'ĠH', 'ello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠH', 'ello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸', 'µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸', 'Ķ', 'Ċ', 'H', 'ey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
+expected_token_ids = [0, 2113, 343, 281, 1185, 221, 63, 435, 8613, 301, 243, 47, 40, 38, 38, 38, 34, 312, 495, 343, 34500, 2230, 36, 221, 33239, 276, 185, 135, 142, 31778, 186, 273, 276, 187, 131, 272, 185, 269, 130, 221, 33719, 243, 414, 13716, 221, 33719, 304, 414, 13716, 221, 221, 243, 221, 304, 221, 414, 13716, 221, 0, 221, 2197, 0, 10158, 221, 592, 1093, 4935, 1502, 391, 10651, 10033, 48, 414, 13716, 36, 221, 11847, 243, 2326, 312, 243, 12043, 272, 12043, 136, 304, 243, 2326, 304, 243, 12043, 265, 221, 62, 1220, 1905, 417, 2589, 10671, 2]
 
 
 @require_tokenizers
 class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "facebook/nougat-base"
     slow_tokenizer_class = None
-    rust_tokenizer_class = NougatTokenizerFast
-    tokenizer_class = NougatTokenizerFast
+    rust_tokenizer_class = NougatTokenizer
+    tokenizer_class = NougatTokenizer
     test_rust_tokenizer = True
     test_slow_tokenizer = False
     from_pretrained_vocab_key = "tokenizer_file"
@@ -36,16 +57,9 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        tokenizer = NougatTokenizerFast.from_pretrained("facebook/nougat-base")
+        
+        tokenizer = AutoTokenizer.from_pretrained("facebook/nougat-base")
         tokenizer.save_pretrained(cls.tmpdirname)
-
-    @classmethod
-    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
-        _kwargs = copy.deepcopy(cls.special_tokens_map)
-        _kwargs.update(kwargs)
-        kwargs = _kwargs
-        pretrained_name = pretrained_name or cls.tmpdirname
-        return NougatTokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     def test_padding(self, max_length=6):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -63,11 +77,11 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Simple input tests
                 try:
                     tokenizer_r.encode(sentence1, max_length=max_length)
-                    tokenizer_r.encode_plus(sentence1, max_length=max_length)
+                    tokenizer_r(sentence1, max_length=max_length)
 
-                    tokenizer_r.batch_encode_plus(sentence2, max_length=max_length)
+                    tokenizer_r(sentence2, max_length=max_length)
                     tokenizer_r.encode(pair1, max_length=max_length)
-                    tokenizer_r.batch_encode_plus(pair2, max_length=max_length)
+                    tokenizer_r(pair2, max_length=max_length)
                 except ValueError:
                     self.fail("Nougat Tokenizer should be able to deal with padding")
 
@@ -78,13 +92,13 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Simple input
                 self.assertRaises(
-                    ValueError, tokenizer_r.encode_plus, sentence1, max_length=max_length, padding="max_length"
+                    ValueError, tokenizer_r, sentence1, max_length=max_length, padding="max_length"
                 )
 
                 # Simple input
                 self.assertRaises(
                     ValueError,
-                    tokenizer_r.batch_encode_plus,
+                    tokenizer_r,
                     sentence2,
                     max_length=max_length,
                     padding="max_length",
@@ -95,33 +109,45 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Pair input
                 self.assertRaises(
-                    ValueError, tokenizer_r.encode_plus, pair1, max_length=max_length, padding="max_length"
+                    ValueError, tokenizer_r, pair1, max_length=max_length, padding="max_length"
                 )
 
                 # Pair input
                 self.assertRaises(
                     ValueError,
-                    tokenizer_r.batch_encode_plus,
+                    tokenizer_r,
                     pair2,
                     max_length=max_length,
                     padding="max_length",
                 )
 
-    @unittest.skip(reason="NougatTokenizerFast does not have tokenizer_file in its signature")
-    def test_rust_tokenizer_signature(self):
-        pass
+    def test_integration_expected_tokens(self):
+        tokenizer = self.get_rust_tokenizer()
+        self.assertEqual(tokenizer.tokenize(input_string), expected_tokens)
 
-    @unittest.skip(reason="NougatTokenizerFast does not support pretokenized inputs")
-    def test_pretokenized_inputs(self):
-        pass
+    def test_integration_expected_token_ids(self):
+        tokenizer = self.get_rust_tokenizer()
+        self.assertEqual(tokenizer.encode(input_string), expected_token_ids)
 
-    @unittest.skip(reason="NougatTokenizerFast directly inherits from PreTrainedTokenizerFast")
-    def test_prepare_for_model(self):
-        pass
+    def test_save_and_reload(self):
+        import tempfile
+        tokenizer = self.get_rust_tokenizer()
+        original_tokens = tokenizer.tokenize(input_string)
+        original_ids = tokenizer.encode(input_string)
 
-    @unittest.skip(reason="This needs a slow tokenizer. Nougat does not have one!")
-    def test_encode_decode_with_spaces(self):
-        pass
+        # Save tokenizer to temporary directory
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+
+            # Reload tokenizer from saved directory
+            reloaded_tokenizer = NougatTokenizer.from_pretrained(tmp_dir)
+
+            # Test that reloaded tokenizer produces same results
+            reloaded_tokens = reloaded_tokenizer.tokenize(input_string)
+            reloaded_ids = reloaded_tokenizer.encode(input_string)
+
+            self.assertEqual(original_tokens, reloaded_tokens)
+            self.assertEqual(original_ids, reloaded_ids)
 
 
 class MarkdownCompatibleTest(unittest.TestCase):
@@ -182,7 +208,7 @@ class TestNormalizeListLikeLines(unittest.TestCase):
 class NougatPostProcessingTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.tokenizer = NougatTokenizerFast.from_pretrained("facebook/nougat-base")
+        self.tokenizer = NougatTokenizer.from_pretrained("facebook/nougat-base")
 
     def test_correct_tables_basic(self):
         input_str = "\\begin{table} \\begin{tabular}{l l}  & \\ \\end{tabular} \\end{table}"

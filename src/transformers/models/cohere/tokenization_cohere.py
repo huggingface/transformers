@@ -13,20 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This file is based on the tokenization_llama_fast.py file in transformers
+# This file is based on the tokenization_llama.py file in transformers
 
-import pickle
-from typing import Literal, Union
+from typing import Literal, Optional, Union
 
-from tokenizers import processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers.models import BPE
 
-from ...tokenization_utils_base import BatchEncoding
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_tokenizers import TokenizersBackend
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "tokenizer_file": {
@@ -44,7 +43,7 @@ Unless the user asks for a different style of answer, you should answer in full 
 # fmt: on
 
 
-class CohereTokenizerFast(PreTrainedTokenizerFast):
+class CohereTokenizer(TokenizersBackend):
     """
     Construct a Cohere tokenizer. Based on byte-level Byte-Pair-Encoding.
 
@@ -72,7 +71,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     </Tip>
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Args:
@@ -101,6 +100,10 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             Whether or not the default system prompt for Cohere tokenizer should be used.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not the tokenizer should automatically add a prefix space
+        vocab (`dict`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        merges (`list`, *optional*):
+            Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -112,65 +115,103 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
-        merges_file=None,
-        tokenizer_file=None,
-        clean_up_tokenization_spaces=False,
-        unk_token="<UNK>",
-        bos_token="<BOS_TOKEN>",
-        eos_token="<|END_OF_TURN_TOKEN|>",
-        add_bos_token=True,
-        add_eos_token=False,
-        use_default_system_prompt=False,
-        add_prefix_space=False,
+        errors: str = "replace",
+        unk_token: str = "<UNK>",
+        bos_token: str = "<BOS_TOKEN>",
+        eos_token: str = "<|END_OF_TURN_TOKEN|>",
+        pad_token: str = "<PAD>",
+        cls_token: str = "<CLS>",
+        sep_token: str = "<SEP>",
+        mask_token: str = "<MASK_TOKEN>",
+        add_bos_token: bool = True,
+        add_eos_token: bool = False,
+        use_default_system_prompt: bool = False,
+        add_prefix_space: bool = False,
+        vocab: Optional[dict] = None,
+        merges: Optional[list] = None,
         **kwargs,
     ):
+        self._add_bos_token = add_bos_token
+        self._add_eos_token = add_eos_token
+        self.use_default_system_prompt = use_default_system_prompt
+        self.add_prefix_space = add_prefix_space
+        self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
+        self.tool_use_template = kwargs.pop("tool_use_template", None)
+
+        if vocab is not None:
+            self._vocab = vocab
+        else:
+            self._vocab = {
+                str(pad_token): 0,
+                str(unk_token): 1,
+                str(cls_token): 2,
+                str(sep_token): 3,
+                str(mask_token): 4,
+                str(bos_token): 5,
+            }
+
+        if merges is not None:
+            self._merges = merges
+        else:
+            self._merges = []
+
+        self._tokenizer = Tokenizer(
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        self._tokenizer.normalizer = normalizers.NFC()
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Digits(individual_digits=True),
+                pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space, trim_offsets=True),
+            ]
+        )
+        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=add_prefix_space, trim_offsets=True)
+
+        tokenizer_object = self._tokenizer
+
         super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            tokenizer_file=tokenizer_file,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            tokenizer_object=tokenizer_object,
+            errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            sep_token=sep_token,
+            mask_token=mask_token,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
-        self.update_post_processor()
-        self.use_default_system_prompt = use_default_system_prompt
-        self.vocab_file = vocab_file
-        self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
-        self.tool_use_template = kwargs.pop("tool_use_template", None)
 
-        # TODO @ArthurZucker this can only work one way for now, to update later-on. Tests should also properly
-        # check this as they were green before.
-        pre_tok_state = pickle.dumps(self.backend_tokenizer.pre_tokenizer)
-        decoder_state = pickle.dumps(self.backend_tokenizer.decoder)
+        self._post_init()
 
-        if add_prefix_space:
-            pre_tok_state = pre_tok_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
-            decoder_state = decoder_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
-        self.backend_tokenizer.pre_tokenizer = pickle.loads(pre_tok_state)
-        self.backend_tokenizer.decoder = pickle.loads(decoder_state)
+    def _post_init(self):
+        """Post-initialization to ensure add_prefix_space is applied correctly."""
+        # Re-apply add_prefix_space setting to pre_tokenizer and decoder
+        # This is needed because when loading from pretrained, the tokenizer.json
+        # has these settings baked in and we need to override them
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Digits(individual_digits=True),
+                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, trim_offsets=True),
+            ]
+        )
+        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=self.add_prefix_space, trim_offsets=True)
+        
+        # Call parent to handle AddedToken properties
+        super()._post_init()
 
-        self.add_prefix_space = add_prefix_space
-
-    #TODO: does this check need to be model-specific?
-    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
-        is_split_into_words = kwargs.get("is_split_into_words", False)
-
-        if not (self.add_prefix_space or not is_split_into_words):
-            raise Exception(
-                f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True to use it with"
-                " pretokenized inputs."
-            )
-
-        return super()._encode_plus(*args, **kwargs)
 
     def apply_tool_use_template(
         self,
@@ -238,7 +279,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Examples:
 
         ```python
-        >> tokenizer = CohereTokenizerFast.from_pretrained("CohereForAI/c4ai-command-r-v01")
+        >> tokenizer = CohereTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
         >> tools = [
             {
                 "name": "internet_search",
@@ -384,7 +425,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Examples:
 
         ```python
-        >> tokenizer = CohereTokenizerFast.from_pretrained('CohereForAI/c4ai-command-r-v01')
+        >> tokenizer = CohereTokenizer.from_pretrained('CohereForAI/c4ai-command-r-v01')
 
         >> # define documents:
         >> documents = [
@@ -440,4 +481,5 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         )
 
 
-__all__ = ["CohereTokenizerFast"]
+__all__ = ["CohereTokenizer"]
+
