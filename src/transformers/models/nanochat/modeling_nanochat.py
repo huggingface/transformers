@@ -258,11 +258,11 @@ class NanoChatDecoderLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
-        self.config = config
+        self.hidden_size = config.hidden_size
         self.self_attn = NanoChatAttention(config, layer_idx)
         self.mlp = NanoChatMLP(config)
-        self.input_layernorm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = NanoChatRMSNorm(config, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = NanoChatRMSNorm(config, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -272,26 +272,30 @@ class NanoChatDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, self_attn_weights = self.self_attn(
+        # Self Attention
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        return hidden_states, self_attn_weights
+        return hidden_states
 
 
 @auto_docstring
@@ -398,7 +402,7 @@ class NanoChatModel(NanoChatPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            hidden_states, self_attn_weights = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
@@ -410,6 +414,7 @@ class NanoChatModel(NanoChatPreTrainedModel):
             )
 
             if output_attentions:
+                self_attn_weights = decoder_layer.self_attn.attn_weights
                 all_self_attns = all_self_attns + (self_attn_weights,)
 
         hidden_states = self.norm(hidden_states)

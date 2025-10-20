@@ -23,14 +23,13 @@ import torch.nn as nn
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import CLIPMLP
-from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRotaryEmbedding, eager_attention_forward
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaPreTrainedModel, LlamaRotaryEmbedding, eager_attention_forward
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from .configuration_nanochat import NanoChatConfig
@@ -141,45 +140,16 @@ class NanoChatMLP(CLIPMLP):
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
 
-class NanoChatDecoderLayer(GradientCheckpointingLayer):
+class NanoChatDecoderLayer(LlamaDecoderLayer):
     """NanoChat decoder layer with pre-norm architecture."""
 
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
-        self.config = config
         self.self_attn = NanoChatAttention(config, layer_idx)
         self.mlp = NanoChatMLP(config)
-        self.input_layernorm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = NanoChatRMSNorm(config, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = NanoChatRMSNorm(config, eps=config.rms_norm_eps)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states, self_attn_weights
 
 
 @auto_docstring
@@ -285,7 +255,7 @@ class NanoChatModel(NanoChatPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            hidden_states, self_attn_weights = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
@@ -297,6 +267,7 @@ class NanoChatModel(NanoChatPreTrainedModel):
             )
 
             if output_attentions:
+                self_attn_weights = decoder_layer.self_attn.attn_weights
                 all_self_attns = all_self_attns + (self_attn_weights,)
 
         hidden_states = self.norm(hidden_states)
