@@ -47,7 +47,7 @@ from torch.utils.checkpoint import checkpoint
 from .configuration_utils import PreTrainedConfig
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import CompileConfig
+from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
     _get_device_map,
@@ -1827,6 +1827,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation, is_init_check=True
         )
+        if self.can_generate():
+            self.generation_config = GenerationConfig.from_model_config(config)
 
         # for initialization of the loss
         loss_type = self.__class__.__name__
