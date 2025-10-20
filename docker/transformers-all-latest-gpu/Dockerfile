@@ -1,6 +1,8 @@
 FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
+ENV NVIDIA_DRIVER_CAPABILITIES=all
+
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Use login shell to read variables from `~/.profile` (to pass dynamic created variables between RUN commands)
