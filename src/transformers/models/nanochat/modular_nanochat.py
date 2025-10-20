@@ -110,7 +110,7 @@ class NanoChatAttention(Qwen3Attention):
         key_states = self.k_norm(key_states)
 
         if past_key_values is not None:
-            cache_kwargs = {"cache_position": cache_position}
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} 
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
