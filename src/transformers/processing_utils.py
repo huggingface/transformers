@@ -605,6 +605,9 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
         """
+        if "audios" in kwargs and audio is None:
+            raise ValueError("You passed keyword argument `audios` which is deprecated. Please use `audio` instead.")
+
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 

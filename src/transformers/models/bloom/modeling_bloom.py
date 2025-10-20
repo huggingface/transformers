@@ -856,7 +856,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
                 lm_logits,
                 labels,
                 vocab_size=self.config.vocab_size,
-                num_items_in_batch=kwargs["num_items_in_batch"],
+                num_items_in_batch=kwargs.get("num_items_in_batch"),
             )
 
         if not return_dict:
@@ -1103,7 +1103,6 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1129,7 +1128,6 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
         outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
