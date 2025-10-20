@@ -46,10 +46,6 @@ class DinoDetrConfig(PretrainedConfig):
             The number of input channels.
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use pretrained weights for the backbone.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        enc_layer_dropout_prob (`float`, *optional*): The dropout probability for all fully connected layers in the encoder.
-        dec_layer_dropout_prob (`float`, *optional*): The dropout probability for all fully connected layers in the decoder.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
@@ -75,15 +71,11 @@ class DinoDetrConfig(PretrainedConfig):
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         encoder_ffn_dim (`int`, *optional*, defaults to 2048):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        module_seq (`List[str]`, *optional*, defaults to `['sa', 'ca', 'ffn']`): The sequence of modules in the decoder.
         d_ffn (`int`, *optional*, defaults to 2048): The hidden dimensions of the fully connected layers.
         activation (`str`, *optional*, defaults to `"relu"`): Could be `"relu"`, `"gelu"`, `"glu"`, `"prelu"`, `"selu"`.
-        decoder_sa_type (`str`, *optional*, defaults to `"sa"`): The type of decoder self attention can take values
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`DinoDetrModel`] can detect in a single image. In case `two_stage` is set to `True`, we use
-            `two_stage_num_proposals` instead.
-        two_stage_type (`str`, *optional*, defaults to `"standard"`): The type of two-stage mechanism to use.
+            [`DinoDetrModel`] can detect in a single image.
         query_dim (`int`, *optional*, defaults to 4): The dimension of the object query embeddings.
         num_encoder_layers (`int`, *optional*, defaults to 6): Number of encoder layers.
         num_decoder_layers (`int`, *optional*, defaults to 6): Number of decoder layers.
@@ -127,6 +119,7 @@ class DinoDetrConfig(PretrainedConfig):
         is_encoder_decoder (`bool`, *optional*, defaults to `True`): Whether the model is an encoder-decoder architecture.
         pe_temperatureH (`float`, *optional*, defaults to 20): The temperature for positional encoding along the height dimension.
         pe_temperatureW (`float`, *optional*, defaults to 20): The temperature for positional encoding along the width dimension.
+        activation_dropout (`float`, *optional*, defaults to 0.0): The dropout ratio for activations inside the fully connected layer.
 
     Examples:
 
@@ -157,9 +150,6 @@ class DinoDetrConfig(PretrainedConfig):
         use_timm_backbone=True,
         num_channels=3,
         use_pretrained_backbone=True,
-        activation_dropout=0.0,
-        enc_layer_dropout_prob=None,
-        dec_layer_dropout_prob=None,
         init_std=0.02,
         backbone="resnet50",
         num_feature_levels=4,
@@ -170,13 +160,11 @@ class DinoDetrConfig(PretrainedConfig):
         encoder_n_points=4,
         dropout=0.0,
         activation_function="relu",
+        activation_dropout=0.0,
         encoder_ffn_dim=2048,
-        module_seq=["sa", "ca", "ffn"],
         d_ffn=2048,
         activation="relu",
-        decoder_sa_type="sa",
         num_queries=900,
-        two_stage_type="standard",
         query_dim=4,
         num_encoder_layers=6,
         num_decoder_layers=6,
@@ -241,15 +229,10 @@ class DinoDetrConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.activation_dropout = activation_dropout
         self.encoder_ffn_dim = encoder_ffn_dim
-        self.module_seq = module_seq
         self.d_ffn = d_ffn
         self.activation = activation
-        self.decoder_sa_type = decoder_sa_type
         self.num_queries = num_queries
-        self.enc_layer_dropout_prob = enc_layer_dropout_prob
-        self.two_stage_type = two_stage_type
         self.query_dim = query_dim
-        self.dec_layer_dropout_prob = dec_layer_dropout_prob
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
         self.embed_init_tgt = embed_init_tgt

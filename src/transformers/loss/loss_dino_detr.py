@@ -410,7 +410,6 @@ def DinoDetrForObjectDetectionLoss(
     use_masks,
     dice_loss_coefficient,
     num_decoder_layers,
-    two_stage_type,
     outputs_class=None,
     outputs_coord=None,
 ):
@@ -451,7 +450,6 @@ def DinoDetrForObjectDetectionLoss(
         dice_loss_coefficient,
         auxiliary_loss,
         num_decoder_layers,
-        two_stage_type,
     )
     loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs
@@ -467,7 +465,6 @@ def compute_weight_dict(
     dice_loss_coefficient,
     auxiliary_loss,
     num_decoder_layers,
-    two_stage_type,
 ):
     # prepare weight dict
     weight_dict = {
@@ -495,15 +492,12 @@ def compute_weight_dict(
             aux_weight_dict.update({k + f"_{i}": v for k, v in clean_weight_dict.items()})
         weight_dict.update(aux_weight_dict)
 
-    if two_stage_type != "no":
-        interm_weight_dict = {}
-        _coeff_weight_dict = {
-            "loss_ce": 1.0,
-            "loss_bbox": 1.0,
-            "loss_giou": 1.0,
-        }
-        interm_weight_dict.update(
-            {k + "_interm": v * _coeff_weight_dict[k] for k, v in clean_weight_dict_wo_dn.items()}
-        )
-        weight_dict.update(interm_weight_dict)
+    interm_weight_dict = {}
+    _coeff_weight_dict = {
+        "loss_ce": 1.0,
+        "loss_bbox": 1.0,
+        "loss_giou": 1.0,
+    }
+    interm_weight_dict.update({k + "_interm": v * _coeff_weight_dict[k] for k, v in clean_weight_dict_wo_dn.items()})
+    weight_dict.update(interm_weight_dict)
     return weight_dict
