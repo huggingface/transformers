@@ -415,7 +415,7 @@ class GenerationMixin(ContinuousMixin):
                     config_file_name="config.json",
                     _from_auto=from_auto_class,
                     _from_pipeline=from_pipeline,
-                    from_model_config=True,
+                    _from_model_config=True,
                     **repo_loading_kwargs,
                 )
             # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
