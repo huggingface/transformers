@@ -38,7 +38,7 @@ deps = {
     "opencv-python": "opencv-python",
     "optimum-benchmark": "optimum-benchmark>=0.3.0",
     "optuna": "optuna",
-    "pandas": "pandas!=2.3.0",
+    "pandas": "pandas<2.3.0",
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized>=0.9",
     "phonemizer": "phonemizer",
