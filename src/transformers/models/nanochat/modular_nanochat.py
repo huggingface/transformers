@@ -74,13 +74,9 @@ class NanoChatAttention(Qwen3Attention):
         config.attention_bias = config.qkv_bias
         if not hasattr(config, "layer_types"):
             config.layer_types = ["full_attention"] * config.num_hidden_layers
-
         super().__init__(config, layer_idx)
-
-        # NanoChat doesn't use sliding window
         self.sliding_window = None
 
-        # Replace Qwen3RMSNorm with NanoChatRMSNorm
         self.q_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
