@@ -328,9 +328,9 @@ class MLCDEncoder(CLIPEncoder):
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
-                hidden_states=hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
+                hidden_states,
+                position_embeddings,
+                attention_mask,
                 **kwargs,
             )
 
