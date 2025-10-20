@@ -4004,13 +4004,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Private method to put the tokenizer in input mode (when it has different modes for input/outputs)
         """
-        pass
 
     def _switch_to_target_mode(self):
         """
         Private method to put the tokenizer in target mode (when it has different modes for input/outputs)
         """
-        pass
 
     @contextmanager
     def as_target_tokenizer(self):
