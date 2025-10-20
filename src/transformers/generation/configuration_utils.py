@@ -388,6 +388,11 @@ class GenerationConfig(PushToHubMixin):
         else:
             self.watermarking_config = WatermarkingConfig.from_dict(watermarking_config)
 
+        # Safety configuration (optional)
+        # Accepts either a dict (to be consumed by a user-implemented config) or an instance
+        # of a base safety config carrying factory methods to build processors/criteria.
+        self.safety_config = kwargs.pop("safety_config", None)
+
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
         self.output_attentions = kwargs.pop("output_attentions", False)

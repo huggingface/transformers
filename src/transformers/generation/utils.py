@@ -1346,6 +1346,25 @@ class GenerationMixin(ContinuousMixin):
                 )
             )
 
+        # Safety processors (if any) constructed from a user-provided safety_config
+        # A safety_config implementation may return one or multiple processors.
+        safety_config = getattr(generation_config, "safety_config", None)
+        if safety_config is not None and hasattr(safety_config, "construct_processors"):
+            try:
+                constructed = safety_config.construct_processors(
+                    vocab_size=self.config.get_text_config().vocab_size, device=device
+                )
+                if constructed is not None:
+                    if isinstance(constructed, (list, tuple)):
+                        for proc in constructed:
+                            if proc is not None:
+                                processors.append(proc)
+                    else:
+                        processors.append(constructed)
+            except Exception:
+                # Keep BC and avoid breaking generation on safety construction errors
+                pass
+
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
             processors.append(LogitNormalization())
@@ -1378,6 +1397,21 @@ class GenerationMixin(ContinuousMixin):
             criteria.append(StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=tokenizer))
         if generation_config._eos_token_tensor is not None:
             criteria.append(EosTokenCriteria(eos_token_id=generation_config._eos_token_tensor))
+        # Safety stopping criteria (if any) from a user-provided safety_config
+        safety_config = getattr(generation_config, "safety_config", None)
+        if safety_config is not None and hasattr(safety_config, "construct_criteria"):
+            try:
+                constructed = safety_config.construct_criteria()
+                if constructed is not None:
+                    if isinstance(constructed, (list, tuple)):
+                        for crit in constructed:
+                            if crit is not None:
+                                criteria.append(crit)
+                    else:
+                        criteria.append(constructed)
+            except Exception:
+                # Keep BC and avoid breaking generation on safety construction errors
+                pass
         if (
             generation_config.is_assistant
             and generation_config.assistant_confidence_threshold is not None
