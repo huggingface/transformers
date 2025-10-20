@@ -154,7 +154,7 @@ Add a `convert_<model_name>_to_hf.py` script that converts the original model we
 
 ☐ **4. Add integration tests with exact output matching**
 
-At minimum, add an `IntegrationTest` class that tests end-to-end generation with **exact** output matching:
+At minimum, add an `IntegrationTest` class that tests end-to-end generation (processing and modelling) with **exact** output matching:
 
 - For generative models: test that generated text matches expected output exactly
 - For non-generative models: test that output logits match expected values
