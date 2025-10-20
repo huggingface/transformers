@@ -26,23 +26,11 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
-
-from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
     requires_backends,
 )
-
-
-"""class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
-    #Public (persisted) key — must match slow processor:
-    size_divisor: int
-    #Back-compat alias (NOT persisted):
-    ensure_multiple_of: int
-    #Allow overriding resample (persisted like slow):
-    resample: PILImageResampling
-"""
 
 
 @auto_docstring
@@ -56,20 +44,20 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
     - (No normalization by default)
     """
 
-    #Persist ONLY the same keys as the slow processor
+    # Persist ONLY the same keys as the slow processor
     do_resize = True
     do_rescale = True
     do_normalize = False
     resample = PILImageResampling.BILINEAR
     size_divisor = 32
-    #Don't persist an explicit `size` for GLPN (slow doesn't)
+    # Don't persist an explicit `size` for GLPN (slow doesn't)
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 480, "width": 640}  # only for validation; we still crop, not resize
     interpolation = F.InterpolationMode.BILINEAR
-    #valid_kwargs = GLPNImageProcessorKwargs
+    # valid_kwargs = GLPNImageProcessorKwargs
 
-    #If BaseImageProcessorFast supports it, this makes persistence explicit:
+    # If BaseImageProcessorFast supports it, this makes persistence explicit:
     try:
         config_keys = {"do_resize", "size_divisor", "resample", "do_rescale"}
     except Exception:
@@ -79,7 +67,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         if "ensure_multiple_of" in kwargs and "size_divisor" not in kwargs:
             kwargs = dict(kwargs)
             kwargs["size_divisor"] = kwargs.pop("ensure_multiple_of")
-        #ensure resample default for validation
+        # ensure resample default for validation
         kwargs.setdefault("resample", PILImageResampling.BILINEAR)
         super().__init__(**kwargs)
 
@@ -97,7 +85,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         new_w = (w // size_divisor) * size_divisor
         if (new_h, new_w) == (h, w):
             return images
-        #Use top-left crop to mirror typical behavior; slow doesn't center-crop.
+        # Use top-left crop to mirror typical behavior; slow doesn't center-crop.
         return images[..., :new_h, :new_w]
 
     def _preprocess(
@@ -123,7 +111,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         - rescale [0,1]
         - normalize (off by default)
         """
-        #avoid validation error: inject dummy size/resample for validate_preprocess_arguments
+        # avoid validation error: inject dummy size/resample for validate_preprocess_arguments
         if size is None:
             size = {"height": 480, "width": 640}
         if resample is None and interpolation is None:
@@ -161,22 +149,27 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data={"pixel_values": processed}, tensor_type=tensor_type)
 
-    #ensure only slow keys are serialized
+    # ensure only slow keys are serialized
     def to_dict(self):
         d = super().to_dict()
-        
+
         # Keep only these keys with their values (everything else gets set to None)
         keys_to_keep = {
-            "image_processor_type", "_processor_class",  # Identity metadata
-            "do_resize", "size_divisor", "resample", "do_rescale",  # Core GLPN params
-            "default_to_square", "data_format"  # Fast processor params
+            "image_processor_type",
+            "_processor_class",  # Identity metadata
+            "do_resize",
+            "size_divisor",
+            "resample",
+            "do_rescale",  # Core GLPN params
+            "default_to_square",
+            "data_format",  # Fast processor params
         }
-        
+
         # Set all other keys to None (don't persist their values)
         for key in list(d.keys()):
             if key not in keys_to_keep:
                 d[key] = None
-        
+
         return d
 
     @torch.no_grad()
@@ -187,19 +180,6 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         """
         requires_backends(self, "torch")
         predicted_depth = outputs.predicted_depth  # shape: (B, H, W) or (B, 1, H, W)
-
-        """#Normalize shape to (B, H, W)
-        if predicted_depth.ndim == 4 and predicted_depth.shape[1] == 1:
-            predicted_depth = predicted_depth.squeeze(1)
-        elif predicted_depth.ndim == 3:
-            pass
-        else:
-            #fallback: ensure (B, H, W)
-            if predicted_depth.ndim == 4:
-                predicted_depth = predicted_depth[:, 0, ...]
-            else:
-                raise ValueError("Unexpected depth prediction shape")
-        """
 
         results = []
         target_sizes = target_sizes or [None] * predicted_depth.shape[0]
