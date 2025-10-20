@@ -180,11 +180,8 @@ class NanoChatAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        # Replace Qwen3RMSNorm with NanoChatRMSNorm
         self.q_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-
-        # NanoChat doesn't use sliding window
         self.sliding_window = None
 
     def forward(
@@ -217,7 +214,7 @@ class NanoChatAttention(nn.Module):
         key_states = self.k_norm(key_states)
 
         if past_key_values is not None:
-            cache_kwargs = {"cache_position": cache_position}
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
@@ -241,18 +238,18 @@ class NanoChatAttention(nn.Module):
 
 
 class NanoChatMLP(nn.Module):
-    """MLP module for NanoChat with ReLU^2 activation."""
-
-    def __init__(self, config: NanoChatConfig):
+    def __init__(self, config):
         super().__init__()
-        self.fc = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        # Override with bias=False for NanoChat
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.proj(hidden_states)
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
 
 

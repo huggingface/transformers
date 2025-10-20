@@ -20,7 +20,6 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
@@ -30,6 +29,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRotaryEmbedding, eager_attention_forward
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
@@ -133,20 +133,12 @@ class NanoChatAttention(Qwen3Attention):
         return attn_output, attn_weights
 
 
-class NanoChatMLP(nn.Module):
-    """MLP module for NanoChat with ReLU^2 activation."""
-
-    def __init__(self, config: NanoChatConfig):
-        super().__init__()
-        self.fc = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.proj(hidden_states)
-        return hidden_states
+class NanoChatMLP(CLIPMLP):
+    def __init__(self, config):
+        super().__init__(config)
+        # Override with bias=False for NanoChat
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
 
 class NanoChatDecoderLayer(GradientCheckpointingLayer):
