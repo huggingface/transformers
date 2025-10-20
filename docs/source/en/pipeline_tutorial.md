@@ -355,3 +355,29 @@ pipeline = pipeline(model="google/gemma-7b", dtype=torch.bfloat16, device_map="a
 pipeline("the secret to baking a good cake is ")
 [{'generated_text': 'the secret to baking a good cake is 1. the right ingredients 2. the right'}]
 ```
+### Text Classification Example (Sentiment Analysis)
+
+This example shows how to classify sentences as **positive** or **negative** using Hugging Face Transformers
+
+```python
+
+from transformers import pipeline
+
+classifier = pipeline(
+"text-classification",
+model="distilbert-base-uncased-finetuned-sst-2-english"
+)
+
+
+texts = [
+"I love coding in Python!",
+"I hate bugs in my code.",
+"Learning new language is fun.",
+"Debugging is fun sometimes and frustrating sometimes."
+]
+
+results=classifiers(texts)
+
+for text,result in zip(texts,results):
+     print(f"Text: {text}")
+     print(f"Prediction: {results['label']}, Confidence: {result['score']:.4f}\n")
