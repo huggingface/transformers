@@ -1111,6 +1111,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs()
     @can_return_tuple
     @auto_docstring
     def forward(
