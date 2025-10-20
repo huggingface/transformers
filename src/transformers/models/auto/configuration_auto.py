@@ -955,6 +955,9 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
+        ("video_llama_3_vision", "video_llama_3"),
+        ("parakeet_encoder", "parakeet"),
+        ("parakeet_ctc", "parakeet"),
         ("perception_encoder", "perception_lm"),
         ("keye_vl_1_5_text", "keye_vl_1_5"),
     ]

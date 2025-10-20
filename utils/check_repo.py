@@ -399,6 +399,14 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
     "CsmForConditionalGeneration",  # Building part of a bigger model
     "Florence2VisionBackbone",  # Building part of a bigger model
+    "Qwen3OmniMoeCode2Wav",  # Building part of a bigger model
+    "Qwen3OmniMoeCode2WavTransformerModel",  # Building part of a bigger model
+    "Qwen3OmniMoeTalkerCodePredictorModel",  # Building part of a bigger model
+    "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of a bigger model
+    "Qwen3OmniMoeTalkerForConditionalGeneration",  # Building part of a bigger model
+    "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
+    "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
+    "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
     "KeyeVL1_5VisionModel",  # Building part of a bigger model
 ]
 
