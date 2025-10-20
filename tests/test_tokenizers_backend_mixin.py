@@ -3,13 +3,11 @@
 import inspect
 import shutil
 import tempfile
-import unittest
 from typing import TYPE_CHECKING
 
 from parameterized import parameterized
 
-from transformers import PreTrainedTokenizerFast
-from transformers.testing_utils import require_tokenizers
+from transformers import TokenizersBackend
 from transformers.tokenization_utils import AddedToken
 
 SMALL_TRAINING_CORPUS = [
@@ -52,7 +50,7 @@ class TokenizersBackendTesterMixin:
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @classmethod
-    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizerFast:
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> TokenizersBackend:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 

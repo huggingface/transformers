@@ -6,8 +6,7 @@ import tempfile
 import unittest
 from typing import TYPE_CHECKING
 
-from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
-from transformers.testing_utils import require_tokenizers
+from transformers import AutoTokenizer, PreTrainedTokenizer, TokenizersBackend
 from transformers.tokenization_utils import AddedToken
 
 if TYPE_CHECKING:
@@ -45,7 +44,7 @@ class SentencePieceBackendTesterMixin:
         return AutoTokenizer.from_pretrained(cls.from_pretrained_id, **merged_kwargs)
 
     @classmethod
-    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
+    def get_rust_tokenizer(cls, **kwargs) -> TokenizersBackend:
         return cls.rust_tokenizer_class.from_pretrained(cls.from_pretrained_id, **kwargs)
 
     def get_tokenizers(self, fast=True, **kwargs):

@@ -22,7 +22,7 @@ from typing import Optional
 import numpy as np
 from tqdm import tqdm
 
-from ...models.bert.tokenization_bert import whitespace_tokenize
+from ...models.bert.tokenization_bert_legacy import whitespace_tokenize
 from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
 from ...utils import is_torch_available, is_torch_hpu_available, logging
 from .utils import DataProcessor
@@ -126,7 +126,6 @@ def squad_convert_example_to_features(
             "RobertaTokenizer",
             "LongformerTokenizer",
             "BartTokenizer",
-            "RobertaTokenizerFast",
             "LongformerTokenizerFast",
             "BartTokenizerFast",
         ]:

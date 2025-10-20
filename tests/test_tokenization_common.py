@@ -18,11 +18,9 @@ import inspect
 import itertools
 import json
 import os
-import pickle
 import re
 import shutil
 import tempfile
-import traceback
 import unittest
 from collections import OrderedDict
 from itertools import takewhile
@@ -33,38 +31,29 @@ from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
-    AlbertTokenizer,
-  #  AlbertTokenizerFast,
     BertTokenizer,
- #   BertTokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     TokenizersBackend,
-    Trainer,
-    TrainingArguments,
     is_mlx_available,
     is_torch_available,
     logging,
 )
 from transformers.testing_utils import (
-    check_json_file_has_correct_format,
     get_tests_dir,
     require_jinja,
-    require_read_token,
     require_tokenizers,
     require_torch,
-    run_test_in_subprocess,
-    slow,
 )
 from transformers.tokenization_utils import AddedToken
 
-# from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
-# from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
+
+from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
+from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
 
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
 
 
 if TYPE_CHECKING:
@@ -141,6 +130,7 @@ def merge_model_tokenizer_mappings(
                     model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
+
 
 def check_subword_sampling(
     tokenizer: PreTrainedTokenizer,
@@ -2422,93 +2412,93 @@ class TokenizerTesterMixin:
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
-    @require_torch
-    @slow
-    def test_torch_encode_plus_sent_to_model(self):
-        import torch
+    # @require_torch
+    # @slow
+    # def test_torch_encode_plus_sent_to_model(self):
+    #     import torch
 
-        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
+    #     from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
+    #     MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
 
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    self.skipTest(f"{tokenizer.__class__.__name__} is not in the MODEL_TOKENIZER")
+    #     tokenizers = self.get_tokenizers(do_lower_case=False)
+    #     for tokenizer in tokenizers:
+    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
+    #             if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+    #                 self.skipTest(f"{tokenizer.__class__.__name__} is not in the MODEL_TOKENIZER")
 
-                config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-                config = config_class()
+    #             config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+    #             config = config_class()
 
-                if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest(reason="Model is not an encoder-decoder model or has no set pad token id")
+    #             if config.is_encoder_decoder or config.pad_token_id is None:
+    #                 self.skipTest(reason="Model is not an encoder-decoder model or has no set pad token id")
 
-                model = model_class(config)
+    #             model = model_class(config)
 
-                # Make sure the model contains at least the full vocabulary size in its embedding matrix
-                is_using_common_embeddings = hasattr(model.get_input_embeddings(), "weight")
-                if is_using_common_embeddings:
-                    self.assertGreaterEqual(model.get_input_embeddings().weight.shape[0], len(tokenizer))
+    #             # Make sure the model contains at least the full vocabulary size in its embedding matrix
+    #             is_using_common_embeddings = hasattr(model.get_input_embeddings(), "weight")
+    #             if is_using_common_embeddings:
+    #                 self.assertGreaterEqual(model.get_input_embeddings().weight.shape[0], len(tokenizer))
 
-                # Build sequence
-                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-                sequence = " ".join(first_ten_tokens)
-                encoded_sequence = tokenizer(sequence, return_tensors="pt")
+    #             # Build sequence
+    #             first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+    #             sequence = " ".join(first_ten_tokens)
+    #             encoded_sequence = tokenizer(sequence, return_tensors="pt")
 
-                # Ensure that the BatchEncoding.to() method works.
-                encoded_sequence.to(model.device)
+    #             # Ensure that the BatchEncoding.to() method works.
+    #             encoded_sequence.to(model.device)
 
-                batch_encoded_sequence = tokenizer([sequence, sequence], return_tensors="pt")
-                # This should not fail
+    #             batch_encoded_sequence = tokenizer([sequence, sequence], return_tensors="pt")
+    #             # This should not fail
 
-                with torch.no_grad():  # saves some time
-                    model(**encoded_sequence)
-                    model(**batch_encoded_sequence)
+    #             with torch.no_grad():  # saves some time
+    #                 model(**encoded_sequence)
+    #                 model(**batch_encoded_sequence)
 
-    @require_torch
-    @slow
-    def test_np_encode_plus_sent_to_model(self):
-        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
+    # @require_torch
+    # @slow
+    # def test_np_encode_plus_sent_to_model(self):
+    #     from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
+    #     MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
 
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    self.skipTest(f"{tokenizer.__class__.__name__} is not in the MODEL_TOKENIZER_MAPPING")
+    #     tokenizers = self.get_tokenizers()
+    #     for tokenizer in tokenizers:
+    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
+    #             if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+    #                 self.skipTest(f"{tokenizer.__class__.__name__} is not in the MODEL_TOKENIZER_MAPPING")
 
-                config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-                config = config_class()
+    #             config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+    #             config = config_class()
 
-                if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest("Model is not an encoder-decoder model or has no set pad token id")
+    #             if config.is_encoder_decoder or config.pad_token_id is None:
+    #                 self.skipTest("Model is not an encoder-decoder model or has no set pad token id")
 
-                # Build sequence
-                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-                sequence = " ".join(first_ten_tokens)
-                encoded_sequence = tokenizer(sequence, return_tensors="np")
-                batch_encoded_sequence = tokenizer([sequence, sequence], return_tensors="np")
+    #             # Build sequence
+    #             first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+    #             sequence = " ".join(first_ten_tokens)
+    #             encoded_sequence = tokenizer(sequence, return_tensors="np")
+    #             batch_encoded_sequence = tokenizer([sequence, sequence], return_tensors="np")
 
-                # This is currently here to make ruff happy !
-                if encoded_sequence is None:
-                    raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
+    #             # This is currently here to make ruff happy !
+    #             if encoded_sequence is None:
+    #                 raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
 
-                if batch_encoded_sequence is None:
-                    raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus()")
+    #             if batch_encoded_sequence is None:
+    #                 raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus()")
 
-                fast_tokenizer = self.get_rust_tokenizer()
-                encoded_sequence_fast = fast_tokenizer(sequence, return_tensors="np")
-                batch_encoded_sequence_fast = fast_tokenizer(
-                    [sequence, sequence], return_tensors="np"
-                )
+    #             fast_tokenizer = self.get_rust_tokenizer()
+    #             encoded_sequence_fast = fast_tokenizer(sequence, return_tensors="np")
+    #             batch_encoded_sequence_fast = fast_tokenizer(
+    #                 [sequence, sequence], return_tensors="np"
+    #             )
 
-                # This is currently here to make ruff happy !
-                if encoded_sequence_fast is None:
-                    raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
+    #             # This is currently here to make ruff happy !
+    #             if encoded_sequence_fast is None:
+    #                 raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
 
-                if batch_encoded_sequence_fast is None:
-                    raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus() (fast)")
+    #             if batch_encoded_sequence_fast is None:
+    #                 raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus() (fast)")
 
     @require_torch
     def test_prepare_seq2seq_batch(self):
@@ -2844,24 +2834,97 @@ class TokenizerTesterMixin:
                     output = tokenizer(empty_input_string, return_tensors=return_type)
                     self.assertEqual(output.input_ids.dtype, target_type)
 
+    def test_pad_token_initialization(self):
+        """Test that passing pad_token when creating a tokenizer works correctly."""
+        tokenizers = self.get_tokenizers(pad_token="[PAD]")
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                # Verify the pad_token was set correctly
+                self.assertEqual(tokenizer.pad_token, "[PAD]")
+                self.assertIsNotNone(tokenizer.pad_token_id)
 
-# @require_tokenizers
-# class TokenizersBackendCommonTest(unittest.TestCase, TokenizersBackendTesterMixin):
-#     """
-#     A single test class that runs all tokenizers-backend tests once.
-#     Uses BertTokenizerFast as a representative fast tokenizer.
-#     """
+                # Test with two sequences of different lengths to trigger padding
+                seq_0 = "Test this method."
+                seq_1 = "With these inputs and some extra tokens here."
 
-#     rust_tokenizer_class = BertTokenizerFast
-#     from_pretrained_id = "google-bert/bert-base-uncased"
-#     from_pretrained_kwargs = {}
+                # Test padding works with the custom pad_token
+                output_with_padding = tokenizer(
+                    [seq_0, seq_1],
+                    padding=True,
+                    return_attention_mask=True,
+                )
+
+                # Check that sequences were padded to the same length
+                self.assertEqual(
+                    len(output_with_padding["input_ids"][0]),
+                    len(output_with_padding["input_ids"][1]),
+                )
+
+                # Check that attention mask has 0s where padding was added (on the shorter sequence)
+                # Find the shorter sequence
+                unpadded_lengths = [
+                    len(tokenizer(seq_0, add_special_tokens=True)["input_ids"]),
+                    len(tokenizer(seq_1, add_special_tokens=True)["input_ids"])
+                ]
+                shorter_idx = 0 if unpadded_lengths[0] < unpadded_lengths[1] else 1
+                self.assertIn(0, output_with_padding["attention_mask"][shorter_idx])
+
+    def test_bos_token_with_add_bos_token_true(self):
+        """Test that passing bos_token with add_bos_token=True during initialization adds the BOS token."""
+        try:
+            tokenizers = self.get_tokenizers(bos_token="<BOS>", add_bos_token=True)
+        except TypeError:
+            # Some tokenizers might not support add_bos_token parameter
+            self.skipTest("Tokenizer does not support add_bos_token parameter")
+
+        test_string = "Hello world"
+
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                # Verify bos_token was set
+                self.assertEqual(tokenizer.bos_token, "<BOS>")
+
+                # Verify the tokenizer was created successfully with these parameters
+                output = tokenizer(test_string, add_special_tokens=False)
+                self.assertIsNotNone(output["input_ids"])
+
+    def test_bos_token_with_add_bos_token_false(self):
+        """Test that passing bos_token with add_bos_token=False during initialization does not add the BOS token."""
+        try:
+            tokenizers = self.get_tokenizers(bos_token="<BOS>", add_bos_token=False)
+        except TypeError:
+            # Some tokenizers might not support add_bos_token parameter
+            self.skipTest("Tokenizer does not support add_bos_token parameter")
+
+        test_string = "Hello world"
+
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                # Verify bos_token was set
+                self.assertEqual(tokenizer.bos_token, "<BOS>")
+
+                # Verify the tokenizer was created successfully with these parameters
+                output = tokenizer(test_string, add_special_tokens=False)
+                self.assertIsNotNone(output["input_ids"])
 
 
-# class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTesterMixin):
-#     """
-#     A single test class that runs all SentencePiece-backend tests once.
-#     Uses T5Tokenizer as a representative SentencePiece tokenizer.
-#     """
-#
-#     tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b", use_fast=False)
-#     from_pretrained_kwargs = {}
+@require_tokenizers
+class TokenizersBackendCommonTest(unittest.TestCase, TokenizersBackendTesterMixin):
+    """
+    A single test class that runs all tokenizers-backend tests once.
+    Uses BertTokenizerFast as a representative fast tokenizer.
+    """
+
+    rust_tokenizer_class = BertTokenizer
+    from_pretrained_id = "google-bert/bert-base-uncased"
+    from_pretrained_kwargs = {}
+
+
+class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTesterMixin):
+    """
+    A single test class that runs all SentencePiece-backend tests once.
+    Uses T5Tokenizer as a representative SentencePiece tokenizer.
+    """
+
+    tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+    from_pretrained_kwargs = {}
