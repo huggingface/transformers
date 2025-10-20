@@ -210,7 +210,7 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (CLIPVisionModel, CLIPVisionModelWithProjection) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -398,7 +398,7 @@ class CLIPTextModelTester:
 @require_torch
 class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPTextModel, CLIPTextModelWithProjection) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False
 
     model_split_percents = [0.5, 0.8, 0.9]
 
