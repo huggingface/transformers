@@ -535,7 +535,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_interpolate_pos_encoding(self):
         model_name = "microsoft/beit-base-patch16-224-pt22k"
-        model = BeitModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(torch_device)
+        model = BeitModel.from_pretrained(model_name, use_absolute_position_embeddings=True).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         processor = BeitImageProcessor.from_pretrained(model_name)

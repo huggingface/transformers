@@ -141,5 +141,3 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_tokenizers
 class OpenAIGPTTokenizationTestWithSpacy(OpenAIGPTTokenizationTest):
     """Tests OpenAIGPTTokenizer that uses SpaCy and ftfy."""
-
-    pass

@@ -169,11 +169,7 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None, path: O
                 new_text = re.sub(pattern, replacement, new_text)
         output_dict.update(dict(zip(old_text_language.split("\n"), new_text.split("\n"))))
         old_text_multi = "\n".join(
-            [
-                key
-                for key in state_dict_keys
-                if not (key.startswith("language_model") or key.startswith("vision_model"))
-            ]
+            [key for key in state_dict_keys if not (key.startswith(("language_model", "vision_model")))]
         )
         new_text = old_text_multi
         for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_MULTI.items():

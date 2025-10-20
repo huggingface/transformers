@@ -95,13 +95,13 @@ def rename_key(name, base_model=False):
     if ".conv_proj." in name:
         name = name.replace(".conv_proj.", ".conv_projection.")
 
-    for i in range(0, 2):
-        for j in range(0, 4):
+    for i in range(2):
+        for j in range(4):
             if f".{i}.{j}." in name:
                 name = name.replace(f".{i}.{j}.", f".{i}.layer.{j}.")
 
     for i in range(2, 6):
-        for j in range(0, 4):
+        for j in range(4):
             if f".{i}.{j}." in name:
                 name = name.replace(f".{i}.{j}.", f".{i}.")
                 if "expand_1x1" in name:
