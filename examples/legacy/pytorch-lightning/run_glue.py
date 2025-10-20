@@ -122,7 +122,7 @@ class GLUETransformer(BaseTransformer):
         out_label_list = [[] for _ in range(out_label_ids.shape[0])]
         preds_list = [[] for _ in range(out_label_ids.shape[0])]
 
-        results = {**{"val_loss": val_loss_mean}, **compute_metrics(self.hparams.task, preds, out_label_ids)}
+        results = {"val_loss": val_loss_mean, **compute_metrics(self.hparams.task, preds, out_label_ids)}
 
         ret = dict(results.items())
         ret["log"] = results

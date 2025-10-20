@@ -1155,8 +1155,6 @@ class AriaTextMoELayer(nn.Module):
 class AriaTextAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    pass
-
 
 class AriaTextDecoderLayer(LlamaDecoderLayer):
     """

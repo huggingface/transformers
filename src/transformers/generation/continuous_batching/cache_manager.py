@@ -31,7 +31,6 @@ class CacheAllocator(ABC):
     def allocate_blocks(self, n_blocks: int, request_id: str, free_blocks: deque[int]) -> Optional[int]:
         """Allocates n_blocks for a given request_id. Returns the num of blocks allocated if successful and None
         otherwise."""
-        pass
 
     def free_blocks(self, request_id: str, free_blocks: deque[int]) -> None:
         """Frees all blocks associated with a request_id."""
@@ -46,17 +45,14 @@ class CacheAllocator(ABC):
     @abstractmethod
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to read request_id's cache in the cache tensor."""
-        pass
 
     @abstractmethod
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to write request_id's cache in the cache tensor."""
-        pass
 
     @abstractmethod
     def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-        pass
 
 
 class FullAttentionCacheAllocator(CacheAllocator):

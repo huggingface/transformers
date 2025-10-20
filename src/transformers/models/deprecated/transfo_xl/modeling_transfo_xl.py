@@ -688,7 +688,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
     def _prune_heads(self, heads):
         logger.info("Head pruning is not implemented for Transformer-XL model")
-        pass
 
     def init_mems(self, bsz):
         if self.mem_len > 0:

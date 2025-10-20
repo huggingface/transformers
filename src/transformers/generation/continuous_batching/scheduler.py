@@ -53,7 +53,6 @@ class Scheduler(ABC):
         """Schedules requests for the next batch based on available token budget. This method selects which requests
         should be processed in the current batch, considering the token budget and the scheduler's prioritization rules.
         The token_budget is the maximum number of tokens that can be processed in this batch."""
-        pass
 
     @traced
     def has_pending_requests(self) -> bool:

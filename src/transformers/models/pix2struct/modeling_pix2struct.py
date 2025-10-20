@@ -92,7 +92,6 @@ except ImportError:
     pass
 except Exception:
     logger.warning("Discovered apex but it failed to load, falling back to Pix2StructLayerNorm")
-    pass
 
 
 class Pix2StructVisionEmbeddings(nn.Module):
