@@ -38,7 +38,6 @@ from ...utils import (
     DUMMY_MASK,
     auto_docstring,
     is_torch_flex_attn_available,
-    is_torch_fx_proxy,
     is_torchdynamo_compiling,
     logging,
 )
@@ -337,6 +336,7 @@ class Pix2StructVisionEncoder(nn.Module):
 @auto_docstring
 class Pix2StructPreTrainedModel(PreTrainedModel):
     config: Pix2StructConfig
+    input_modalities = ["image", "text"]
 
     _can_compile_fullgraph = False
 
@@ -439,15 +439,9 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
                 "See Pix2Struct docs for more information."
             )
 
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
             raise ValueError("self.model.config.pad_token_id has to be defined.")
@@ -461,6 +455,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
 class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     config: Pix2StructVisionConfig
     main_input_name = "flattened_patches"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructVisionLayer"]
 
@@ -962,6 +957,7 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
 )
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config: Pix2StructTextConfig
+    input_modalities = "text"
     _no_split_modules = ["Pix2StructTextBlock"]
     _tied_weights_keys = ["lm_head.weight"]
     supports_gradient_checkpointing = True

@@ -23,7 +23,7 @@ from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
 from .utils.generic import GeneralInterface
-from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_torchdynamo_compiling
+from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_tracing
 
 
 if is_torch_flex_attn_available():
@@ -239,7 +239,6 @@ def _ignore_causal_mask_sdpa(
     allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
     passed).
     """
-    is_tracing = torch.jit.is_tracing() or isinstance(padding_mask, torch.fx.Proxy) or is_torchdynamo_compiling()
     if padding_mask is not None and padding_mask.shape[-1] > kv_length:
         mask_indices = torch.arange(kv_length, device=padding_mask.device)
         mask_indices += kv_offset
@@ -250,7 +249,7 @@ def _ignore_causal_mask_sdpa(
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
     # `ignore_causal_mask = True` if we are not tracing
     if (
-        not is_tracing
+        not is_tracing(padding_mask)
         # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
         and (query_length == 1 or (kv_length == query_length or _is_torch_xpu_available))
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
@@ -275,11 +274,9 @@ def _ignore_bidirectional_mask_sdpa(padding_mask: Optional[torch.Tensor]) -> boo
     Detects whether the bidirectional mask can be ignored in case PyTorch's SDPA is used, i.e. when there is full
     attention with no padding.
     """
-    is_tracing = torch.jit.is_tracing() or isinstance(padding_mask, torch.fx.Proxy) or is_torchdynamo_compiling()
-
     # When using `torch.export` or `torch.onnx.dynamo_export`, we need to avoid to check the contents of the mask;
     # otherwise, we will encounter dynamic control flows
-    if not is_tracing and (padding_mask is None or padding_mask.all()):
+    if not is_tracing(padding_mask) and (padding_mask is None or padding_mask.all()):
         return True
 
     return False
@@ -405,6 +402,16 @@ def sdpa_mask_recent_torch(
     if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
         return None
 
+    # vmap can incur performance issues as reported in #41566 for bidirectional mask as we only need to expand the
+    # padding mask. Thus, we allow early exit here if we do not detect any modification to the base mask function
+    if mask_function is bidirectional_mask_function:
+        if padding_mask is not None:
+            # used for slicing without data-dependent slicing
+            mask_indices = torch.arange(kv_length, device=cache_position.device) + kv_offset
+            return padding_mask[:, None, None, mask_indices].expand(-1, -1, q_length, -1)
+        else:
+            return torch.ones(batch_size, 1, q_length, kv_length, dtype=torch.bool, device=cache_position.device)
+
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
@@ -484,6 +491,14 @@ def sdpa_mask_older_torch(
         return None
     if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
         return None
+
+    # vmap can incur performance issues as reported in #41566 for bidirectional mask as we only need to expand the
+    # padding mask. Thus, we allow early exit here if we do not detect any modification to the base mask function
+    if mask_function is bidirectional_mask_function:
+        if padding_mask is not None:
+            return padding_mask[:, None, None, :].expand(-1, -1, q_length, -1)
+        else:
+            return torch.ones(batch_size, 1, q_length, kv_length, dtype=torch.bool, device=cache_position.device)
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
     # but without data-dependent slicing (i.e. torch.compile friendly)
@@ -839,7 +854,8 @@ def create_causal_mask(
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
     if _is_torch_xpu_available:
-        allow_is_causal_skip = True
+        # Do not allow skip if we are compiling for decoding, but for prefill, we still allow skip to optimization the perf of 1st token generation
+        allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and cache_position.shape[0] == 1)
     else:
         allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
 

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
 import shutil
 import tempfile
@@ -21,7 +20,7 @@ import unittest
 from transformers import BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES, BertTokenizer
 from transformers.testing_utils import require_tokenizers, require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_torchvision_available, is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -51,12 +50,8 @@ class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase
             "image_mean": [0.5, 0.5, 0.5],
             "image_std": [0.5, 0.5, 0.5],
         }
-        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
-
+        image_processor = ViTImageProcessor(**image_processor_map)
         tokenizer = cls.get_tokenizer()
-        image_processor = cls.get_image_processor()
         processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(cls.tmpdirname)
 

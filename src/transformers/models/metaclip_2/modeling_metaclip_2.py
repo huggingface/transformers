@@ -265,6 +265,7 @@ class MetaClip2MLP(nn.Module):
 class MetaClip2PreTrainedModel(PreTrainedModel):
     config: MetaClip2Config
     base_model_prefix = "metaclip_2"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -519,6 +520,7 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
     ```"""
 
     config: MetaClip2TextConfig
+    input_modalities = "text"
 
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
     _supports_flash_attn = False  # mask creation only accounts for sdpa/eager
@@ -622,6 +624,7 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
     ```"""
 
     config: MetaClip2TextConfig
+    input_modalities = "text"
 
     _supports_flash_attn = False
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
@@ -1058,6 +1061,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 
     config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["MetaClip2EncoderLayer"]
 
     def __init__(self, config: MetaClip2VisionConfig):
@@ -1162,6 +1166,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 
     config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: MetaClip2VisionConfig):
         super().__init__(config)
@@ -1228,6 +1233,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 )
 class MetaClip2ForImageClassification(MetaClip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: MetaClip2Config) -> None:
         super().__init__(config)

@@ -1187,22 +1187,24 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         reordered_past = ()
         for idx in range(len(past_key_values)):
             if isinstance(past_key_values, EncoderDecoderCache):
-                layer_past = (
-                    past_key_values.self_attention_cache.layers[idx].keys,
-                    past_key_values.self_attention_cache.layers[idx].values,
-                    past_key_values.cross_attention_cache.layers[idx].keys,
-                    past_key_values.cross_attention_cache.layers[idx].values,
+                self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = (
+                    _reorder_stacked(x, beam_idx.to(x.device))
+                    for x in (
+                        past_key_values.self_attention_cache.layers[idx].keys,
+                        past_key_values.self_attention_cache.layers[idx].values,
+                        past_key_values.cross_attention_cache.layers[idx].keys,
+                        past_key_values.cross_attention_cache.layers[idx].values,
+                    )
                 )
+                new_tuple = (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
             else:
-                layer_past = (past_key_values.layers[idx].keys, past_key_values.layers[idx].values)
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            reordered_past += (
-                tuple(_reorder_stacked(past_state, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-
-        # Cast back to the correct cache class
-        reordered_cache = type(past_key_values)(reordered_past)
-        return reordered_cache
+                self_attention_k, self_attention_v = (
+                    _reorder_stacked(x, beam_idx.to(x.device))
+                    for x in (past_key_values.layers[idx].keys, past_key_values.layers[idx].values)
+                )
+                new_tuple = (self_attention_k, self_attention_v)
+            reordered_past += (new_tuple,)
+        return type(past_key_values)(reordered_past)
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
         n_docs = n_docs if n_docs is not None else self.config.n_docs

@@ -242,6 +242,7 @@ from .import_utils import (
     is_torchdynamo_exporting,
     is_torchvision_available,
     is_torchvision_v2_available,
+    is_tracing,
     is_training_run_on_sagemaker,
     is_triton_available,
     is_uroman_available,

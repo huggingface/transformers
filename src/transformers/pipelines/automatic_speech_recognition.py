@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import httpx
 import numpy as np
@@ -187,10 +187,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def __init__(
         self,
         model: "PreTrainedModel",
-        feature_extractor: Optional[Union["SequenceFeatureExtractor", str]] = None,
-        tokenizer: Optional[PreTrainedTokenizer] = None,
-        decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
-        device: Optional[Union[int, "torch.device"]] = None,
+        feature_extractor: Union["SequenceFeatureExtractor", str] | None = None,
+        tokenizer: PreTrainedTokenizer | None = None,
+        decoder: Union["BeamSearchDecoderCTC", str] | None = None,
+        device: Union[int, "torch.device"] | None = None,
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
@@ -210,7 +210,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
 
-    def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
+    def __call__(self, inputs: np.ndarray | bytes | str | dict, **kwargs: Any) -> list[dict[str, Any]]:
         """
         Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`]
         documentation for more information.
@@ -577,7 +577,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return {"is_last": is_last, **out, **extra}
 
     def postprocess(
-        self, model_outputs, decoder_kwargs: Optional[dict] = None, return_timestamps=None, return_language=None
+        self, model_outputs, decoder_kwargs: dict | None = None, return_timestamps=None, return_language=None
     ):
         # Optional return types
         optional = {}
