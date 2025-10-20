@@ -41,11 +41,6 @@ from .configuration_nanochat import NanoChatConfig
 
 
 class NanoChatRMSNorm(torch.nn.Module):
-    """
-    NanoChatRMSNorm inherits from Llama4TextL2Norm (weight-less RMS normalization).
-    Overrides __init__ to match NanoChat's API with hidden_size parameter.
-    """
-
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
         self.eps = eps
@@ -97,40 +92,6 @@ class NanoChatRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -169,6 +130,22 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input with flipped signs for NanoChat."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((x2, -x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors using NanoChat's rotate_half."""
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 class NanoChatAttention(nn.Module):
     """
     Multi-headed attention from NanoChat with custom RoPE and QK normalization.
@@ -178,25 +155,37 @@ class NanoChatAttention(nn.Module):
 
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
+        # Temporarily add attention_bias and layer_types for Qwen3 compatibility
+        config.attention_bias = config.qkv_bias
+        if not hasattr(config, "layer_types"):
+            config.layer_types = ["full_attention"] * config.num_hidden_layers
         self.config = config
         self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.num_kv_heads = config.num_key_value_heads
-        self.head_dim = self.hidden_size // self.num_heads
-        self.num_key_value_groups = self.num_heads // self.num_kv_heads
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
 
-        self.attention_dropout = config.attention_dropout
-        self.scaling = self.head_dim**-0.5
+        # Replace Qwen3RMSNorm with NanoChatRMSNorm
+        self.q_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.qkv_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=config.qkv_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=config.qkv_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.qkv_bias)
-        self.query_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.key_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        # NanoChat doesn't use sliding window
+        self.sliding_window = None
 
     def forward(
         self,
@@ -207,42 +196,30 @@ class NanoChatAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        batch, seq_len, _ = hidden_states.shape
+        """
+        NanoChat uses a different order than Qwen3: RoPE is applied before QK normalization.
+        Qwen3 order: project -> norm -> transpose -> RoPE
+        NanoChat order: project -> transpose -> RoPE -> norm
+
+        NanoChat also uses a custom rotate_half with flipped signs.
+        """
         input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # Project the input to get queries, keys, and values [batch, num_heads, seq_len, head_dim]
-        query_states = (
-            self.q_proj(hidden_states).view(batch, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-        )
-        key_states = (
-            self.k_proj(hidden_states)
-            .view(batch, seq_len, self.num_kv_heads, self.head_dim)
-            .transpose(1, 2)
-            .contiguous()
-        )
-        value_states = (
-            self.v_proj(hidden_states)
-            .view(batch, seq_len, self.num_kv_heads, self.head_dim)
-            .transpose(1, 2)
-            .contiguous()
-        )
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Apply Rotary Embeddings to queries and keys to get relative positional encoding
         cos, sin = position_embeddings
-        # NanoChat uses a negative sine for the rotary embedding
-        sin = -sin
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        # Apply QK normalization (RMSNorm)
-        query_states = self.query_norm(query_states)
-        key_states = self.key_norm(key_states)
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
-        # Apply KV cache: insert current k,v into cache, get the full view so far
         if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # Use attention interface pattern for vLLM compatibility
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -258,7 +235,6 @@ class NanoChatAttention(nn.Module):
             **kwargs,
         )
 
-        # Reshape and project output
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -344,7 +320,6 @@ class NanoChatPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
 
-        # NanoChat-specific: scaled initialization for output projection
         for name, param in module.named_parameters():
             if name == "o_proj.weight":
                 nn.init.normal_(
