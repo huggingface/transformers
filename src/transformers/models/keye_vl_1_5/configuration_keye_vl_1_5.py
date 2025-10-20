@@ -106,7 +106,7 @@ class KeyeVL1_5VisionConfig(SiglipVisionConfig):
         tokens_per_second: int = 2,
         initializer_range: float = 0.02,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(
             hidden_size=hidden_size,
             intermediate_size=intermediate_size,
@@ -261,7 +261,7 @@ class KeyeVL1_5TextConfig(PretrainedConfig):
         video_token_id: int = None,
         attention_bias: bool = False,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -346,7 +346,7 @@ class KeyeVL1_5Config(PretrainedConfig):
         text_config=None,
         vision_config=None,
         **kwargs,
-    ):
+    ) -> None:
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:

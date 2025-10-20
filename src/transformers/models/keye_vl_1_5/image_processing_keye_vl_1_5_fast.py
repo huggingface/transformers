@@ -25,18 +25,17 @@
 # limitations under the License.
 
 
+from copy import deepcopy
 from typing import Optional, Union
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...models.qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ...utils import add_start_docstrings
 
 
-@add_start_docstrings(
-    "Constructs a fast KeyeVl1_5 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
-class KeyeVL1_5ImageProcessorFast(BaseImageProcessorFast):
+@add_start_docstrings("Constructs a fast KeyeVl1_5 image processor.")
+class KeyeVL1_5ImageProcessorFast(Qwen2VLImageProcessorFast, BaseImageProcessorFast):
     def __init__(
         self,
         do_resize: bool = True,
@@ -47,8 +46,7 @@ class KeyeVL1_5ImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: int = 28 * 28 * 4,
-        max_pixels: int = 28 * 28 * 1280,
+        size: dict[str, int] = {"min_pixels": 28 * 28 * 4, "max_pixels": 28 * 28 * 1280},
         patch_size: int = 14,
         temporal_patch_size: int = 1,
         merge_size: int = 2,
@@ -62,12 +60,13 @@ class KeyeVL1_5ImageProcessorFast(BaseImageProcessorFast):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
-        self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
+        size = deepcopy(size)
+        size["shortest_edge"] = size["min_pixels"]
+        size["longest_edge"] = size["max_pixels"]
+        self.size = size
         self.do_convert_rgb = do_convert_rgb
         if self.temporal_patch_size != 1:
             raise ValueError("temporal_patch_size != 1 is not supported yet.")

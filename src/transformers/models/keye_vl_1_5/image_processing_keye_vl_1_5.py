@@ -25,6 +25,7 @@
 # limitations under the License.
 
 
+from copy import deepcopy
 from typing import Optional, Union
 
 import numpy as np
@@ -48,7 +49,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...models.qwen2_vl.image_processing_qwen2_vl import smart_resize
+from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_resize
 from ...utils import TensorType, logging
 from ...video_utils import VideoInput, make_batched_videos
 
@@ -56,7 +57,7 @@ from ...video_utils import VideoInput, make_batched_videos
 logger = logging.get_logger(__name__)
 
 
-class KeyeVL1_5ImageProcessor(BaseImageProcessor):
+class KeyeVL1_5ImageProcessor(Qwen2VLImageProcessor, BaseImageProcessor):
     r"""
     Constructs a Keye-VL-1.5 image processor that dynamically resizes images based on the original images.
 
@@ -101,8 +102,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: int = 28 * 28 * 4,
-        max_pixels: int = 28 * 28 * 1280,
+        size: dict[str, int] = {"min_pixels": 28 * 28 * 4, "max_pixels": 28 * 28 * 1280},
         patch_size: int = 14,
         temporal_patch_size: int = 1,
         merge_size: int = 2,
@@ -116,12 +116,13 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
-        self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
+        size = deepcopy(size)
+        size["shortest_edge"] = size["min_pixels"]
+        size["longest_edge"] = size["max_pixels"]
+        self.size = size
         self.do_convert_rgb = do_convert_rgb
         if self.temporal_patch_size != 1:
             raise ValueError("temporal_patch_size != 1 is not supported yet.")
@@ -206,8 +207,8 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
                         height,
                         width,
                         factor=self.patch_size * self.merge_size,
-                        min_pixels=self.min_pixels,
-                        max_pixels=self.max_pixels,
+                        min_pixels=size["min_pixels"],
+                        max_pixels=size["max_pixels"],
                     )
                 image = resize(
                     image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format

@@ -27,7 +27,7 @@
 
 import os
 from collections import namedtuple
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -40,6 +40,7 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, add_start_docstrings, logging
 from ...utils.import_utils import requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from .processing_keye_vl_1_5 import KeyeVL1_5VideosProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -115,8 +116,6 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    min_pixels = 128 * 28 * 28
-    max_pixels = 28 * 28 * 768
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
@@ -127,14 +126,13 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
         "fast_video_grid_thw",
         "num_frames",
     ]
+    valid_kwargs = KeyeVL1_5VideosProcessorKwargs
     ResizeArugs = namedtuple("ResizeArugs", "height,width,resized_height,resized_width")
 
-    def __init__(self, **kwargs: Unpack[KeyeVL1_5VideoProcessorInitKwargs]):
-        size = kwargs.pop("size", None)
-        min_pixels = kwargs.pop("min_pixels", None)
-        max_pixels = kwargs.pop("max_pixels", None)
-        size.pop("height", None)
-        size.pop("width", None)
+    def __init__(self, **kwargs: Unpack[KeyeVL1_5VideoProcessorInitKwargs]) -> None:
+        size = kwargs.pop("size", dict()) or self.size
+        min_pixels = kwargs.pop("min_pixels", None) or size.pop("min_pixels", None)
+        max_pixels = kwargs.pop("max_pixels", None) or size.pop("max_pixels", None)
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = size or self.size
         if min_pixels is not None:
@@ -186,7 +184,6 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
     def _preprocess_native_op(
         self,
         videos: list[torch.Tensor],
-        videos_kwargs: dict[str, Any],
         do_resize: bool = True,
         do_rescale: bool = True,
         do_normalize: bool = True,
@@ -212,11 +209,14 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
         batch_fast_argus = list()
 
         num_videos = len(videos)
-        batch_frame_types = videos_kwargs.get("frame_types", [None] * num_videos)
-        batch_width = videos_kwargs.get("width", [None] * num_videos)
-        batch_height = videos_kwargs.get("height", [None] * num_videos)
-        batch_fast_width = videos_kwargs.get("fast_width", [None] * num_videos)
-        batch_fast_height = videos_kwargs.get("fast_height", [None] * num_videos)
+        slow_size = kwargs.get("slow_size", [dict() for _ in range(num_videos)])
+        fast_size = kwargs.get("fast_size", [dict() for _ in range(num_videos)])
+        batch_frame_types = kwargs.get("frame_types", [None] * num_videos)
+
+        batch_width = [_size.get("width", None) for _size in slow_size]
+        batch_height = [_size.get("height", None) for _size in slow_size]
+        batch_fast_width = [_size.get("width", None) for _size in fast_size]
+        batch_fast_height = [_size.get("height", None) for _size in fast_size]
 
         for index, frames in enumerate(videos):
             if isinstance(frames, np.ndarray):
@@ -356,7 +356,6 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
     def _preprocess_fusion_op(
         self,
         videos: list[torch.Tensor],
-        videos_kwargs: dict[str, Any],
         do_resize: bool = True,
         do_rescale: bool = True,
         do_normalize: bool = True,
@@ -390,11 +389,14 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
         batch_fast_frames = list()
 
         num_videos = len(videos)
-        batch_frame_types = videos_kwargs.get("frame_types", [None] * num_videos)
-        batch_width = videos_kwargs.get("width", [None] * num_videos)
-        batch_height = videos_kwargs.get("height", [None] * num_videos)
-        batch_fast_width = videos_kwargs.get("fast_width", [None] * num_videos)
-        batch_fast_height = videos_kwargs.get("fast_height", [None] * num_videos)
+        slow_size = kwargs.get("slow_size", [dict() for _ in range(num_videos)])
+        fast_size = kwargs.get("fast_size", [dict() for _ in range(num_videos)])
+        batch_frame_types = kwargs.get("frame_types", [None] * num_videos)
+
+        batch_width = [_size.get("width", None) for _size in slow_size]
+        batch_height = [_size.get("height", None) for _size in slow_size]
+        batch_fast_width = [_size.get("width", None) for _size in fast_size]
+        batch_fast_height = [_size.get("height", None) for _size in fast_size]
 
         for index, frames in enumerate(videos):
             if isinstance(frames, np.ndarray):
@@ -491,7 +493,6 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        videos_kwargs: dict[str, Any],
         do_resize: Optional[bool] = None,
         do_normalize: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
@@ -508,15 +509,15 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
         device: Optional[Union[str, torch.device]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         **kwargs,
-    ):
+    ) -> BatchFeature:
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        min_pixels = min_pixels if min_pixels is not None else self.min_pixels
-        max_pixels = max_pixels if max_pixels is not None else self.max_pixels
+        min_pixels = min_pixels if min_pixels is not None else self.size["shortest_edge"]
+        max_pixels = max_pixels if max_pixels is not None else self.size["longest_edge"]
         patch_size = patch_size if patch_size is not None else self.patch_size
         temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
         merge_size = merge_size if merge_size is not None else self.merge_size
@@ -535,7 +536,6 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
 
         video_inputs = preprocess_op(
             videos=videos,
-            videos_kwargs=videos_kwargs,
             do_resize=do_resize,
             do_rescale=do_rescale,
             do_normalize=do_normalize,
@@ -559,7 +559,7 @@ class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
             tensor_type=return_tensors,
         )
 
-    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None) -> int:
         """
         A utility that returns number of video patches a given video size.
 

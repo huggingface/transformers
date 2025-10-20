@@ -295,7 +295,7 @@ class KeyeVL1_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
             )
-
+        
     def test_video_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

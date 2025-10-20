@@ -25,7 +25,6 @@
 # limitations under the License.
 
 
-import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
@@ -41,8 +40,8 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...models.qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 from ...models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLDecoderLayer,
@@ -50,6 +49,7 @@ from ...models.qwen2_5_vl.modeling_qwen2_5_vl import (
     apply_multimodal_rotary_pos_emb,
     apply_rotary_pos_emb_vision,
 )
+from ...models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 from ...models.siglip.modeling_siglip import SiglipMLP, SiglipVisionModelOutput
 from ...processing_utils import Unpack
 from ...utils import (
@@ -77,8 +77,26 @@ else:
 logger = logging.get_logger(__name__)
 
 
+class KeyeVL1_5TokenizerFast(Qwen2TokenizerFast):
+    SPECIAL_TOKENS_ATTRIBUTES = [
+        "bos_token",
+        "eos_token",
+        "unk_token",
+        "sep_token",
+        "pad_token",
+        "cls_token",
+        "mask_token",
+        "image_token",
+        "video_token",
+        "frame_token",
+        "fast_start",
+        "fast_end",
+        "additional_special_tokens",
+    ]
+
+
 class KeyeVL1_5VisionEmbeddings(nn.Module):
-    def __init__(self, config: KeyeVL1_5VisionConfig):
+    def __init__(self, config: KeyeVL1_5VisionConfig) -> None:
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -210,7 +228,7 @@ def eager_attention_forward(
 class KeyeVL1_5VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: KeyeVL1_5VisionConfig):
+    def __init__(self, config: KeyeVL1_5VisionConfig) -> None:
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -318,7 +336,7 @@ class KeyeVL1_5VisionMLP(SiglipMLP):
 
 
 class KeyeVL1_5VisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: KeyeVL1_5VisionConfig):
+    def __init__(self, config: KeyeVL1_5VisionConfig) -> None:
         super().__init__()
         self.embed_dim = config.hidden_size
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -378,7 +396,7 @@ class KeyeVL1_5VisionEncoder(nn.Module):
         config: KeyeVL1_5VisionConfig
     """
 
-    def __init__(self, config: KeyeVL1_5VisionConfig):
+    def __init__(self, config: KeyeVL1_5VisionConfig) -> None:
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
@@ -474,7 +492,7 @@ class KeyeVL1_5VisionModelOutput(SiglipVisionModelOutput):
 
 
 class KeyeVL1_5VisionTransformer(nn.Module):
-    def __init__(self, config: KeyeVL1_5VisionConfig):
+    def __init__(self, config: KeyeVL1_5VisionConfig) -> None:
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
@@ -630,7 +648,7 @@ class KeyeVL1_5VisionModel(KeyeVL1_5PreTrainedModel):
     config_class = KeyeVL1_5VisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: KeyeVL1_5VisionConfig):
+    def __init__(self, config: KeyeVL1_5VisionConfig) -> None:
         super().__init__(config)
 
         self.vision_model = KeyeVL1_5VisionTransformer(config)
@@ -725,72 +743,8 @@ class KeyeVL1_5ModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
     pass
 
 
-class KeyeVL1_5RotaryEmbedding(nn.Module):
-    def __init__(self, config: KeyeVL1_5TextConfig, device=None) -> None:
-        super().__init__()
-        self.rope_kwargs = dict()
-
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    def _dynamic_frequency_update(self, position_ids, device) -> None:
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
-    @torch.no_grad()
-    def forward(self, x, position_ids) -> tuple[torch.FloatTensor, torch.FloatTensor]:
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block. In contrast to other models, KeyeVL1_5 has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-    def rope_init(self) -> None:
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device=None, **self.rope_kwargs)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+class KeyeVL1_5RotaryEmbedding(Qwen2VLRotaryEmbedding):
+    pass
 
 
 def repeat_kv(hidden_states: torch.FloatTensor, n_rep: int) -> torch.FloatTensor:
@@ -805,8 +759,169 @@ def repeat_kv(hidden_states: torch.FloatTensor, n_rep: int) -> torch.FloatTensor
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+def keye_1_5_vl_eager_attention_forward(
+    module: nn.Module,
+    query: torch.FloatTensor,
+    key: torch.FloatTensor,
+    value: torch.FloatTensor,
+    attention_mask: Optional[torch.FloatTensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) / scaling
+
+    if attention_mask is not None:  # no matter the length, we just slice it
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    # Fix precision issues in KeyeVL-1.5 float16 inference
+    # Replace inf values with zeros in attention weights to prevent NaN propagation
+    if query.dtype == torch.float16:
+        attn_weights = torch.where(torch.isinf(attn_weights), torch.zeros_like(attn_weights), attn_weights)
+
+    # upcast attention to fp32
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+def keye_1_5_vl_flash_attn_attention_forward(
+    module: nn.Module,
+    query: torch.FloatTensor,
+    key: torch.FloatTensor,
+    value: torch.FloatTensor,
+    attention_mask: Optional[torch.FloatTensor],
+    scaling: float,
+    dropout: float = 0.0,
+    sliding_window: int = -1,
+    cu_seqlens: torch.IntTensor = None,
+    **kwargs,
+) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+    config = module.config
+    layer_idx = module.layer_idx
+    is_causal = module.is_causal
+    _flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    input_dtype = query.dtype
+    if input_dtype == torch.float32:
+        if torch.is_autocast_enabled():
+            target_dtype = torch.get_autocast_gpu_dtype()
+        # Handle the case where the model is quantized
+        elif hasattr(config, "_pre_quantization_dtype"):
+            target_dtype = config._pre_quantization_dtype
+        else:
+            target_dtype = q_proj.weight.dtype
+
+        logger.warning_once(
+            f"The input hidden states seems to be silently casted in float32, this might be related to"
+            f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+            f" {target_dtype}."
+        )
+
+        query = query.to(target_dtype)
+        key = key.to(target_dtype)
+        value = value.to(target_dtype)
+
+    # Reashape to the expected shape for Flash Attention
+    query = query.transpose(1, 2)
+    key = key.transpose(1, 2)
+    value = value.transpose(1, 2)
+
+    if (
+        sliding_window == -1
+        and config.use_sliding_window
+        and getattr(config, "sliding_window", None) is not None
+        and layer_idx >= config.max_window_layers
+    ):
+        sliding_window = config.sliding_window
+    else:
+        sliding_window = -1
+
+    if cu_seqlens is not None:
+        # Sample packing with FA2
+        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+        cu_seqlens = cu_seqlens.to(torch.int32)
+        # remove batch_dim first: q.squeeze(0)
+        attn_output = flash_attn_varlen_func(
+            query.squeeze(0),
+            key.squeeze(0),
+            value.squeeze(0),
+            cu_seqlens,
+            cu_seqlens,
+            max_seqlen,
+            max_seqlen,
+            dropout_p=dropout,
+            window_size=(sliding_window, sliding_window),
+            causal=is_causal,
+        )
+    else:
+        attn_output = _flash_attention_forward(
+            query,
+            key,
+            value,
+            attention_mask,
+            query.shape[1],
+            dropout=dropout,
+            sliding_window=sliding_window,
+            is_causal=is_causal,
+            use_top_left_mask=_flash_attn_uses_top_left_mask,
+        )
+    return attn_output, None
+
+
+def keye_1_5_vl_sdpa_attention_forward(
+    module: nn.Module,
+    query: torch.FloatTensor,
+    key: torch.FloatTensor,
+    value: torch.FloatTensor,
+    attention_mask: Optional[torch.FloatTensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+    causal_mask = attention_mask
+    if attention_mask is not None:  # no matter the length, we just slice it
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+
+    # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+    # Reference: https://github.com/pytorch/pytorch/issues/112577.
+    if query.device.type == "cuda" and attention_mask is not None:
+        query = query.contiguous()
+        key = key.contiguous()
+        value = value.contiguous()
+
+    # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+    # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+    # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+    is_causal = True if causal_mask is None and query.shape[2] > 1 else False
+
+    attn_output = torch.nn.functional.scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        attn_mask=causal_mask,
+        dropout_p=dropout if module.training else 0.0,
+        is_causal=is_causal,
+    )
+
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, None
+
+
+KEYE_1_5_VL_ATTENTION_FUNCTIONS = {
+    "eager": keye_1_5_vl_eager_attention_forward,
+    "sdpa": keye_1_5_vl_sdpa_attention_forward,
+    "flash_attention_2": keye_1_5_vl_flash_attn_attention_forward,
+}
+
+
 class KeyeVL1_5Attention(nn.Module):
-    def __init__(self, config: KeyeVL1_5TextConfig, layer_idx: int):
+    def __init__(self, config: KeyeVL1_5TextConfig, layer_idx: int) -> None:
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -837,6 +952,7 @@ class KeyeVL1_5Attention(nn.Module):
         )  # thus post q_norm does not need reshape
 
         self.rotary_emb = KeyeVL1_5RotaryEmbedding(config=config)
+        self.scaling = self.head_dim**0.5
 
     def forward(
         self,
@@ -850,6 +966,8 @@ class KeyeVL1_5Attention(nn.Module):
         position_embeddings: Optional[
             tuple[torch.FloatTensor, torch.FloatTensor]
         ] = None,  # necessary, but kept here for BC
+        cu_seqlens: Optional[torch.IntTensor] = None,
+        sliding_window=-1,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         bsz, q_len, _ = hidden_states.size()
@@ -873,29 +991,26 @@ class KeyeVL1_5Attention(nn.Module):
         keys = repeat_kv(keys, self.num_key_value_groups)
         values = repeat_kv(values, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(queries, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attention_interface = KEYE_1_5_VL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            sliding_window=sliding_window,
+            cu_seqlens=cu_seqlens,
+            **kwargs,
+        )
 
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : keys.shape[-2]]
-            attn_weights = attn_weights + causal_mask
-
-        # Fix precision issues in KeyeVL-1.5 float16 inference
-        # Replace inf values with zeros in attention weights to prevent NaN propagation
-        if queries.dtype == torch.float16:
-            attn_weights = torch.where(torch.isinf(attn_weights), torch.zeros_like(attn_weights), attn_weights)
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(queries.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, values)
-
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+        if attn_output.size() != (bsz, q_len, self.num_heads, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz, q_len, self.num_heads, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, -1)
 
         attn_output = self.o_proj(attn_output)
@@ -904,231 +1019,6 @@ class KeyeVL1_5Attention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_values
-
-
-class KeyeVL1_5FlashAttention2(KeyeVL1_5Attention):
-    """
-    KeyeVL1_5 flash attention module, following KeyeVL1_5 attention module. This module inherits from `KeyeVL1_5Attention`
-    as the weights of the module stays untouched. The only required change would be on the forward pass
-    where it needs to correctly call the public API of flash attention and deal with padding tokens
-    in case the input contains any of them. Additionally, for sliding window attention, we apply SWA only to the bottom
-    config.max_window_layers layers.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[
-            tuple[torch.FloatTensor, torch.FloatTensor]
-        ] = None,  # necessary, but kept here for BC
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        sliding_window=-1,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
-        bsz, q_len, _ = hidden_states.size()
-        q = self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
-        queries = self.q_norm(q)
-        keys = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
-        values = self.v_proj(hidden_states)
-
-        queries = queries.transpose(1, 2)
-        keys = keys.transpose(1, 2)
-        values = values.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-
-        # Because the input can be padded, the absolute sequence length depends on the max position id.
-        cos, sin = position_embeddings
-        queries, keys = apply_multimodal_rotary_pos_emb(queries, keys, cos, sin, self.rope_scaling["mrope_section"])
-
-        if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
-            keys, values = past_key_values.update(keys, values, self.layer_idx, cache_kwargs)
-
-        # repeat k/v heads if n_kv_heads < n_heads
-        keys = repeat_kv(keys, self.num_key_value_groups)
-        values = repeat_kv(values, self.num_key_value_groups)
-        dropout_rate = 0.0 if not self.training else self.dropout
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
-        input_dtype = queries.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            else:
-                target_dtype = self.q_proj.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            queries = queries.to(target_dtype)
-            keys = keys.to(target_dtype)
-            values = values.to(target_dtype)
-
-        # Reashape to the expected shape for Flash Attention
-        queries = queries.transpose(1, 2)
-        keys = keys.transpose(1, 2)
-        values = values.transpose(1, 2)
-
-        if (
-            sliding_window == -1
-            and self.config.use_sliding_window
-            and getattr(self.config, "sliding_window", None) is not None
-            and self.layer_idx >= self.config.max_window_layers
-        ):
-            sliding_window = self.config.sliding_window
-        else:
-            sliding_window = -1
-
-        if cu_seqlens is not None:
-            # Sample packing with FA2
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            cu_seqlens = cu_seqlens.to(torch.int32)
-            # remove batch_dim first: q.squeeze(0)
-            attn_output = flash_attn_varlen_func(
-                queries.squeeze(0),
-                keys.squeeze(0),
-                values.squeeze(0),
-                cu_seqlens,
-                cu_seqlens,
-                max_seqlen,
-                max_seqlen,
-                dropout_p=dropout_rate,
-                window_size=(sliding_window, sliding_window),
-                causal=self.is_causal,
-            )
-        else:
-            attn_output = _flash_attention_forward(
-                queries,
-                keys,
-                values,
-                attention_mask,
-                q_len,
-                dropout=dropout_rate,
-                sliding_window=sliding_window,
-                is_causal=self.is_causal,
-                use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            )
-
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-
-        attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_values
-
-
-class KeyeVL1_5SdpaAttention(KeyeVL1_5Attention):
-    """
-    KeyeVL-1.5 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `KeyeVL1_5Attention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[
-            tuple[torch.FloatTensor, torch.FloatTensor]
-        ] = None,  # necessary, but kept here for BC
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "KeyeVL1_5Model is using KeyeVL1_5SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-            )
-
-        bsz, q_len, _ = hidden_states.size()
-
-        queries = self.q_norm(self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
-        keys = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
-        values = self.v_proj(hidden_states)
-
-        queries = queries.transpose(1, 2)
-        keys = keys.transpose(1, 2)
-        values = values.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        queries, keys = apply_multimodal_rotary_pos_emb(queries, keys, cos, sin, self.rope_scaling["mrope_section"])
-
-        if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
-            keys, values = past_key_values.update(keys, values, self.layer_idx, cache_kwargs)
-
-        keys = repeat_kv(keys, self.num_key_value_groups)
-        values = repeat_kv(values, self.num_key_value_groups)
-
-        causal_mask = attention_mask
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : keys.shape[-2]]
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if queries.device.type == "cuda" and attention_mask is not None:
-            queries = queries.contiguous()
-            keys = keys.contiguous()
-            values = values.contiguous()
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-        is_causal = True if causal_mask is None and q_len > 1 else False
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            queries,
-            keys,
-            values,
-            attn_mask=causal_mask,
-            dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
-
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, None, past_key_values
 
 
 class KeyeVL1_5MLP(nn.Module):
@@ -1147,15 +1037,8 @@ class KeyeVL1_5MLP(nn.Module):
         return down_proj
 
 
-KEYE_VL_1_5_ATTENTION_CLASSES = {
-    "eager": KeyeVL1_5Attention,
-    "flash_attention_2": KeyeVL1_5FlashAttention2,
-    "sdpa": KeyeVL1_5SdpaAttention,
-}
-
-
 class KeyeVL1_5DecoderLayer(Qwen2_5_VLDecoderLayer):
-    def __init__(self, config: KeyeVL1_5TextConfig, layer_idx: int):
+    def __init__(self, config: KeyeVL1_5TextConfig, layer_idx: int) -> None:
         super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
 
@@ -1164,7 +1047,7 @@ class KeyeVL1_5DecoderLayer(Qwen2_5_VLDecoderLayer):
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
             )
-        self.self_attn = KEYE_VL_1_5_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = KeyeVL1_5Attention(config=config, layer_idx=layer_idx)
 
         self.mlp = KeyeVL1_5MLP(config)
         self.input_layernorm = KeyeVL1_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1219,7 +1102,7 @@ class KeyeVL1_5DecoderLayer(Qwen2_5_VLDecoderLayer):
 
 @auto_docstring
 class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
-    def __init__(self, config: KeyeVL1_5TextConfig):
+    def __init__(self, config: KeyeVL1_5TextConfig) -> None:
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1496,7 +1379,7 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
 
 
 class KeyeVL1_5Projector(nn.Module):
-    def __init__(self, config: KeyeVL1_5Config):
+    def __init__(self, config: KeyeVL1_5Config) -> None:
         super().__init__()
         vision_config = config.vision_config
         text_config = config.text_config
@@ -1569,7 +1452,7 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
     base_model_prefix = ""
     _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionEncoderLayer"]
 
-    def __init__(self, config: KeyeVL1_5Config):
+    def __init__(self, config: KeyeVL1_5Config) -> None:
         super().__init__(config)
         self.visual = KeyeVL1_5VisionModel._from_config(config.vision_config)
         self.language_model = KeyeVL1_5TextModel._from_config(config.text_config)
@@ -1993,7 +1876,7 @@ class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixi
     config_class = KeyeVL1_5Config
     _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionEncoderLayer"]
 
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         super().__init__(config)
         self.model = KeyeVL1_5Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -2069,7 +1952,7 @@ class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixi
             ]
         >>> # Since we support the slow-fast architecture and keye-vl-utils has additional return parameters,
         >>> # we did not adopt the combined form of:
-        >>> # inputs = processor.apply_chat_template( messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt" )
+        >>> # inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt" )
 
         >>> text = processor.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
@@ -2317,6 +2200,7 @@ class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixi
 
 
 __all__ = [
+    "KeyeVL1_5TokenizerFast",
     "KeyeVL1_5PreTrainedModel",
     "KeyeVL1_5VisionModel",
     "KeyeVL1_5TextModel",

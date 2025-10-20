@@ -28,16 +28,17 @@
 from copy import deepcopy
 from typing import Optional, Union
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...models.qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
 from .image_processing_keye_vl_1_5 import KeyeVL1_5ImageProcessor
+from .modeling_keye_vl_1_5 import KeyeVL1_5TokenizerFast
 from .video_processing_keye_vl_1_5 import KeyeVL1_5VideoProcessor
 
 
@@ -46,21 +47,13 @@ class KeyeVL1_5VideosProcessorKwargs(VideosKwargs, total=False):
     """
     the fps of the video.
     """
-    width: Optional[Union[list[int], int]]
+    slow_size: Optional[dict[str, Union[list[int], int]]]
     """
-    the width to resize in for slow frames.
+    the arguments to resize in for slow frames.
     """
-    height: Optional[Union[list[int], int]]
+    fast_size: Optional[dict[str, Union[list[int], int]]]
     """
-    the height to resize in for slow frames.
-    """
-    fast_width: Optional[Union[list[int], int]]
-    """
-    the width to resize in for fast frames.
-    """
-    fast_height: Optional[Union[list[int], int]]
-    """
-    the height to resize in for fast frames.
+    the arguments to resize in for fast frames.
     """
     timestamps: Optional[Union[list[torch.Tensor], torch.Tensor]]
     """
@@ -77,6 +70,7 @@ class KeyeVL1_5ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "truncation": True,
         },
         "videos_kwargs": {"fps": 2.0},
     }
@@ -147,17 +141,18 @@ def merge_thw(
             f"The length of `thw` must equals to sum of `num_frames`, but the shape of `thw` is {thw.shape}, `num_frames` = {num_frames}."
         )
 
+    num_frames = num_frames if isinstance(num_frames, (list, tuple)) else num_frames.tolist()
     return torch.concat([merge_thw(part) for part in thw.split(num_frames, dim=0)], dim=0)
 
 
 class KeyeVL1_5Processor(ProcessorMixin):
     r"""
-    [`KeyeVL1_5Processor`] offers all the functionalities of [`KeyeVL1_5ImageProcessor`] and [`Qwen2TokenizerFast`]. See the
+    [`KeyeVL1_5Processor`] offers all the functionalities of [`KeyeVL1_5ImageProcessor`] and [`KeyeVL1_5TokenizerFast`]. See the
     [`~KeyeVL1_5Processor.__call__`] and [`~KeyeVL1_5Processor.decode`] for more information.
     Args:
         image_processor ([`KeyeVL1_5ImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
+        tokenizer ([`KeyeVL1_5TokenizerFast`], *optional*):
             The tokenizer is a required input.
         video_processor ([`KeyeVL1_5VideoProcessor`], *optional*):
             The video processor is a required input.
@@ -171,14 +166,24 @@ class KeyeVL1_5Processor(ProcessorMixin):
     video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 
+    model_input_names = [
+        "pixel_values",
+        "image_grid_thw",
+        "input_ids",
+        "attention_mask",
+        "pixel_values_videos",
+        "video_grid_thw",
+        "num_frames",
+    ]
+
     def __init__(
         self,
         image_processor: Optional[KeyeVL1_5ImageProcessor] = None,
-        tokenizer: Optional[Qwen2TokenizerFast] = None,
+        tokenizer: Optional[KeyeVL1_5TokenizerFast] = None,
         video_processor: Optional[KeyeVL1_5VideoProcessor] = None,
         chat_template: Optional[str] = None,
         **kwargs,
-    ):
+    ) -> None:
         self.image_token = tokenizer.image_token
         self.video_token = tokenizer.video_token
         self.frame_token = tokenizer.frame_token
@@ -186,6 +191,52 @@ class KeyeVL1_5Processor(ProcessorMixin):
         self.fast_end = tokenizer.fast_end
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+
+    def _fetch_videos_kwargs(
+        self,
+        videos: VideoInput,
+        output_kwargs: Unpack[KeyeVL1_5ProcessorKwargs],
+    ) -> tuple[VideoInput, KeyeVL1_5ProcessorKwargs]:
+        num_videos = len(videos)
+        videos_kwargs = output_kwargs["videos_kwargs"]
+        batch_frame_types = videos_kwargs.get("frame_types", [None] * num_videos)
+
+        for index in range(num_videos):
+            if isinstance(videos[index], (list, tuple)):
+                if isinstance(videos[index][0], np.ndarray):
+                    if videos[index][0].ndim == 3:
+                        videos[index] = np.stack(videos[index], axis=0)
+                    elif videos[index][0].ndim == 4:
+                        videos[index] = np.concatenate(videos[index], axis=0)
+                    else:
+                        raise ValueError("Unsupported videos ndim, expected `3` or `4`.")
+                elif isinstance(videos[index][0], torch.Tensor):
+                    if videos[index][0].ndim == 3:
+                        videos[index] = torch.stack(videos[index], dim=0)
+                    elif videos[index][0].ndim == 4:
+                        videos[index] = torch.concat(videos[index], dim=0)
+                    else:
+                        raise ValueError("Unsupported videos ndim, expected `3` or `4`.")
+                else:
+                    raise TypeError(
+                        f"Unsupported videos type `{type(videos[index])}`, expected `np.ndarray` or `torch.Tensor`."
+                    )
+
+            nframes = videos[index].shape[0]
+            if batch_frame_types[index] is None:
+                batch_frame_types[index] = torch.zeros((nframes,), dtype=torch.long)
+
+        videos_kwargs.update({"frame_types": batch_frame_types})
+
+        if "size" in videos_kwargs:
+            size = videos_kwargs["size"]
+            if "min_pixels" in size:
+                size["shortest_edge"] = size.pop("min_pixels")
+
+            if "max_pixels" in size:
+                size["longest_edge"] = size.pop("max_pixels")
+
+        return videos, videos_kwargs
 
     def __call__(
         self,
@@ -196,7 +247,7 @@ class KeyeVL1_5Processor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to KeyeVL1_5TokenizerFast's [`~KeyeVL1_5TokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
         KeyeVL1_5ImageProcessor's [`~KeyeVL1_5ImageProcessor.__call__`] if `vision_infos` is not `None`.
 
@@ -238,7 +289,7 @@ class KeyeVL1_5Processor(ProcessorMixin):
         )
 
         if images is not None:
-            image_inputs = self.image_processor(images=images, return_tensors="pt")
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_inputs["pixel_values"] = image_inputs["pixel_values"]
             image_grid_thw = image_inputs["image_grid_thw"]
         else:
@@ -246,12 +297,16 @@ class KeyeVL1_5Processor(ProcessorMixin):
             image_grid_thw = None
 
         if videos is not None:
+            videos, videos_kwargs = self._fetch_videos_kwargs(videos, output_kwargs)
+
             num_videos = len(videos)
-            videos_kwargs = output_kwargs["videos_kwargs"]
             batch_frame_types = videos_kwargs.get("frame_types", [None] * num_videos)
             batch_timestamps = videos_kwargs.get("timestamps", [None] * num_videos)
 
-            video_inputs = self.video_processor(videos=videos, return_tensors="pt", videos_kwargs=videos_kwargs)
+            video_inputs = self.video_processor(
+                videos=videos,
+                **videos_kwargs,
+            )
             slow_video_grid_thw = video_inputs["video_grid_thw"]
             fast_video_grid_thw = video_inputs["fast_video_grid_thw"]
             slow_video_grid_thw = slow_video_grid_thw if slow_video_grid_thw.numel() > 0 else None
@@ -349,6 +404,44 @@ class KeyeVL1_5Processor(ProcessorMixin):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs) -> MultiModalData:
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = dict()
+        if image_sizes is not None:
+            images_kwargs = KeyeVL1_5ProcessorKwargs._defaults.get("images_kwargs", dict())
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = KeyeVL1_5ProcessorKwargs._defaults.get("videos_kwargs", dict())
+            videos_kwargs.update(kwargs)
+            num_video_patches = [
+                self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
+                for video_size in video_sizes
+            ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
 
 
 __all__ = ["KeyeVL1_5Processor"]
