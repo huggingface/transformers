@@ -158,7 +158,7 @@ At minimum, add an `IntegrationTest` class that tests end-to-end generation with
 
 - For generative models: test that generated text matches expected output exactly
 - For non-generative models: test that output logits match expected values
-- Tests should use real checkpoints and inputs
+- Tests should use real checkpoints (load in 4-bit or half precision if the checkpoint is too big) and inputs
 - Example pattern:
 
 ```python
