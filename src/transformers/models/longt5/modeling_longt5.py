@@ -254,7 +254,6 @@ except ImportError:
     pass
 except Exception:
     logger.warning("discovered apex but it failed to load, falling back to LongT5LayerNorm")
-    pass
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->LongT5
