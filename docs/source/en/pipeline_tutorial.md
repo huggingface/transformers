@@ -378,3 +378,24 @@ for prompt in prompts:
     print("Prompt:", prompt)
     print("Generated:", out[0]["generated_text"])
     print("-" * 60)
+    ```
+**CPU vs GPU perfromance comparision**
+  This example shows  the comparing the inference speed on CPU vs GPU using the Hugging Face      pipeline  and Accelerator 
+
+```python
+
+import time
+from transformers import pipeline
+from accelerator import Accelerator
+
+#Use Accelerator to auto select CPU or GPU
+device = Accelerator().device
+generator - pipeline("text-generation", model="google/gemma-2-2b",device=device)
+
+start = time.time()
+generator("AI is trasforming education by")
+end = time.time()
+
+print(f"Inference completed on {device} in {end - start:.2f} seconds.")
+
+python```
