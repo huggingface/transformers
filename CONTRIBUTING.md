@@ -150,7 +150,7 @@ Add a `convert_<model_name>_to_hf.py` script that converts the original model we
 
 - Script should handle checkpoint loading, key mapping, and saving in HF format
 - Include usage examples and documentation in the script
-- Examples: `convert_llava_onevision_weights_to_hf.py`, `convert_idefics2_weights_to_hf.py`
+- Examples: [`convert_llava_onevision_weights_to_hf.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llava_onevision/convert_llava_onevision_weights_to_hf.py), [`convert_idefics2_weights_to_hf.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/idefics2/convert_idefics2_weights_to_hf.py)
 
 ☐ **4. Add integration tests with exact output matching**
 
