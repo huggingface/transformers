@@ -1860,6 +1860,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         self.rope_deltas = None
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.post_init()
 
     def get_input_embeddings(self):
