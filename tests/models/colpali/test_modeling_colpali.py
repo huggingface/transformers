@@ -185,11 +185,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ColPaliForRetrieval,) if is_torch_available() else ()
-    fx_compatible = False
-    test_torchscript = False
-    test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     additional_model_inputs = ["token_type_ids"]
 
     def setUp(self):
@@ -272,10 +268,6 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         reason="From PaliGemma: Some undefined behavior encountered with test versions of this model. Skip for now."
     )
     def test_model_parallelism(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma's SigLip encoder uses a non-standard initialization scheme")
-    def test_initialization(self):
         pass
 
     # TODO extend valid outputs to include this test @Molbap

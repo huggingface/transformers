@@ -570,6 +570,7 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
     config: MobileViTV2Config
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MobileViTV2Layer"]
 
@@ -613,16 +614,6 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
-        """
-        for layer_index, heads in heads_to_prune.items():
-            mobilevitv2_layer = self.encoder.layer[layer_index]
-            if isinstance(mobilevitv2_layer, MobileViTV2Layer):
-                for transformer_layer in mobilevitv2_layer.transformer.layer:
-                    transformer_layer.attention.prune_heads(heads)
 
     @auto_docstring
     def forward(

@@ -141,11 +141,8 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Sam2VisionModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -465,11 +462,8 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": Sam2Model, "mask-generation": Sam2Model} if is_torch_available() else {}
     )
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -558,7 +552,6 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
 
     # Override as Sam2Model has different sub-modules
-
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.

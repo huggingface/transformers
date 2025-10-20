@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -23,22 +24,21 @@ from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
 from ...video_utils import VideoInput
-from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
-from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
+from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, Glm4RotaryEmbedding, eager_attention_forward
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
@@ -48,22 +48,20 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLModel,
     Qwen2_5_VLModelOutputWithPast,
     Qwen2_5_VLPreTrainedModel,
-    Qwen2_5_VLRotaryEmbedding,
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
-from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLVideosProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import (
-    Qwen2_VLProcessor,
-    Qwen2_VLProcessorKwargs,
+    Qwen2VLProcessor,
+    Qwen2VLProcessorKwargs,
 )
 
 
 logger = logging.get_logger(__name__)
 
 
-class Glm4vVisionConfig(PretrainedConfig):
+class Glm4vVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vVisionModel`]. It is used to instantiate an Glm4vVisionModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
@@ -160,15 +158,15 @@ class Glm4vVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Glm4vTextConfig(PretrainedConfig):
+class Glm4vTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
     GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151552):
@@ -202,29 +200,12 @@ class Glm4vTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         image_token_id (`int`, *optional*):
             Token index used as placeholder for image embeddings.
         video_token_id (`int`, *optional*):
@@ -263,23 +244,22 @@ class Glm4vTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151552,
-        hidden_size=4096,
-        intermediate_size=13696,
-        num_hidden_layers=40,
-        num_attention_heads=32,
-        num_key_value_heads=2,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        attention_dropout=0.0,
-        rope_scaling=None,
-        image_token_id=None,
-        video_token_id=None,
+        vocab_size: Optional[int] = 151552,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 13696,
+        num_hidden_layers: Optional[int] = 40,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 2,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-05,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        image_token_id: Optional[int] = None,
+        video_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -298,14 +278,14 @@ class Glm4vTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self, ignore_keys={"mrope_section"})
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
@@ -313,15 +293,15 @@ class Glm4vTextConfig(PretrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class Glm4vConfig(Qwen2_5_VLConfig):
+class Glm4vConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
     GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -355,6 +335,10 @@ class Glm4vConfig(Qwen2_5_VLConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "glm4v"
+    sub_configs = {"vision_config": Glm4vVisionConfig, "text_config": Glm4vTextConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
     def __init__(
         self,
         text_config=None,
@@ -367,11 +351,24 @@ class Glm4vConfig(Qwen2_5_VLConfig):
         video_end_token_id=151342,
         **kwargs,
     ):
-        super().__init__()
+        if isinstance(vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
+        elif vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
+
+        if isinstance(text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**text_config)
+        elif text_config is None:
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
         self.video_start_token_id = video_start_token_id
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+
+        super().__init__(**kwargs)
 
 
 # Will be used for both Text and Vision modalities
@@ -522,8 +519,22 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
         self.mlp = Glm4VisionMlp(config, bias=False)
 
 
-class Glm4vTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
-    pass
+class Glm4vTextRotaryEmbedding(Glm4RotaryEmbedding):
+    # Ignore copy
+    def forward(self, x, position_ids):
+        # In contrast to other models, GLM4V different position ids for the grids
+        # So we expand the inv_freq to shape (3, ...)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def rotate_half_llm(x):
@@ -608,7 +619,7 @@ class Glm4vTextAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
-        self.rope_scaling = config.rope_scaling
+        self.rope_parameters = config.rope_parameters
         self.scaling = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
@@ -619,9 +630,8 @@ class Glm4vTextAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -638,7 +648,7 @@ class Glm4vTextAttention(nn.Module):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
-            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+            query_states, key_states, cos, sin, self.rope_parameters["mrope_section"]
         )
 
         if past_key_values is not None:
@@ -680,14 +690,14 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -703,7 +713,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
@@ -736,6 +745,7 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
     config: Glm4vVisionConfig
+    input_modalities = ["image", "video"]
     _no_split_modules = ["Glm4vVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -856,7 +866,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         del self.has_sliding_layers
 
     @auto_docstring
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -887,31 +897,48 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
             position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
-        elif position_ids.dim() == 2:
+        elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # NOTE: we need to pass text position ids for packing. Qwen2-VL uses 3D positions
+        # where each dim indicates visual spatial positions for temporal/height/width grids.
+        # There are two scenarios when FA2-like packed masking might be activated.
+        # 1. User specifically passed packed `position_ids` and no attention mask.
+        #    In this case we expect the useer to create correct position ids for all 3 grids
+        #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
+        # 2. User runs forward with no attention mask and no position ids. In this case, position ids
+        #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
+        #    prepended by us when creating positions so that the mask is constructed correctly. NOTE: failing to pass
+        #    text-only positions will cause incorrect mask construction, do not change `prepare_input_for_generation`
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
+        else:
+            # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
+            text_position_ids = None
+
+        mask_kwargs = {
+            "config": self.config,
+            "input_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "cache_position": cache_position,
+            "past_key_values": past_key_values,
+            "position_ids": text_position_ids,
+        }
+        # Create the masks
+        causal_mask = create_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers:
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
             hidden_states = layer_outputs
@@ -1320,6 +1347,8 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vCausalLMOutputWithPast]:
         r"""
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1328,8 +1357,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
 
@@ -1492,19 +1519,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         return image_counts, video_counts
 
 
-class Glm4vVideosProcessorKwargs(Qwen2_5_VLVideosProcessorKwargs):
-    pass
-
-
-class Glm4vImagesKwargs(ImagesKwargs):
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
-class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
-    images_kwargs: Glm4vImagesKwargs
-    videos_kwargs: Glm4vVideosProcessorKwargs
+class Glm4vProcessorKwargs(Qwen2VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -1515,7 +1530,7 @@ class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
     }
 
 
-class Glm4vProcessor(Qwen2_VLProcessor):
+class Glm4vProcessor(Qwen2VLProcessor):
     r"""
     Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
     [`~Glm4vProcessor.__call__`] and [`~Glm4vProcessor.decode`] for more information.
@@ -1623,7 +1638,7 @@ class Glm4vProcessor(Qwen2_VLProcessor):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    metadata = video_metadata[i]
+                    metadata = video_metadata[video_index]
                     if metadata.fps is None:
                         logger.warning_once(
                             "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "

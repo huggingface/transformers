@@ -18,12 +18,11 @@ import copy
 import importlib
 import json
 import os
-import warnings
 from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import (
     CONFIG_NAME,
@@ -65,7 +64,7 @@ FROM_CONFIG_DOCSTRING = """
             model's configuration. Use [`~BaseAutoModelClass.from_pretrained`] to load the model weights.
 
         Args:
-            config ([`PretrainedConfig`]):
+            config ([`PreTrainedConfig`]):
                 The model class to instantiate is selected based on the configuration class:
 
                 List options
@@ -104,7 +103,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
             model_args (additional positional arguments, *optional*):
                 Will be passed along to the underlying model `__init__()` method.
-            config ([`PretrainedConfig`], *optional*):
+            config ([`PreTrainedConfig`], *optional*):
                 Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
@@ -126,9 +125,6 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -158,7 +154,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
                       underlying model's `__init__` method (we assume all relevant updates to the configuration have
                       already been done)
                     - If a configuration is not provided, `kwargs` will be first passed to the configuration class
-                      initialization function ([`~PretrainedConfig.from_pretrained`]). Each key of `kwargs` that
+                      initialization function ([`~PreTrainedConfig.from_pretrained`]). Each key of `kwargs` that
                       corresponds to a configuration attribute will be used to override said attribute with the
                       supplied `kwargs` value. Remaining keys that do not correspond to any configuration attribute
                       will be passed to the underlying model's `__init__` function.
@@ -246,7 +242,7 @@ class _BaseAutoModelClass:
         )
 
     @classmethod
-    def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
+    def _prepare_config_for_auto_class(cls, config: PreTrainedConfig) -> PreTrainedConfig:
         """Additional autoclass-specific config post-loading manipulation. May be overridden in subclasses."""
         return config
 
@@ -260,10 +256,8 @@ class _BaseAutoModelClass:
             "force_download",
             "local_files_only",
             "proxies",
-            "resume_download",
             "revision",
             "subfolder",
-            "use_auth_token",
             "token",
         ]
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
@@ -272,23 +266,12 @@ class _BaseAutoModelClass:
         adapter_kwargs = kwargs.pop("adapter_kwargs", None)
 
         token = hub_kwargs.pop("token", None)
-        use_auth_token = hub_kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         if token is not None:
             hub_kwargs["token"] = token
 
         if commit_hash is None:
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
                 resolved_config_file = cached_file(
                     pretrained_model_name_or_path,
@@ -319,7 +302,7 @@ class _BaseAutoModelClass:
                     adapter_kwargs["_adapter_model_path"] = pretrained_model_name_or_path
                     pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
 
-        if not isinstance(config, PretrainedConfig):
+        if not isinstance(config, PreTrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)
             # ensure not to pollute the config object with dtype="auto" - since it's
             # meaningless in the context of the config object - torch.dtype values are acceptable
@@ -400,7 +383,7 @@ class _BaseAutoModelClass:
         Register a new model for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             model_class ([`PreTrainedModel`]):
                 The model to register.
@@ -557,7 +540,7 @@ def add_generation_mixin_to_remote_model(model_class):
     return model_class
 
 
-class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue]):
+class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue]):
     """
     " A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
 
@@ -578,7 +561,7 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
         common_keys = set(self._config_mapping.keys()).intersection(self._model_mapping.keys())
         return len(common_keys) + len(self._extra_content)
 
-    def __getitem__(self, key: type[PretrainedConfig]) -> _LazyAutoMappingValue:
+    def __getitem__(self, key: type[PreTrainedConfig]) -> _LazyAutoMappingValue:
         if key in self._extra_content:
             return self._extra_content[key]
         model_type = self._reverse_config_mapping[key.__name__]
@@ -600,7 +583,7 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
             self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
         return getattribute_from_module(self._modules[module_name], attr)
 
-    def keys(self) -> list[type[PretrainedConfig]]:
+    def keys(self) -> list[type[PreTrainedConfig]]:
         mapping_keys = [
             self._load_attr_from_module(key, name)
             for key, name in self._config_mapping.items()
@@ -608,7 +591,7 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
         ]
         return mapping_keys + list(self._extra_content.keys())
 
-    def get(self, key: type[PretrainedConfig], default: _T) -> Union[_LazyAutoMappingValue, _T]:
+    def get(self, key: type[PreTrainedConfig], default: _T) -> Union[_LazyAutoMappingValue, _T]:
         try:
             return self.__getitem__(key)
         except KeyError:
@@ -625,7 +608,7 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
         ]
         return mapping_values + list(self._extra_content.values())
 
-    def items(self) -> list[tuple[type[PretrainedConfig], _LazyAutoMappingValue]]:
+    def items(self) -> list[tuple[type[PreTrainedConfig], _LazyAutoMappingValue]]:
         mapping_items = [
             (
                 self._load_attr_from_module(key, self._config_mapping[key]),
@@ -636,7 +619,7 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
         ]
         return mapping_items + list(self._extra_content.items())
 
-    def __iter__(self) -> Iterator[type[PretrainedConfig]]:
+    def __iter__(self) -> Iterator[type[PreTrainedConfig]]:
         return iter(self.keys())
 
     def __contains__(self, item: type) -> bool:
@@ -647,7 +630,7 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
         model_type = self._reverse_config_mapping[item.__name__]
         return model_type in self._model_mapping
 
-    def register(self, key: type[PretrainedConfig], value: _LazyAutoMappingValue, exist_ok=False) -> None:
+    def register(self, key: type[PreTrainedConfig], value: _LazyAutoMappingValue, exist_ok=False) -> None:
         """
         Register a new model in this mapping.
         """

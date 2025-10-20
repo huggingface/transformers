@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -22,7 +23,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
@@ -31,6 +32,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -42,7 +44,6 @@ from ..phi3.modeling_phi3 import (
     Phi3Model,
     Phi3PreTrainedModel,
     Phi3RMSNorm,
-    Phi3RotaryEmbedding,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -67,8 +68,8 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
     configuration with the defaults will yield a similar configuration to that of the vision encoder of
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1152):
@@ -145,15 +146,15 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         self.feature_layer = feature_layer
 
 
-class Phi4MultimodalAudioConfig(PretrainedConfig):
+class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalAudioModel`]. It is used to instantiate a
     Phi4Multimodal audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -273,7 +274,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         if time_reduction % 2 != 0:
             raise ValueError("`time_reduction` should be a multiple of 2!")
         length = input_size
-        for _ in range(int(math.log(time_reduction, 2))):
+        for _ in range(int(math.log2(time_reduction))):
             length = math.floor((length - 1) / 2 + 1)
         self.nemo_final_size = length
 
@@ -285,8 +286,8 @@ class Phi4MultimodalConfig(Phi3Config):
     with the defaults will yield a similar configuration to that of the
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 200064):
@@ -327,13 +328,10 @@ class Phi4MultimodalConfig(Phi3Config):
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
-            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
-            divided by the number of attention heads divided by 2.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         partial_rotary_factor (`float`, *optional*, defaults to `1.0`):
             Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 199999):
@@ -375,33 +373,44 @@ class Phi4MultimodalConfig(Phi3Config):
 
     def __init__(
         self,
-        vocab_size=200064,
-        hidden_size=3072,
-        intermediate_size=8192,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        resid_pdrop=0.0,
-        embd_pdrop=0.0,
-        attention_dropout=0.0,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        partial_rotary_factor=1,
-        bos_token_id=199999,
-        eos_token_id=[199999, 200020],
-        pad_token_id=199999,
-        original_max_position_embeddings=4096,
-        sliding_window=None,
-        vision_config=None,
-        audio_config=None,
+        vocab_size: Optional[int] = 200064,
+        hidden_size: Optional[int] = 3072,
+        intermediate_size: Optional[int] = 8192,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 8,
+        resid_pdrop: Optional[float] = 0.0,
+        embd_pdrop: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 131072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        partial_rotary_factor: Optional[int] = 1,
+        bos_token_id: Optional[int] = 199999,
+        eos_token_id: Optional[list[int]] = [199999, 200020],
+        pad_token_id: Optional[int] = 199999,
+        original_max_position_embeddings: Optional[int] = 4096,
+        sliding_window: Optional[int] = None,
+        vision_config: Optional[dict] = None,
+        audio_config: Optional[dict] = None,
         **kwargs,
     ):
+        if isinstance(vision_config, dict):
+            vision_config = Phi4MultimodalVisionConfig(**vision_config)
+        elif vision_config is None:
+            Phi4MultimodalVisionConfig()
+        self.vision_config = vision_config
+
+        if isinstance(audio_config, dict):
+            audio_config = Phi4MultimodalAudioConfig(**audio_config)
+        elif vision_config is None:
+            audio_config = Phi4MultimodalAudioConfig()
+        self.audio_config = audio_config
+
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -418,8 +427,7 @@ class Phi4MultimodalConfig(Phi3Config):
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
             tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             partial_rotary_factor=partial_rotary_factor,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
@@ -428,18 +436,6 @@ class Phi4MultimodalConfig(Phi3Config):
             sliding_window=sliding_window,
             **kwargs,
         )
-
-        if isinstance(vision_config, dict):
-            vision_config = Phi4MultimodalVisionConfig(**vision_config)
-        elif vision_config is None:
-            Phi4MultimodalVisionConfig()
-        self.vision_config = vision_config
-
-        if isinstance(audio_config, dict):
-            audio_config = Phi4MultimodalAudioConfig(**audio_config)
-        elif vision_config is None:
-            audio_config = Phi4MultimodalAudioConfig()
-        self.audio_config = audio_config
 
 
 class Phi4MultimodalVisionMLP(SiglipMLP):
@@ -537,6 +533,7 @@ class Phi4MultimodalVisionEncoder(SiglipEncoder):
 class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
@@ -672,7 +669,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values,
@@ -1028,7 +1025,7 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
         self.subsampling_factor = config.time_reduction
-        self.sampling_num = int(math.log(self.subsampling_factor, 2))
+        self.sampling_num = int(math.log2(self.subsampling_factor))
         self.act_fn = ACT2FN[config.nemo_activation]
         conv_channels = config.nemo_conv_channels
 
@@ -1115,6 +1112,7 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 @auto_docstring
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalAudioConfig
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]
     _supports_flash_attn = True
@@ -1440,11 +1438,9 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
         return inputs_embeds
 
 
-class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
-    pass
-
-
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
+    input_modalities = ["image", "audio", "text"]
+
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Phi4MultimodalImageEmbedding):
@@ -1472,7 +1468,7 @@ class Phi4MultimodalModel(Phi3Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1545,9 +1541,8 @@ class Phi4MultimodalModel(Phi3Model):
         )
 
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
@@ -1700,7 +1695,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_scaling
+            and self.config.rope_parameters
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]

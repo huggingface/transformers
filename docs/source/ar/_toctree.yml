@@ -123,8 +123,6 @@
     title: تشغيل التدريب على Amazon SageMaker
   - local: serialization
     title: التصدير إلى ONNX
-  - local: torchscript
-    title: التصدير إلى TorchScript
   - local: notebooks
     title: دفاتر الملاحظات مع الأمثلة
   - local: community

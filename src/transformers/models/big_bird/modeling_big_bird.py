@@ -39,7 +39,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -78,7 +77,6 @@ class BigBirdEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -153,12 +151,10 @@ class BigBirdSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
@@ -213,10 +209,6 @@ class BigBirdSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -1175,12 +1167,10 @@ class BigBirdAttention(nn.Module):
         if not self.training:
             self.self.eval()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
@@ -1204,7 +1194,6 @@ class BigBirdAttention(nn.Module):
             self_outputs = self.self(
                 hidden_states,
                 attention_mask=attention_mask,
-                head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
@@ -1285,12 +1274,10 @@ class BigBirdLayer(GradientCheckpointingLayer):
         if self.add_cross_attention:
             self.crossattention.set_attention_type(value, layer_idx=layer_idx)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         band_mask=None,
@@ -1305,7 +1292,6 @@ class BigBirdLayer(GradientCheckpointingLayer):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
@@ -1330,7 +1316,6 @@ class BigBirdLayer(GradientCheckpointingLayer):
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask=encoder_attention_mask,
-                head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
@@ -1378,7 +1363,6 @@ class BigBirdEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
@@ -1405,24 +1389,14 @@ class BigBirdEncoder(nn.Module):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
-                layer_head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 band_mask,
@@ -1680,7 +1654,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
@@ -1716,13 +1689,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -1804,13 +1771,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -1822,7 +1782,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
@@ -1965,7 +1924,6 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
         next_sentence_label: Optional[torch.LongTensor] = None,
@@ -2008,7 +1966,6 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2073,7 +2030,6 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
@@ -2136,7 +2092,6 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -2214,7 +2169,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
@@ -2225,6 +2179,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[CausalLMOutputWithCrossAttentions, tuple[torch.FloatTensor]]:
         r"""
@@ -2240,7 +2195,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -2253,25 +2207,22 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.cls(hidden_states[:, slice_indices, :])
 
-        lm_loss = None
+        loss = None
         if labels is not None:
-            lm_loss = self.loss_function(
-                prediction_scores,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -2327,7 +2278,6 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -2382,7 +2332,6 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2446,7 +2395,6 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -2501,7 +2449,6 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2554,7 +2501,6 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -2572,7 +2518,6 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2646,7 +2591,6 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         question_lengths: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -2718,7 +2662,6 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

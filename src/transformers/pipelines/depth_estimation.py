@@ -65,7 +65,7 @@ class DepthEstimationPipeline(Pipeline):
 
     def __call__(
         self, inputs: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs: Any
-    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """
         Predict the depth(s) of the image(s) passed as inputs.
 

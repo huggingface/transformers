@@ -17,12 +17,11 @@
 import importlib
 import json
 import os
-import warnings
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Optional, Union
 
 # Build the list of all video processors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, VIDEO_PROCESSOR_NAME, cached_file, is_torchvision_available, logging
 from ...utils.import_utils import requires
@@ -62,6 +61,7 @@ else:
             ("sam2_video", "Sam2VideoVideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
+            ("videomae", "VideoMAEVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
         ]
     )
@@ -106,7 +106,6 @@ def get_video_processor_config(
     pretrained_model_name_or_path: Union[str, os.PathLike],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -131,9 +130,6 @@ def get_video_processor_config(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -171,22 +167,11 @@ def get_video_processor_config(
     video_processor.save_pretrained("video-processor-test")
     video_processor = get_video_processor_config("video-processor-test")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         VIDEO_PROCESSOR_NAME,
         cache_dir=cache_dir,
         force_download=force_download,
-        resume_download=resume_download,
         proxies=proxies,
         token=token,
         revision=revision,
@@ -246,9 +231,6 @@ class AutoVideoProcessor:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the video processor files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -290,18 +272,6 @@ class AutoVideoProcessor:
         >>> # If video processor files are in a directory (e.g. video processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # video_processor = AutoVideoProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
@@ -329,7 +299,7 @@ class AutoVideoProcessor:
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
         if video_processor_class is None and video_processor_auto_map is None:
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
@@ -382,7 +352,7 @@ class AutoVideoProcessor:
         Register a new video processor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             video_processor_class ([`BaseVideoProcessor`]):
                 The video processor to register.

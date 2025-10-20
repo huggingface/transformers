@@ -55,15 +55,18 @@ from transformers import (
     Wav2Vec2Processor,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.trainer_utils import is_main_process
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.57.0.dev0")
 
-require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
+require_version(
+    "datasets>=1.18.0",
+    "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt",
+)
 
 
 logger = logging.getLogger(__name__)
@@ -91,13 +94,16 @@ class ModelArguments:
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
     freeze_feature_encoder: bool = field(
-        default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
+        default=True,
+        metadata={"help": "Whether to freeze the feature encoder layers of the model."},
     )
     attention_dropout: float = field(
-        default=0.0, metadata={"help": "The dropout ratio for the attention probabilities."}
+        default=0.0,
+        metadata={"help": "The dropout ratio for the attention probabilities."},
     )
     activation_dropout: float = field(
-        default=0.0, metadata={"help": "The dropout ratio for activations inside the fully connected layer."}
+        default=0.0,
+        metadata={"help": "The dropout ratio for activations inside the fully connected layer."},
     )
     feat_proj_dropout: float = field(default=0.0, metadata={"help": "The dropout ratio for the projected features."})
     hidden_dropout: float = field(
@@ -140,7 +146,8 @@ class ModelArguments:
     )
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
     ctc_loss_reduction: Optional[str] = field(
-        default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."}
+        default="mean",
+        metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."},
     )
     ctc_zero_infinity: Optional[bool] = field(
         default=False,
@@ -169,10 +176,13 @@ class DataTrainingArguments:
     """
 
     dataset_name: str = field(
-        metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        metadata={"help": "Path or name of the dataset (cf `load_dataset` method of the Datasets library)."}
     )
     dataset_config_name: str = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (cf `load_dataset` method of the Datasets library)."
+        },
     )
     train_split_name: str = field(
         default="train+validation",
@@ -198,7 +208,8 @@ class DataTrainingArguments:
         metadata={"help": "The name of the dataset column containing the text data. Defaults to 'text'"},
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
+        default=False,
+        metadata={"help": "Overwrite the cached preprocessed datasets or not."},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -240,7 +251,8 @@ class DataTrainingArguments:
         },
     )
     min_duration_in_seconds: float = field(
-        default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
+        default=0.0,
+        metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"},
     )
     preprocessing_only: bool = field(
         default=False,
@@ -383,7 +395,8 @@ def create_vocabulary_from_data(
 
     # take union of all unique characters in each dataset
     vocab_set = functools.reduce(
-        lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values()
+        lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]),
+        vocabs.values(),
     )
 
     vocab_dict = {v: k for k, v in enumerate(sorted(vocab_set))}
@@ -416,40 +429,21 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_speech_recognition_ctc", model_args, data_args)
-
-    # Detecting last checkpoint.
-    last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif last_checkpoint is not None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
-
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(logging.INFO if is_main_process(training_args.local_process_index) else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
+    if is_main_process(training_args.local_process_index):
         transformers.utils.logging.set_verbosity_info()
     logger.info("Training/evaluation parameters %s", training_args)
 
@@ -549,7 +543,7 @@ def main():
         vocab_file = os.path.join(tokenizer_name_or_path, "vocab.json")
 
         with training_args.main_process_first():
-            if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
+            if os.path.isfile(vocab_file):
                 try:
                     os.remove(vocab_file)
                 except OSError:
@@ -575,7 +569,7 @@ def main():
         # it is defined by `tokenizer_class` if present in config else by `model_type`
         tokenizer_kwargs = {
             "config": config if config.tokenizer_class is not None else None,
-            "tokenizer_type": config.model_type if config.tokenizer_class is None else None,
+            "tokenizer_type": (config.model_type if config.tokenizer_class is None else None),
             "unk_token": unk_token,
             "pad_token": pad_token,
             "word_delimiter_token": word_delimiter_token,
@@ -643,7 +637,8 @@ def main():
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
     if dataset_sampling_rate != feature_extractor.sampling_rate:
         raw_datasets = raw_datasets.cast_column(
-            data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+            data_args.audio_column_name,
+            datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate),
         )
 
     # derive max & min input length for sample rate & max duration
@@ -731,7 +726,7 @@ def main():
     # make sure all processes wait until data is saved
     with training_args.main_process_first():
         # only the main process saves them
-        if is_main_process(training_args.local_rank):
+        if is_main_process(training_args.local_process_index):
             # save feature extractor, tokenizer and config
             feature_extractor.save_pretrained(training_args.output_dir)
             tokenizer.save_pretrained(training_args.output_dir)
@@ -771,9 +766,7 @@ def main():
     # Training
     if training_args.do_train:
         # use last checkpoint if exist
-        if last_checkpoint is not None:
-            checkpoint = last_checkpoint
-        elif os.path.isdir(model_args.model_name_or_path):
+        if os.path.isdir(model_args.model_name_or_path):
             checkpoint = model_args.model_name_or_path
         else:
             checkpoint = None

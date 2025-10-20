@@ -15,6 +15,7 @@
 """PyTorch Falcon model."""
 
 import math
+from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
@@ -37,7 +38,10 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import (
+    ROPE_INIT_FUNCTIONS,
+    dynamic_rope_update,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
@@ -104,20 +108,49 @@ class FalconRotaryEmbedding(nn.Module):
 
     def __init__(self, config: FalconConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[FalconConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -194,7 +227,7 @@ class FalconAttention(nn.Module):
         self.split_size = self.hidden_size
         self.hidden_dropout = config.hidden_dropout
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+
         self.is_causal = True
         self.layer_idx = layer_idx
         if layer_idx is None:
@@ -290,11 +323,10 @@ class FalconAttention(nn.Module):
         attention_mask: torch.Tensor,
         position_ids: Optional[torch.LongTensor] = None,
         layer_past: Optional[Cache] = None,
-        head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -353,7 +385,7 @@ class FalconAttention(nn.Module):
                 attention_scores /= math.sqrt(self.head_dim)
 
                 attention_scores = F.softmax(attention_scores + attention_mask, dim=-1, dtype=hidden_states.dtype)
-                # It is unclear why neither dropout nor head_mask is applied here (while it is with alibi).
+                # It is unclear why dropout is not applied here (while it is with alibi).
                 attn_output = attention_scores @ value_layer
 
             attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
@@ -365,7 +397,7 @@ class FalconAttention(nn.Module):
             return attn_output, attention_scores
 
         else:
-            if self.config._attn_implementation == "sdpa" and not output_attentions and head_mask is None:
+            if self.config._attn_implementation == "sdpa" and not output_attentions:
                 # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
                 # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
                 is_causal = self.is_causal and attention_mask is None and query_length > 1
@@ -399,9 +431,6 @@ class FalconAttention(nn.Module):
                 attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
                 # [batch_size, num_heads, q_length, kv_length]
                 attention_probs = self.attention_dropout(attention_probs)
-
-                if head_mask is not None:
-                    attention_probs = attention_probs * head_mask
 
                 # change view [batch_size, num_heads, q_length, kv_length]
                 attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
@@ -439,11 +468,10 @@ class FalconFlashAttention2(FalconAttention):
         attention_mask: torch.Tensor,
         position_ids: Optional[torch.LongTensor] = None,
         layer_past: Optional[Cache] = None,
-        head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -582,11 +610,10 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor,
         position_ids: Optional[torch.LongTensor] = None,
         layer_past: Optional[Union[Cache, tuple[torch.Tensor, torch.Tensor]]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ):
         residual = hidden_states
@@ -604,7 +631,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             alibi=alibi,
-            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -695,10 +721,8 @@ class FalconModel(FalconPreTrainedModel):
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-
-        self.rotary_emb = FalconRotaryEmbedding(config=config)
-
         self.gradient_checkpointing = False
+        self.rotary_emb = FalconRotaryEmbedding(config=config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -713,10 +737,9 @@ class FalconModel(FalconPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor, torch.Tensor], ...]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -783,18 +806,11 @@ class FalconModel(FalconPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions, head_mask, alibi
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions, alibi
         )
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape batch_size x num_heads x N x N
-        # head_mask has shape n_layer x batch x num_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -808,7 +824,6 @@ class FalconModel(FalconPreTrainedModel):
                 layer_past=past_key_values,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                head_mask=head_mask[i],
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 alibi=alibi,
@@ -845,7 +860,6 @@ class FalconModel(FalconPreTrainedModel):
         cache_position: torch.Tensor,
         past_key_values: Cache,
         output_attentions: bool,
-        head_mask: torch.Tensor,
         alibi: torch.Tensor,
     ):
         # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
@@ -869,7 +883,6 @@ class FalconModel(FalconPreTrainedModel):
             self.config._attn_implementation == "sdpa"
             and not using_static_cache
             and not output_attentions
-            and head_mask is None
             and alibi is None
         ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
@@ -904,7 +917,7 @@ class FalconModel(FalconPreTrainedModel):
         )
 
         # We take care to integrate alibi bias in the causal_mask here
-        if head_mask is None and alibi is not None:
+        if alibi is not None:
             alibi = alibi.reshape(batch_size, -1, *alibi.shape[1:])
             causal_mask = torch.masked_fill(
                 alibi / math.sqrt(self.config.hidden_size // self.num_heads),
@@ -1005,10 +1018,9 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor, torch.Tensor], ...]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1044,7 +1056,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1109,7 +1120,6 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1141,7 +1151,6 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1235,7 +1244,6 @@ class FalconForTokenClassification(FalconPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1267,7 +1275,6 @@ class FalconForTokenClassification(FalconPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1314,7 +1321,6 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1340,7 +1346,6 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
         outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

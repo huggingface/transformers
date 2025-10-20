@@ -20,8 +20,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -423,6 +424,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
     config: SamHQConfig
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["SamHQVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -532,7 +534,7 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
     ) -> Union[tuple, SamHQVisionEncoderOutput]:
@@ -1233,6 +1235,7 @@ class SamHQPromptEncoder(nn.Module):
     """
 )
 class SamHQModel(SamHQPreTrainedModel):
+    input_modalities = ["image", "text"]
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
@@ -1320,7 +1323,7 @@ class SamHQModel(SamHQPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

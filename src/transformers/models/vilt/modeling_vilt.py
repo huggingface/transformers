@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
+from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring, logging
 from .configuration_vilt import ViltConfig
 
@@ -232,7 +232,6 @@ class TextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -265,11 +264,11 @@ class TextEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings += position_embeddings
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -325,7 +324,7 @@ class ViltSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
             self.query(hidden_states)
@@ -356,10 +355,6 @@ class ViltSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -395,28 +390,9 @@ class ViltAttention(nn.Module):
         super().__init__()
         self.attention = ViltSelfAttention(config)
         self.output = ViltSelfOutput(config)
-        self.pruned_heads = set()
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
-        self_outputs = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+        self_outputs = self.attention(hidden_states, attention_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -467,11 +443,10 @@ class ViltLayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViLT, layernorm is applied before self-attention
             attention_mask,
-            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -503,7 +478,6 @@ class ViltEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -515,9 +489,7 @@ class ViltEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -540,6 +512,7 @@ class ViltEncoder(nn.Module):
 class ViltPreTrainedModel(PreTrainedModel):
     config: ViltConfig
     base_model_prefix = "vilt"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViltEmbeddings", "ViltSelfAttention"]
 
@@ -583,14 +556,6 @@ class ViltModel(ViltPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.text_embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -599,7 +564,6 @@ class ViltModel(ViltPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         image_token_type_idx: Optional[int] = None,
@@ -666,13 +630,6 @@ class ViltModel(ViltPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones((image_batch_size, self.config.image_size, self.config.image_size), device=device)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output, attention_mask = self.embeddings(
             input_ids,
             attention_mask,
@@ -691,7 +648,6 @@ class ViltModel(ViltPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -758,7 +714,6 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -831,7 +786,6 @@ class ViltForMaskedLM(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
             output_attentions=output_attentions,
@@ -936,7 +890,6 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -985,7 +938,6 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
             output_attentions=output_attentions,
@@ -1042,7 +994,6 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1091,7 +1042,6 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
             output_attentions=output_attentions,
@@ -1147,7 +1097,6 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1218,7 +1167,6 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
                 token_type_ids=token_type_ids,
                 pixel_values=pixel_values[:, i, :, :, :] if pixel_values is not None else None,
                 pixel_mask=pixel_mask[:, i, :, :] if pixel_mask is not None else None,
-                head_mask=head_mask,
                 inputs_embeds=inputs_embeds,
                 image_embeds=image_embeds[:, i, :, :] if image_embeds is not None else None,
                 image_token_type_idx=i + 1,
@@ -1277,7 +1225,6 @@ class ViltForTokenClassification(ViltPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1301,7 +1248,6 @@ class ViltForTokenClassification(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
             output_attentions=output_attentions,

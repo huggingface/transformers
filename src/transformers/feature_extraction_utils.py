@@ -18,7 +18,6 @@ Feature extraction saving/loading class for common feature extractors.
 import copy
 import json
 import os
-import warnings
 from collections import UserDict
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
@@ -187,7 +186,7 @@ class BatchFeature(UserDict):
             [`BatchFeature`]: The same instance after modification.
         """
         requires_backends(self, ["torch"])
-        import torch  # noqa
+        import torch
 
         device = kwargs.get("device")
         non_blocking = kwargs.get("non_blocking", False)
@@ -221,7 +220,7 @@ class BatchFeature(UserDict):
 
 class FeatureExtractionMixin(PushToHubMixin):
     """
-    This is a feature extraction mixin used to provide saving/loading functionality for sequential and image feature
+    This is a feature extraction mixin used to provide saving/loading functionality for sequential and audio feature
     extractors.
     """
 
@@ -275,9 +274,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -336,18 +332,6 @@ class FeatureExtractionMixin(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         if token is not None:
             kwargs["token"] = token
 
@@ -370,19 +354,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -433,24 +404,11 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         subfolder = kwargs.pop("subfolder", None)
         token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -487,7 +445,6 @@ class FeatureExtractionMixin(PushToHubMixin):
                             cache_dir=cache_dir,
                             force_download=force_download,
                             proxies=proxies,
-                            resume_download=resume_download,
                             local_files_only=local_files_only,
                             subfolder=subfolder,
                             token=token,
@@ -517,7 +474,10 @@ class FeatureExtractionMixin(PushToHubMixin):
             with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
-            feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
+            if "audio_processor" in feature_extractor_dict:
+                feature_extractor_dict = feature_extractor_dict["audio_processor"]
+            else:
+                feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
 
         except json.JSONDecodeError:
             raise OSError(

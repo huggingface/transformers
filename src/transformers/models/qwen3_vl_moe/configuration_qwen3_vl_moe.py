@@ -18,19 +18,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+
+from typing import Optional
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class Qwen3VLMoeTextConfig(PretrainedConfig):
+class Qwen3VLMoeTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLMoeTextModel`]. It is used to instantiate a
     Qwen3-VL-MOE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen3-VL-30B-A3B-Instruct [Qwen/Qwen3-VL-30B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
@@ -64,8 +67,6 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 5000000.0):
-            The base period of the RoPE embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -78,49 +79,14 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 60):
             Number of routed experts.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the topk probabilities.
         mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
             Indicate which layers use Qwen3VLMoeMLP rather than Qwen3VLMoeSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         head_dim (`int`, *optional*):
             The dimension of the head. If not specified, will default to `hidden_size // num_attention_heads`.
 
@@ -158,29 +124,27 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151936,
-        hidden_size=2048,
-        intermediate_size=5632,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        num_key_value_heads=16,
-        hidden_act="silu",
-        max_position_embeddings=128000,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=5000000.0,
-        attention_bias=False,
-        attention_dropout=0.0,
-        decoder_sparse_step=1,
-        moe_intermediate_size=1408,
-        num_experts_per_tok=4,
-        num_experts=60,
-        norm_topk_prob=True,
-        mlp_only_layers=None,
-        rope_scaling=None,
-        head_dim=None,
+        vocab_size: Optional[int] = 151936,
+        hidden_size: Optional[int] = 2048,
+        intermediate_size: Optional[int] = 5632,
+        num_hidden_layers: Optional[int] = 24,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = 16,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 128000,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        decoder_sparse_step: Optional[int] = 1,
+        moe_intermediate_size: Optional[int] = 1408,
+        num_experts_per_tok: Optional[int] = 4,
+        num_experts: Optional[int] = 60,
+        mlp_only_layers: Optional[list[int]] = None,
+        rope_parameters: Optional[RopeParameters] = None,
+        head_dim: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -199,12 +163,16 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
         self.head_dim = head_dim or hidden_size // num_attention_heads
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 5000000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self, ignore_keys={"mrope_section", "mrope_interleaved"})
 
         # MoE arguments
@@ -212,13 +180,12 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
         self.moe_intermediate_size = moe_intermediate_size
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
-        self.norm_topk_prob = norm_topk_prob
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class Qwen3VLMoeVisionConfig(PretrainedConfig):
+class Qwen3VLMoeVisionConfig(PreTrainedConfig):
     model_type = "qwen3_vl_moe"
     base_config_key = "vision_config"
 
@@ -256,15 +223,15 @@ class Qwen3VLMoeVisionConfig(PretrainedConfig):
         self.deepstack_visual_indexes = deepstack_visual_indexes
 
 
-class Qwen3VLMoeConfig(PretrainedConfig):
+class Qwen3VLMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLMoeModel`]. It is used to instantiate a
     Qwen3-VL-MOE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen3-VL-30B-A3B-Instruct [Qwen/Qwen3-VL-30B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

@@ -9,7 +9,6 @@ import argparse
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
 
 import requests
 from custom_init_isort import sort_imports_in_all_inits
@@ -37,7 +36,7 @@ def get_last_stable_minor_release():
     last_stable_minor_releases = [
         release for release in release_data["releases"] if release.startswith(last_major_minor)
     ]
-    last_stable_release = sorted(last_stable_minor_releases, key=version.parse)[-1]
+    last_stable_release = max(last_stable_minor_releases, key=version.parse)
 
     return last_stable_release
 
@@ -77,7 +76,7 @@ def insert_tip_to_model_doc(model_doc_path, tip_message):
         f.write("\n".join(new_model_lines))
 
 
-def get_model_doc_path(model: str) -> tuple[Optional[str], Optional[str]]:
+def get_model_doc_path(model: str) -> tuple[str | None, str | None]:
     # Possible variants of the model name in the model doc path
     model_names = [model, model.replace("_", "-"), model.replace("_", "")]
 

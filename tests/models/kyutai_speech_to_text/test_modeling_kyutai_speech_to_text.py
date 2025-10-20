@@ -41,7 +41,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
@@ -253,9 +252,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -299,10 +295,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         pass
 
     @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
-    def test_tie_model_weights(self):
-        pass
-
-    @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
     def test_resize_embeddings_untied(self):
         pass
 
@@ -317,25 +309,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     @pytest.mark.skip(reason="Does not apply to Moshi ASR that requires input_values.")
     def test_generate_without_input_ids(self):
         pass
-
-    def test_initialization(self):
-        """
-        Overrides [ModelTesterMixin.test_initialization] because of specificities of Mimi codec model.
-        See https://github.com/huggingface/transformers/blob/1077603410cd73ba71d64a522033574d66d64b55/tests/models/mimi/test_modeling_mimi.py#L384-L397
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = ["conv", "input_proj", "output_proj"]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
@@ -450,14 +423,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            for layer_idx in range(len(outputs_cached.past_key_values)):
-                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            outputs_cached.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     # needs to be overridden to avoid to avoid casting of input_values to float16
     # indeed, the codec model is kept in fp32, so we need to avoid casting input_values to float16

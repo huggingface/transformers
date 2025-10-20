@@ -28,7 +28,6 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -308,9 +307,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     pipeline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
 
     is_training = False
-    test_headmasking = False
-    test_pruning = False
-    test_torchscript = False
+
     test_resize_embeddings = False
     has_attentions = False
 
@@ -437,29 +434,6 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
         if self.has_attentions:
             self.assertIsNotNone(attentions.grad)
-
-    # override as the `logit_scale` parameter initialization is different for BRIDGE TOWER
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            config.logit_scale_init_value,
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. So this test is not applicable.""")
     def test_model_get_set_embeddings(self):

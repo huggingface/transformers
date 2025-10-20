@@ -20,7 +20,8 @@
 # limitations under the License.
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -38,7 +39,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_longcat_flash import LongcatFlashConfig
 
@@ -69,20 +69,49 @@ class LongcatFlashRotaryEmbedding(nn.Module):
 
     def __init__(self, config: LongcatFlashConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[LongcatFlashConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -106,7 +135,6 @@ class LongcatFlashMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
         self.intermediate_size = config.ffn_hidden_size if intermediate_size is None else intermediate_size
-
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -121,19 +149,13 @@ class LongcatFlashTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
         self.top_k = config.moe_topk
-        self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.router_bias = getattr(config, "router_bias", False)
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
-
-    @torch.no_grad()
-    def get_topk_indices(self, scores):
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        return topk_indices
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
@@ -144,7 +166,40 @@ class LongcatFlashTopkRouter(nn.Module):
         topk_weights = topk_weights * self.routed_scaling_factor
         return topk_indices, topk_weights
 
+    @torch.no_grad()
+    def get_topk_indices(self, scores):
+        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        return topk_indices
 
+
+class LongcatFlashExperts(nn.ModuleList):
+    def __init__(self, config):
+        super().__init__()
+        self.intermediate_size = config.expert_ffn_hidden_size
+        self.hidden_size = config.hidden_size
+        self.num_experts = config.n_routed_experts + config.zero_expert_num
+        self.zero_expert_num = config.zero_expert_num
+
+        self.extend(
+            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(self.num_experts)]
+            + [nn.Identity() for _ in range(self.zero_expert_num)]
+        )
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        final_hidden_states = torch.zeros_like(hidden_states)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
+            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        return final_hidden_states
+
+
+# remap config key expert_ffn_hidden_size -> moe_intermediate_size
 class LongcatFlashMoE(nn.Module):
     """
     A mixed expert module containing zero compute (identity) experts.
@@ -154,45 +209,15 @@ class LongcatFlashMoE(nn.Module):
         super().__init__()
         self.intermediate_size = config.expert_ffn_hidden_size
         self.config = config
-
-        self.experts = nn.ModuleList(
-            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)]
-            + [nn.Identity() for _ in range(config.zero_expert_num)]
-        )
+        self.experts = LongcatFlashExperts(config)
 
         self.router = LongcatFlashTopkRouter(config)
-
-    def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        r"""
-        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
-        to not have to do a loop here (deepseek has 256 experts soooo yeah).
-        """
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
-        expert_mask = expert_mask.permute(2, 0, 1)
-
-        for expert_idx in range(len(self.experts)):
-            expert = self.experts[expert_idx]
-            mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
-
-            if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = expert(expert_input)
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
-
-        # in original deepseek, the output of the experts are gathered once we leave this module
-        # thus the moe module is itelsf an IsolatedParallel module
-        # and all expert are "local" meaning we shard but we don't gather
-        return final_hidden_states.type(hidden_states.dtype)
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
         topk_indices, topk_weights = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         return hidden_states
 
 
@@ -295,7 +320,7 @@ class LongcatFlashMLA(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
         self.num_heads = config.num_attention_heads
-        self.rope_theta = config.rope_theta
+
         self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank
@@ -330,9 +355,9 @@ class LongcatFlashMLA(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_scaling is not None:
-            mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_scaling["factor"]
+        if self.config.rope_parameters.get("rope_type", "default") != "default":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
             if mscale_all_dim:
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
@@ -340,7 +365,6 @@ class LongcatFlashMLA(nn.Module):
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -534,14 +558,14 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
         self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
-        self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used) # noqa
+        self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used)
 
         self.config.num_hidden_layers = 2 * config.num_layers
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

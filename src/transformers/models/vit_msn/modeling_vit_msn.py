@@ -15,7 +15,8 @@
 """PyTorch ViT MSN (masked siamese network) model."""
 
 import collections.abc
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -25,7 +26,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_vit_msn import ViTMSNConfig
@@ -163,30 +163,29 @@ class ViTMSNPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.eager_attention_forward
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
     # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    # This is actually dropping out entire tokens to attend to, which might
-    # seem a bit unusual, but is taken from the original Transformer paper.
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
     if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -216,9 +215,7 @@ class ViTMSNSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(
-        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -235,7 +232,7 @@ class ViTMSNSelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
+            None,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -271,28 +268,9 @@ class ViTMSNAttention(nn.Module):
         super().__init__()
         self.attention = ViTMSNSelfAttention(config)
         self.output = ViTMSNSelfOutput(config)
-        self.pruned_heads = set()
 
-    def prune_heads(self, heads: set[int]):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, head_mask)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -341,9 +319,9 @@ class ViTMSNLayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm, head_mask)
+        attention_output = self.attention(hidden_states_norm)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -366,10 +344,9 @@ class ViTMSNEncoder(nn.Module):
         self.layer = nn.ModuleList([ViTMSNLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            hidden_states = layer_module(hidden_states, layer_head_mask)
+            hidden_states = layer_module(hidden_states)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -379,6 +356,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     config: ViTMSNConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViTMSNAttention", "ViTMSNSdpaAttention"]
     _supports_sdpa = True
@@ -429,21 +407,12 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
     def get_input_embeddings(self) -> ViTMSNPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
@@ -473,17 +442,10 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(
             pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
         )
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, head_mask=head_mask)
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output)
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
 
@@ -511,7 +473,6 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -543,9 +504,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         ```
         """
 
-        outputs: BaseModelOutput = self.vit(
-            pixel_values, head_mask=head_mask, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
-        )
+        outputs: BaseModelOutput = self.vit(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs)
         sequence_output = outputs.last_hidden_state
         logits = self.classifier(sequence_output[:, 0, :])
 

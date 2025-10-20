@@ -17,12 +17,11 @@
 import importlib
 import json
 import os
-import warnings
 from collections import OrderedDict
 from typing import Optional, Union
 
 # Build the list of all feature extractors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, cached_file, logging
@@ -40,85 +39,39 @@ logger = logging.get_logger(__name__)
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
-        ("beit", "BeitFeatureExtractor"),
-        ("chinese_clip", "ChineseCLIPFeatureExtractor"),
         ("clap", "ClapFeatureExtractor"),
-        ("clip", "CLIPFeatureExtractor"),
-        ("clipseg", "ViTFeatureExtractor"),
         ("clvp", "ClvpFeatureExtractor"),
-        ("conditional_detr", "ConditionalDetrFeatureExtractor"),
-        ("convnext", "ConvNextFeatureExtractor"),
-        ("cvt", "ConvNextFeatureExtractor"),
         ("dac", "DacFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
-        ("data2vec-vision", "BeitFeatureExtractor"),
-        ("deformable_detr", "DeformableDetrFeatureExtractor"),
-        ("deit", "DeiTFeatureExtractor"),
-        ("detr", "DetrFeatureExtractor"),
         ("dia", "DiaFeatureExtractor"),
-        ("dinat", "ViTFeatureExtractor"),
-        ("donut-swin", "DonutFeatureExtractor"),
-        ("dpt", "DPTFeatureExtractor"),
         ("encodec", "EncodecFeatureExtractor"),
-        ("flava", "FlavaFeatureExtractor"),
         ("gemma3n", "Gemma3nAudioFeatureExtractor"),
-        ("glpn", "GLPNFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
-        ("groupvit", "CLIPFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
-        ("imagegpt", "ImageGPTFeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
-        ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
-        ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
-        ("levit", "LevitFeatureExtractor"),
-        ("maskformer", "MaskFormerFeatureExtractor"),
         ("mctct", "MCTCTFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
-        ("mobilenet_v1", "MobileNetV1FeatureExtractor"),
-        ("mobilenet_v2", "MobileNetV2FeatureExtractor"),
-        ("mobilevit", "MobileViTFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
-        ("nat", "ViTFeatureExtractor"),
-        ("owlvit", "OwlViTFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
-        ("perceiver", "PerceiverFeatureExtractor"),
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
-        ("poolformer", "PoolFormerFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
-        ("regnet", "ConvNextFeatureExtractor"),
-        ("resnet", "ConvNextFeatureExtractor"),
         ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("seamless_m4t_v2", "SeamlessM4TFeatureExtractor"),
-        ("segformer", "SegformerFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("speecht5", "SpeechT5FeatureExtractor"),
-        ("swiftformer", "ViTFeatureExtractor"),
-        ("swin", "ViTFeatureExtractor"),
-        ("swinv2", "ViTFeatureExtractor"),
-        ("table-transformer", "DetrFeatureExtractor"),
-        ("timesformer", "VideoMAEFeatureExtractor"),
-        ("tvlt", "TvltFeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
         ("univnet", "UnivNetFeatureExtractor"),
-        ("van", "ConvNextFeatureExtractor"),
-        ("videomae", "VideoMAEFeatureExtractor"),
-        ("vilt", "ViltFeatureExtractor"),
-        ("vit", "ViTFeatureExtractor"),
-        ("vit_mae", "ViTFeatureExtractor"),
-        ("vit_msn", "ViTFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
         ("wavlm", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
-        ("xclip", "CLIPFeatureExtractor"),
         ("xcodec", "DacFeatureExtractor"),
-        ("yolos", "YolosFeatureExtractor"),
     ]
 )
 
@@ -153,7 +106,6 @@ def get_feature_extractor_config(
     pretrained_model_name_or_path: Union[str, os.PathLike],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -178,9 +130,6 @@ def get_feature_extractor_config(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -218,22 +167,11 @@ def get_feature_extractor_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         FEATURE_EXTRACTOR_NAME,
         cache_dir=cache_dir,
         force_download=force_download,
-        resume_download=resume_download,
         proxies=proxies,
         token=token,
         revision=revision,
@@ -295,9 +233,6 @@ class AutoFeatureExtractor:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -339,18 +274,6 @@ class AutoFeatureExtractor:
         >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
@@ -363,7 +286,7 @@ class AutoFeatureExtractor:
 
         # If we don't find the feature extractor class in the feature extractor config, let's try the model config.
         if feature_extractor_class is None and feature_extractor_auto_map is None:
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
@@ -412,7 +335,7 @@ class AutoFeatureExtractor:
         Register a new feature extractor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """

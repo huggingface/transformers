@@ -13,13 +13,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -31,6 +32,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -39,7 +41,6 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -66,8 +67,8 @@ class T5GemmaModuleConfig(Gemma2Config):
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the T5GemmaModule-7B.
     e.g. [google/t5_gemma_module-7b](https://huggingface.co/google/t5_gemma_module-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
@@ -111,8 +112,10 @@ class T5GemmaModuleConfig(Gemma2Config):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -140,30 +143,30 @@ class T5GemmaModuleConfig(Gemma2Config):
 
     def __init__(
         self,
-        vocab_size=256000,
-        hidden_size=2304,
-        intermediate_size=9216,
-        num_hidden_layers=26,
-        num_attention_heads=8,
-        num_key_value_heads=4,
-        head_dim=256,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
-        tie_word_embeddings=True,
-        rope_theta=10000.0,
-        attention_bias=False,
-        attention_dropout=0.0,
-        query_pre_attn_scalar=256,
-        sliding_window=4096,
-        layer_types=None,
-        final_logit_softcapping=30.0,
-        attn_logit_softcapping=50.0,
+        vocab_size: Optional[int] = 256000,
+        hidden_size: Optional[int] = 2304,
+        intermediate_size: Optional[int] = 9216,
+        num_hidden_layers: Optional[int] = 26,
+        num_attention_heads: Optional[int] = 8,
+        num_key_value_heads: Optional[int] = 4,
+        head_dim: Optional[int] = 256,
+        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
+        max_position_embeddings: Optional[int] = 8192,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 1,
+        bos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        query_pre_attn_scalar: Optional[int] = 256,
+        sliding_window: Optional[int] = 4096,
+        layer_types: Optional[list[str]] = None,
+        final_logit_softcapping: Optional[float] = 30.0,
+        attn_logit_softcapping: Optional[float] = 50.0,
         **kwargs,
     ):
         super().__init__(
@@ -183,7 +186,7 @@ class T5GemmaModuleConfig(Gemma2Config):
             eos_token_id=eos_token_id,
             bos_token_id=bos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
+            rope_parameters=rope_parameters,
             attention_bias=attention_bias,
             attention_dropout=attention_dropout,
             query_pre_attn_scalar=query_pre_attn_scalar,
@@ -197,7 +200,7 @@ class T5GemmaModuleConfig(Gemma2Config):
         del self.use_bidirectional_attention
 
 
-class T5GemmaConfig(PretrainedConfig):
+class T5GemmaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`T5GemmaModel`]. It is used to instantiate an T5Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -208,8 +211,8 @@ class T5GemmaConfig(PretrainedConfig):
     >>> t5gemma_config = T5GemmaConfig.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
     >>> model = T5GemmaModel(t5gemma_config)
     ```
-    Configuration objects inherit from [PretrainedConfig] and can be used to control the model outputs. Read the
-    documentation from [PretrainedConfig] for more information.
+    Configuration objects inherit from [PreTrainedConfig] and can be used to control the model outputs. Read the
+    documentation from [PreTrainedConfig] for more information.
     Args:
         encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):
             Configuration for the encoder.
@@ -228,7 +231,7 @@ class T5GemmaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the T5Gemma model (the same as Gemma 2).
         kwargs (additional keyword arguments, optional, *optional*):
-            Will be passed to the PretrainedConfig base class.
+            Will be passed to the PreTrainedConfig base class.
     """
 
     model_type = "t5gemma"
@@ -270,12 +273,12 @@ class T5GemmaConfig(PretrainedConfig):
         self,
         encoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
         decoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
-        is_encoder_decoder: bool = True,
-        dropout_rate: float = 0.0,
-        classifier_dropout_rate: float = 0.0,
-        attention_dropout: float = 0.0,
-        tie_word_embeddings: bool = True,
-        vocab_size: int = 256000,
+        is_encoder_decoder: Optional[bool] = True,
+        dropout_rate: Optional[float] = 0.0,
+        classifier_dropout_rate: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        tie_word_embeddings: Optional[bool] = True,
+        vocab_size: Optional[int] = 256000,
         **kwargs,
     ):
         if isinstance(encoder, dict):
@@ -339,10 +342,6 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
-    def get_text_config(self, *args, **kwargs):
-        # Always return self, regardless of the decoder option.
-        return self
-
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
@@ -361,8 +360,7 @@ class T5GemmaMLP(Gemma2MLP):
 
 
 class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
-    def __init__(self, config, device=None):
-        super().__init__(config, device)
+    pass
 
 
 class T5GemmaSelfAttention(Gemma2Attention):
@@ -376,6 +374,7 @@ class T5GemmaCrossAttention(Gemma2Attention):
     def __init__(self, config: T5GemmaModuleConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         del self.sliding_window
+        del self.layer_type
         self.is_causal = False
 
         if config.cross_attention_hidden_size is None:
@@ -388,7 +387,6 @@ class T5GemmaCrossAttention(Gemma2Attention):
             config.cross_attention_hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -406,7 +404,7 @@ class T5GemmaCrossAttention(Gemma2Attention):
 
         if past_key_values is not None:
             is_updated = past_key_values.is_updated.get(self.layer_idx)
-            curr_past_key_value = past_key_values.cross_attention_cache
+            curr_past_key_values = past_key_values.cross_attention_cache
 
         if past_key_values is None or not is_updated:
             encoder_input_shape = encoder_hidden_states.shape[:-1]
@@ -415,11 +413,11 @@ class T5GemmaCrossAttention(Gemma2Attention):
             value_states = self.v_proj(encoder_hidden_states).view(encoder_hidden_shape).transpose(1, 2)
 
             if past_key_values is not None:
-                key_states, value_states = curr_past_key_value.update(key_states, value_states, self.layer_idx)
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 past_key_values.is_updated[self.layer_idx] = True
         else:
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -493,7 +491,7 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -528,11 +526,10 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         self.pre_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
@@ -693,18 +690,18 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.norm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList(
             [T5GemmaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.dropout = nn.Dropout(config.dropout_rate)
+        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -752,11 +749,11 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
         hidden_states = self.dropout(hidden_states)
+
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
@@ -785,10 +782,11 @@ class T5GemmaDecoder(T5GemmaEncoder):
         self.layers = nn.ModuleList(
             [T5GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -855,11 +853,11 @@ class T5GemmaDecoder(T5GemmaEncoder):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
         hidden_states = self.dropout(hidden_states)
+
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
@@ -1027,7 +1025,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     def _tie_weights(self):
         # Decoder input and output embeddings are tied.
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
+            self._tie_embedding_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
 
     def get_encoder(self):
         return self.model.encoder
@@ -1378,7 +1376,7 @@ __all__ = [
     "T5GemmaForConditionalGeneration",
     "T5GemmaModel",
     "T5GemmaEncoderModel",
-    "T5GemmaPreTrainedModel",  # noqa: F822
+    "T5GemmaPreTrainedModel",
     "T5GemmaForSequenceClassification",
     "T5GemmaForTokenClassification",
 ]

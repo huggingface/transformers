@@ -26,7 +26,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_detectron2_available, is_torch_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -265,8 +265,6 @@ class LayoutLMv2ModelTester:
 @require_torch
 @require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_pruning = False
-    test_torchscript = True
     test_mismatched_shapes = False
 
     all_model_classes = (
@@ -305,12 +303,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -432,23 +424,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model = LayoutLMv2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "backbone" in name or "visual_segment_embedding" in name:
-                    continue
-
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_batching_equivalence(self):
         def equivalence(tensor1, tensor2):
             return 1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=0)
@@ -497,7 +472,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
                 elif hasattr(value, "tensor"):
-                    # layoutlmv2uses ImageList instead of pixel values (needs for torchscript)
+                    # layoutlmv2uses ImageList instead of pixel values
                     single_row_input[key] = value.tensor[:single_batch_shape]
 
             with torch.no_grad():

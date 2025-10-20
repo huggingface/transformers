@@ -39,7 +39,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 
 
@@ -900,7 +899,6 @@ class SeamlessM4Tv2Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -921,17 +919,17 @@ class SeamlessM4Tv2Attention(nn.Module):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_values.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -941,7 +939,7 @@ class SeamlessM4Tv2Attention(nn.Module):
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
+                key_states, value_states = curr_past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -978,7 +976,7 @@ class SeamlessM4Tv2FeedForwardNetwork(nn.Module):
         self.dropout = nn.Dropout(config.activation_dropout)
         self.act = ACT2FN[config.activation_function]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1094,7 +1092,6 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
         self.ffn_layer_norm = nn.LayerNorm(config.hidden_size)
         self.ffn_dropout = nn.Dropout(config.activation_dropout)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1492,6 +1489,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TSpeechEncoder with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2SpeechEncoder(SeamlessM4Tv2PreTrainedModel):
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: SeamlessM4Tv2Config):
         super().__init__(config)
@@ -1845,13 +1843,6 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         attention_mask = _prepare_4d_causal_attention_mask(
@@ -2301,7 +2292,7 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedMod
         if getattr(self.config, "tie_word_embeddings", True):
             output_embeddings = self.get_output_embeddings()
             if output_embeddings is not None:
-                self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+                self._tie_embedding_weights(output_embeddings, self.get_input_embeddings())
 
 
 ############ VOCODER related code ################
@@ -2488,6 +2479,7 @@ class SeamlessM4Tv2HifiGan(nn.Module):
 class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
     config: SeamlessM4Tv2Config
     main_input_name = "input_embeds"
+    input_modalities = "audio"
     _no_split_modules = []
 
     def __init__(self, config):
@@ -2702,9 +2694,9 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     def forward(
@@ -2922,6 +2914,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     """
 )
 class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    input_modalities = "audio"
     _keys_to_ignore_on_load_missing = ["text_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
@@ -2961,8 +2954,8 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.forward
@@ -3191,6 +3184,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     """
 )
 class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    output_modalities = "audio"
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
 
@@ -3237,9 +3231,9 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.forward with SeamlessM4T->SeamlessM4Tv2
@@ -3552,6 +3546,8 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     """
 )
 class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    input_modalities = "audio"
+    output_modalities = "audio"
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
@@ -3594,8 +3590,8 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.forward with SeamlessM4T->SeamlessM4Tv2
@@ -3920,6 +3916,8 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
     """
 )
 class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    input_modalities = ["audio", "text"]
+    output_modalities = ["audio", "text"]
     _tied_weights_keys = [
         "lm_head.weight",
         "text_encoder.embed_tokens.weight",
@@ -3983,9 +3981,9 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.forward with SeamlessM4T->SeamlessM4Tv2

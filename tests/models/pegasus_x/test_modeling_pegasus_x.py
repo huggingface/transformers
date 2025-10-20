@@ -213,19 +213,12 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
 
     def setUp(self):
         self.model_tester = PegasusXModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PegasusXConfig)
-
-    @unittest.skip(
-        "`PegasusXGlobalLocalAttention` returns attentions as dictionary - not compatible with torchscript "
-    )
-    def test_torchscript_output_attentions(self):
-        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -552,7 +545,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -849,9 +842,8 @@ class PegasusXStandaloneDecoderModelTester:
 @require_torch
 class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXDecoder,) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
-    test_head_masking = False
 
     def setUp(
         self,

@@ -19,18 +19,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class DeepseekV2Config(PretrainedConfig):
+class DeepseekV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekV2Model`]. It is used to instantiate a DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of DeepSeek-V2-Lite" [deepseek-ai/DeepSeek-V2-Lite"](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite").
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -66,18 +67,16 @@ class DeepseekV2Config(PretrainedConfig):
             End-of-sequence token ID.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the Rotary Position Embeddings (RoPE).
-        rope_scaling (`Dict`, *optional*):
-            Configuration for scaling RoPE embeddings. Supports `linear` and `dynamic` scaling strategies.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value, and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability applied to attention weights.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias term in the MLP layers.
-        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
-            Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
             Number of dense layers in the shallow layers before switching to MoE layers.
         kv_lora_rank (`int`, *optional*, defaults to 512):
@@ -98,8 +97,6 @@ class DeepseekV2Config(PretrainedConfig):
             The head dimension for QK projections when using RoPE.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
             Scaling factor for routed experts in MoE models.
-        seq_aux (`bool`, *optional*, defaults to `True`):
-            Whether to compute the auxiliary loss for each individual sequence.
         topk_group (`int`, *optional*):
             Number of selected groups per token for expert selection.
         topk_method (`str`, *optional*, defaults to `"greedy"`):
@@ -108,8 +105,6 @@ class DeepseekV2Config(PretrainedConfig):
             The dimension of value projections in the attention layers.
         num_experts_per_tok (`int`, *optional*):
             The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the probability distribution over top-k selected experts.
         moe_intermediate_size (`int`, *optional*, defaults to 1407):
             Dimension of the MoE (Mixture of Experts) representations.
 
@@ -144,52 +139,55 @@ class DeepseekV2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        aux_loss_alpha=0.001,
-        first_k_dense_replace=0,
-        kv_lora_rank=512,
-        q_lora_rank=1536,
-        n_group=None,
-        n_routed_experts=64,
-        n_shared_experts=2,
-        qk_nope_head_dim=128,
-        qk_rope_head_dim=64,
-        routed_scaling_factor=1.0,
-        seq_aux=True,
-        topk_group=None,
-        topk_method="greedy",
-        v_head_dim=128,
-        num_experts_per_tok=None,
-        norm_topk_prob=False,
-        moe_intermediate_size=1407,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        first_k_dense_replace: Optional[int] = 0,
+        kv_lora_rank: Optional[int] = 512,
+        q_lora_rank: Optional[int] = 1536,
+        n_group: Optional[int] = None,
+        n_routed_experts: Optional[int] = 64,
+        n_shared_experts: Optional[int] = 2,
+        qk_nope_head_dim: Optional[int] = 128,
+        qk_rope_head_dim: Optional[int] = 64,
+        routed_scaling_factor: Optional[float] = 1.0,
+        topk_group: Optional[int] = None,
+        topk_method: Optional[str] = "greedy",
+        v_head_dim: Optional[int] = 128,
+        num_experts_per_tok: Optional[int] = None,
+        moe_intermediate_size: Optional[int] = 1407,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.first_k_dense_replace = first_k_dense_replace
+        self.kv_lora_rank = kv_lora_rank
+        self.q_lora_rank = q_lora_rank
+        self.n_group = n_group
+        self.n_routed_experts = n_routed_experts
+        self.n_shared_experts = n_shared_experts
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_rope_head_dim = qk_rope_head_dim
+        self.routed_scaling_factor = routed_scaling_factor
+        self.topk_group = topk_group
+        self.topk_method = topk_method
+        self.v_head_dim = v_head_dim
+        self.num_experts_per_tok = num_experts_per_tok
+        self.moe_intermediate_size = moe_intermediate_size
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -206,34 +204,27 @@ class DeepseekV2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
+
         self.head_dim = qk_rope_head_dim
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
-        self.aux_loss_alpha = aux_loss_alpha
-        self.first_k_dense_replace = first_k_dense_replace
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.n_group = n_group
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.routed_scaling_factor = routed_scaling_factor
-        self.seq_aux = seq_aux
-        self.topk_group = topk_group
-        self.topk_method = topk_method
-        self.v_head_dim = v_head_dim
-        self.num_experts_per_tok = num_experts_per_tok
-        self.norm_topk_prob = norm_topk_prob
-        self.moe_intermediate_size = moe_intermediate_size
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
 __all__ = ["DeepseekV2Config"]

@@ -15,6 +15,7 @@
 """PyTorch GPTNeoX model."""
 
 import math
+from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
@@ -67,176 +68,55 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
                 module.dense_bias.data.zero_()
 
 
-class GPTNeoXJapaneseAttention(nn.Module):
-    def __init__(self, config, use_bias=False, layer_idx=None):
-        super().__init__()
-        self.num_attention_heads = config.num_attention_heads
-        self.hidden_size = config.hidden_size
-        self.head_size = self.hidden_size // self.num_attention_heads
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
-        self.layer_idx = layer_idx
-        self.rotary_ndims = int(self.head_size * config.rotary_pct)
-        self.rope_theta = config.rotary_emb_base
-        self.rotary_emb = GPTNeoXJapaneseRotaryEmbedding(config=config)
-        self.attention_dropout = nn.Dropout(config.attention_dropout)
-        self.norm_factor = math.sqrt(self.head_size)
-
-        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=False)
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        # Activate bias if the last layer
-        self.use_bias = use_bias
-        self.dense_bias = nn.Parameter(torch.zeros(config.hidden_size)) if use_bias else None
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: torch.FloatTensor,
-        position_ids: torch.LongTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
-        layer_past: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-    ):
-        # Compute QKV
-        # Attention heads [batch, seq_len, hidden_size]
-        #   --> [batch, seq_len, (np * 3 * head_size)]
-        qkv = self.query_key_value(hidden_states)
-
-        # [batch, seq_len, (num_heads * 3 * head_size)]
-        #   --> [batch, seq_len, num_heads, 3 * head_size]
-        new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
-        qkv = qkv.view(*new_qkv_shape)
-
-        # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
-        query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
-        key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
-        value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
-
-        # Compute rotary embeddings on rotary_ndims
-        query_rot = query[..., : self.rotary_ndims]
-        query_pass = query[..., self.rotary_ndims :]
-        key_rot = key[..., : self.rotary_ndims]
-        key_pass = key[..., self.rotary_ndims :]
-
-        cos, sin = position_embeddings
-        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
-        query = torch.cat((query, query_pass), dim=-1).contiguous()
-        key = torch.cat((key, key_pass), dim=-1).contiguous()
-
-        # Cache QKV values
-        if layer_past is not None:
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "partial_rotation_size": self.rotary_ndims,
-                "cache_position": cache_position,
-            }
-            key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
-
-        # Compute attention
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
-
-        # Reshape outputs
-        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
-        attn_output = self.dense(attn_output)
-
-        return attn_output, attn_weights, self.dense_bias
-
-    @classmethod
-    def _split_heads(cls, tensor, num_attention_heads, attn_head_size):
-        """
-        Splits hidden dim into attn_head_size and num_attention_heads
-        """
-        # tensor: [bs, seq_len, hidden_size]
-        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
-        # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(new_shape)
-        # -> [bs, num_attention_heads, seq_len, attn_head_size]
-        tensor = tensor.permute(0, 2, 1, 3)
-        return tensor
-
-    @classmethod
-    def _merge_heads(cls, tensor, num_attention_heads, attn_head_size):
-        """
-        Merges attn_head_size dim and num_attn_heads dim into hidden dim
-        """
-        # tensor [bs, num_attention_heads, seq_len, attn_head_size]
-        tensor = tensor.permute(0, 2, 1, 3).contiguous()
-        # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size)
-        # -> [bs, seq_len, hidden_size]
-        return tensor
-
-    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
-        # compute causal mask from causal mask buffer
-        batch_size, num_attention_heads, query_length, attn_head_size = query.size()
-        key_length = key.size(-2)
-
-        query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
-        key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-
-        # [batch_size * num_heads, q_length, kv_length]
-        attn_scores = torch.zeros(
-            batch_size * num_attention_heads,
-            query_length,
-            key_length,
-            dtype=query.dtype,
-            device=key.device,
-        )
-        attention_scores = torch.baddbmm(
-            attn_scores,
-            query,
-            key.transpose(1, 2),
-            beta=1.0,
-            alpha=1.0 / self.norm_factor,
-        )
-
-        attention_scores = attention_scores.view(batch_size, num_attention_heads, query_length, -1)
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-            attention_scores = attention_scores + causal_mask
-
-        attn_weights = nn.functional.softmax(attention_scores, dim=-1)
-        attn_weights = self.attention_dropout(attn_weights)
-        attn_weights = attn_weights.to(value.dtype)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
-        attn_output = torch.matmul(attn_weights, value)
-        return attn_output, attn_weights
-
-
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding with GPTNeoX->GPTNeoXJapanese
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GPTNeoXJapanese
 class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: GPTNeoXJapaneseConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[GPTNeoXJapaneseConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -287,6 +167,149 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
+
+class GPTNeoXJapaneseAttention(nn.Module):
+    def __init__(self, config, use_bias=False, layer_idx=None):
+        super().__init__()
+        self.num_attention_heads = config.num_attention_heads
+        self.hidden_size = config.hidden_size
+        self.head_size = self.hidden_size // self.num_attention_heads
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+
+        self.layer_idx = layer_idx
+        self.rotary_ndims = int(self.head_size * config.rotary_pct)
+        self.attention_dropout = nn.Dropout(config.attention_dropout)
+        self.norm_factor = math.sqrt(self.head_size)
+
+        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=False)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        # Activate bias if the last layer
+        self.use_bias = use_bias
+        self.dense_bias = nn.Parameter(torch.zeros(config.hidden_size)) if use_bias else None
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: torch.FloatTensor,
+        position_ids: torch.LongTensor,
+        layer_past: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+    ):
+        # Compute QKV
+        # Attention heads [batch, seq_len, hidden_size]
+        #   --> [batch, seq_len, (np * 3 * head_size)]
+        qkv = self.query_key_value(hidden_states)
+
+        # [batch, seq_len, (num_heads * 3 * head_size)]
+        #   --> [batch, seq_len, num_heads, 3 * head_size]
+        new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
+        qkv = qkv.view(*new_qkv_shape)
+
+        # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
+        query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
+        key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
+        value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
+
+        # Compute rotary embeddings on rotary_ndims
+        query_rot = query[..., : self.rotary_ndims]
+        query_pass = query[..., self.rotary_ndims :]
+        key_rot = key[..., : self.rotary_ndims]
+        key_pass = key[..., self.rotary_ndims :]
+
+        cos, sin = position_embeddings
+        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
+        query = torch.cat((query, query_pass), dim=-1).contiguous()
+        key = torch.cat((key, key_pass), dim=-1).contiguous()
+
+        # Cache QKV values
+        if layer_past is not None:
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "partial_rotation_size": self.rotary_ndims,
+                "cache_position": cache_position,
+            }
+            key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
+
+        # Compute attention
+        attn_output, attn_weights = self._attn(query, key, value, attention_mask)
+
+        # Reshape outputs
+        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
+        attn_output = self.dense(attn_output)
+
+        return attn_output, attn_weights, self.dense_bias
+
+    @classmethod
+    def _split_heads(cls, tensor, num_attention_heads, attn_head_size):
+        """
+        Splits hidden dim into attn_head_size and num_attention_heads
+        """
+        # tensor: [bs, seq_len, hidden_size]
+        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
+        # -> [bs, seq_len, num_attention_heads, attn_head_size]
+        tensor = tensor.view(new_shape)
+        # -> [bs, num_attention_heads, seq_len, attn_head_size]
+        tensor = tensor.permute(0, 2, 1, 3)
+        return tensor
+
+    @classmethod
+    def _merge_heads(cls, tensor, num_attention_heads, attn_head_size):
+        """
+        Merges attn_head_size dim and num_attn_heads dim into hidden dim
+        """
+        # tensor [bs, num_attention_heads, seq_len, attn_head_size]
+        tensor = tensor.permute(0, 2, 1, 3).contiguous()
+        # -> [bs, seq_len, num_attention_heads, attn_head_size]
+        tensor = tensor.view(tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size)
+        # -> [bs, seq_len, hidden_size]
+        return tensor
+
+    def _attn(self, query, key, value, attention_mask=None):
+        # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
+        # compute causal mask from causal mask buffer
+        batch_size, num_attention_heads, query_length, attn_head_size = query.size()
+        key_length = key.size(-2)
+
+        query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
+        key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
+
+        # [batch_size * num_heads, q_length, kv_length]
+        attn_scores = torch.zeros(
+            batch_size * num_attention_heads,
+            query_length,
+            key_length,
+            dtype=query.dtype,
+            device=key.device,
+        )
+        attention_scores = torch.baddbmm(
+            attn_scores,
+            query,
+            key.transpose(1, 2),
+            beta=1.0,
+            alpha=1.0 / self.norm_factor,
+        )
+
+        attention_scores = attention_scores.view(batch_size, num_attention_heads, query_length, -1)
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+            attention_scores = attention_scores + causal_mask
+
+        attn_weights = nn.functional.softmax(attention_scores, dim=-1)
+        attn_weights = self.attention_dropout(attn_weights)
+        attn_weights = attn_weights.to(value.dtype)
+
+        attn_output = torch.matmul(attn_weights, value)
+        return attn_output, attn_weights
 
 
 def bias_dropout_add(x: Tensor, bias: Tensor, residual: Optional[Tensor], prob: float, training: bool) -> Tensor:
@@ -344,12 +367,11 @@ class GPTNeoXJapaneseLayer(nn.Module):
         hidden_states: Optional[torch.FloatTensor],
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         residual = hidden_states
         ln_out = self.input_layernorm(hidden_states)
@@ -357,7 +379,6 @@ class GPTNeoXJapaneseLayer(nn.Module):
             ln_out,
             attention_mask=attention_mask,
             layer_past=layer_past,
-            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             position_ids=position_ids,
@@ -411,9 +432,8 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[Cache, tuple[tuple[torch.FloatTensor]]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -464,16 +484,8 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -485,7 +497,6 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                head_mask=head_mask[i],
                 layer_past=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -670,14 +681,14 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[Cache, tuple[tuple[torch.FloatTensor]]]] = None,
+        past_key_values: Optional[Cache] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
@@ -709,7 +720,6 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -720,27 +730,21 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
         )
 
         hidden_states = outputs[0]
-        lm_logits = self.embed_out(hidden_states)
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.embed_out(hidden_states[:, slice_indices, :])
 
-        lm_loss = None
+        loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(lm_logits.device)
-
-            lm_loss = self.loss_function(
-                lm_logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
-            loss=lm_loss,
-            logits=lm_logits,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
