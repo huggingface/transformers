@@ -386,6 +386,7 @@ for prompt in prompts:
     print("Prompt:", prompt)
     print("Generated:", out[0]["generated_text"])
     print("-" * 60)
+
     ```
 **CPU vs GPU perfromance comparision**
   This example shows  the comparing the inference speed on CPU vs GPU using the Hugging Face      pipeline  and Accelerator 
