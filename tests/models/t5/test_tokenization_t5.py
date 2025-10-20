@@ -370,7 +370,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
         sentinel_tokens = tokenizer.get_sentinel_tokens()
         self.assertEqual(len(sentinel_tokens), 10)
-        self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
+        self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(10)]))
         self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
     def test_get_sentinel_token_ids(self):
@@ -381,7 +381,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
         sentinel_tokens = tokenizer.get_sentinel_tokens()
         self.assertEqual(len(sentinel_tokens), 10)
-        self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
+        self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(10)]))
         self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
     def test_get_sentinel_token_ids_for_fasttokenizer(self):

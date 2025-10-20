@@ -25,7 +25,7 @@ def normalize_test_line(line):
         return f"{status} {location}"
 
     # Normalize ERROR/FAILED lines with optional message
-    if line.startswith("ERROR") or line.startswith("FAILED"):
+    if line.startswith(("ERROR", "FAILED")):
         return re.split(r"\s+-\s+", line)[0].strip()
 
     return line

@@ -75,10 +75,10 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     if not (len(missing_keys) == 1 and missing_keys[0] == "embeddings.position_ids"):
         raise ValueError(f"Missing keys {', '.join(missing_keys)}. Expected only missing embeddings.position_ids")
-    if not (all(key.startswith("entity_predictions") or key.startswith("lm_head") for key in unexpected_keys)):
+    if not (all(key.startswith(("entity_predictions", "lm_head")) for key in unexpected_keys)):
         raise ValueError(
             "Unexpected keys"
-            f" {', '.join([key for key in unexpected_keys if not (key.startswith('entity_predictions') or key.startswith('lm_head'))])}"
+            f" {', '.join([key for key in unexpected_keys if not (key.startswith(('entity_predictions', 'lm_head')))])}"
         )
 
     # Check outputs

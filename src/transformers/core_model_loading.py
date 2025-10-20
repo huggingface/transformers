@@ -414,8 +414,6 @@ def set_param_for_module(
 class SkipLayer(Exception):
     """Control-flow sentinel: abort processing of the current layer only."""
 
-    pass
-
 
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,

@@ -236,7 +236,7 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
             elif "class_labels_classifier" in key or "bbox_predictor" in key:
                 val = state_dict.pop(key)
                 state_dict["detr." + key] = val
-            elif key.startswith("bbox_attention") or key.startswith("mask_head"):
+            elif key.startswith(("bbox_attention", "mask_head")):
                 continue
             else:
                 val = state_dict.pop(key)
