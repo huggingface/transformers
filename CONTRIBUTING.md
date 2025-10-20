@@ -124,7 +124,7 @@ If you're contributing a **vision-language model** (or any multimodal model that
 
 All new models should use the modular architecture pattern. Create a `modular_<model_name>.py` file using the modular model converter:
 
-- Use [`transformers-cli add-new-model-like`](https://github.com/huggingface/transformers/blob/main/src/transformers/cli/add_new_model_like.py) to generate a modular skeleton and get started
+- Use the CLI, [`transformers add-new-model-like`](https://github.com/huggingface/transformers/blob/main/src/transformers/cli/add_new_model_like.py) to generate a modular skeleton and get started
 - All code should be in the modular file if possible. Modeling must be in it, it's better if configuration is in it as well. 
 - Reuse existing patterns from similar models as much as possible
 
@@ -158,7 +158,7 @@ At minimum, add an `IntegrationTest` class that tests end-to-end generation (pro
 
 - For generative models: test that generated text matches expected output exactly
 - For non-generative models: test that output logits match expected values
-- Tests should use real checkpoints (load in 4-bit or half precision if the checkpoint is too big) and inputs
+- Tests should use real checkpoints (load in 4-bit or half precision if the checkpoint is too big to fit in our CI runners) and real inputs
 - Example pattern:
 
 ```python
@@ -192,7 +192,7 @@ The library has 400+ models with many established patterns:
 - Search for similar models (e.g., other vision-language models)
 - Reuse attention mechanisms, layer implementations, and processing patterns
 - Check models like LLaVA, Idefics2, Fuyu for vision-language patterns
-- Use the decorators like (`auto_docstring`, `can_return_tuple`, `check_model_inputs` and `_can_record_outputs`) in the correct manner.
+- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `check_model_inputs` and `_can_record_outputs`) where relevant. 
 - Don't reinvent the wheel
 
 ☐ **7. Run quality checks and read the output**
