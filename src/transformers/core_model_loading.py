@@ -13,12 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Core helpers for loading model checkpoints."""
+
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field
-from typing import Optional, Union, List, Dict, Tuple, Iterable
-from collections import defaultdict
 import math
 import re
 import time
@@ -26,16 +23,16 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
 from contextlib import nullcontext
-from dataclasses import dataclass
-from fnmatch import fnmatchcase
-from itertools import chain
+from dataclasses import dataclass, field
+import itertools
 from typing import Any, Optional, Union
 
 import torch
 from torch import Tensor
 
-from .utils import logging
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
+from .utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -60,6 +57,78 @@ except (ImportError, AttributeError):
     torch_profile = None
 
 
+def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
+    """
+    Convert a glob with '*' into a regex *source* string.
+    '*' matches (\\d+) if digits_only else (.+). Inner groups are non-capturing.
+    """
+    star = r"(?:\d+)" if digits_only else r"(?:.+)"
+    return re.escape(glob).replace(r"\*", star)
+
+
+def build_glob_alt(
+    globs: list[str],
+    *,
+    digits_only: bool = True,
+    allow_prefix: bool = True,
+) -> tuple[re.Pattern, dict[str, str]]:
+    """
+    Build one compiled regex alternation with a named group per glob.
+    - digits_only: '*' => digits only (\\d+) if True, else any chars (.+)
+    - allow_prefix: if True, allow arbitrary prefix before the pattern
+                    (keeps '$' so we still require a full suffix match)
+    Returns (compiled_regex, name->glob map).
+    """
+    name_map: dict[str, str] = {}
+    parts: list[str] = []
+
+    # If we keep using .match(), we must handle prefix allowance in the pattern itself.
+    prefix_src = r".*" if allow_prefix else r"^"
+
+    for i, g in enumerate(globs):
+        name = f"g{i}"
+        name_map[name] = g
+        pat_src = _glob_to_regex_src(g, digits_only=digits_only)
+        # Each branch is fully wrapped and uniquely named.
+        parts.append(f"(?P<{name}>{prefix_src}{pat_src}$)")
+
+    alt_src = "|".join(parts)
+    return re.compile(alt_src), name_map
+
+
+def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[str]:
+    """
+    Match the key against the alternation; return the original glob string that matched.
+    """
+    m = alt.match(key)
+    if not m:
+        return None
+    return name_map.get(m.lastgroup)
+
+
+def _compile_single_glob_for_extract(glob: str, *, digits_only: bool = True, allow_prefix: bool = True) -> str:
+    """
+    Build a regex for a single glob that captures each '*' so we can extract per-layer identifiers.
+    """
+    star = r"\d+" if digits_only else r".+"
+    src = glob.replace("*", star)
+    return rf"{src}"
+
+
+def _apply_star_subst(pattern: str, star_values: list[str]) -> str:
+    """
+    Replace each '*' in 'pattern' with the next value from 'star_values' (in order).
+    """
+    it = iter(star_values)
+    out = []
+    for ch in pattern:
+        if ch == "*":
+            out.append(str(next(it)))
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 class ConversionOps:
     """Base class for weight conversion operations.
 
@@ -76,44 +145,6 @@ class ConversionOps:
     1. weight rename (because the tp plan will be defined only for the renamed weights)
       -> you get many keys with the same tensor
       -> use default dict list
-
-    Case 1: Sequence[ Fuse nn list, Fuse gate and up]
-    ---------------------------------------------------------------------------------
-      "model.layers.0.block_sparse_moe.experts.(0, 1, ..., 7).w1.weight"
-      +
-      "model.layers.0.block_sparse_moe.experts.(0, 1, ..., 7).w3.weight"
-      =>
-      "model.layers.0.block_sparse_moe.experts.gate_up_proj.weight": [0.w1, 0.w2, ..., 7.w1, 7.w2]  if 8 experts -> Final name and tensors
-    ---------------------------------------------------------------------------------
-
-    Case 2: fuse qkv
-    ---------------------------------------------------------------------------------
-      "model.layers.0.self_attn.q_proj.weight"
-      +
-      "model.layers.0.self_attn.k_proj.weight"
-      +
-      "model.layers.0.self_attn.v_proj.weight"
-      =>
-      "model.layers.0.self_attn.qkv_proj.weight": [q, k, v]
-    ---------------------------------------------------------------------------------
-
-    Case 3: chunk
-    ---------------------------------------------------------------------------------
-      "model.layers.0.mlp.gate_up_proj.weight"
-      =>
-      "model.layers.0.mlp.gate_proj.weight"
-      +
-      "model.layers.0.mlp.up_proj.weight"
-    ---------------------------------------------------------------------------------
-
-    Case 4: Quantize
-    ---------------------------------------------------------------------------------
-      "model.layers.0.mlp.gate_up_proj.weight"
-      =>
-      "model.layers.0.mlp.gate_proj.blocks"
-      +
-      "model.layers.0.mlp.up_proj.scales"
-    ---------------------------------------------------------------------------------
     """
 
     # Reusable scratch buffer to avoid reallocations.
@@ -263,7 +294,7 @@ class Concatenate(ConversionOps):
         return out
 
 
-class MergeModuleList(Concatenate):
+class MergeModulelist(Concatenate):
     """
     Merge a list of tensors into a single tensor along the first dimension.
     We explicitly define this because for EP or TP you want to make sure you know what you are doing!
@@ -272,39 +303,39 @@ class MergeModuleList(Concatenate):
 
     def __init__(self, dim: int = 0):
         super().__init__(dim=dim)
-        self._inverse_op = SplitModuleList
+        self._inverse_op = SplitModulelist
 
     def convert(self, value: Sequence[Sequence[torch.Tensor]], *, context: dict[str, Any]) -> list[torch.Tensor]:
         if not isinstance(value, Sequence):
-            raise TypeError("MergeModuleList expects a sequence of sequences of tensors.")
+            raise TypeError("MergeModulelist expects a sequence of sequences of tensors.")
         merged: list[torch.Tensor] = []
         for group in value:
             if not isinstance(group, Sequence) or len(group) == 0:
-                raise ValueError("MergeModuleList requires non-empty sub-sequences.")
+                raise ValueError("MergeModulelist requires non-empty sub-sequences.")
             merged.append(torch.cat(tuple(group), dim=self.dim))
         return merged
 
 
-class SplitModuleList(ConversionOps):
-    """Inverse of :class:`MergeModuleList` using explicit split sizes per group."""
+class SplitModulelist(ConversionOps):
+    """Inverse of :class:`MergeModulelist` using explicit split sizes per group."""
 
     def __init__(self, sizes: Sequence[Sequence[int]], dim: int = 0):
         if not isinstance(sizes, Sequence) or not all(isinstance(sub, Sequence) and sub for sub in sizes):
             raise ValueError("`sizes` must be a sequence of non-empty sequences of integers.")
         self.sizes = [list(sub) for sub in sizes]
         self.dim = dim
-        self._inverse_op = MergeModuleList
+        self._inverse_op = MergeModulelist
 
     def convert(self, value: Sequence[torch.Tensor], *, context: dict[str, Any]) -> list[list[torch.Tensor]]:
         if not isinstance(value, Sequence):
-            raise TypeError("SplitModuleList expects a sequence of tensors.")
+            raise TypeError("SplitModulelist expects a sequence of tensors.")
         if len(value) != len(self.sizes):
             raise ValueError("Number of tensors does not match the provided split specifications.")
 
         result: list[list[torch.Tensor]] = []
         for tensor, split_sizes in zip(value, self.sizes):
             if not isinstance(tensor, torch.Tensor):
-                raise TypeError("SplitModuleList can only split torch.Tensor instances.")
+                raise TypeError("SplitModulelist can only split torch.Tensor instances.")
             splits = torch.split(tensor, split_sizes, dim=self.dim)
             result.append(list(splits))
         return result
@@ -334,8 +365,10 @@ class To(ConversionOps):
     def __init__(self, device):
         self.device = device
 
-class DistributedOp(ConversionOps): # all `distributed_operation` need to respect this
+
+class DistributedOp(ConversionOps):  # all `distributed_operation` need to respect this
     pass
+
 
 class Shard(DistributedOp):
     """Shard tensors along a specific dimension.
@@ -367,6 +400,7 @@ class Shard(DistributedOp):
         """
         This is akin to a normal sharding, BUT we handle a list of tensor inputs (which are gonna be merged later on)
         """
+
         def _shard_tensor(tensor: Tensor, rank: int) -> Tensor:
             dim_size = tensor.shape[self.dim]
             local_world_size = max(world_size, 1)
@@ -499,18 +533,29 @@ class Fp8Dequantize(QuantizationOp):
 
 
 @dataclass
-class WeightConversion:
-    """
+class WeightConverter:
+    r"""
+    A weight convert that acts on a pattern of source keys.
+    The keys need to be collected based on the target keys.
+
+    With wild card, glob patterns are matched, so you have to be detailed with what to match. If you match: 
+    `model.layers.*.experts.*` -> it will act on all of them
+    {"model.layers.*.experts.*": []}
+    but 
+    `experts.*.mlp` will be layer specific.
+    {"model.layers.1.experts.*": [], }
     - source_keys: str | list[str] (wildcards '*' match digits)
     - target_keys: str | list[str] | None
     - distributed_operation / operations / quantization_operations are ALWAYS lists.
     """
+
     source_keys: Union[str, list[str]]
     target_keys: Optional[Union[str, list[str]]] = None
 
     distributed_operation: Optional[ConversionOps] = None
     quantization_operation: Optional[ConversionOps] = None
     _operations: list[ConversionOps] = field(default_factory=list, repr=False)
+    operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
     _compiled: tuple[tuple[str, re.Pattern], ...] = field(default_factory=tuple, compare=False, repr=False)
 
@@ -522,156 +567,163 @@ class WeightConversion:
                 self.target_keys = self.source_keys
             else:
                 self.target_keys = [self.target_keys]
-
-        regex_pat = r""
-        for p in self.source_keys:
-            pat = re.escape(p).replace(r"\*", r"\d+")
-            regex_pat += f"({re.compile(fr'^{pat}$')})|"
-        self._regex_pat = regex_pat[:-1]
+        self._regex_pat = build_glob_alt(self.source_keys)
         self.operations = self._operations
 
     @property
     def operations(self) -> list[ConversionOps]:
         return self._operations
+
     @operations.setter
     def operations(self, v: Union[None, ConversionOps, list[ConversionOps]]):
-        if v is None: self._operations = []
-        elif isinstance(v, list): self._operations = v
-        else: self._operations = [v]
-
-
-
-def convert_and_load_state_dict_in_model(model, state_dict, weight_mapping, tp_plan, quantizer, device_map=None, keep_in_dtype=None, device_mesh=None, profile: bool = False):
-    """Convert a state dict according to a weight mapping.
-
-    Given that the model might be sharded, and that some patterns might fuse experts, there will
-    be small edgecases to handle.
-
-    If q,k and v need to be merged, but they are on a different state dict, we need to make sure
-    we collected all of the keys.
-
-
-    There is an ordered collection. so experts.*.w1.weight will collect all keys that match first.
-
-    Given that the tensors are mmaped, its fine if we read all safetensors.json files first! We
-    can load directly any tensors that does not match the mapping, but for those that do, we need to
-    collect them first.
-
-    Args:
-        model (`torch.nn.Module`):
-            The model to load the converted state dict into. We need this to get the type
-            of the layer. TODO not used yet
-        state_dict (`dict`):
-            A state dict containing the weights to convert.
-        weight_mapping (`List[WeightConversion]`):
-            A list of `WeightConversion` objects describing how to convert the weights.
-        tp_plan:
-            The tensor parallelism plan for this model. Used to shard the weights correctly.
-        quantization_config:
-            The quantization configuration for this model. Used to quantize the weights correctly.
-        profile (`bool`, *optional*, defaults to `False`):
-            If set, wraps each conversion operation in a ``torch.profiler`` context (when available) and logs per-op
-            execution time and profiling summaries.
-
-    Returns:
-        - `dict`: The converted state dict.
-        - list[ConversionOps]: The list of operations used during the conversion. This is useful if the model needs to be saved
-          in its legacy format later on.
-    """
-    tp_plan = tp_plan or{} # keys are * patterns, exact match with model.state_dict().keys()
-    device_map = device_map or {} # keys are the `target` obtained from the model
-    keep_in_dtype = keep_in_dtype or {} # keys are * pattern model.state_dict().keys()
-    weight_mapping = weight_mapping or {} # keys are * patterns model.state_dict().keys()
-
-    meta_model_state_dict = model.state_dict()
-    tp_regex_pattern = f"""({')|()'.join(tp_plan.keys()).replace("*", "d+")})"""
-    keep_in_dtype_pattern = f"""({')|()'.join(keep_in_dtype.keys()).replace("*", "d+")})"""
-    weight_mapping_pattern = weight_mapping._regex_pat
-    used_operations: list[ConversionOps] = []
-    collected_target_keys = defaultdict(list)
-    for original_key, tensor in state_dict.items():
-        default_op = re.sub(weight_mapping_pattern, r"\1", original_key)
-        if default_op is not None:
-            converter: WeightConversion =  weight_mapping[default_op] # forget about this
+        if v is None:
+            self._operations = []
+        elif isinstance(v, list):
+            self._operations = v
         else:
-            converter : WeightConversion = WeightConversion(default_op) # source and target are the same!
-            weight_mapping[default_op] = converter
-
-        current_key = converter.target_keys if isinstance(converter.target_keys, str) else "|".join(converter.target_keys)
-        # current_key = re.sub(original_key, "", current_key) # get the full key name from ckpt?
-        collected_target_keys[current_key] += [tensor]
-
-    missing_keys = meta_model_state_dict.keys() # we'll pop from this one
-    missmatch_keys = []                   # we'll add into this one
-    unexpected_keys = []                  # we'll add into this one as well
-
-    for collected_keys, collected_tensors in collected_target_keys.items(): # a single key indexes many target keys
-        target_keys = collected_keys.split('|')
-
-        # ------------- PROCESS TARGET KEY TO MAKE IT EXACT wrt device_map and state_dict ---------
-        # =========================================================================================
-        # WHAT if we do the ROPE permutation and reshape?
-        # q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d) ?
-        # should i just pass torch ops? ops on empty tensor? Partial? NO! -> A custom operation.
-        # FOR now don't support permute / transpose but its an absolute TODO!
-        # FIXME: If someone wants to "permute(0,1,2)" on all keys
-        # FIXME: then we are fucked for automatic TP because shard dims will be wrong
-        # FIXME: tho we could find a solution with good functional programming?
-        # Like having default indexes 0, 1, 2
-        #                    physical 2, 1, 0 for example! And in that case, an op need to define which
-        # axis it changed / moved and maps them. -> before the op we know the final new index.
-        for target_key in target_keys: # some of these can be newly created by quantizer / merge or chunk op
-            # TODO: here if we get the exact key from the state_dict, our key needs to be exact :sweat:
-            # so solve prefix and etc
-            empty_tensor = meta_model_state_dict.get(target_key)
-            if empty_tensor is None:
-                unexpected_keys.append(empty_tensor)
-
-            if plan:=re.sub(target_key, r"\1", tp_regex_pattern):
-                if converter.distributed_operation is None:
-                    converter.distributed_operation = ALL_PARALLEL_STYLES[plan].shard_tensor
-                rank = device_mesh.get_local_rank()
-                final_target = converter.distributed_operation(tensor, empty_tensor, tensor_type, rank, device_mesh)
-            else:
-                final_target = [ k[:] for k in collected_tensors] # we materialize the weights here
-
-            # Now we need to add the standard operations. Some of this can play with TP....
-            for op in converter.operations:
-                final_target = op.convert(final_target)
-
-            # Finaly the quantizer comes into play!
-            if quantizer is not None:
-                if converter.quantize_operation is None: # just for now
-                    converter.quantize_operation = Fp8Quantize()
-                final_target = converter.quantize_operation(final_target)
+            self._operations = [v]
 
 
-            # Finally, once we have the final keys, some might be new -> we move them to the operation's device
-            # and we cast to the correct dype if provided.
-            for k,v in final_target.items():
+def convert_and_load_state_dict_in_model(
+    model,
+    state_dict,
+    weight_mapping,
+    tp_plan,
+    quantizer,
+    device_map=None,
+    keep_in_dtype=None,
+    device_mesh=None,
+    profile: bool = False,
+):
+    """
+    Convert a state dict according to a weight mapping (one WeightConverter per glob pattern),
+    collecting tensors per *layer instance* (the concrete indices captured from '*').
+    """
+    # Inputs defaulting
+    tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
+    device_map = device_map or {}  # {exact_target_key: device}
+    keep_in_dtype = keep_in_dtype or {}  # {glob_pattern: dtype}
+    weight_mapping = weight_mapping or {}  # {glob_pattern: WeightConverter}
+    meta_model_state_dict = model.state_dict()
+
+    # Fast alternations; allow prefixes (e.g., "model.model.layers..." should match "model.layers.*...")
+    _patterns = list(itertools.chain.from_iterable( [k.source_keys for k in weight_mapping]))
+    source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
+    weight_pattern_alt, weight_pattern_by_group_name = build_glob_alt(_patterns)
+    tp_plan_alt, tp_plan_by_group_name = build_glob_alt(list(tp_plan.keys()))
+    dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(keep_in_dtype.keys()))
+
+    used_operations: list[ConversionOps] = []
+
+    # We organize tensors by the conversion pattern, then by layer (captured '*' tuple)
+    # by_conversion_pattern[glob_pattern] = {
+    #   "conversion": WeightConverter, -> usually a single conversion needed for all layers
+    #   "tensors_per_layer": { layer_indices_tuple: [tensors...] }
+    # }
+    by_conversion_pattern: dict[str, dict] = {}
+    # ------------ First pass: decide the conversion pattern and layer indices for each key ------------
+    for original_key, tensor in state_dict.items():
+        matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
+        # FINE UP UNTIL HERE
+        if matched_pattern is not None:
+            conversion: WeightConverter = source_to_target[matched_pattern]
+            extractor = _compile_single_glob_for_extract(matched_pattern)
+            converter_key = re.sub(extractor, matched_pattern, original_key)
+            entry = by_conversion_pattern.setdefault(
+                matched_pattern, {"conversion": conversion, "tensors_per_layer": defaultdict(list)}
+            )
+            entry["tensors_per_layer"][converter_key].append(tensor)
+        else:
+            # No pattern matched -> identity conversion keyed by the exact key (no '*', single "layer" = empty tuple)
+            conversion = WeightConverter(original_key)
+            entry = by_conversion_pattern.setdefault(
+                original_key, {"conversion": conversion, "tensors_per_layer": defaultdict(list)}
+            )
+            entry["tensors_per_layer"][()].append(tensor)
+
+    missing_keys = set(meta_model_state_dict.keys())
+    mismatch_keys = []
+    unexpected_keys = []
+
+    # ------------ Second pass: for each conversion pattern and each layer instance, realize outputs ------------
+    for conversion_pattern, group in by_conversion_pattern.items():
+        conversion: WeightConverter = group["conversion"]
+        tensors_per_layer: dict[str, list[torch.Tensor]] = group["tensors_per_layer"]
+
+        for layer_name, tensors_for_this_layer in tensors_per_layer.items():
+            # Materialize concrete target keys for this specific layer instance
+            target_patterns = conversion.target_keys
+            concrete_target_keys = [re.sub(conversion_pattern, p, layer_name) for p in target_patterns]
+
+            for target_key in concrete_target_keys:
+                empty_tensor = meta_model_state_dict.get(target_key)
+                if empty_tensor is None:
+                    unexpected_keys.append(target_key)
+                    continue
+
+                # Tensor-parallel plan matching on the *concrete* target key
+                matched_tp_pattern = match_glob(target_key, tp_plan_alt, tp_plan_by_group_name)
+                if matched_tp_pattern is not None:
+                    if getattr(conversion, "distributed_operation", None) is None:
+                        conversion.distributed_operation = ALL_PARALLEL_STYLES[matched_tp_pattern].shard_tensor
+                    rank = device_mesh.get_local_rank() if device_mesh is not None else 0
+                    realized_value = conversion.distributed_operation(
+                        tensors_for_this_layer[0],
+                        context={"tp_world_size": None, "tp_rank": rank},
+                    )
+                else:
+                    realized_value = [t[:] for t in tensors_for_this_layer]
+
+                for op in conversion.operations:
+                    realized_value = op.convert(realized_value, context={})
+                    used_operations.append(op)
+
+                # Quantization (may produce a dict of tensors)
+                if quantizer is not None:
+                    if getattr(conversion, "quantization_operation", None) is None:
+                        conversion.quantization_operation = Fp8Quantize()
+                    realized_value = conversion.quantization_operation(
+                        realized_value if isinstance(realized_value, torch.Tensor) else realized_value[0],
+                        context={},
+                    )
+                    used_operations.append(conversion.quantization_operation)
+
+                # Device & dtype policies
+                output_value = realized_value
                 if target_key in device_map:
                     op = To(device_map[target_key])
-                    converter.operations.append(op)
-                if match:= re.sub(keep_in_dtype_pattern, "\1", target_key):
-                    op = Cast(keep_in_dtype[match])
-                    converter.operations.append(op)
+                    conversion.operations.append(op)
+                    output_value = op.convert(output_value, context={})
+                    used_operations.append(op)
 
-                op.convert(final_target)
-                module_to_tp = model.get_submodule(k)
-                param_type = k.rsplit('.')[:-1]
+                matched_dtype_pattern = match_glob(target_key, dtype_policy_alt, dtype_policy_by_group_name)
+                if matched_dtype_pattern is not None:
+                    op = Cast(keep_in_dtype[matched_dtype_pattern])
+                    conversion.operations.append(op)
+                    output_value = op.convert(output_value, context={})
+                    used_operations.append(op)
 
-                # TODO: if DTENSOR -> need to cast to DTensor fuck it
-                if not isinstance(tensor, torch.nn.Parameter):
-                    param = torch.nn.Parameter(k, requires_grad=k.is_floating_point())
-                if not (
-                    converter.quantize_operation is None and tensor.shape[-1] == 1 and tensor.numel() * 2 == empty_tensor.numel()
-                ):
-                    missmatch_keys.append((k, param.shape, empty_tensor.shape))
-                missing_keys.pop(target_key)
-                setattr(module_to_tp, param_type, param)
+                # Install into the module
+                to_install = output_value.items() if isinstance(output_value, dict) else [(target_key, output_value)]
+                for install_key, value_like in to_install:
+                    module_path, _, param_name = install_key.rpartition(".")
+                    module_obj = model.get_submodule(module_path) if module_path else model
 
-        # Clear cached buffers in unique operations
+                    param_value = value_like
+                    if not isinstance(param_value, torch.nn.Parameter):
+                        param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+
+                    ref = meta_model_state_dict.get(install_key, empty_tensor if install_key == target_key else None)
+                    if ref is not None and ref.shape != param_value.shape:
+                        mismatch_keys.append((install_key, param_value.shape, ref.shape))
+
+                    if install_key in missing_keys:
+                        missing_keys.remove(install_key)
+
+                    setattr(module_obj, param_name, param_value)
+
+    # Clear any cached buffers on unique ops
     for op in {op for op in used_operations if hasattr(op, "clear_cache")}:
         op.clear_cache()
 
-    return used_operations, missing_keys, unexpected_keys, missmatch_keys
+    return used_operations, missing_keys, unexpected_keys, mismatch_keys

@@ -53,7 +53,6 @@ from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
     _get_device_map,
-    accelerate_disk_offload,
     accelerate_dispatch,
     check_and_set_device_map,
     expand_device_map,
@@ -133,7 +132,6 @@ if is_accelerate_available():
     from accelerate.utils import (
         extract_model_from_parallel,
         offload_weight,
-        save_offload_index,
     )
     from accelerate.utils.modeling import get_state_dict_from_offload
 
@@ -4705,11 +4703,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Now we read all the files to get a pointer on each physical weights
         merged_state_dict = {}
         all_pointer = {}
-        for k,v in sharded_metadata["weight_map"]:
+        for k, v in sharded_metadata["weight_map"]:
             if v not in all_pointer:
                 file_pointer = safe_open(v, framework="pt", device="meta")
                 all_pointer[v] = file_pointer
-            merged_state_dict[k] = all_pointer[v].get_slice(k, device="meta") # don't meterialize yet
+            merged_state_dict[k] = all_pointer[v].get_slice(k, device="meta")  # don't meterialize yet
             tp_plan = getattr(model, "_tp_plan", None)
 
         keep_in_dtype = None
@@ -4718,11 +4716,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
             _conversion_ops, missing_keys, unexpected_keys, mismatched_keys = convert_and_load_state_dict_in_model(
-                model, merged_state_dict, weight_mapping, tp_plan, hf_quantizer, device_map, keep_in_dtype, profile=profile_weight_conversion
+                model,
+                merged_state_dict,
+                weight_mapping,
+                tp_plan,
+                hf_quantizer,
+                device_map,
+                keep_in_dtype,
+                profile=profile_weight_conversion,
             )
             model._conversion_ops = _conversion_ops
 
-        for k in all_pointer: # finally close all opened file pointeres
+        for k in all_pointer:  # finally close all opened file pointeres
             k.__exit__(None, None, None)
 
         new_state_dict = model.state_dict()
