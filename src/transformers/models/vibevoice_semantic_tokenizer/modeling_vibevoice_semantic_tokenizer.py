@@ -20,7 +20,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -79,59 +79,68 @@ class VibeVoiceEncoderFeedForward(nn.Module):
         return self.linear2(self.activation(self.linear1(x)))
 
 
-# TODO (ebezzam) move to `src/transformers/cache_utils.py` and make more similar to `DynamicCache`?
+# TODO (ebezzam) move to `src/transformers/cache_utils.py` and make similar to `DynamicCache`?
 class VibeVoiceSemanticTokenizerCache:
-    """Cache for streaming convolution, similar to KV cache in attention"""
+    """
+    Cache for streaming convolution, where the past convolution outputs of each layer are stored.
+    Similar to KV cache for attention-based models.
+    """
 
     def __init__(self):
         self.cache = {}  # Dict mapping (layer_idx, sample_idx) to state tensor
 
     def get(self, layer_idx: int, sample_indices: torch.Tensor) -> Optional[torch.Tensor]:
         """Get cached states for given layer and sample indices"""
-        sample_indices_list = sample_indices.tolist()
+        if sample_indices.numel() == 0:
+            return None
+            
+        # Collect states for all requested samples
         states = []
-        
-        # Collect states and check if all samples exist
+        sample_indices_list = sample_indices.tolist()
         for idx in sample_indices_list:
             key = (layer_idx, idx)
             if key not in self.cache:
                 return None  # If any sample is missing, return None
             states.append(self.cache[key])
 
-        if not states:
-            return None
-
-        # If all states have the same shape, stack directly
-        if all(state.shape == states[0].shape for state in states):
+        # Check if all states have the same shape for direct stacking
+        first_shape = states[0].shape
+        if all(state.shape == first_shape for state in states):
             return torch.stack(states, dim=0)
 
-        # Otherwise, pad to max length
+        # Pad to max length if shapes differ
         max_length = max(state.shape[-1] for state in states)
-        padded_states = []
-        for state in states:
-            if state.shape[-1] < max_length:
-                pad_size = max_length - state.shape[-1]
-                # Pad with zeros on the LEFT to align the most recent samples
-                padded_state = F.pad(state, (pad_size, 0))
-                padded_states.append(padded_state)
-            else:
-                padded_states.append(state)
+        padded_states = [
+            F.pad(state, (max_length - state.shape[-1], 0)) if state.shape[-1] < max_length else state
+            for state in states
+        ]
         return torch.stack(padded_states, dim=0)
 
     def update(self, layer_idx: int, sample_indices: torch.Tensor, states: torch.Tensor):
         """Set cached states for given layer and sample indices"""
         sample_indices_list = sample_indices.tolist()
         for i, idx in enumerate(sample_indices_list):
-            key = (layer_idx, idx)
-            self.cache[key] = states[i].detach()
+            self.cache[(layer_idx, idx)] = states[i].detach()
 
     def set_to_zero(self, sample_indices: torch.Tensor):
-        """Set all cached states to zero for given sample indices"""
+        """Reset cached states for given sample indices"""
+        if sample_indices.numel() == 0 or not self.cache:
+            return
+            
         sample_indices_set = set(sample_indices.tolist())
-        for key in list(self.cache.keys()):
-            _, sample_idx = key
-            if sample_idx in sample_indices_set:
-                self.cache[key] = torch.zeros_like(self.cache[key])
+        # Remove keys (instead of zeroing them in original) for cleaner memory management
+        keys_to_remove = [key for key in self.cache.keys() if key[1] in sample_indices_set]
+        for key in keys_to_remove:
+            del self.cache[key]
+    
+    def clear(self):
+        """Clear all cached states"""
+        self.cache.clear()
+    
+    @property
+    def is_empty(self) -> bool:
+        """Check if cache is empty"""
+        return len(self.cache) == 0
 
 
 # TODO their original name was `SConv1d`
@@ -176,10 +185,13 @@ class StreamingConv1d(nn.Module):
         Returns:
             Output tensor
         """
+        # Early return for no causal padding case
+        if self.causal_padding <= 0:
+            return self.conv(x)
+            
         batch_size, channels, _ = x.shape
 
-        # Get cached context
-        cached_states = None
+        # Validate cache parameters
         if past_conv_values is not None:
             if layer_idx is None:
                 raise ValueError("layer_idx must be provided when past_conv_values is used.")
@@ -187,22 +199,26 @@ class StreamingConv1d(nn.Module):
                 raise ValueError("sample_indices must be provided when past_conv_values is used.")
             if len(sample_indices) != batch_size:
                 raise ValueError("sample_indices length must match batch size")
+
+        # Get cached context
+        cached_states = None
+        if past_conv_values is not None:
             cached_states = past_conv_values.get(layer_idx, sample_indices)
 
+        # Initialize with zeros if no cache exists
         if cached_states is None:
-            # Initializing with zeros if no cache exists
             cached_states = torch.zeros(batch_size, channels, self.causal_padding, device=x.device, dtype=x.dtype)
 
-        # Concatenate context with input and apply convolution
-        input_with_context = torch.cat([cached_states, x], dim=2) if self.causal_padding > 0 else x
-        output = self.conv(input_with_context)
-
-        # Update cache with the last causal_padding samples
-        if past_conv_values is not None and self.causal_padding > 0:
+        # Concatenate context with input
+        input_with_context = torch.cat([cached_states, x], dim=2)
+        
+        # Update cache with the last causal_padding samples from the input
+        if past_conv_values is not None:
+            # Use the combined input for cache update to maintain continuity
             new_cache = input_with_context[:, :, -self.causal_padding:]
             past_conv_values.update(layer_idx, sample_indices, new_cache)
-
-        return output
+        
+        return self.conv(input_with_context)
 
 
 class ConvNext1dLayer(nn.Module):
@@ -261,10 +277,9 @@ class ConvNext1dLayer(nn.Module):
 
         # ffn
         residual = x
-        x = self.ffn_norm(x.transpose(1, 2)).transpose(1, 2)
-        x = x.permute(0, 2, 1)
-        x = self.ffn(x)
-        x = x.permute(0, 2, 1)
+        x = self.ffn_norm(x.transpose(1, 2))  # [B, T, C] 
+        x = self.ffn(x)  # FFN expects [B, T, C]
+        x = x.transpose(1, 2)  # Back to [B, C, T]
         if self.ffn_gamma is not None:
             x = x * self.ffn_gamma.unsqueeze(-1)
         # (ebezzam) see comment above
@@ -383,6 +398,11 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
         """
+        # Input validation
+        batch_size = audio.shape[0]
+        if sample_indices is not None and len(sample_indices) != batch_size:
+            raise ValueError(f"sample_indices length ({len(sample_indices)}) must match batch size ({batch_size})")
+            
         if use_cache and past_conv_values is None:
             past_conv_values = VibeVoiceSemanticTokenizerCache()
         
