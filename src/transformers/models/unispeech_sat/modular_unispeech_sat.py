@@ -241,9 +241,6 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for UniSpeechSat")
-
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeechSat")
 

@@ -325,18 +325,6 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
     def from_dict(self):
         raise NotImplementedError("No need to override this method for RT-DETR yet.")
 
-    def post_process(self):
-        raise NotImplementedError("Post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_segmentation(self):
-        raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_instance(self):
-        raise NotImplementedError("Instance post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_panoptic(self):
-        raise NotImplementedError("Panoptic post-processing is not implemented for RT-DETR yet.")
-
     def post_process_instance_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
 

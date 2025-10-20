@@ -1105,12 +1105,10 @@ class Blip2Model(Blip2PreTrainedModel):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        legacy_output (`bool`, *optional*, defaults to `True`):
-            Whether to return a model output object or a tensor of features.
 
         Returns:
-            text_outputs (`CausalLMOutputWithPast` or `torch.FloatTensor`):
-                The language model outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+            text_outputs (``torch.FloatTensor`):
+                The language model's last hidden states.
 
         Examples:
         ```python
@@ -1152,12 +1150,9 @@ class Blip2Model(Blip2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
         r"""
-        legacy_output (`bool`, *optional*, defaults to `True`):
-            Whether to return a model output object or a tensor of features.
-
         Returns:
-            vision_outputs (`BaseModelOutputWithPooling` or `torch.FloatTensor`):
-                The vision model outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+            vision_outputs (`torch.FloatTensor`):
+                The vision model's last layer pooled logits.
 
         Examples:
         ```python
@@ -1191,12 +1186,9 @@ class Blip2Model(Blip2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
-        legacy_output (`bool`, *optional*, defaults to `True`):
-            Whether to return a model output object or a tensor of features.
-
         Returns:
-            qformer_outputs (`BaseModelOutputWithPooling` or `torch.FloatTensor`):
-                The Q-Former outputs. If `legacy_output=False`, the output is a `torch.FloatTensor`.
+            qformer_outputs (`torch.FloatTensor`):
+                The Q-Former model's last layer hidden states.
 
         Examples:
 
