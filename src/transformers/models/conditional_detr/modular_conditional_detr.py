@@ -76,4 +76,5 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
 
         return results
 
+
 __all__ = ["ConditionalDetrImageProcessorFast"]

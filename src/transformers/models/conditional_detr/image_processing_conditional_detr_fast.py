@@ -267,7 +267,7 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
         size = kwargs.pop("size", None)
-        max_size = None if size is None else 1333
+        max_size = None if size is None else kwargs.pop("max_size", 1333)
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
