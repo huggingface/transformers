@@ -33,7 +33,7 @@ this model, including [Alternating Updates][altup] (AltUp), [Learned Augmented R
 [MatFormer][matformer], Per-Layer Embeddings (PLE), [Activation Sparsity with Statistical Top-k][spark-transformer], and KV cache sharing. The language model uses
 a similar attention pattern to [Gemma 3](./gemma3) with alternating 4 local sliding window self-attention layers for
 every global self-attention layer with a maximum context length of 32k tokens. Gemma 3n introduces
-[MobileNet v5][mobilenetv5] as the vision encoder, using a default resolution of 768x768 pixels, and adds a newly
+MobileNet v5 as the vision encoder, using a default resolution of 768x768 pixels, and adds a newly
 trained audio encoder based on the [Universal Speech Model][usm] (USM) architecture.
 
 The instruction-tuned variant was post-trained with knowledge distillation and reinforcement learning.
