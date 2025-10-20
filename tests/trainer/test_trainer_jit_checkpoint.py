@@ -106,14 +106,16 @@ class JITCheckpointTest(unittest.TestCase):
             # Restore original handler
             signal.signal(signal.SIGTERM, original_handler)
 
-    @patch("time.sleep")
+    @patch("threading.Timer")
     @patch("threading.Thread")
-    def test_sigterm_handler_flow(self, mock_thread, mock_sleep):
+    def test_sigterm_handler_flow(self, mock_thread, mock_timer):
         """Test SIGTERM handler execution flow."""
         trainer = self.get_trainer()
         manager = CheckpointManager(trainer, kill_wait=2)
 
-        # Mock thread to prevent actual threading
+        # Mock timer and thread to prevent actual threading
+        mock_timer_instance = Mock()
+        mock_timer.return_value = mock_timer_instance
         mock_thread_instance = Mock()
         mock_thread.return_value = mock_thread_instance
 
@@ -124,21 +126,23 @@ class JITCheckpointTest(unittest.TestCase):
         # Verify checkpoint was requested
         self.assertTrue(manager.checkpoint_requested)
 
-        # Verify sleep was called with kill_wait period
-        mock_sleep.assert_called_once_with(2)
+        # Verify timer was created with kill_wait period
+        mock_timer.assert_called_once_with(2, manager._start_checkpoint_thread)
+        mock_timer_instance.start.assert_called_once()
+
+        # Manually trigger the timer callback to test thread creation
+        manager._start_checkpoint_thread()
 
         # Verify thread was created and started
         mock_thread.assert_called_once_with(target=manager._immediate_async_checkpoint, daemon=True)
         mock_thread_instance.start.assert_called_once()
 
         # Test second SIGTERM call (should be ignored)
-        mock_thread.reset_mock()
-        mock_sleep.reset_mock()
+        mock_timer.reset_mock()
         manager._sigterm_handler(signal.SIGTERM, None)
 
-        # Verify no additional calls were made
-        mock_thread.assert_not_called()
-        mock_sleep.assert_not_called()
+        # Verify no additional timer was created
+        mock_timer.assert_not_called()
 
     def test_should_checkpoint_now(self):
         """Test checkpoint condition checking."""
@@ -202,10 +206,11 @@ class JITCheckpointTest(unittest.TestCase):
         self.assertEqual(str(context.exception), "Checkpoint failed")
 
     @patch("torch.cuda.is_available", return_value=True)
+    @patch("torch.cuda.set_device")
     @patch("torch.cuda.current_stream")
     @patch("torch.cuda.Stream")
     def test_immediate_async_checkpoint_cuda_streams(
-        self, mock_stream_class, mock_current_stream, mock_cuda_available
+        self, mock_stream_class, mock_current_stream, mock_set_device, mock_cuda_available
     ):
         """Test async checkpoint with CUDA streams."""
         trainer = self.get_trainer()
@@ -314,20 +319,20 @@ class JITCheckpointTest(unittest.TestCase):
         callback.on_step_end(None, None, control)
         self.assertFalse(control.should_training_stop)
 
-    @patch("time.sleep")
-    def test_kill_wait_period(self, mock_sleep):
+    @patch("threading.Timer")
+    def test_kill_wait_period(self, mock_timer):
         """Test the kill wait period functionality."""
         trainer = self.get_trainer()
         manager = CheckpointManager(trainer, kill_wait=5)
 
-        with patch("threading.Thread") as mock_thread:
-            mock_thread_instance = Mock()
-            mock_thread.return_value = mock_thread_instance
+        mock_timer_instance = Mock()
+        mock_timer.return_value = mock_timer_instance
 
-            manager._sigterm_handler(signal.SIGTERM, None)
+        manager._sigterm_handler(signal.SIGTERM, None)
 
-            # Verify sleep was called with the correct kill_wait period
-            mock_sleep.assert_called_once_with(5)
+        # Verify Timer was created with the correct kill_wait period
+        mock_timer.assert_called_once_with(5, manager._start_checkpoint_thread)
+        mock_timer_instance.start.assert_called_once()
 
     def test_integration_with_trainer(self):
         """Test integration of JIT checkpointing with Trainer."""
