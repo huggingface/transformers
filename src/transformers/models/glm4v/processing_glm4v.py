@@ -171,7 +171,7 @@ class Glm4vProcessor(ProcessorMixin):
                     timestamps = metadata.timestamps[::2]  # mrope
 
                     unique_timestamps = []
-                    for idx in range(0, len(timestamps)):
+                    for idx in range(len(timestamps)):
                         unique_timestamps.append(timestamps[idx])
 
                     selected_timestamps = unique_timestamps[:num_frames]

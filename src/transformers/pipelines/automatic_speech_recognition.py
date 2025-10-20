@@ -362,7 +362,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None):
         if isinstance(inputs, str):
-            if inputs.startswith("http://") or inputs.startswith("https://"):
+            if inputs.startswith(("http://", "https://")):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
                 inputs = httpx.get(inputs, follow_redirects=True).content

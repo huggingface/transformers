@@ -889,7 +889,7 @@ class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
     def setUpClass(cls):
         super().setUpClass()
         # fmt: off
-        cls.quant_scheme = Int4WeightOnlyConfig(**{"group_size": 32, "version": 1})
+        cls.quant_scheme = Int4WeightOnlyConfig(group_size=32, version=1)
         cls.quant_scheme_kwargs = {}
         EXPECTED_OUTPUTS = Expectations(
             {

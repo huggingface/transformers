@@ -90,10 +90,7 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
 
             # Look for model weights with various common names
             if (
-                file.endswith(".pt")
-                or file.endswith(".pth")
-                or file.endswith(".ckpt")
-                or file.endswith(".bin")
+                file.endswith((".pt", ".pth", ".ckpt", ".bin"))
                 or "model" in file_lower
                 and ("weight" in file_lower or "state" in file_lower)
                 or file_lower == "model.pt"
@@ -117,10 +114,9 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
 
             # Look for vocabulary files
             elif (
-                file.endswith(".vocab")
-                or file.endswith(".model")
-                or file.endswith(".txt")
-                or ("tokenizer" in file_lower and (file.endswith(".vocab") or file.endswith(".model")))
+                file.endswith((".vocab", ".model", ".txt"))
+                or "tokenizer" in file_lower
+                and (file.endswith((".vocab", ".model")))
             ):
                 # Prefer .vocab files over others
                 if "tokenizer_model_file" not in model_files or file.endswith(".model"):
@@ -264,7 +260,7 @@ def load_and_convert_state_dict(model_files):
     converted_state_dict = {}
     for key, value in state_dict.items():
         # Skip preprocessing weights (featurizer components)
-        if key.endswith("featurizer.window") or key.endswith("featurizer.fb"):
+        if key.endswith(("featurizer.window", "featurizer.fb")):
             print(f"Skipping preprocessing weight: {key}")
             continue
         converted_key = convert_key(key, NEMO_TO_HF_WEIGHT_MAPPING)

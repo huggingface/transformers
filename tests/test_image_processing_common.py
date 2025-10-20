@@ -786,7 +786,7 @@ class AnnotationFormatTestMixin:
 
         for annotation_format, params in test_cases:
             with self.subTest(annotation_format):
-                image_processor_params = {**image_processor_dict, **{"format": annotation_format}}
+                image_processor_params = {**image_processor_dict, "format": annotation_format}
                 image_processor_first = self.image_processing_class(**image_processor_params)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:

@@ -119,7 +119,7 @@ else:
 
         scaM_inter_k = scaM_inter_k.squeeze(-1)
 
-        for key in range(0, num_chunks):
+        for key in range(num_chunks):
             # store the states from the previous iteration before updating them
             # in the first iteration, these are the initial states
             matC_states[:, :, key * dhqk : (key + 1) * dhqk, :] = matC_k

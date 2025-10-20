@@ -131,7 +131,7 @@ def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeo
     requires_backends(load_audio_librosa, ["librosa"])
 
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
-    if audio.startswith("http://") or audio.startswith("https://"):
+    if audio.startswith(("http://", "https://")):
         audio = librosa.load(
             BytesIO(httpx.get(audio, follow_redirects=True, timeout=timeout).content), sr=sampling_rate
         )[0]

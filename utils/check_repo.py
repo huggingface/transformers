@@ -1062,14 +1062,7 @@ def ignore_undocumented(name: str) -> bool:
     if name.isupper():
         return True
     # PreTrainedModels / Encoders / Decoders / Layers / Embeddings / Attention are not documented.
-    if (
-        name.endswith("PreTrainedModel")
-        or name.endswith("Decoder")
-        or name.endswith("Encoder")
-        or name.endswith("Layer")
-        or name.endswith("Embeddings")
-        or name.endswith("Attention")
-    ):
+    if name.endswith(("PreTrainedModel", "Decoder", "Encoder", "Layer", "Embeddings", "Attention")):
         return True
     # Submodules are not documented.
     if os.path.isdir(os.path.join(PATH_TO_TRANSFORMERS, name)) or os.path.isfile(

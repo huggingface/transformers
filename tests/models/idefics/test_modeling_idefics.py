@@ -833,7 +833,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         Overwrite from generation tests because Idefics has only SDPA layers.
         Do not skip because we still want generation tests to run. Rather we can remove checks for shape.
         """
-        pass
 
     @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_custom_4d_attention_mask(self):

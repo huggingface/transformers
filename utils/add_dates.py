@@ -181,7 +181,7 @@ def get_release_date(link: str) -> str:
         except Exception as e:
             print(f"Error fetching release date for the paper https://huggingface.co/papers/{link}: {e}")
 
-    elif link.startswith("https://arxiv.org/abs/") or link.startswith("https://arxiv.org/pdf/"):
+    elif link.startswith(("https://arxiv.org/abs/", "https://arxiv.org/pdf/")):
         print(f"This paper {link} is not yet available in Hugging Face papers, skipping the release date attachment.")
         return r"{release_date}"
 

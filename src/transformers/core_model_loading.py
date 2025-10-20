@@ -843,8 +843,6 @@ class SkipParameters(Exception):
     """Control-flow sentinel: abort processing of the current parameters only (that were supposed to be created
     by a WeightConverter)."""
 
-    pass
-
 
 def rename_source_key(
     source_key: str,

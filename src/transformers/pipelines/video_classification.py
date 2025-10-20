@@ -141,7 +141,7 @@ class VideoClassificationPipeline(Pipeline):
         if num_frames is None:
             num_frames = self.model.config.num_frames
 
-        if video.startswith("http://") or video.startswith("https://"):
+        if video.startswith(("http://", "https://")):
             video = BytesIO(httpx.get(video, follow_redirects=True).content)
 
         container = av.open(video)
