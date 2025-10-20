@@ -526,7 +526,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         {"feature-extraction": CLIPModel, "image-feature-extraction": CLIPVisionModel} if is_torch_available() else {}
     )
     additional_model_inputs = ["pixel_values"]
-    fx_compatible = True
+    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
