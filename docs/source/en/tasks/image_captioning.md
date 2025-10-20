@@ -169,7 +169,7 @@ def compute_metrics(eval_pred):
     return {"wer_score": wer_score}
 ```
 
-## Train!
+## Train
 
 Now, you are ready to start fine-tuning the model. You will use the 🤗 [`Trainer`] for this.
 

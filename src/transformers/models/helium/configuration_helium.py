@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class HeliumConfig(PreTrainedConfig):
@@ -63,8 +66,10 @@ class HeliumConfig(PreTrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 100000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 3):
             Padding token id.
         eos_token_id (`int` | `list`, *optional*, defaults to 2):
@@ -105,26 +110,26 @@ class HeliumConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=48000,
-        hidden_size=2560,
-        intermediate_size=7040,
-        num_hidden_layers=24,
-        num_attention_heads=20,
-        num_key_value_heads=20,
-        head_dim=128,
-        hidden_act="silu",
-        attention_dropout=0.0,
-        max_position_embeddings=4096,
-        initializer_range=0.02,
-        rms_norm_eps=1e-8,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=100000.0,
-        pad_token_id=3,
-        eos_token_id=2,
-        bos_token_id=1,
-        attention_bias=False,
-        mlp_bias=False,
+        vocab_size: Optional[int] = 48000,
+        hidden_size: Optional[int] = 2560,
+        intermediate_size: Optional[int] = 7040,
+        num_hidden_layers: Optional[int] = 24,
+        num_attention_heads: Optional[int] = 20,
+        num_key_value_heads: Optional[int] = 20,
+        head_dim: Optional[int] = 128,
+        hidden_act: Optional[str] = "silu",
+        attention_dropout: Optional[float] = 0.0,
+        max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-8,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        pad_token_id: Optional[int] = 3,
+        eos_token_id: Optional[int] = 2,
+        bos_token_id: Optional[int] = 1,
+        attention_bias: Optional[bool] = False,
+        mlp_bias: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -139,10 +144,17 @@ class HeliumConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 100000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

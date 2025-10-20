@@ -67,7 +67,6 @@ To create the package for pypi.
 9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 """
 
-import os
 import re
 import shutil
 from pathlib import Path
@@ -114,7 +113,7 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub==1.0.0.rc5",
+    "huggingface-hub==1.0.0.rc6",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -175,6 +174,7 @@ _deps = [
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
+    "typer-slim",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
@@ -260,10 +260,7 @@ extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
 extras["hf_xet"] = deps_list("hf_xet")
 
-if os.name == "nt":  # windows
-    extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
-else:
-    extras["retrieval"] = deps_list("faiss-cpu", "datasets")
+extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
@@ -406,6 +403,7 @@ install_requires = [
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["tokenizers"],
+    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
@@ -427,11 +425,7 @@ setup(
     package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
-    entry_points={
-        "console_scripts": [
-            "transformers=transformers.commands.transformers_cli:main",
-        ]
-    },
+    entry_points={"console_scripts": ["transformers=transformers.cli.transformers:main"]},
     python_requires=">=3.10.0",
     install_requires=list(install_requires),
     classifiers=[

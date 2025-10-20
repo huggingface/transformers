@@ -16,11 +16,12 @@ import os
 import re
 import subprocess
 import textwrap
-from argparse import ArgumentParser, Namespace
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Annotated, Any, Optional, Union
+
+import typer
 
 from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
@@ -29,7 +30,6 @@ from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from ..models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
 from ..utils import is_libcst_available
-from . import BaseTransformersCLICommand
 from .add_fast_image_processor import add_fast_image_processor
 
 
@@ -71,8 +71,7 @@ if is_libcst_available():
 
 
 CURRENT_YEAR = date.today().year
-TRANSFORMERS_PATH = Path(__file__).parent.parent
-REPO_PATH = TRANSFORMERS_PATH.parent.parent
+REPO_PATH = Path(__file__).parents[3]
 
 COPYRIGHT = f"""
 # coding=utf-8
@@ -90,6 +89,37 @@ COPYRIGHT = f"""
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """.lstrip()
+
+### Entrypoint
+
+
+def add_new_model_like(
+    repo_path: Annotated[
+        Optional[str], typer.Argument(help="When not using an editable install, the path to the Transformers repo.")
+    ] = None,
+):
+    """
+    Add a new model to the library, based on an existing one.
+    """
+    (
+        old_model_infos,
+        new_lowercase_name,
+        new_model_paper_name,
+        filenames_to_add,
+        create_fast_image_processor,
+    ) = get_user_input()
+
+    _add_new_model_like_internal(
+        repo_path=Path(repo_path) if repo_path is not None else REPO_PATH,
+        old_model_infos=old_model_infos,
+        new_lowercase_name=new_lowercase_name,
+        new_model_paper_name=new_model_paper_name,
+        filenames_to_add=filenames_to_add,
+        create_fast_image_processor=create_fast_image_processor,
+    )
+
+
+### Core logic
 
 
 class ModelInfos:
@@ -149,6 +179,7 @@ def add_content_to_file(file_name: Union[str, os.PathLike], new_content: str, ad
 
 
 def add_model_to_auto_mappings(
+    repo_path: Path,
     old_model_infos: ModelInfos,
     new_lowercase_name: str,
     new_model_paper_name: str,
@@ -185,12 +216,12 @@ def add_model_to_auto_mappings(
 
     # Add the config mappings directly as the handling for config is a bit different
     add_content_to_file(
-        TRANSFORMERS_PATH / "models" / "auto" / "configuration_auto.py",
+        repo_path / "src" / "transformers" / "models" / "auto" / "configuration_auto.py",
         new_content=f'        ("{new_lowercase_name}", "{new_cased_name}Config"),\n',
         add_after="CONFIG_MAPPING_NAMES = OrderedDict[str, str](\n    [\n        # Add configs here\n",
     )
     add_content_to_file(
-        TRANSFORMERS_PATH / "models" / "auto" / "configuration_auto.py",
+        repo_path / "src" / "transformers" / "models" / "auto" / "configuration_auto.py",
         new_content=f'        ("{new_lowercase_name}", "{new_model_paper_name}"),\n',
         add_after="MODEL_NAMES_MAPPING = OrderedDict[str, str](\n    [\n        # Add full (and cased) model names here\n",
     )
@@ -199,15 +230,14 @@ def add_model_to_auto_mappings(
         if to_add:
             # The auto mapping
             filename = filename.replace("_fast.py", ".py")
-            with open(TRANSFORMERS_PATH / "models" / "auto" / filename) as f:
-                file = f.read()
+            file = (repo_path / "src" / "transformers" / "models" / "auto" / filename).read_text()
             # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
             matching_lines = re.findall(
                 rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL
             )
             for match in matching_lines:
                 add_content_to_file(
-                    TRANSFORMERS_PATH / "models" / "auto" / filename,
+                    repo_path / "src" / "transformers" / "models" / "auto" / filename,
                     new_content=match.replace(old_lowercase_name, new_lowercase_name).replace(
                         old_cased_name, new_cased_name
                     ),
@@ -271,7 +301,9 @@ def create_doc_file(new_paper_name: str, public_classes: list[str]):
     return copyright_for_markdown + doc_template + class_doc
 
 
-def insert_model_in_doc_toc(old_lowercase_name: str, new_lowercase_name: str, new_model_paper_name: str):
+def insert_model_in_doc_toc(
+    repo_path: Path, old_lowercase_name: str, new_lowercase_name: str, new_model_paper_name: str
+):
     """
     Insert the new model in the doc `_toctree.yaml`, in the same section as the old model.
 
@@ -283,14 +315,14 @@ def insert_model_in_doc_toc(old_lowercase_name: str, new_lowercase_name: str, ne
         new_model_paper_name (`str`):
             The fully cased name (as in the official paper name) of the new model.
     """
-    toc_file = REPO_PATH / "docs" / "source" / "en" / "_toctree.yml"
+    toc_file = repo_path / "docs" / "source" / "en" / "_toctree.yml"
     with open(toc_file, "r") as f:
         content = f.read()
 
     old_model_toc = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: .*?\n", content).group(0)
     new_toc = f"      - local: model_doc/{new_lowercase_name}\n        title: {new_model_paper_name}\n"
     add_content_to_file(
-        REPO_PATH / "docs" / "source" / "en" / "_toctree.yml", new_content=new_toc, add_after=old_model_toc
+        repo_path / "docs" / "source" / "en" / "_toctree.yml", new_content=new_toc, add_after=old_model_toc
     )
 
 
@@ -374,6 +406,7 @@ def find_modular_structure(
 
 
 def create_modular_file(
+    repo_path: Path,
     old_model_infos: ModelInfos,
     new_lowercase_name: str,
     filenames_to_add: list[tuple[str, bool]],
@@ -393,7 +426,7 @@ def create_modular_file(
     """
     new_cased_name = "".join(x.title() for x in new_lowercase_name.replace("-", "_").split("_"))
     old_lowercase_name = old_model_infos.lowercase_name
-    old_folder_root = TRANSFORMERS_PATH / "models" / old_lowercase_name
+    old_folder_root = repo_path / "src" / "transformers" / "models" / old_lowercase_name
 
     # Construct the modular file from the original (old) model, by subclassing each class
     all_imports = ""
@@ -425,7 +458,9 @@ def create_modular_file(
     return modular_file, all_public_classes
 
 
-def create_test_files(old_model_infos: ModelInfos, new_lowercase_name, filenames_to_add: list[tuple[str, bool]]):
+def create_test_files(
+    repo_path: Path, old_model_infos: ModelInfos, new_lowercase_name, filenames_to_add: list[tuple[str, bool]]
+):
     """
     Create the test files for the new model. It basically copies over the old test files and adjust the class names.
 
@@ -458,7 +493,7 @@ def create_test_files(old_model_infos: ModelInfos, new_lowercase_name, filenames
     for new_file, to_add in corrected_filenames_to_add:
         if to_add:
             original_test_file = new_file.replace(new_lowercase_name, old_lowercase_name)
-            original_test_path = REPO_PATH / "tests" / "models" / old_lowercase_name / original_test_file
+            original_test_path = repo_path / "tests" / "models" / old_lowercase_name / original_test_file
             # Sometimes, tests may not exist
             if not original_test_path.is_file():
                 continue
@@ -475,7 +510,8 @@ def create_test_files(old_model_infos: ModelInfos, new_lowercase_name, filenames
     return test_files
 
 
-def create_new_model_like(
+def _add_new_model_like_internal(
+    repo_path: Path,
     old_model_infos: ModelInfos,
     new_lowercase_name: str,
     new_model_paper_name: str,
@@ -486,6 +522,8 @@ def create_new_model_like(
     Creates a new model module like a given model of the Transformers library.
 
     Args:
+        repo_path (`Path`):
+            The path to the root of the Transformers repository.
         old_model_infos (`ModelInfos`):
             The structure containing the class information of the old model.
         new_lowercase_name (`str`):
@@ -505,11 +543,13 @@ def create_new_model_like(
     old_lowercase_name = old_model_infos.lowercase_name
 
     # 1. We create the folder for our new model
-    new_module_folder = TRANSFORMERS_PATH / "models" / new_lowercase_name
+    new_module_folder = repo_path / "src" / "transformers" / "models" / new_lowercase_name
     os.makedirs(new_module_folder, exist_ok=True)
 
     # 2. Create and add the modular file
-    modular_file, public_classes = create_modular_file(old_model_infos, new_lowercase_name, filenames_to_add)
+    modular_file, public_classes = create_modular_file(
+        repo_path, old_model_infos, new_lowercase_name, filenames_to_add
+    )
     with open(new_module_folder / f"modular_{new_lowercase_name}.py", "w") as f:
         f.write(modular_file)
 
@@ -520,55 +560,55 @@ def create_new_model_like(
 
     # 4. Add new model to the models init
     add_content_to_file(
-        TRANSFORMERS_PATH / "models" / "__init__.py",
+        repo_path / "src" / "transformers" / "models" / "__init__.py",
         new_content=f"    from .{new_lowercase_name} import *\n",
         add_after="if TYPE_CHECKING:\n",
     )
 
     # 5. Add model to auto mappings
-    add_model_to_auto_mappings(old_model_infos, new_lowercase_name, new_model_paper_name, filenames_to_add)
+    add_model_to_auto_mappings(repo_path, old_model_infos, new_lowercase_name, new_model_paper_name, filenames_to_add)
 
     # 6. Add test files
-    tests_folder = REPO_PATH / "tests" / "models" / new_lowercase_name
+    tests_folder = repo_path / "tests" / "models" / new_lowercase_name
     os.makedirs(tests_folder, exist_ok=True)
     # Add empty __init__.py
     with open(tests_folder / "__init__.py", "w"):
         pass
-    test_files = create_test_files(old_model_infos, new_lowercase_name, filenames_to_add)
+    test_files = create_test_files(repo_path, old_model_infos, new_lowercase_name, filenames_to_add)
     for filename, content in test_files.items():
         with open(tests_folder / filename, "w") as f:
             f.write(content)
 
     # 7. Add doc file
     doc_file = create_doc_file(new_model_paper_name, public_classes)
-    with open(REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w") as f:
+    with open(repo_path / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w") as f:
         f.write(doc_file)
-    insert_model_in_doc_toc(old_lowercase_name, new_lowercase_name, new_model_paper_name)
+    insert_model_in_doc_toc(repo_path, old_lowercase_name, new_lowercase_name, new_model_paper_name)
 
     # 8. Add additional fast image processor if necessary
     if create_fast_image_processor:
         add_fast_image_processor(model_name=new_lowercase_name)
 
     # 9. Run linters
-    model_init_file = TRANSFORMERS_PATH / "models" / "__init__.py"
+    model_init_file = repo_path / "src" / "transformers" / "models" / "__init__.py"
     subprocess.run(
         ["ruff", "check", new_module_folder, tests_folder, model_init_file, "--fix"],
-        cwd=REPO_PATH,
+        cwd=repo_path,
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
         ["ruff", "format", new_module_folder, tests_folder, model_init_file],
-        cwd=REPO_PATH,
+        cwd=repo_path,
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
-        ["python", "utils/check_doc_toc.py", "--fix_and_overwrite"], cwd=REPO_PATH, stdout=subprocess.DEVNULL
+        ["python", "utils/check_doc_toc.py", "--fix_and_overwrite"], cwd=repo_path, stdout=subprocess.DEVNULL
     )
-    subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=REPO_PATH, stdout=subprocess.DEVNULL)
+    subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=repo_path, stdout=subprocess.DEVNULL)
 
     # 10. Run the modular conversion
     subprocess.run(
-        ["python", "utils/modular_model_converter.py", new_lowercase_name], cwd=REPO_PATH, stdout=subprocess.DEVNULL
+        ["python", "utils/modular_model_converter.py", new_lowercase_name], cwd=repo_path, stdout=subprocess.DEVNULL
     )
 
 
@@ -741,44 +781,3 @@ def get_user_input():
         )
 
     return old_model_infos, new_lowercase_name, new_model_paper_name, filenames_to_add, create_fast_image_processor
-
-
-def add_new_model_like_command_factory(args: Namespace):
-    return AddNewModelLikeCommand(path_to_repo=args.path_to_repo)
-
-
-class AddNewModelLikeCommand(BaseTransformersCLICommand):
-    @staticmethod
-    def register_subcommand(parser: ArgumentParser):
-        add_new_model_like_parser = parser.add_parser("add-new-model-like")
-        add_new_model_like_parser.add_argument(
-            "--path_to_repo", type=str, help="When not using an editable install, the path to the Transformers repo."
-        )
-        add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
-
-    def __init__(self, path_to_repo=None, **kwargs):
-        (
-            self.old_model_infos,
-            self.new_lowercase_name,
-            self.new_model_paper_name,
-            self.filenames_to_add,
-            self.create_fast_image_processor,
-        ) = get_user_input()
-        self.path_to_repo = path_to_repo
-
-    def run(self):
-        if self.path_to_repo is not None:
-            # Adapt constants
-            global TRANSFORMERS_PATH
-            global REPO_PATH
-
-            REPO_PATH = Path(self.path_to_repo)
-            TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
-
-        create_new_model_like(
-            old_model_infos=self.old_model_infos,
-            new_lowercase_name=self.new_lowercase_name,
-            new_model_paper_name=self.new_model_paper_name,
-            filenames_to_add=self.filenames_to_add,
-            create_fast_image_processor=self.create_fast_image_processor,
-        )

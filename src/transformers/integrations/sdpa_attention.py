@@ -32,13 +32,11 @@ def use_gqa_in_sdpa(attention_mask: Optional[torch.Tensor], key: torch.Tensor) -
     # 1.cuda or Ascend NPU
     #   - torch version >= 2.5
     #   - attention_mask is None (otherwise it will fall back to the math kernel)
-    #   - key is not a torch.fx.Proxy (otherwise it will fail with a tracing error)
     # 2.xpu
     #   - torch version >= 2.8
-    #   - key is not a torch.fx.Proxy (otherwise it will fail with a tracing error)
     if _is_torch_xpu_available:
-        return _is_torch_greater_or_equal_than_2_8 and not isinstance(key, torch.fx.Proxy)
-    return _is_torch_greater_or_equal_than_2_5 and attention_mask is None and not isinstance(key, torch.fx.Proxy)
+        return _is_torch_greater_or_equal_than_2_8
+    return _is_torch_greater_or_equal_than_2_5 and attention_mask is None
 
 
 def sdpa_attention_forward(
@@ -68,13 +66,20 @@ def sdpa_attention_forward(
     if attention_mask is not None and attention_mask.ndim == 4:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
 
-    # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-    # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-    # Note that it is important to check first for the shape, otherwise compile will fail with `argument 'is_causal' must be bool, not SymBool`
-    if is_causal is None:
-        # The last condition is for encoder (decoder) models which specify this by passing their own `is_causal` flag
-        # This is mainly due to those models having mixed implementations for encoder, decoder, and encoder-decoder attns
-        is_causal = query.shape[2] > 1 and attention_mask is None and getattr(module, "is_causal", True)
+    # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
+    is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
+
+    # SDPA's Flash Attention (and cuDNN) kernels rely on the `is_causal` flag. However, there are certain conditions:
+    # - Not in decoding phase (otherwise we want full attention on the single query token)
+    # - Attention mask is not to be provided (even if it is a causal pattern)
+    # - Internally, we marked this as compatible with causal, i.e. it is a decoder attention type
+    #
+    # Quirks on the conditionals:
+    # - We avoid inline passing this to the SDPA function directly to support both torch.compile's dynamic shapes and
+    #   full graph options. Otherwise, dynamic shapes are prevented from compiling.
+    # - It is important to check first for the shape, otherwise compile will fail with
+    #   `argument 'is_causal' must be bool, not SymBool`.
+    is_causal = query.shape[2] > 1 and attention_mask is None and is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
