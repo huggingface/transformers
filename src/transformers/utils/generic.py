@@ -573,7 +573,7 @@ def torch_float(x):
     return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
-def filter_out_non_signature_kwargs(extra: Optional[list] = None):
+def filter_out_non_signature_kwargs(extra: list | None = None):
     """
     Decorator to filter out named arguments that are not in the function signature.
 
@@ -676,13 +676,13 @@ class TransformersKwargs(TypedDict, total=False):
     """
 
     num_items_in_batch: Optional["torch.Tensor"]
-    output_hidden_states: Optional[bool]
-    output_attentions: Optional[bool]
-    output_router_logits: Optional[bool]
+    output_hidden_states: bool | None
+    output_attentions: bool | None
+    output_router_logits: bool | None
     cu_seq_lens_q: Optional["torch.LongTensor"]
     cu_seq_lens_k: Optional["torch.LongTensor"]
-    max_length_q: Optional[int]
-    max_length_k: Optional[int]
+    max_length_q: int | None
+    max_length_k: int | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -777,8 +777,8 @@ class OutputRecorder:
 
     target_class: "type[torch.nn.Module]"
     index: int = 0
-    layer_name: Optional[str] = None
-    class_name: Optional[str] = None
+    layer_name: str | None = None
+    class_name: str | None = None
 
 
 def check_model_inputs(tie_last_hidden_states=True):

@@ -16,8 +16,11 @@ from collections.abc import Callable
 from types import ModuleType
 from typing import Optional, Union
 
+from ..utils import logging
 from .flash_attention import flash_attention_forward
 
+
+logger = logging.get_logger(__name__)
 
 try:
     from kernels import (
@@ -157,6 +160,13 @@ except ImportError:
         raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
 
 
+_HUB_KERNEL_MAPPING: dict[str, str] = {
+    "causal-conv1d": "kernels-community/causal-conv1d",
+}
+
+_KERNEL_MODULE_MAPPING: dict[str, Optional[ModuleType]] = {}
+
+
 def is_kernel(attn_implementation: Optional[str]) -> bool:
     """Check whether `attn_implementation` matches a kernel pattern from the hub."""
     return (
@@ -223,9 +233,53 @@ def load_and_register_attn_kernel(
     return kernel
 
 
+def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] = _KERNEL_MODULE_MAPPING):
+    if kernel_name in mapping and isinstance(mapping[kernel_name], ModuleType):
+        return mapping[kernel_name]
+    if kernel_name not in _HUB_KERNEL_MAPPING:
+        logger.warning(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
+        mapping[kernel_name] = None
+        return None
+    if _kernels_available:
+        from kernels import get_kernel
+
+        try:
+            kernel = get_kernel(_HUB_KERNEL_MAPPING[kernel_name])
+            mapping[kernel_name] = kernel
+        except FileNotFoundError:
+            mapping[kernel_name] = None
+
+    else:
+        # Try to import is_{kernel_name}_available from ..utils
+        import importlib
+
+        new_kernel_name = kernel_name.replace("-", "_")
+        func_name = f"is_{new_kernel_name}_available"
+
+        try:
+            utils_mod = importlib.import_module("..utils.import_utils", __package__)
+            is_kernel_available = getattr(utils_mod, func_name, None)
+        except Exception:
+            is_kernel_available = None
+
+        if callable(is_kernel_available) and is_kernel_available():
+            # Try to import the module "{kernel_name}" from parent package level
+            try:
+                module = importlib.import_module(f"{kernel_name}")
+                mapping[kernel_name] = module
+                return module
+            except Exception:
+                mapping[kernel_name] = None
+        else:
+            mapping[kernel_name] = None
+
+    return mapping[kernel_name]
+
+
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
     "register_kernel_mapping",
     "replace_kernel_forward_from_hub",
+    "lazy_load_kernel",
 ]

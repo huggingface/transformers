@@ -79,7 +79,7 @@ class Qwen2VLVisionText2TextModelTester:
             "num_key_value_heads": 2,
             "rope_theta": 10000,
             "tie_word_embeddings": True,
-            "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
+            "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
         },
         vision_start_token_id=3,
         image_token_id=4,

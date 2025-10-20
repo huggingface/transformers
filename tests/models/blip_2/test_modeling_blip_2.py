@@ -156,7 +156,6 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Blip2VisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -461,11 +460,9 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["input_ids"]
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -792,11 +789,9 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     # TODO: Fix the failed tests
@@ -1072,11 +1067,9 @@ class Blip2TextModelWithProjectionTester:
 @require_torch
 class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2TextModelWithProjection,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2TextModelWithProjectionTester(self)
@@ -1230,10 +1223,8 @@ class Blip2VisionModelWithProjectionTester:
 @require_torch
 class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2VisionModelWithProjection,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2VisionModelWithProjectionTester(self)
@@ -1379,11 +1370,9 @@ class Blip2TextRetrievalModelTester:
 class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForImageTextRetrieval,) if is_torch_available() else ()
     additional_model_inputs = ["input_ids"]
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2TextRetrievalModelTester(self)

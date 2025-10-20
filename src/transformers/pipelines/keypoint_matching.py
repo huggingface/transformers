@@ -97,10 +97,10 @@ class KeypointMatchingPipeline(Pipeline):
 
     def __call__(
         self,
-        inputs: Union[list[ImagePair], ImagePair],
+        inputs: list[ImagePair] | ImagePair,
         threshold: float = 0.0,
         **kwargs: Any,
-    ) -> Union[list[Match], list[list[Match]]]:
+    ) -> list[Match] | list[list[Match]]:
         """
         Find matches between keypoints in two images.
 
