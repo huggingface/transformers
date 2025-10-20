@@ -116,7 +116,7 @@ We have a technical guide for [how to add a model to 🤗 Transformers](https://
 
 ### Vision-Language Model Contribution Checklist
 
-If you're contributing a **vision-language model** (or any multimodal model that processes images), please follow this checklist. Maintainers will use this to review your PR, and completing these steps will significantly increase the likelihood of your PR being merged quickly.
+If you're contributing a **vision-language model** (or any multimodal model that processes images/videos), please follow this checklist. Maintainers will use this to review your PR, and completing these steps will significantly increase the likelihood of your PR being merged quickly.
 
 **Required checklist for all vision-language model contributions:**
 
