@@ -39,15 +39,23 @@ pipeline("the secret to baking a really good cake is ")
 When you have more than one input, pass them as a list.
 
 ```py
+
 from transformers import pipeline
 from accelerate import Accelerator
 
+# Automatically use GPU if available
 device = Accelerator().device
 
-pipeline = pipeline(task="text-generation", model="google/gemma-2-2b", device=device)
-pipeline(["the secret to baking a really good cake is ", "a baguette is "])
-[[{'generated_text': 'the secret to baking a really good cake is 1. the right ingredients 2. the'}],
- [{'generated_text': 'a baguette is 100% bread.\n\na baguette is 100%'}]]
+generator = pipeline(task="text-generation", model="google/gemma-2-2b", device=device)
+
+# Batch of prompts
+prompts = ["the secret to baking a really good cake is ", "a baguette is "]
+outputs = generator(prompts)
+
+for i, output in enumerate(outputs):
+    print(f"Prompt: {prompts[i]}")
+    print(f"Generated: {output['generated_text']}\n")
+
 ```
 
 This guide will introduce you to the [`Pipeline`], demonstrate its features, and show how to configure its various parameters.
