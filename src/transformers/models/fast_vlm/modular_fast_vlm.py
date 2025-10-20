@@ -102,7 +102,7 @@ class FastVlmConfig(LlavaConfig):
 
         if vision_feature_layer != -1:
             raise ValueError(
-                f"Unexpected vision feature layer: {vision_feature_select_strategy}. Only -1 is supported in FastVLM."
+                f"Unexpected vision feature layer: {vision_feature_layer}. Only -1 is supported in FastVLM."
             )
 
         self.vision_feature_select_strategy = vision_feature_select_strategy

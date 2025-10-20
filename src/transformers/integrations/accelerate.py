@@ -105,10 +105,6 @@ def init_on_device(device: "torch.device", include_buffers: bool = False):
         tst = nn.Linear(100, 100)  # on `cuda` device
     ```
     """
-    if include_buffers:
-        with device:
-            yield
-        return
 
     old_register_parameter = nn.Module.register_parameter
     if include_buffers:

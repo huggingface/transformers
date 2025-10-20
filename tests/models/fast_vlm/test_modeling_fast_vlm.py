@@ -184,7 +184,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
 
     def setUp(self):
         self.model_tester = FastVlmVisionText2TextModelTester(self)
-        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
+        common_properties = ["image_token_id", "image_seq_length"]
         self.config_tester = ConfigTester(
             self, config_class=FastVlmConfig, has_text_modality=False, common_properties=common_properties
         )
@@ -223,11 +223,9 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
             input_ids = torch.cat([input_ids, input_ids], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
-    # @unittest.skip(
-    #     "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
-    # )
-    # def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-    #     pass
+    @unittest.skip("Timm wrapper and backbone don't currently support HF initialization")
+    def test_can_init_all_missing_weights(self):
+        pass
 
 
 @require_torch
