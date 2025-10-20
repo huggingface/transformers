@@ -175,8 +175,7 @@ class BartConfig(PreTrainedConfig):
         if kwargs.get("force_bos_token_to_be_generated", False):
             self.forced_bos_token_id = self.bos_token_id
             warnings.warn(
-                f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions. "
-                "The config can simply be saved and uploaded again to be fixed."
+                f"Please make sure the generation config includes `forced_bos_token_id={self.bos_token_id}`. "
             )
 
 

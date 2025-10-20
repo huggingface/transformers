@@ -410,7 +410,14 @@ class GenerationMixin(ContinuousMixin):
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
-                pass
+                self.generation_config = GenerationConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    config_file_name="config.json",
+                    _from_auto=from_auto_class,
+                    _from_pipeline=from_pipeline,
+                    from_model_config=True,
+                    **repo_loading_kwargs,
+                )
             # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
             if hasattr(self, "load_custom_generate"):
                 try:

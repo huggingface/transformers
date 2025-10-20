@@ -1097,40 +1097,18 @@ class PreTrainedConfig(PushToHubMixin):
         non_default_generation_parameters = {}
         decoder_attribute_name = None
 
-        # Some composite models don't have a default config, use their decoder config as a fallback for default values
-        # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
-        if not self.has_no_defaults_at_init:
-            default_config = self.__class__()
-        else:
-            decoder_config = self.get_text_config(decoder=True)
-            if decoder_config is not self:
-                default_config = decoder_config.__class__()
-            else:
-                default_config = None
-
         # If it is a composite model, we want to check the subconfig that will be used for generation
         self_decoder_config = self if decoder_attribute_name is None else getattr(self, decoder_attribute_name)
 
         for parameter_name, default_global_value in self._get_global_generation_defaults().items():
             if hasattr(self_decoder_config, parameter_name):
-                is_default_in_config = is_default_generation_value = None
-                parameter_value = getattr(self_decoder_config, parameter_name)
-                # Three cases in which is okay for the model config to hold generation config parameters:
+                parameter_value = getattr(self_decoder_config, parameter_name, None)
+                # Two cases in which is okay for the model config to hold generation config parameters:
                 # 1. The parameter is set to `None`, effectively delegating its value to the generation config
-                if parameter_value is None:
+                # 2. The parameter is set the global generation defaults
+                if parameter_value is None or parameter_value == default_global_value:
                     continue
-                # 2. If we have a default config, then the instance should hold the same generation defaults
-                if default_config is not None:
-                    is_default_in_config = parameter_value == getattr(default_config, parameter_name)
-                # 3. if we don't have a default config, then the instance should hold the global generation defaults
-                else:
-                    is_default_generation_value = parameter_value == default_global_value
-
-                is_non_default = (is_default_in_config is False) or (
-                    is_default_in_config is None and is_default_generation_value is False
-                )
-                if is_non_default:
-                    non_default_generation_parameters[parameter_name] = getattr(self_decoder_config, parameter_name)
+                non_default_generation_parameters[parameter_name] = getattr(self_decoder_config, parameter_name)
 
         return non_default_generation_parameters
 

@@ -166,7 +166,7 @@ class RagConfig(PreTrainedConfig):
 
         self.use_cache = use_cache
 
-        if self.forced_eos_token_id is None:
+        if forced_eos_token_id is None:
             self.forced_eos_token_id = getattr(self.generator, "forced_eos_token_id", None)
 
     @classmethod
