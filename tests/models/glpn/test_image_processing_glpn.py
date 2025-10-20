@@ -125,47 +125,64 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_rescale"))
 
     def test_call_pil(self):
+        # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random PIL images
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
+        # Test not batched input (GLPNImageProcessor doesn't support batching)
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
         self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_numpy(self):
+        # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
+
+        # Test not batched input (GLPNImageProcessor doesn't support batching)
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
         self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_pytorch(self):
+        # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random PyTorch tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
+
+        # Test not batched input (GLPNImageProcessor doesn't support batching)
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
         self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_numpy_4_channels(self):
+        # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
         self.image_processing_class.num_channels = 4
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
+        
+        # Test not batched input (GLPNImageProcessor doesn't support batching)
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
         self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
         self.image_processing_class.num_channels = 3
 
     def test_equivalence_slow_fast(self):
+        # Verify that the fast (torchvision) and slow (PIL) paths give identical pixel outputs
         if self.fast_image_processing_class is None:
             self.skipTest("TorchVision not available")
 
+        # Random RGB test image
         image = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
         slow = self.image_processing_class(**self.image_processor_dict)
         fast = self.fast_image_processing_class(**self.image_processor_dict)
@@ -176,6 +193,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         torch.testing.assert_close(out_slow, out_fast, atol=1e-7, rtol=1e-5)
 
     def test_post_process_depth_equivalence(self):
+        # Check that both processors produce equivalent post-processed depth maps
         if self.fast_image_processing_class is None:
             self.skipTest("TorchVision not available")
 
@@ -183,10 +201,12 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         slow = self.image_processing_class(**self.image_processor_dict)
         fast = self.fast_image_processing_class(**self.image_processor_dict)
 
+        # target_sizes simulate resized inference outputs
         target_sizes = [(240, 320)] * self.image_processor_tester.batch_size
         processed_slow = slow.post_process_depth_estimation(outputs, target_sizes=target_sizes)
         processed_fast = fast.post_process_depth_estimation(outputs, target_sizes=target_sizes)
 
+        # Compare per-sample predicted depth tensors
         for pred_slow, pred_fast in zip(processed_slow, processed_fast):
             depth_slow = pred_slow["predicted_depth"]
             depth_fast = pred_fast["predicted_depth"]

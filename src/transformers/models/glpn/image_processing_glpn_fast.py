@@ -27,7 +27,6 @@ from ...image_utils import (
     PILImageResampling,
 )
 
-# optional typing container (similar to ZoeDepthImageProcessorKwargs)
 from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
@@ -36,13 +35,14 @@ from ...utils import (
 )
 
 
-class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
-    # Public (persisted) key — must match slow processor:
+"""class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
+    #Public (persisted) key — must match slow processor:
     size_divisor: int
-    # Back-compat alias (NOT persisted):
+    #Back-compat alias (NOT persisted):
     ensure_multiple_of: int
-    # Allow overriding resample (persisted like slow):
+    #Allow overriding resample (persisted like slow):
     resample: PILImageResampling
+"""
 
 
 @auto_docstring
@@ -56,30 +56,30 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
     - (No normalization by default)
     """
 
-    # Persist ONLY the same keys as the slow processor
+    #Persist ONLY the same keys as the slow processor
     do_resize = True
     do_rescale = True
     do_normalize = False
     resample = PILImageResampling.BILINEAR
     size_divisor = 32
-    # Don't persist an explicit `size` for GLPN (slow doesn't)
+    #Don't persist an explicit `size` for GLPN (slow doesn't)
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 480, "width": 640}  # only for validation; we still crop, not resize
     interpolation = F.InterpolationMode.BILINEAR
-    valid_kwargs = GLPNImageProcessorKwargs
+    #valid_kwargs = GLPNImageProcessorKwargs
 
-    # If BaseImageProcessorFast supports it, this makes persistence explicit:
+    #If BaseImageProcessorFast supports it, this makes persistence explicit:
     try:
         config_keys = {"do_resize", "size_divisor", "resample", "do_rescale"}
     except Exception:
         pass
 
-    def __init__(self, **kwargs: GLPNImageProcessorKwargs) -> None:
+    def __init__(self, **kwargs) -> None:
         if "ensure_multiple_of" in kwargs and "size_divisor" not in kwargs:
             kwargs = dict(kwargs)
             kwargs["size_divisor"] = kwargs.pop("ensure_multiple_of")
-        # ensure resample default for validation
+        #ensure resample default for validation
         kwargs.setdefault("resample", PILImageResampling.BILINEAR)
         super().__init__(**kwargs)
 
@@ -97,7 +97,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         new_w = (w // size_divisor) * size_divisor
         if (new_h, new_w) == (h, w):
             return images
-        # Use top-left crop to mirror typical behavior; slow doesn't center-crop.
+        #Use top-left crop to mirror typical behavior; slow doesn't center-crop.
         return images[..., :new_h, :new_w]
 
     def _preprocess(
@@ -123,7 +123,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         - rescale [0,1]
         - normalize (off by default)
         """
-        # 🔹 avoid validation error: inject dummy size/resample for validate_preprocess_arguments
+        #avoid validation error: inject dummy size/resample for validate_preprocess_arguments
         if size is None:
             size = {"height": 480, "width": 640}
         if resample is None and interpolation is None:
@@ -148,51 +148,36 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
             # Detect heterogeneous shapes
             shapes = {tuple(img.shape) for img in reordered}
             if len(shapes) == 1:
-                # all images same shape -> safe to stack
+                # All images same shape -> safe to stack
                 processed = torch.stack(reordered, dim=0)
                 tensor_type = return_tensors
             else:
-                # mimic slow processor: leave as list so BatchFeature won't tensorize
-                processed = [img.cpu().numpy() for img in reordered]
-                tensor_type = None
+                # Keep as list of tensors - can't stack due to heterogeneous shapes
+                processed = reordered  # Already torch tensors, keep them that way
+                tensor_type = None  # Signal BatchFeature not to try converting
         else:
             processed = reordered
             tensor_type = None
 
         return BatchFeature(data={"pixel_values": processed}, tensor_type=tensor_type)
 
-    # 🔹 ensure only slow keys are serialized
+    #ensure only slow keys are serialized
     def to_dict(self):
         d = super().to_dict()
-
-        # ✅ Keep identity metadata so AutoImageProcessor can load fast directly
-        keep_always = {"image_processor_type", "processor_class"}
-
-        # ✅ Keys that should persist with value (slow-compatible)
-        keep_values = {"do_resize", "size_divisor", "resample", "do_rescale", "default_to_square", "data_format"}
-
-        # ❌ Fast-only or confusing-on-disk: null them out to satisfy test expectations
-        null_out = {
-            "size",  # validator-only; we crop anyway
-            "ensure_multiple_of",  # alias we accepted in __init__
-            "interpolation",  # runtime helper for validator
-            "image_mean",
-            "image_std",
-            "do_normalize",  # GLPN slow doesn’t persist these by default
+        
+        # Keep only these keys with their values (everything else gets set to None)
+        keys_to_keep = {
+            "image_processor_type", "_processor_class",  # Identity metadata
+            "do_resize", "size_divisor", "resample", "do_rescale",  # Core GLPN params
+            "default_to_square", "data_format"  # Fast processor params
         }
-
-        # Build filtered dict:
-        out = {}
-        for k, v in d.items():
-            if k in keep_always or k in keep_values:
-                out[k] = v
-            elif k in null_out:
-                out[k] = None
-            else:
-                # For any other unexpected fast-only keys, set None to be safe
-                out[k] = None
-
-        return out
+        
+        # Set all other keys to None (don't persist their values)
+        for key in list(d.keys()):
+            if key not in keys_to_keep:
+                d[key] = None
+        
+        return d
 
     @torch.no_grad()
     def post_process_depth_estimation(self, outputs, target_sizes=None):
@@ -203,27 +188,31 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         requires_backends(self, "torch")
         predicted_depth = outputs.predicted_depth  # shape: (B, H, W) or (B, 1, H, W)
 
-        # Normalize shape to (B, H, W)
+        """#Normalize shape to (B, H, W)
         if predicted_depth.ndim == 4 and predicted_depth.shape[1] == 1:
             predicted_depth = predicted_depth.squeeze(1)
         elif predicted_depth.ndim == 3:
             pass
         else:
-            # fallback: ensure (B, H, W)
+            #fallback: ensure (B, H, W)
             if predicted_depth.ndim == 4:
                 predicted_depth = predicted_depth[:, 0, ...]
             else:
                 raise ValueError("Unexpected depth prediction shape")
+        """
 
         results = []
         target_sizes = target_sizes or [None] * predicted_depth.shape[0]
-        for depth, tgt in zip(predicted_depth, target_sizes):
-            if tgt is not None:
-                # slow adds [None, None, ...], interpolates, then squeezes
-                d = depth[None, None, ...]
-                d = torch.nn.functional.interpolate(d, size=tgt, mode="bicubic", align_corners=False)
-                depth = d.squeeze(0).squeeze(0)
+        for depth, target_size in zip(predicted_depth, target_sizes):
+            if target_size is not None:
+                # Add batch and channel dimensions for interpolation
+                depth_4d = depth[None, None, ...]
+                resized = torch.nn.functional.interpolate(
+                    depth_4d, size=target_size, mode="bicubic", align_corners=False
+                )
+                depth = resized.squeeze(0).squeeze(0)
             results.append({"predicted_depth": depth})
+
         return results
 
 
