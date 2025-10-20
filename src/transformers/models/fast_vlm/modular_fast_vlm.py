@@ -245,12 +245,12 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, FastVlmForConditionalGeneration
+        >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> import torch
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        >>> model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B").to(device)
+        >>> model = AutoModelForImageTextToText.from_pretrained("KamilaMila/FastVLM-0.5B").to(device)
         >>> processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
         >>> conversation = [

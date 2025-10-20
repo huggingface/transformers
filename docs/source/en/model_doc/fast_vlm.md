@@ -43,6 +43,20 @@ The original code can be found [here](https://github.com/apple/ml-fastvlm).
 
 - Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
 
+**Important: **
+
+Hugging Face models use SDPA by default; however, this model’s visual backbone supports only eager attention, so it automatically falls back to `"eager"`.
+
+If you want to use a different attention implementation in the language decoder, make sure to set it explicitly, for example:
+
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"})`
+
+Setting it for the entire model, e.g.
+
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2")`
+
+will result in an error.
+
 ### Formatting Prompts with Chat Templates  
 
 Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.  
