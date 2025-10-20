@@ -33,6 +33,7 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaModel,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -52,6 +53,10 @@ class DiffLlamaMLP(MistralMLP):
 
 def lambda_init_fn(layer_idx):
     return 0.8 - 0.6 * math.exp(-0.3 * layer_idx)
+
+
+class DiffLlamaRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 class DiffLlamaAttention(nn.Module):
@@ -76,7 +81,6 @@ class DiffLlamaAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         # under this are not used
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
         self.is_causal = True
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)

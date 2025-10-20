@@ -363,6 +363,10 @@ class LightGluePositionalEncoder(nn.Module):
 
 
 class LightGlueAttention(LlamaAttention):
+    def __init__(self, config: LightGlueConfig, layer_idx: int):
+        super().__init__()
+        del self.rotary_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -583,6 +587,7 @@ class LightGluePreTrainedModel(PreTrainedModel):
     config: LightGlueConfig
     base_model_prefix = "lightglue"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
     _supports_sdpa = True

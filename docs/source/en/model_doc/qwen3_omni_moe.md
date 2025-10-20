@@ -271,6 +271,7 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct", mi
 ```
 
 #### Prompt for audio output
+
 If users need audio output, the system prompt must be set as "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.", otherwise the audio output may not work as expected.
 
 ```json
@@ -307,6 +308,7 @@ text_ids = model.generate(**inputs, return_audio=False)
 ```
 
 #### Change voice type of output audio
+
 Qwen3-Omni-MOE supports the ability to change the voice of the output audio. Users can use the `spk` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen3-Omni-30B-A3B-Instruct"` checkpoint support two voice types: `Chelsie` and `Ethan`, while `Chelsie` is a female voice and `Ethan` is a male voice. By default, if `spk` is not specified, the default voice type is `Chelsie`.
 
 ```python

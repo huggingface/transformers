@@ -350,10 +350,8 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
 
-    fx_compatible = False
     test_missing_keys = False
 
-    test_torchscript = False
     pipeline_model_mapping = (
         {
             "feature-extraction": MptModel,

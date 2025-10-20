@@ -464,6 +464,7 @@ class VisualBertPreTrainingHeads(nn.Module):
 class VisualBertPreTrainedModel(PreTrainedModel):
     config: VisualBertConfig
     base_model_prefix = "visual_bert"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):

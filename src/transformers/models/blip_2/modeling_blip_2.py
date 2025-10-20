@@ -391,6 +391,7 @@ class Blip2EncoderLayer(GradientCheckpointingLayer):
 class Blip2PreTrainedModel(PreTrainedModel):
     config: Blip2Config
     base_model_prefix = "blip"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -473,6 +474,7 @@ class Blip2Encoder(nn.Module):
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->Blip2, BLIP->BLIP_2
 class Blip2VisionModel(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     config: Blip2VisionConfig
     _can_record_outputs = {
         "hidden_states": Blip2EncoderLayer,
@@ -1455,6 +1457,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 @auto_docstring
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
 
@@ -1926,6 +1929,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
 
