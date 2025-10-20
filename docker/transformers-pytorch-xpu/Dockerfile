@@ -71,11 +71,6 @@ RUN pip install torch==2.8.0+xpu torchvision==0.23.0+xpu torchaudio==2.8.0+xpu -
 
 RUN pip install torchcodec torchdata --no-cache-dir
 
-RUN pip install evaluate torchdata pyctcdecode pytesseract decord galore-torch fire scipy scikit-learn sentencepiece sacremoses nltk rouge_score librosa soundfile g2p_en mpi4py requests_mock
-RUN pip install pretty_midi essentia resampy Levenshtein av sacrebleu phonemizer invisible_watermark schedulefree
-RUN pip install gguf hqq compressed_tensors gptqmodel mergekit autoawq deepspeed torchao onnx
-RUN pip install hf_transfer huggingface-hub hf-doc-builder datasets optimum-quanto timm transformers accelerate optimum peft
-
 RUN pip install evaluate pyctcdecode pytesseract decord galore-torch fire scipy scikit-learn sentencepiece sacremoses nltk rouge_score librosa soundfile g2p_en mpi4py requests_mock
 RUN pip install pretty_midi essentia resampy Levenshtein av sacrebleu phonemizer invisible_watermark schedulefree setuptools
 RUN pip install gptqmodel --no-build-isolation
