@@ -26,7 +26,6 @@ from PIL import Image
 
 # Import MetaCLIP modules
 from src.mini_clip.factory import create_model_and_transforms
-
 from transformers import (
     AutoTokenizer,
     CLIPImageProcessor,

@@ -36,7 +36,7 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
@@ -396,8 +396,6 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -406,37 +404,20 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             pre-training.
         """
 
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
-
-        collected_hidden_states: Optional[list[torch.Tensor]] = None
-
-        if output_hidden_states:
-            collected_hidden_states = [hidden_states]
 
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(
                 hidden_states,
                 position_embeddings=position_embeddings,
             )
-            if output_hidden_states:
-                collected_hidden_states.append(hidden_states)
 
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
 
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=tuple(collected_hidden_states) if output_hidden_states else None,
-        )
+        return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
 
 
 @auto_docstring
@@ -445,63 +426,73 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
         super().__init__(config)
         super()._init_backbone(config)
 
-        self.dinov3 = DINOv3ViTModel(config)
+        self.embeddings = DINOv3ViTEmbeddings(config)
+        self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
+        self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.gradient_checkpointing = False
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.dinov3.get_input_embeddings()
-
-    def _tokens_to_bchw(self, tokens: torch.Tensor, H: int, W: int) -> torch.Tensor:
-        # tokens: [B, N, C] -> [B, C, H, W], where N == H*W
-        B, N, C = tokens.shape
-        return tokens.reshape(B, H, W, C).permute(0, 3, 1, 2).contiguous()
+        return self.embeddings.patch_embeddings
 
     @check_model_inputs
+    @can_return_tuple
     def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
-        return_dict = kwargs.get("return_dict", getattr(self.config, "use_return_dict", True))
-
-        outputs = self.dinov3(pixel_values, output_hidden_states=True)
-        hidden_states = outputs.hidden_states
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        B, C_in, H_img, W_img = pixel_values.shape
-        patch = self.config.patch_size
-        H = H_img // patch
-        W = W_img // patch
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
+        hidden_states = self.embeddings(pixel_values)
+        position_embeddings = self.rope_embeddings(pixel_values)
+
+        stage_hidden_states: list[torch.Tensor] = [hidden_states]
+
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings)
+            stage_hidden_states.append(hidden_states)
+
+        sequence_output = self.norm(hidden_states)
+        stage_hidden_states[-1] = sequence_output
+
+        batch_size, _, image_height, image_width = pixel_values.shape
+        patch_size = self.config.patch_size
+        num_patches_height = image_height // patch_size
+        num_patches_width = image_width // patch_size
 
         num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
 
         feature_maps = []
-        for stage_name, hidden_state in zip(self.stage_names, hidden_states):
+        for stage_name, hidden_state in zip(self.stage_names, stage_hidden_states):
             if stage_name in self.out_features:
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
 
                 patch_tokens = hidden_state[:, num_prefix:, :]
                 if self.config.reshape_hidden_states:
-                    fmap = self._tokens_to_bchw(patch_tokens, H, W)  # [B, C, H, W]
+                    fmap = (
+                        patch_tokens.reshape(batch_size, num_patches_height, num_patches_width, patch_tokens.shape[-1])
+                        .permute(0, 3, 1, 2)
+                        .contiguous()
+                    )
                 else:
                     fmap = patch_tokens
 
                 feature_maps.append(fmap)
 
-        if not return_dict:
-            output = (tuple(feature_maps),)
-            if output_hidden_states:
-                output = output + (hidden_states,)
-            return output
+        output = BackboneOutput(feature_maps=tuple(feature_maps))
+        output.last_hidden_state = sequence_output
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states if output_hidden_states else None,
-        )
+        return output
 
 
 __all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel", "DINOv3ViTBackbone"]

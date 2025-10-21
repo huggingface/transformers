@@ -140,9 +140,6 @@ class DINOv3ViTModelTester:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if model_class == DINOv3ViTBackbone:
-                continue
-
             model = model_class(config)
             model.to(torch_device)
             model.eval()
