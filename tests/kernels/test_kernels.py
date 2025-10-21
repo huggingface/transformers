@@ -15,8 +15,19 @@
 # Run the test: CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/kernels/test_kernels.py
 import copy
 import gc
+import types
+import unittest
+from unittest.mock import patch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
+from transformers.integrations.hub_kernels import (
+    _KERNEL_MODULE_MAPPING,
+    _HUB_KERNEL_MAPPING,
+    is_kernel,
+    lazy_load_kernel,
+    load_and_register_attn_kernel,
+)
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.testing_utils import (
     TestCasePlus,
     backend_empty_cache,
@@ -28,7 +39,9 @@ from transformers.utils import is_kernels_available
 
 
 if is_kernels_available():
+    import kernels as kernels_pkg
     from kernels import Device, Mode, kernelize
+
 
 @require_kernels
 class TestHubKernels(TestCasePlus):
@@ -42,7 +55,6 @@ class TestHubKernels(TestCasePlus):
             self.model_id, use_kernels=False, device_map=torch_device
         )
         self.input = "Hello"
-
 
     def tearDown(self):
         gc.collect()
@@ -146,6 +158,7 @@ class TestHubKernels(TestCasePlus):
         )
 
         self.assertFalse(model.use_kernels)
+        del model
 
     def test_kernels_mapping(self):
         kernel_config = KernelConfig(kernel_mapping={"RMSNorm": "kernels-community/layer_norm:LlamaRMSNorm"})
@@ -176,3 +189,158 @@ class TestHubKernels(TestCasePlus):
             _ = AutoModelForCausalLM.from_pretrained(
                 "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
             )
+
+
+@require_kernels
+class TestKernelUtilities(TestCasePlus):
+    def test_is_kernel_regex(self):
+        valid = [
+            "org/model",
+            "org/model@main",
+            "org/model:my_func",
+            "org/model@v1.2.3:my_func",
+            "flash|org/model@rev:fn",
+        ]
+        invalid = [
+            "org//model",
+            "org/model:too:many",
+            "org/model@rev:fn:extra",
+            "/org/model",
+            "org:model",
+        ]
+        for s in valid:
+            self.assertTrue(is_kernel(s.split("|")[-1]))
+        for s in invalid:
+            self.assertFalse(is_kernel(s))
+
+    def test_lazy_load_kernel_success_and_cache(self):
+        sentinel = types.SimpleNamespace(name="sentinel")
+
+        original_get_kernel = getattr(kernels_pkg, "get_kernel")
+        try:
+
+            def fake_get_kernel(repo_id, revision=None):
+                self.assertIn(repo_id, {"kernels-community/causal-conv1d"})
+                return sentinel
+
+            setattr(kernels_pkg, "get_kernel", fake_get_kernel)
+            _KERNEL_MODULE_MAPPING.pop("causal-conv1d", None)
+
+            mod1 = lazy_load_kernel("causal-conv1d")
+            self.assertIs(mod1, sentinel)
+            mod2 = lazy_load_kernel("causal-conv1d")
+            self.assertIs(mod2, sentinel)
+        finally:
+            setattr(kernels_pkg, "get_kernel", original_get_kernel)
+
+    def test_lazy_load_kernel_unknown(self):
+        name = "unknown-kernel-name"
+        _KERNEL_MODULE_MAPPING.pop(name, None)
+        mod = lazy_load_kernel(name)
+        self.assertIsNone(mod)
+        self.assertIn(name, _KERNEL_MODULE_MAPPING)
+
+    def test_lazy_load_kernel_version(self):
+        HUB = _HUB_KERNEL_MAPPING
+        name = "causal-conv1d"
+        version_spec = ">=0.0.4,<0.1.0"
+        original_get_kernel = getattr(kernels_pkg, "get_kernel")
+        original_entry = HUB.get(name, None)
+
+        # Use a real ModuleType so caching short-circuits on the second call
+        sentinel_mod = types.ModuleType("sentinel_kernel_module")
+        call_count = {"n": 0}
+
+        try:
+            # Inject dict-style mapping with repo_id and version
+            HUB[name] = {"repo_id": "kernels-community/causal-conv1d", "version": version_spec}
+            _KERNEL_MODULE_MAPPING.pop(name, None)
+
+            def fake_get_kernel(repo_id, revision=None, version=None, user_agent=None):
+                call_count["n"] += 1
+                self.assertEqual(repo_id, "kernels-community/causal-conv1d")
+                self.assertIsNone(revision, "revision must not be set when version is provided")
+                self.assertEqual(version, version_spec)
+                return sentinel_mod
+
+            # Patch kernels.get_kernel so lazy_load_kernel picks it up on import
+            setattr(kernels_pkg, "get_kernel", fake_get_kernel)
+
+            # Act
+            mod1 = lazy_load_kernel(name)
+            mod2 = lazy_load_kernel(name)
+
+            # Assert
+            self.assertIs(mod1, sentinel_mod)
+            self.assertIs(mod2, sentinel_mod)
+            self.assertEqual(call_count["n"], 1, "second call should hit the cache")
+        finally:
+            # Restore patched function and mapping to avoid side effects
+            setattr(kernels_pkg, "get_kernel", original_get_kernel)
+            if original_entry is None:
+                HUB.pop(name, None)
+            else:
+                HUB[name] = original_entry
+            _KERNEL_MODULE_MAPPING.pop(name, None)
+       
+
+@require_kernels
+class TestAttentionKernelRegistration(TestCasePlus):
+    def test_load_and_register_flash_attn_like_kernel(self):
+        kernel_obj = types.SimpleNamespace(flash_attn_varlen_func=lambda *a, **k: None)
+
+        with (
+            patch("transformers.integrations.hub_kernels.get_kernel", return_value=kernel_obj),
+            patch("transformers.integrations.hub_kernels.lazy_import_flash_attention", return_value=None),
+        ):
+            attn_impl = "org/model"
+            load_and_register_attn_kernel(attn_impl)
+            self.assertIn(attn_impl, ALL_ATTENTION_FUNCTIONS.valid_keys())
+
+    def test_load_and_register_named_function_kernel(self):
+        def my_attention(*args, **kwargs):
+            return None
+
+        kernel_obj = types.SimpleNamespace(my_func=my_attention)
+        with patch("transformers.integrations.hub_kernels.get_kernel", return_value=kernel_obj):
+            attn_impl = "org/model:my_func"
+            load_and_register_attn_kernel(attn_impl)
+            self.assertIn(attn_impl, ALL_ATTENTION_FUNCTIONS.valid_keys())
+
+
+@require_kernels
+class TestUseKernelsLifecycle(TestCasePlus):
+    def setUp(self):
+        self.model_id = "unsloth/Llama-3.2-1B-Instruct"
+        self.model = AutoModelForCausalLM.from_pretrained(self.model_id, use_kernels=False, device_map=torch_device)
+
+    def tearDown(self):
+        gc.collect()
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    def test_setting_use_kernels_twice_does_not_rekernelize(self):
+        call_count = {"n": 0}
+
+        def spy_kernelize(*args, **kwargs):
+            call_count["n"] += 1
+
+        with patch.object(kernels_pkg, "kernelize", side_effect=spy_kernelize):
+            self.model.use_kernels = True
+            self.assertTrue(self.model.use_kernels)
+            self.assertEqual(call_count["n"], 1)
+            self.model.use_kernels = True
+            self.assertEqual(call_count["n"], 1)
+
+    def test_train_eval_calls_kernelize_with_correct_mode(self):
+        last_modes = []
+
+        def spy_kernelize(model, device=None, mode=None):
+            last_modes.append(mode)
+
+        with patch.object(kernels_pkg, "kernelize", side_effect=spy_kernelize):
+            self.model.use_kernels = True
+            self.model.train(True)
+            self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
+            self.model.eval()
+            self.assertTrue(any(m == Mode.INFERENCE for m in last_modes))
