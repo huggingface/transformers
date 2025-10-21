@@ -395,10 +395,10 @@ class TrainingArguments:
         dataloader_num_workers (`int`, *optional*, defaults to 0):
             Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
             main process.
-        run_name (`str`, *optional*, defaults to `output_dir`):
+        run_name (`str`, *optional*):
             A descriptor for the run. Typically used for [trackio](https://github.com/gradio-app/trackio),
             [wandb](https://www.wandb.com/), [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and
-            [swanlab](https://swanlab.cn) logging. If not specified, will be the same as `output_dir`.
+            [swanlab](https://swanlab.cn) logging.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -752,6 +752,10 @@ class TrainingArguments:
             Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
             num_tokens_in_batch for precise loss calculation. Reference:
             https://github.com/huggingface/transformers/issues/34242
+
+        use_cache (`bool`, *optional*, defaults to `False`):
+            Whether or not to enable cache for the model. For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`.
+
     """
 
     # Sometimes users will pass in a `str` repr of a dict in the CLI
@@ -1379,6 +1383,13 @@ class TrainingArguments:
             "help": "Whether or not to average tokens across devices. If enabled, will use all_reduce to "
             "synchronize num_tokens_in_batch for precise loss calculation. Reference: "
             "https://github.com/huggingface/transformers/issues/34242"
+        },
+    )
+
+    use_cache: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to use cache for the model For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`."
         },
     )
 
@@ -2212,7 +2223,7 @@ class TrainingArguments:
         Sanitized serialization to use with TensorBoard's hparams
         """
         d = self.to_dict()
-        d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}
+        d = {**d, "train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}
 
         valid_types = [bool, int, float, str]
         if is_torch_available():

@@ -305,7 +305,6 @@ docs/source/en/tasks/visual_question_answering.md
 docs/source/en/tasks/zero_shot_image_classification.md
 docs/source/en/tasks/zero_shot_object_detection.md
 docs/source/en/tokenizer_summary.md
-docs/source/en/torchscript.md
 docs/source/en/training.md
 docs/source/en/troubleshooting.md
 src/transformers/activations.py
@@ -798,7 +797,6 @@ src/transformers/utils/dummy_sentencepiece_objects.py
 src/transformers/utils/dummy_speech_objects.py
 src/transformers/utils/dummy_tokenizers_objects.py
 src/transformers/utils/dummy_vision_objects.py
-src/transformers/utils/fx.py
 src/transformers/utils/generic.py
 src/transformers/utils/hp_naming.py
 src/transformers/utils/hub.py

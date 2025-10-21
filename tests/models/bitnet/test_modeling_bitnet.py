@@ -142,8 +142,6 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
 
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
-
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
         self,
