@@ -170,7 +170,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     _is_composite = True
 

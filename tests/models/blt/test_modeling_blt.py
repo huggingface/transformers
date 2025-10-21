@@ -168,7 +168,6 @@ class BltModelTester(CausalLMModelTester):
 
 @require_torch
 class BltModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False
     model_tester_class = BltModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`

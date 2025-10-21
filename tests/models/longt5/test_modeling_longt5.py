@@ -506,7 +506,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = True
     is_encoder_decoder = True

@@ -163,7 +163,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
                 )
             max_frames = math.floor(min(max_frames, total_num_frames) / temporal_patch_size) * temporal_patch_size
             num_frames = total_num_frames / metadata.fps * fps
-            num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
+            num_frames = min(max(num_frames, min_frames), max_frames, total_num_frames)
             num_frames = math.floor(num_frames / temporal_patch_size) * temporal_patch_size
 
         if num_frames > total_num_frames:

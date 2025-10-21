@@ -46,7 +46,9 @@ PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
 def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str] | bool:
     """Check if `pkg_name` exist, and optionally try to get its version"""
-    package_exists = importlib.util.find_spec(pkg_name) is not None
+    spec = importlib.util.find_spec(pkg_name)
+    # the spec might be not None but not importable
+    package_exists = spec is not None and spec.loader is not None
     package_version = "N/A"
     if package_exists and return_version:
         try:
@@ -1256,6 +1258,25 @@ def is_torch_fx_proxy(x):
         return isinstance(x, torch.fx.Proxy)
     except Exception:
         return False
+
+
+def is_jit_tracing() -> bool:
+    try:
+        import torch
+
+        return torch.jit.is_tracing()
+    except Exception:
+        return False
+
+
+def is_tracing(tensor=None) -> bool:
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, or torch.fx"""
+    # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
+    # only checks export)
+    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing()
+    if tensor is not None:
+        _is_tracing |= is_torch_fx_proxy(tensor)
+    return _is_tracing
 
 
 @lru_cache

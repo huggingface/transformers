@@ -120,8 +120,7 @@ from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
-    is_torch_fx_proxy,
-    is_torchdynamo_compiling,
+    is_tracing,
 )
 from .utils.quantization_config import QuantizationMethod
 
@@ -4934,7 +4933,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
 
         # Skip the check during tracing.
-        if is_torch_fx_proxy(input_ids) or torch.jit.is_tracing() or is_torchdynamo_compiling():
+        if is_tracing(input_ids):
             return
 
         if (attention_mask is not None) or (self.config.pad_token_id is None):
@@ -5402,9 +5401,7 @@ class PreTrainedAudioTokenizerBase(PreTrainedModel):
         """
         Encode raw audio retrieved from a respective `FeatureExtractor` into discrete audio codebooks (with x channels)
         """
-        pass
 
     @abstractmethod
     def decode(self, audio_codes: torch.Tensor, *args, **kwargs):
         """Decode from discrete audio codebooks back to raw audio"""
-        pass
