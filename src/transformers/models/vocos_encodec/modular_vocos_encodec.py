@@ -13,13 +13,15 @@
 # limitations under the License.
 
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ..vocos.modeling_vocos import VocosPreTrainedModel, VocosModel, VocosOutput, VocosConvNeXtBlock
-from .configuration_vocos_encodec import VocosEncodecConfig
+
 from ...utils import auto_docstring, can_return_tuple
-from typing import Optional
+from ..vocos.modeling_vocos import VocosConvNeXtBlock, VocosModel, VocosOutput, VocosPreTrainedModel
+from .configuration_vocos_encodec import VocosEncodecConfig
 
 
 class VocosEncodecOutput(VocosOutput):
