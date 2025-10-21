@@ -19,7 +19,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -42,7 +43,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_t5gemma import T5GemmaConfig, T5GemmaModuleConfig
 
@@ -92,22 +92,51 @@ class T5GemmaMLP(nn.Module):
 class T5GemmaRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config, device=None):
+    def __init__(self, config: T5GemmaConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[T5GemmaConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -211,6 +240,7 @@ class T5GemmaSelfAttention(nn.Module):
 
     def __init__(self, config: T5GemmaModuleConfig, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -233,14 +263,13 @@ class T5GemmaSelfAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -313,7 +342,6 @@ class T5GemmaCrossAttention(nn.Module):
         if config.cross_attention_hidden_size is None:
             raise ValueError("Cross-attention needs cross_attention_hidden_size to be specified.")
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -331,7 +359,7 @@ class T5GemmaCrossAttention(nn.Module):
 
         if past_key_values is not None:
             is_updated = past_key_values.is_updated.get(self.layer_idx)
-            curr_past_key_value = past_key_values.cross_attention_cache
+            curr_past_key_values = past_key_values.cross_attention_cache
 
         if past_key_values is None or not is_updated:
             encoder_input_shape = encoder_hidden_states.shape[:-1]
@@ -340,11 +368,11 @@ class T5GemmaCrossAttention(nn.Module):
             value_states = self.v_proj(encoder_hidden_states).view(encoder_hidden_shape).transpose(1, 2)
 
             if past_key_values is not None:
-                key_states, value_states = curr_past_key_value.update(key_states, value_states, self.layer_idx)
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 past_key_values.is_updated[self.layer_idx] = True
         else:
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -394,7 +422,7 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -429,11 +457,10 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         self.pre_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
@@ -625,18 +652,18 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.norm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList(
             [T5GemmaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.dropout = nn.Dropout(config.dropout_rate)
+        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -684,11 +711,11 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
         hidden_states = self.dropout(hidden_states)
+
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
@@ -717,10 +744,11 @@ class T5GemmaDecoder(T5GemmaEncoder):
         self.layers = nn.ModuleList(
             [T5GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -787,11 +815,11 @@ class T5GemmaDecoder(T5GemmaEncoder):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
         hidden_states = self.dropout(hidden_states)
+
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
@@ -959,7 +987,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     def _tie_weights(self):
         # Decoder input and output embeddings are tied.
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
+            self._tie_embedding_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
 
     def get_encoder(self):
         return self.model.encoder

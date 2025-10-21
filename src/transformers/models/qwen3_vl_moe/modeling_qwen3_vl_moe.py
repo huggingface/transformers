@@ -19,8 +19,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -37,8 +38,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 
@@ -62,25 +62,6 @@ class Qwen3VLMoeTextRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class Qwen3VLMoeTextRouter(nn.Linear):
-    def __init__(self, config):
-        super().__init__(config.hidden_size, config.num_experts, bias=False)
-        self.hidden_size = config.hidden_size
-        self.top_k = config.num_experts_per_tok
-        # since all the models use norm_topk_prob, we don't need to have a extra check for it
-        # self.norm_topk_prob = config.norm_topk_prob
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.reshape(-1, self.hidden_size)
-        router_logits = super().forward(hidden_states)
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
-        routing_weights, router_indices = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
-        router_weights = torch.zeros_like(router_logits).scatter_(1, router_indices, routing_weights)
-        return router_weights, router_logits, router_indices
 
 
 class Qwen3VLMoeTextExperts(nn.Module):
@@ -150,13 +131,25 @@ class Qwen3VLMoeTextSparseMoeBlock(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_experts = config.num_experts
-        self.gate = Qwen3VLMoeTextRouter(config)
+        self.top_k = config.num_experts_per_tok
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = Qwen3VLMoeTextExperts(config)
 
+        # since all the models use norm_topk_prob, we don't need to have a extra check for it
+        # self.norm_topk_prob = config.norm_topk_prob
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        router_weights, router_logits, router_indices = self.gate(hidden_states)
+        batch_size = hidden_states.shape[0]
+        hidden_states = hidden_states.reshape(-1, self.hidden_size)
+        router_logits = self.gate(hidden_states)
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
+        routing_weights, router_indices = torch.topk(routing_weights, self.top_k, dim=-1)
+        routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
+        routing_weights = routing_weights.to(router_logits.dtype)
+        router_weights = torch.zeros_like(router_logits).scatter_(1, router_indices, routing_weights)
+        hidden_states = hidden_states.reshape(batch_size, -1, self.hidden_size)
         routed_out = self.experts(hidden_states, router_weights, router_indices)
-        return routed_out, router_logits
+        return routed_out
 
 
 def rotate_half(x):
@@ -236,6 +229,7 @@ class Qwen3VLMoeTextAttention(nn.Module):
 
     def __init__(self, config: Qwen3VLMoeTextConfig, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -263,7 +257,6 @@ class Qwen3VLMoeTextAttention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -313,7 +306,7 @@ class Qwen3VLMoeTextMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -327,67 +320,39 @@ class Qwen3VLMoeTextMLP(nn.Module):
 class Qwen3VLMoeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3VLMoeTextConfig, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
-
         self.self_attn = Qwen3VLMoeTextAttention(config, layer_idx)
-
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
         ):
             self.mlp = Qwen3VLMoeTextSparseMoeBlock(config)
         else:
             self.mlp = Qwen3VLMoeTextMLP(config, intermediate_size=config.intermediate_size)
-
         self.input_layernorm = Qwen3VLMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3VLMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.hidden_size = config.hidden_size
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> torch.FloatTensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_router_logits (`bool`, *optional*):
-                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
-                and should not be returned during inference.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -396,11 +361,7 @@ class Qwen3VLMoeTextDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        # For the MoE layers, we need to unpack
-        if isinstance(hidden_states, tuple):
-            hidden_states, _ = hidden_states
         hidden_states = residual + hidden_states
-
         return hidden_states
 
 
@@ -417,7 +378,7 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3VLMoeTextSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
         "hidden_states": Qwen3VLMoeTextDecoderLayer,
         "attentions": Qwen3VLMoeTextAttention,
     }
@@ -701,6 +662,7 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
 
     def fast_pos_embed_interpolate(self, grid_thw):
         grid_ts, grid_hs, grid_ws = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
+        device = grid_thw.device
 
         idx_list = [[] for _ in range(4)]
         weight_list = [[] for _ in range(4)]
@@ -738,11 +700,9 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
                 idx_list[i].extend(indices[i].tolist())
                 weight_list[i].extend(weights[i].tolist())
 
-        idx_tensor = torch.tensor(idx_list, dtype=torch.long, device=self.pos_embed.weight.device)
-        weight_tensor = torch.tensor(
-            weight_list, dtype=self.pos_embed.weight.dtype, device=self.pos_embed.weight.device
-        )
-        pos_embeds = self.pos_embed(idx_tensor) * weight_tensor[:, :, None]
+        idx_tensor = torch.tensor(idx_list, dtype=torch.long, device=device)
+        weight_tensor = torch.tensor(weight_list, dtype=self.pos_embed.weight.dtype, device=device)
+        pos_embeds = self.pos_embed(idx_tensor).to(device) * weight_tensor[:, :, None]
         patch_pos_embeds = pos_embeds[0] + pos_embeds[1] + pos_embeds[2] + pos_embeds[3]
 
         patch_pos_embeds = patch_pos_embeds.split([h * w for h, w in zip(grid_hs, grid_ws)])
@@ -818,38 +778,51 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
 
     def __init__(self, config: Qwen3VLMoeTextConfig, device=None):
         super().__init__()
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", "default")
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
 
-        self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
+        self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
-    def apply_interleaved_mrope(self, freqs, mrope_section):
-        """Apply interleaved MRoPE to 3D rotary embeddings.
-        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
-        interleaved [THTHWHTHW...TT], preserving frequency continuity.
-        args:
-            x: (3, bs, seq_len, head_dim // 2)
-            mrope_section: (3,)
-        returns:
-            x_t: (bs, seq_len, head_dim // 2)
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Qwen3VLMoeTextConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
         """
-        freqs_t = freqs[0]  # just overwrite the first dimension T
-        for dim, offset in enumerate((1, 2), start=1):  # H, W
-            length = mrope_section[dim] * 3
-            idx = slice(offset, length, 3)
-            freqs_t[..., idx] = freqs[dim, ..., idx]
-        return freqs_t
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -870,6 +843,23 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def apply_interleaved_mrope(self, freqs, mrope_section):
+        """Apply interleaved MRoPE to 3D rotary embeddings.
+        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
+        interleaved [THTHWHTHW...TT], preserving frequency continuity.
+        args:
+            x: (3, bs, seq_len, head_dim // 2)
+            mrope_section: (3,)
+        returns:
+            x_t: (bs, seq_len, head_dim // 2)
+        """
+        freqs_t = freqs[0]  # just overwrite the first dimension T
+        for dim, offset in enumerate((1, 2), start=1):  # H, W
+            length = mrope_section[dim] * 3
+            idx = slice(offset, length, 3)
+            freqs_t[..., idx] = freqs[dim, ..., idx]
+        return freqs_t
 
 
 @auto_docstring(
@@ -898,7 +888,7 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -997,9 +987,40 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
     ):
         visual_pos_masks = visual_pos_masks.to(hidden_states.device)
         visual_embeds = visual_embeds.to(hidden_states.device, hidden_states.dtype)
-        local_this = hidden_states[visual_pos_masks, :].clone() + visual_embeds
+        hidden_states = hidden_states.clone()
+        local_this = hidden_states[visual_pos_masks, :] + visual_embeds
         hidden_states[visual_pos_masks, :] = local_this
         return hidden_states
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Qwen3VLMoe causal language model (or autoregressive) outputs.
+    """
+)
+class Qwen3VLMoeCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[Cache] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    rope_deltas: Optional[torch.LongTensor] = None
+    aux_loss: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -1247,7 +1268,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         return special_image_mask, special_video_mask
 
     @auto_docstring
-    @can_return_tuple
+    @check_model_inputs()
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1378,39 +1399,90 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         return Qwen3VLMoeModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
         )
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Qwen3VLMoe causal language model (or autoregressive) outputs.
-    """
-)
-class Qwen3VLMoeCausalLMOutputWithPast(ModelOutput):
+def load_balancing_loss_func(
+    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
+    num_experts: Optional[int] = None,
+    top_k=2,
+    attention_mask: Optional[torch.Tensor] = None,
+) -> Union[torch.Tensor, int]:
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
     """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    rope_deltas: Optional[torch.LongTensor] = None
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
 
 
 class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMixin):
@@ -1456,8 +1528,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
     def visual(self):
         return self.model.visual
 
-    @can_return_tuple
-    @auto_docstring
+    @check_model_inputs()
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1485,8 +1556,46 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             The temporal, height and width of feature shape of each video in LLM.
 
         Example:
-            TODO: Add example
-        """
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Qwen3VLMoeForConditionalGeneration
+
+        >>> model = Qwen3VLMoeForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-30B-A3B-Instruct")
+
+        >>> messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                    },
+                    {"type": "text", "text": "Describe this image in short."},
+                ],
+            }
+        ]
+
+        >>> # Preparation for inference
+        >>> inputs = processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
+        >>> inputs = inputs.to(model.device)
+
+        >>> # Generate
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=128)
+        >>> generated_ids_trimmed = [
+            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        >>> processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "A woman in a plaid shirt sits on a sandy beach at sunset, smiling as she gives a high-five to a yellow Labrador Retriever wearing a harness. The ocean waves roll in the background."
+        ```"""
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1511,12 +1620,24 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
+        aux_loss = None
+        if kwargs.get("output_router_logits", False):
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.config.text_config.num_experts,
+                self.config.text_config.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.config.text_config.router_aux_loss_coef * aux_loss.to(
+                    loss.device
+                )  # make sure to reside in the same device
+
         return Qwen3VLMoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
 

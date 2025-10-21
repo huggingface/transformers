@@ -124,9 +124,10 @@ You can also use the model without the pipeline. To do so, initialize the model 
 the processor.
 
 ```python
-from transformers import SamModel, SamProcessor, infer_device
+from transformers import SamModel, SamProcessor
+from accelerate import Accelerator
 import torch
-device = infer_device()
+device = Accelerator().device
 model = SamModel.from_pretrained("facebook/sam-vit-base").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 ```

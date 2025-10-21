@@ -23,6 +23,7 @@ import math
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -34,26 +35,20 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torchvision_v2_available
+from ...utils import TensorType, add_start_docstrings
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_qwen2_vl import smart_resize
 
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    min_frames: Optional[int]
-    max_frames: Optional[int]
+class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
 
 
 @add_start_docstrings(
@@ -167,7 +162,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 )
             max_frames = math.floor(min(max_frames, total_num_frames) / temporal_patch_size) * temporal_patch_size
             num_frames = total_num_frames / metadata.fps * fps
-            num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
+            num_frames = min(max(num_frames, min_frames), max_frames, total_num_frames)
             num_frames = math.floor(num_frames / temporal_patch_size) * temporal_patch_size
 
         if num_frames > total_num_frames:

@@ -375,7 +375,7 @@ def write_model(
             eos_token_id = 2
 
         if llama_version in ["3.1", "3.2", "Guard-3"]:
-            rope_scaling = {
+            rope_parameters = {
                 "factor": 32.0 if llama_version == "3.2" else 8.0,
                 "low_freq_factor": 1.0,
                 "high_freq_factor": 4.0,
@@ -383,7 +383,7 @@ def write_model(
                 "rope_type": "llama3",
             }
         else:
-            rope_scaling = None
+            rope_parameters = None
 
         config = LlamaConfig(
             hidden_size=dim,
@@ -394,11 +394,11 @@ def write_model(
             num_key_value_heads=num_key_value_heads,
             vocab_size=vocab_size,
             rope_theta=base,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             max_position_embeddings=max_position_embeddings,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=llama_version in ["3.2"],
+            tie_word_embeddings=llama_version == "3.2",
         )
 
         config.save_pretrained(tmp_model_path)
@@ -451,7 +451,7 @@ class Llama3Converter(TikTokenConverter):
         # Prevents a null chat_template, which triggers
         # a parsing warning in the Hub.
         additional_kwargs = {}
-        if instruct or llama_version in ["Guard-3"]:
+        if instruct or llama_version == "Guard-3":
             model_id, revision = templates_for_version.get(llama_version, (None, None))
             if model_id is not None:
                 from transformers import AutoTokenizer

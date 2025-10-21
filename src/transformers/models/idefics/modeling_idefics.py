@@ -19,8 +19,9 @@
 # limitations under the License.
 """PyTorch Idefics model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -32,10 +33,9 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PretrainedConfig, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
@@ -485,7 +485,7 @@ class IdeficsAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_cross_attention: bool = False,
-        config: Optional[PretrainedConfig] = None,
+        config: Optional[PreTrainedConfig] = None,
         qk_layer_norms: bool = False,
         layer_idx: Optional[int] = None,
     ):
@@ -563,7 +563,6 @@ class IdeficsAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -651,7 +650,6 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.dropout = config.dropout
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     @auto_docstring
     def forward(
         self,
@@ -755,7 +753,6 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         if not (hasattr(self, "alpha_cross_attn") and hasattr(self, "alpha_dense")):
             raise ValueError("Alpha parameters not initialized correctly!")
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     @auto_docstring
     def forward(
         self,
@@ -820,6 +817,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
 class IdeficsPreTrainedModel(PreTrainedModel):
     config: IdeficsConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
@@ -943,7 +941,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
     def freeze_vision_layers(self, module_exceptions=[]):
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -997,7 +995,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         elif position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        if sum([x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]]) != 2:
+        if sum(x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
@@ -1162,6 +1160,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, IdeficsCausalLMOutputWithPast]:
         r"""
@@ -1201,8 +1200,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         >>> generate_ids = model.generate(**inputs, max_new_tokens=6)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True)
         ```"""
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: IdeficsBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1219,8 +1217,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

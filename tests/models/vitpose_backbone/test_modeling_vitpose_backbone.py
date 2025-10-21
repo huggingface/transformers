@@ -124,8 +124,7 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (VitPoseBackbone,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torch_exportable = True
 
@@ -140,11 +139,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
-
-    # TODO: @Pavel
-    @unittest.skip(reason="currently failing")
-    def test_initialization(self):
-        pass
 
     @unittest.skip(reason="VitPoseBackbone does not support input and output embeddings")
     def test_model_common_attributes(self):

@@ -76,6 +76,7 @@ if TYPE_CHECKING:
     from .csm import *
     from .ctrl import *
     from .cvt import *
+    from .cwm import *
     from .d_fine import *
     from .dab_detr import *
     from .dac import *
@@ -186,6 +187,7 @@ if TYPE_CHECKING:
     from .led import *
     from .levit import *
     from .lfm2 import *
+    from .lfm2_moe import *
     from .lfm2_vl import *
     from .lightglue import *
     from .lilt import *
@@ -350,6 +352,7 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .vaultgemma import *
+    from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
     from .vilt import *

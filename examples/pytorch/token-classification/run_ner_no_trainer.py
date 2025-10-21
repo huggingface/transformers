@@ -57,7 +57,7 @@ from transformers import (
     AutoModelForTokenClassification,
     AutoTokenizer,
     DataCollatorForTokenClassification,
-    PretrainedConfig,
+    PreTrainedConfig,
     SchedulerType,
     default_data_collator,
     get_scheduler,
@@ -454,7 +454,7 @@ def main():
         model.resize_token_embeddings(len(tokenizer))
 
     # Model has labels -> use them.
-    if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
+    if model.config.label2id != PreTrainedConfig(num_labels=num_labels).label2id:
         if sorted(model.config.label2id.keys()) == sorted(label_list):
             # Reorganize `label_list` to match the ordering of the model.
             if labels_are_int:

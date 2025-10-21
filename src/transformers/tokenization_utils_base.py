@@ -24,11 +24,11 @@ import os
 import re
 import warnings
 from collections import UserDict
-from collections.abc import Mapping, Sequence, Sized
+from collections.abc import Callable, Mapping, Sequence, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional, Union, overload
 
 import numpy as np
 from packaging import version
@@ -61,6 +61,7 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
+from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -913,7 +914,7 @@ class SpecialTokensMixin:
 
                 Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer
                 assign the index of the `unk_token` to them).
-            replace_additional_special_tokens (`bool`, *optional*,, defaults to `True`):
+            replace_additional_special_tokens (`bool`, *optional*, defaults to `True`):
                 If `True`, the existing list of additional special tokens will be replaced by the list provided in
                 `special_tokens_dict`. Otherwise, `self._special_tokens_map["additional_special_tokens"]` is just extended. In the former
                 case, the tokens will NOT be removed from the tokenizer's full vocabulary - they are only being flagged
@@ -1429,6 +1430,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
+        self.response_schema = kwargs.pop("response_schema", None)
+
         super().__init__(**kwargs)
 
         self.extra_special_tokens = kwargs.pop("extra_special_tokens", {})
@@ -1506,6 +1509,69 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             `dict[str, int]`: The vocabulary.
         """
         raise NotImplementedError()
+
+    # Case: tokenize=False → returns rendered string
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        tools: Optional[list[Union[dict, Callable]]] = None,
+        documents: Optional[list[dict[str, str]]] = None,
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        tokenize: Literal[False] = False,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_dict: bool = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenizer_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
+    ) -> str: ...
+
+    # Case: tokenize=True, return_dict=False, return_tensors=None → returns ids
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        tools: Optional[list[Union[dict, Callable]]] = None,
+        documents: Optional[list[dict[str, str]]] = None,
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        tokenize: Literal[True] = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Literal[None] = None,
+        return_dict: Literal[False] = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenizer_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
+    ) -> Union[list[int], list[list[int]]]: ...
+
+    # Case: tokenize=True, return_dict=True → returns BatchEncoding
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        tools: Optional[list[Union[dict, Callable]]] = None,
+        documents: Optional[list[dict[str, str]]] = None,
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        tokenize: Literal[True] = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_dict: Literal[True] = True,
+        return_assistant_tokens_mask: bool = False,
+        tokenizer_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
+    ) -> BatchEncoding: ...
 
     def apply_chat_template(
         self,
@@ -1792,6 +1858,28 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         return chat_template
 
+    def parse_response(self, response: str, schema: Optional[Union[list, dict]] = None):
+        """
+        Converts an output string created by generating text from a model into a parsed message dictionary.
+        This method is intended for use with chat models, and will read the tokenizer's `response_schema` attribute to
+        control parsing, although this can be overridden by passing a `response_schema` argument directly.
+
+        For more information, see the
+        [response parsing](https://huggingface.co/docs/transformers/main/en/chat_response_parsing) documentation.
+
+        Args:
+            response (`str`):
+                The output string generated by the model. This should be the decoded string, not raw tokens.
+            schema (`Union[list, dict]`, *optional*):
+                A response schema that indicates the expected output format and how parsing should be performed.
+                If not provided, the tokenizer's `response_schema` attribute will be used.
+        """
+        if schema is None:
+            if getattr(self, "response_schema", None) is None:
+                raise AttributeError("This tokenizer does not have a `response_schema` for parsing chat responses!")
+            schema = self.response_schema
+        return recursive_parse(response, schema)
+
     @classmethod
     def from_pretrained(
         cls,
@@ -1826,9 +1914,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download the vocabulary files and override the cached versions if they
                 exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -1883,25 +1968,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Otherwise use tokenizer.add_special_tokens({'unk_token': '<unk>'}) instead)
         assert tokenizer.unk_token == "<unk>"
         ```"""
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         subfolder = kwargs.pop("subfolder", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
         gguf_file = kwargs.get("gguf_file")
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class, "is_fast": "Fast" in cls.__name__}
         if from_pipeline is not None:
@@ -1957,7 +2029,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             TOKENIZER_CONFIG_FILE,
                             cache_dir=cache_dir,
                             force_download=force_download,
-                            resume_download=resume_download,
                             proxies=proxies,
                             token=token,
                             revision=revision,
@@ -2025,7 +2096,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         cache_dir=cache_dir,
                         force_download=force_download,
                         proxies=proxies,
-                        resume_download=resume_download,
                         local_files_only=local_files_only,
                         token=token,
                         user_agent=user_agent,
@@ -2454,18 +2524,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             A tuple of `str`: The files saved.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
+        save_jinja_files = kwargs.pop("save_jinja_files", True)
 
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -2503,10 +2562,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
             tokenizer_config.update(self.extra_special_tokens)
 
-        save_jinja_files = kwargs.get("save_jinja_files", True)
         tokenizer_config, saved_raw_chat_template_files = self.save_chat_templates(
             save_directory, tokenizer_config, filename_prefix, save_jinja_files
         )
+        if getattr(self, "response_schema", None) is not None:
+            tokenizer_config["response_schema"] = self.response_schema
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
@@ -3971,13 +4031,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Private method to put the tokenizer in input mode (when it has different modes for input/outputs)
         """
-        pass
 
     def _switch_to_target_mode(self):
         """
         Private method to put the tokenizer in target mode (when it has different modes for input/outputs)
         """
-        pass
 
     @contextmanager
     def as_target_tokenizer(self):

@@ -20,9 +20,9 @@
 # limitations under the License.
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -303,6 +303,7 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesfm"
     _no_split_modules = ["TimesFmDecoderLayer"]
     main_input_name = "past_values"
+    input_modalities = "time"
     _supports_sdpa = True
 
     def _init_weights(self, module):
