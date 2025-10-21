@@ -2642,9 +2642,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            if module.weight.numel() > 0:
+                module.weight.data.normal_(mean=0.0, std=std)
+                if module.padding_idx is not None:
+                    if(hasattr(module,'padding_idx')
+                       and module.padding_idx is not None
+                       and 0<= module.padding_idx < module.weight.size(0)):
+                       module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
