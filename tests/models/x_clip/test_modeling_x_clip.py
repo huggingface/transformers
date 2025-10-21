@@ -147,7 +147,6 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (XCLIPVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -397,7 +396,6 @@ class XCLIPTextModelTester:
 @require_torch
 class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = XCLIPTextModelTester(self)
@@ -517,7 +515,6 @@ class XCLIPModelTester:
 class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": XCLIPModel} if is_torch_available() else {}
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False

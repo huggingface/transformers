@@ -34,6 +34,7 @@ def flash_attention_forward(
     scaling: Optional[float] = None,
     sliding_window: Optional[int] = None,
     softcap: Optional[float] = None,
+    is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -64,9 +65,7 @@ def flash_attention_forward(
     target_dtype = get_target_dtype(query, module)
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
-    is_causal = kwargs.pop("is_causal", None)
-    if is_causal is None:
-        is_causal = module.is_causal
+    is_causal = is_causal if is_causal is not None else module.is_causal
 
     attn_output = _flash_attention_forward(
         query,
