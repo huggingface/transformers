@@ -1,6 +1,5 @@
 import math
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 from torch import nn
@@ -10,7 +9,6 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
 from ..vit.modeling_vit import ViTAttention, ViTEncoder, ViTSelfAttention, eager_attention_forward
 from ..vitdet.configuration_vitdet import VitDetConfig
 from ..vitdet.modeling_vitdet import (
