@@ -1,7 +1,7 @@
 FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
-ENV NVIDIA_DRIVER_CAPABILITIES=all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility,graphics,video,display,compat32
 
 ARG DEBIAN_FRONTEND=noninteractive
 
