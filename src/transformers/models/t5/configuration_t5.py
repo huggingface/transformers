@@ -16,7 +16,7 @@
 
 from collections.abc import Mapping
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
@@ -24,15 +24,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class T5Config(PretrainedConfig):
+class T5Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`T5Model`] or a [`TFT5Model`]. It is used to
     instantiate a T5 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the T5
     [google-t5/t5-small](https://huggingface.co/google-t5/t5-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):

@@ -236,7 +236,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -326,7 +325,14 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         if return_attention_mask:
             # rescale from sample (48000) to feature (3000)
-            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+            rescaled_attention_mask = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+            # The STFT computation produces L//hop_length + 1 frames, but we skip the last frame (see `_torch_extract_fbank_features`).
+            # This means we need to trim the rescaled attention mask to match the actual number of frames (L//hop_length) when the input length
+            # is not perfectly divisible by the hop length.
+            if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
+                rescaled_attention_mask = rescaled_attention_mask[:, :-1]
+            padded_inputs["attention_mask"] = rescaled_attention_mask
 
         if return_token_timestamps is not None:
             logger.warning_once(

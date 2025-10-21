@@ -55,9 +55,6 @@ found [here](https://github.com/microsoft/UniSpeech/tree/main/UniSpeech-SAT).
   decoded using [`Wav2Vec2CTCTokenizer`].
 - UniSpeechSat performs especially well on speaker verification, speaker identification, and speaker diarization tasks.
 
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
-
 ## Resources
 
 - [Audio classification task guide](../tasks/audio_classification)

@@ -87,7 +87,6 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 ## CLIPConfig
 
 [[autodoc]] CLIPConfig
-    - from_text_vision_configs
 
 ## CLIPTextConfig
 
@@ -118,10 +117,6 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 
 [[autodoc]] CLIPImageProcessorFast
     - preprocess
-
-## CLIPFeatureExtractor
-
-[[autodoc]] CLIPFeatureExtractor
 
 ## CLIPProcessor
 

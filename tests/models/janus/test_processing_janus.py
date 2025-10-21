@@ -38,6 +38,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class.from_pretrained(
             "deepseek-community/Janus-Pro-1B",
             extra_special_tokens=special_image_tokens,
+            **self.prepare_processor_dict(),
         )
         # Set the processor to use the default system prompt to False as it's used based on input modality.
         # Hence set to False to avoid any issues in the test irrespective of inputs.
@@ -443,7 +444,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             return_tensors="np",
         )
         self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)
@@ -456,7 +457,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         orig_image_input = self.prepare_image_inputs()
         orig_image = np.array(orig_image_input).transpose(2, 0, 1)
 
-        inputs = processor(text=input_str, images=orig_image, do_resize=False, return_tensors="np")
+        inputs = processor(text=input_str, images=orig_image, do_resize=False, do_pad=False, return_tensors="np")
         normalized_image_input = inputs.pixel_values
         unnormalized_images = processor.postprocess(normalized_image_input, return_tensors="np")["pixel_values"]
 

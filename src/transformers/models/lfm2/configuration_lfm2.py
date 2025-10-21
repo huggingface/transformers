@@ -13,18 +13,19 @@
 # limitations under the License.
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class Lfm2Config(PretrainedConfig):
+class Lfm2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Lfm2Model`]. It is used to instantiate a LFM2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LFM2-1.2B model.
     e.g. [LiquidAI/LFM2-1.2B](https://huggingface.co/LiquidAI/LFM2-1.2B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -65,8 +66,10 @@ class Lfm2Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         conv_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the conv layers.
         conv_L_cache (`int`, *optional*, defaults to 3):
@@ -100,26 +103,26 @@ class Lfm2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size: int = 65536,
-        hidden_size: int = 2560,
-        intermediate_size: int = 12288,
-        num_hidden_layers: int = 32,
-        num_attention_heads: int = 32,
-        num_key_value_heads: int = 8,
-        max_position_embeddings: int = 128_000,
-        initializer_range: float = 0.02,
-        norm_eps: float = 0.00001,
-        use_cache: bool = True,
-        pad_token_id: int = 0,
-        bos_token_id: int = 1,
-        eos_token_id: int = 2,
-        tie_word_embeddings: bool = True,
-        rope_theta: float = 1000000.0,
-        conv_bias: bool = False,
-        conv_L_cache: int = 3,
-        block_multiple_of: int = 256,
-        block_ffn_dim_multiplier: float = 1.0,
-        block_auto_adjust_ff_dim: bool = True,
+        vocab_size: Optional[int] = 65536,
+        hidden_size: Optional[int] = 2560,
+        intermediate_size: Optional[int] = 12288,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 8,
+        max_position_embeddings: Optional[int] = 128_000,
+        initializer_range: Optional[float] = 0.02,
+        norm_eps: Optional[float] = 0.00001,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        conv_bias: Optional[bool] = False,
+        conv_L_cache: Optional[int] = 3,
+        block_multiple_of: Optional[int] = 256,
+        block_ffn_dim_multiplier: Optional[float] = 1.0,
+        block_auto_adjust_ff_dim: Optional[bool] = True,
         full_attn_idxs: Optional[list[int]] = None,
         layer_types: Optional[list[str]] = None,
         **kwargs,
@@ -127,7 +130,6 @@ class Lfm2Config(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.rope_theta = kwargs.get("theta", rope_theta)  # to fit original config keys
         self.max_position_embeddings = max_position_embeddings
         self.use_cache = use_cache
         self.norm_eps = norm_eps
@@ -146,11 +148,19 @@ class Lfm2Config(PretrainedConfig):
         self.block_multiple_of = block_multiple_of
         self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
         self.block_auto_adjust_ff_dim = block_auto_adjust_ff_dim
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
             full_attn_idxs = full_attn_idxs if full_attn_idxs is not None else list(range(num_hidden_layers))
             self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(

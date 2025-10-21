@@ -17,7 +17,6 @@ from unittest.mock import patch
 
 from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     TextGenerationPipeline,
     logging,
     pipeline,
@@ -28,7 +27,6 @@ from transformers.testing_utils import (
     require_accelerate,
     require_torch,
     require_torch_accelerator,
-    require_torch_or_tf,
     torch_device,
 )
 
@@ -36,17 +34,15 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 class TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-random-LlamaForCausalLM",
-            framework="pt",
             max_new_tokens=10,
         )
         # Using `do_sample=False` to force deterministic output
@@ -76,7 +72,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -124,7 +119,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -158,7 +152,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -206,7 +199,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
 
         dataset = MyDataset()
@@ -233,7 +225,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
 
         # Using `do_sample=False` to force deterministic output
@@ -372,11 +363,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             with self.assertRaises((ValueError, AssertionError)):
                 outputs = text_generator("", add_special_tokens=False)
 
-        if text_generator.framework == "tf":
-            # TF generation does not support max_new_tokens, and it's impossible
-            # to control long generation with only max_length without
-            # fancy calculation, dismissing tests for now.
-            self.skipTest(reason="TF generation does not support max_new_tokens")
         # We don't care about infinite range models.
         # They already work.
         # Skip this test for XGLM, since it uses sinusoidal positional embeddings which are resized on-the-fly.
@@ -483,10 +469,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     def test_pipeline_length_setting_warning(self):
         prompt = """Hello world"""
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=5)
-        if text_generator.model.framework == "tf":
-            logger = logging.get_logger("transformers.generation.tf_utils")
-        else:
-            logger = logging.get_logger("transformers.generation.utils")
+        logger = logging.get_logger("transformers.generation.utils")
         logger_msg = "Both `max_new_tokens`"  # The beginning of the message to be checked in this test
 
         # Both are set by the user -> log warning

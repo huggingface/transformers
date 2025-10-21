@@ -16,11 +16,11 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any
 
 from ... import PreTrainedTokenizer
-from ...configuration_utils import PretrainedConfig
-from ...file_utils import TensorType, is_torch_available
+from ...configuration_utils import PreTrainedConfig
+from ...file_utils import is_torch_available
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import logging
@@ -29,15 +29,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class BlenderbotSmallConfig(PretrainedConfig):
+class BlenderbotSmallConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlenderbotSmallModel`]. It is used to instantiate
     an BlenderbotSmall model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the BlenderbotSmall
     [facebook/blenderbot_small-90M](https://huggingface.co/facebook/blenderbot_small-90M) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -164,7 +164,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
         )
 
 
-# Copied from transformers.models.bart.configuration_bart.BartOnnxConfig
+# Copied from transformers.models.bart.configuration_bart.BartOnnxConfig with Bart->BlenderbotSmall
 class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -229,16 +229,15 @@ class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         encoder_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
-            tokenizer, batch_size, seq_length, is_pair, framework
+            tokenizer, batch_size, seq_length, is_pair
         )
 
         # Generate decoder inputs
         decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
-            tokenizer, batch_size, decoder_seq_length, is_pair, framework
+            tokenizer, batch_size, decoder_seq_length, is_pair
         )
         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
         common_inputs = dict(**encoder_inputs, **decoder_inputs)
@@ -297,10 +296,9 @@ class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         common_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
-            tokenizer, batch_size, seq_length, is_pair, framework
+            tokenizer, batch_size, seq_length, is_pair
         )
 
         if self.use_past:
@@ -335,7 +333,6 @@ class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         # Copied from OnnxConfig.generate_dummy_inputs
         # Did not use super(OnnxConfigWithPast, self).generate_dummy_inputs for code clarity.
@@ -352,7 +349,7 @@ class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
         # Generate dummy inputs according to compute batch and sequence
         dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
-        common_inputs = dict(tokenizer(dummy_input, return_tensors=framework))
+        common_inputs = dict(tokenizer(dummy_input, return_tensors="pt"))
         return common_inputs
 
     def generate_dummy_inputs(
@@ -361,20 +358,19 @@ class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         if self.task in ["default", "seq2seq-lm"]:
             common_inputs = self._generate_dummy_inputs_for_default_and_seq2seq_lm(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair
             )
 
         elif self.task == "causal-lm":
             common_inputs = self._generate_dummy_inputs_for_causal_lm(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair
             )
         else:
             common_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair
             )
 
         return common_inputs

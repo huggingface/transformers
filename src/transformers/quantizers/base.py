@@ -31,6 +31,16 @@ else:
 logger = logging.get_logger(__file__)
 
 
+def _assign_original_dtype(module, original_dtype):
+    # not very nice in a recursive function but it avoids a circular import
+    from ..modeling_utils import PreTrainedModel
+
+    for child in module.children():
+        if isinstance(child, PreTrainedModel):
+            child.config._pre_quantization_dtype = original_dtype
+        _assign_original_dtype(child, original_dtype)
+
+
 class HfQuantizer(ABC):
     """
     Abstract class of the HuggingFace quantizer. Supports for now quantizing HF transformers models for inference and/or quantization.
@@ -69,19 +79,6 @@ class HfQuantizer(ABC):
                 f"pass `pre_quantized=True` while knowing what you are doing."
             )
 
-    def update_torch_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        """
-        Deprecared in favor of `update_dtype`!
-
-        Args:
-            dtype (`torch.dtype`):
-                The input dtype that is passed in `from_pretrained`
-        """
-        logger.warning_once(
-            "`update_torch_dtype` is deprecated in favor of `update_dtype`! It will be removed in version v4.57"
-        )
-        return self.update_dtype(dtype)
-
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         """
         Some quantization methods require to explicitly set the dtype of the model to a
@@ -118,30 +115,25 @@ class HfQuantizer(ABC):
         """
         return dtype
 
+    def param_element_size(self, model: "PreTrainedModel", param_name: str) -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name):
+            from accelerate.utils import CustomDtype
+
+            mapping = {
+                torch.int8: 1,
+                CustomDtype.INT4: 0.5,
+                CustomDtype.FP8: 1,
+                CustomDtype.INT2: 0.25,
+            }
+            # The value passed is actually not used when the method is overriden
+            if (custom_dtype := self.adjust_target_dtype(torch.float16)) in mapping:
+                return mapping[custom_dtype]
+        return model.get_parameter_or_buffer(param_name).element_size()
+
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
         Override this method if you want to adjust the `missing_keys`.
-
-        Args:
-            missing_keys (`list[str]`, *optional*):
-                The list of missing keys in the checkpoint compared to the state dict of the model
-        """
-        return missing_keys
-
-    def update_unexpected_keys(self, model, unexpected_keys: list[str], prefix: str) -> list[str]:
-        """
-        Override this method if you want to adjust the `unexpected_keys`.
-
-        Args:
-            unexpected_keys (`list[str]`, *optional*):
-                The list of unexpected keys in the checkpoint compared to the state dict of the model
-        """
-        return unexpected_keys
-
-    def update_missing_keys_after_loading(self, model, missing_keys: list[str], prefix: str) -> list[str]:
-        """
-        Override this method if you want to adjust the `missing_keys` after loading the model params,
-        but before the model is post-processed.
 
         Args:
             missing_keys (`list[str]`, *optional*):
@@ -160,6 +152,9 @@ class HfQuantizer(ABC):
                 The list of the loaded keys in the checkpoint.
         """
         return expected_keys
+
+    def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
+        return unexpected_keys
 
     def get_special_dtypes_update(self, model, dtype: "torch.dtype") -> dict[str, "torch.dtype"]:
         """
@@ -182,25 +177,18 @@ class HfQuantizer(ABC):
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 
-    def check_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         """
-        checks if a loaded state_dict component is part of quantized param + some validation; only defined if
-        requires_parameters_quantization == True for quantization methods that require to create a new parameters
-        for quantization.
+        Check whether a given param needs quantization as defined by `create_quantized_param`.
         """
         return False
 
-    def create_quantized_param(self, *args, **kwargs) -> "torch.nn.Parameter":
+    def create_quantized_param(self, *args, **kwargs):
         """
-        takes needed components from state_dict and creates quantized param; only applicable if
-        requires_parameters_quantization == True
+        Take needed components from state_dict (those from which `param_needs_quantization` is True) and create
+        quantized param.
+        It usually also load the new param directly in the `model`.
+        Note: only applicable if requires_parameters_quantization == True.
         """
         if not self.requires_parameters_quantization:
             raise AttributeError(
@@ -219,7 +207,14 @@ class HfQuantizer(ABC):
         "updates the tp plan for the scales"
         return config
 
-    def preprocess_model(self, model: "PreTrainedModel", **kwargs):
+    def update_ep_plan(self, config):
+        "updates the tp plan for the scales"
+        return config
+
+    def _process_model_before_weight_loading(self, model, **kwargs):
+        return model
+
+    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point
         the model should be initialized on the meta device so you can freely manipulate the skeleton
@@ -235,7 +230,18 @@ class HfQuantizer(ABC):
         model.quantization_method = self.quantization_config.quant_method
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
-        return self._process_model_before_weight_loading(model, **kwargs)
+        self._process_model_before_weight_loading(model, **kwargs)
+
+        # We store the original dtype for quantized models as we cannot easily retrieve it
+        # once the weights have been quantized
+        # Note that once you have loaded a quantized model, you can't change its dtype so this will
+        # remain a single source of truth
+        original_dtype = dtype if dtype is not None else torch.get_default_dtype()
+        config._pre_quantization_dtype = original_dtype
+        _assign_original_dtype(model, original_dtype)
+
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        return model
 
     def postprocess_model(self, model: "PreTrainedModel", **kwargs):
         """
@@ -296,7 +302,7 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
 
-    def update_param_name(self, param_name: str) -> str:
+    def get_param_name(self, param_name: str) -> str:
         """
         Override this method if you want to adjust the `param_name`.
         """
@@ -334,15 +340,13 @@ class HfQuantizer(ABC):
         """Flag indicating whether the quantized model can be compiled"""
         return False
 
-    def get_state_dict(self, model):
-        """Get state dict. Useful when we need to modify a bit the state dict due to quantization"""
-        return None
+    def get_state_dict_and_metadata(self, model, safe_serialization=False):
+        """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
+        return None, {}
 
-    @abstractmethod
-    def _process_model_before_weight_loading(self, model, **kwargs): ...
-
-    @abstractmethod
-    def _process_model_after_weight_loading(self, model, **kwargs): ...
+    def update_state_dict_with_metadata(self, state_dict, metadata):
+        """Update state dict with metadata. Default behaviour returns state_dict"""
+        return state_dict
 
     @abstractmethod
     def is_serializable(self, safe_serialization=None): ...

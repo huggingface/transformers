@@ -23,6 +23,7 @@ The input to models supporting this task is typically a combination of an image 
 answer expressed in natural language.
 
 Some noteworthy use case examples for VQA include:
+
 * Accessibility applications for visually impaired individuals.
 * Education: posing questions about visual materials presented in lectures or textbooks. VQA can also be utilized in interactive museum exhibits or historical sites.
 * Customer service and e-commerce: VQA can enhance user experience by letting users ask questions about products.
@@ -105,6 +106,7 @@ Let's take a look at an example to understand the dataset's features:
 ```
 
 The features relevant to the task include:
+
 * `question`: the question to be answered from the image
 * `image_id`: the path to the image the question refers to
 * `label`: the annotations
@@ -241,7 +243,7 @@ As a final step, create a batch of examples using [`DefaultDataCollator`]:
 
 ## Train the model
 
-You’re ready to start training your model now! Load ViLT with [`ViltForQuestionAnswering`]. Specify the number of labels
+You're ready to start training your model now! Load ViLT with [`ViltForQuestionAnswering`]. Specify the number of labels
 along with the label mappings:
 
 ```py
@@ -325,6 +327,7 @@ learned something from the data and take the first example from the dataset to i
 Even though not very confident, the model indeed has learned something. With more examples and longer training, you'll get far better results!
 
 You can also manually replicate the results of the pipeline if you'd like:
+
 1. Take an image and a question, prepare them for the model using the processor from your model.
 2. Forward the result or preprocessing through the model.
 3. From the logits, get the most likely answer's id, and find the actual answer in the `id2label`.
@@ -361,12 +364,13 @@ Let's illustrate how you can use this model for VQA. First, let's load the model
 GPU, if available, which we didn't need to do earlier when training, as [`Trainer`] handles this automatically:
 
 ```py
->>> from transformers import AutoProcessor, Blip2ForConditionalGeneration, infer_device
+>>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
+from accelerate import Accelerator
 >>> import torch
 
 >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
 >>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16)
->>> device = infer_device()
+>>> device = Accelerator().device
 >>> model.to(device)
 ```
 

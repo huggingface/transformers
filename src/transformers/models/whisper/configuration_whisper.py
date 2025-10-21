@@ -16,9 +16,9 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
@@ -26,7 +26,6 @@ from ...utils import logging
 if TYPE_CHECKING:
     from ...feature_extraction_utils import FeatureExtractionMixin
     from ...tokenization_utils_base import PreTrainedTokenizerBase
-    from ...utils import TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -57,15 +56,15 @@ NON_SPEECH_TOKENS_MULTI = [
 # fmt: on
 
 
-class WhisperConfig(PretrainedConfig):
+class WhisperConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`WhisperModel`]. It is used to instantiate a
     Whisper model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Whisper
     [openai/whisper-tiny](https://huggingface.co/openai/whisper-tiny) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -310,7 +309,6 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
         sampling_rate: int = 22050,
         time_duration: float = 5.0,
         frequency: int = 220,
@@ -320,7 +318,6 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
             self,
             preprocessor=preprocessor.feature_extractor,
             batch_size=batch_size,
-            framework=framework,
             sampling_rate=sampling_rate,
             time_duration=time_duration,
             frequency=frequency,
@@ -329,7 +326,10 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
         seq_length = encoder_sequence_length // 2 if self.use_past else seq_length
 
         decoder_inputs = super().generate_dummy_inputs(
-            preprocessor.tokenizer, batch_size, seq_length, is_pair, framework
+            preprocessor.tokenizer,
+            batch_size,
+            seq_length,
+            is_pair,
         )
 
         dummy_inputs["input_features"] = encoder_inputs.pop("input_features")

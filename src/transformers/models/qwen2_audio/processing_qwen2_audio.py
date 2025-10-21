@@ -87,7 +87,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
+        the text. To prepare the audio(s), this method forwards the `audios` and `kwargs` arguments to
         WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 

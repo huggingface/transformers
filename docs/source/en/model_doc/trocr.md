@@ -14,8 +14,6 @@ rendered properly in your Markdown viewer.
 specific language governing permissions and limitations under the License. -->
 *This model was released on 2021-09-21 and added to Hugging Face Transformers on 2021-10-13.*
 
-
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -32,12 +30,10 @@ You can find all the original TrOCR checkpoints under the [Microsoft](https://hu
 alt="drawing" width="600"/>
 <small> TrOCR architecture. Taken from the <a href="https://huggingface.co/papers/2109.10282">original paper</a>. </small>
 
-
 > [!TIP]
 > This model was contributed by [nielsr](https://huggingface.co/nielsr).
 >
 > Click on the TrOCR models in the right sidebar for more examples of how to apply TrOCR to different image and text tasks.
-
 
 The example below demonstrates how to perform optical character recognition (OCR) with the [`AutoModel`] class.
 
@@ -112,7 +108,6 @@ print(generated_text)
 - An interactive-demo on [TrOCR handwritten character recognition](https://huggingface.co/spaces/nielsr/TrOCR-handwritten).
 - A notebook on [inference with TrOCR](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Inference_with_TrOCR_%2B_Gradio_demo.ipynb) and Gradio demo.
 - A notebook on [evaluating TrOCR on the IAM test set](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Evaluating_TrOCR_base_handwritten_on_the_IAM_test_set.ipynb).
-
 
 ## TrOCRConfig
 
