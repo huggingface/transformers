@@ -15,6 +15,7 @@
 
 import argparse
 import gc
+import json
 import os
 from pathlib import Path
 
@@ -42,9 +43,79 @@ def convert_layer(old_prefix: str, new_prefix: str) -> dict[str, str]:
         f"{old_prefix}.attn.c_k.weight": f"{new_prefix}.self_attn.k_proj.weight",
         f"{old_prefix}.attn.c_v.weight": f"{new_prefix}.self_attn.v_proj.weight",
         f"{old_prefix}.attn.c_proj.weight": f"{new_prefix}.self_attn.o_proj.weight",
-        f"{old_prefix}.mlp.c_fc.weight": f"{new_prefix}.mlp.fc.weight",
-        f"{old_prefix}.mlp.c_proj.weight": f"{new_prefix}.mlp.proj.weight",
+        f"{old_prefix}.mlp.c_fc.weight": f"{new_prefix}.mlp.fc1.weight",
+        f"{old_prefix}.mlp.c_proj.weight": f"{new_prefix}.mlp.fc2.weight",
     }
+
+
+def load_config_from_checkpoint(input_path: Path) -> NanoChatConfig:
+    """Load config from either meta_*.json or config.json in the checkpoint directory."""
+    # Try to find meta_*.json first
+    meta_files = list(input_path.glob("meta_*.json"))
+    
+    if meta_files:
+        meta_file = meta_files[0]
+        print(f"Loading config from {meta_file.name}")
+        with open(meta_file, "r") as f:
+            meta_config = json.load(f)
+        
+        # Extract model config from meta file
+        if "model_config" in meta_config:
+            model_config = meta_config["model_config"]
+        else:
+            model_config = meta_config
+        
+        # Map to NanoChat config parameters
+        config_kwargs = {
+            "vocab_size": model_config.get("vocab_size", 50304),
+            "hidden_size": model_config.get("n_embd", 768),
+            "num_hidden_layers": model_config.get("n_layer", 12),
+            "num_attention_heads": model_config.get("n_head", 6),
+            "num_key_value_heads": model_config.get("n_kv_head"),
+            "max_position_embeddings": model_config.get("sequence_len", 2048),
+        }
+        
+        # Try to load existing config.json for additional parameters
+        config_file = input_path / "config.json"
+        if config_file.exists():
+            print(f"Loading additional config from config.json")
+            with open(config_file, "r") as f:
+                extra_config = json.load(f)
+            
+            # Add additional parameters from config.json
+            for key in ["hidden_act", "attention_dropout", "rms_norm_eps", "initializer_range", 
+                       "logits_soft_cap", "attention_bias", "intermediate_size",
+                       "bos_token_id", "eos_token_id", "pad_token_id"]:
+                if key in extra_config:
+                    config_kwargs[key] = extra_config[key]
+                # Handle legacy qkv_bias -> attention_bias conversion
+                elif key == "attention_bias" and "qkv_bias" in extra_config:
+                    config_kwargs[key] = extra_config["qkv_bias"]
+            
+            # Handle rope_theta as a direct kwarg for the rope_parameters processing
+            if "rope_theta" in extra_config:
+                config_kwargs["rope_theta"] = extra_config["rope_theta"]
+            
+            # Handle rope_parameters or rope_scaling if present
+            if "rope_parameters" in extra_config:
+                config_kwargs["rope_parameters"] = extra_config["rope_parameters"]
+            elif "rope_scaling" in extra_config and extra_config["rope_scaling"] is not None:
+                config_kwargs["rope_parameters"] = extra_config["rope_scaling"]
+        
+        config = NanoChatConfig(**config_kwargs)
+    else:
+        # Fallback to loading from config.json if it exists
+        config_file = input_path / "config.json"
+        if config_file.exists():
+            print(f"Loading config from config.json")
+            config = NanoChatConfig.from_pretrained(input_path)
+            # Handle legacy qkv_bias -> attention_bias conversion
+            if hasattr(config, "qkv_bias") and not hasattr(config, "attention_bias"):
+                config.attention_bias = config.qkv_bias
+        else:
+            raise ValueError(f"No config file found in {input_path}. Expected meta_*.json or config.json")
+    
+    return config
 
 
 def write_model(input_dir, output_dir, safe_serialization=True):
@@ -55,12 +126,18 @@ def write_model(input_dir, output_dir, safe_serialization=True):
     input_path = Path(input_dir)
 
     # Load config
-    config = NanoChatConfig.from_pretrained(input_path)
+    config = load_config_from_checkpoint(input_path)
     print(f"Loaded config hidden_size={config.hidden_size} num_layers={config.num_hidden_layers}")
 
-    # Load checkpoint
-    print(f"Fetching all parameters from the checkpoint at {input_path}...")
-    old_state = torch.load(input_path / "pytorch_model.bin", map_location="cpu")
+    # Load checkpoint - try model_*.pt first, then pytorch_model.bin
+    checkpoint_files = list(input_path.glob("model_*.pt"))
+    if checkpoint_files:
+        checkpoint_path = checkpoint_files[0]
+    else:
+        checkpoint_path = input_path / "pytorch_model.bin"
+    
+    print(f"Fetching all parameters from the checkpoint at {checkpoint_path}...")
+    old_state = torch.load(checkpoint_path, map_location="cpu")
 
     # Original nanochat weights are in bfloat16
     for key in old_state:
@@ -80,8 +157,7 @@ def write_model(input_dir, output_dir, safe_serialization=True):
     state_dict = {}
     rename_map = {}
 
-    # FIXME: ruff `old_state` not recognized
-    def assign(old_key: str, new_key: str) -> None:
+    def assign(old_key: str, new_key: str, old_state: dict[str, torch.Tensor]) -> None:
         tensor = old_state.get(old_key)
         if tensor is None:
             return
@@ -89,8 +165,8 @@ def write_model(input_dir, output_dir, safe_serialization=True):
         rename_map[old_key] = new_key
 
     # Convert embeddings and head
-    assign("transformer.wte.weight", "model.embed_tokens.weight")
-    assign("lm_head.weight", "lm_head.weight")
+    assign("transformer.wte.weight", "model.embed_tokens.weight", old_state)
+    assign("lm_head.weight", "lm_head.weight", old_state)
 
     # Convert layers
     for layer_idx in range(config.num_hidden_layers):
@@ -98,7 +174,7 @@ def write_model(input_dir, output_dir, safe_serialization=True):
         new_prefix = f"model.layers.{layer_idx}"
         mapping = convert_layer(old_prefix, new_prefix)
         for old_key, new_key in mapping.items():
-            assign(old_key, new_key)
+            assign(old_key, new_key, old_state)
 
     missing = [key for key in old_state.keys() if key not in rename_map]
     if missing:
