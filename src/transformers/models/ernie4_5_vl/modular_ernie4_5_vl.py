@@ -85,7 +85,6 @@ from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_re
 from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.modeling_qwen2_vl import VisionMlp
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
-from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 from .configuration_ernie4_5_vl import Ernie4_5_VLConfig, Ernie4_5_VLTextConfig
 
 
@@ -1505,13 +1504,6 @@ class Ernie4_5_VLImageProcessorFast(Qwen2VLImageProcessorFast):
         )
 
 
-# TODO: needs customization around drawing timestamps on each frame
-# See https://huggingface.co/baidu/ERNIE-4.5-VL-28B-A3B-PT/blob/main/processing_ernie4_5_vl.py#L1314-L1341
-# TODO: different pixel defaults
-class Ernie4_5_VLVideoProcessor(Qwen2VLVideoProcessor):
-    pass
-
-
 class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Ernie4_5_VLImageProcessorKwargs
     _defaults = {
@@ -1519,6 +1511,9 @@ class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "videos_kwargs": {
+            "do_sample_frames": True,
+        }
     }
 
 
@@ -1558,7 +1553,6 @@ class Ernie4_5_VLProcessor(Qwen2VLProcessor):
 
 __all__ = [
     "Ernie4_5_VLProcessor",
-    "Ernie4_5_VLVideoProcessor",
     "Ernie4_5_VLImageProcessor",
     "Ernie4_5_VLImageProcessorFast",
     "Ernie4_5_VLForConditionalGeneration",

@@ -330,6 +330,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         videos: VideoInput,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional[str] = None,
+        video_metadata: Optional[list[VideoMetadata]] = None,
     ) -> list["torch.Tensor"]:
         """
         Prepare the input videos for processing.
