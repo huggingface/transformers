@@ -526,6 +526,7 @@ jobs:
         with:
           name: ${{ env.machine_type }}_run_kernels_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports
+
   run_extract_warnings:
     # Let's only do this for the job `run_models_gpu` to simplify the (already complex) logic.
     if: ${{ always() && inputs.job == 'run_models_gpu' }}
@@ -578,6 +579,7 @@ jobs:
       run_examples_gpu,
       run_torch_cuda_extensions_gpu,
       run_quantization_torch_gpu,
+      run_kernels_gpu,
       run_extract_warnings
     ]
     if: always() && !cancelled()
