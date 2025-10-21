@@ -472,7 +472,6 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
-        # FIXME: docs stay with karpathy repo?
         r"""
         Example:
 
