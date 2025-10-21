@@ -51,9 +51,9 @@ def write_model(input_dir, output_dir, safe_serialization=True):
     """Convert NanoChat model from original checkpoint format to HuggingFace format."""
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
-    
+
     input_path = Path(input_dir)
-    
+
     # Load config
     config = NanoChatConfig.from_pretrained(input_path)
     print(f"Loaded config hidden_size={config.hidden_size} num_layers={config.num_hidden_layers}")
@@ -61,12 +61,12 @@ def write_model(input_dir, output_dir, safe_serialization=True):
     # Load checkpoint
     print(f"Fetching all parameters from the checkpoint at {input_path}...")
     old_state = torch.load(input_path / "pytorch_model.bin", map_location="cpu")
-    
+
     # Original nanochat weights are in bfloat16
     for key in old_state:
         if old_state[key].dtype == torch.float32:
             old_state[key] = old_state[key].to(torch.bfloat16)
-    
+
     # Infer key-value heads from checkpoint
     inferred_kv = infer_kv_heads(config, old_state)
     config.num_key_value_heads = inferred_kv
@@ -80,6 +80,7 @@ def write_model(input_dir, output_dir, safe_serialization=True):
     state_dict = {}
     rename_map = {}
 
+    # FIXME: ruff `old_state` not recognized
     def assign(old_key: str, new_key: str) -> None:
         tensor = old_state.get(old_key)
         if tensor is None:
@@ -109,21 +110,21 @@ def write_model(input_dir, output_dir, safe_serialization=True):
     # Update config
     config.torch_dtype = torch.bfloat16
     config.tie_word_embeddings = False
-    
+
     # Load the checkpoint into the model
     print("Loading the checkpoint in a NanoChat model.")
     with torch.device("meta"):
         model = NanoChatForCausalLM(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     print("Checkpoint loaded successfully.")
-    
+
     if hasattr(model.config, "_name_or_path"):
         del model.config._name_or_path
 
     print("Saving the model.")
     model.save_pretrained(output_dir, safe_serialization=safe_serialization)
     del state_dict, model
-    
+
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
@@ -134,7 +135,7 @@ def write_model(input_dir, output_dir, safe_serialization=True):
 def write_tokenizer(input_dir, output_dir):
     """Convert and save the tokenizer."""
     input_path = Path(input_dir)
-    
+
     # Convert the pickle tokenizer to HF format
     tokenizer_pkl = input_path / "tokenizer.pkl"
     if tokenizer_pkl.exists():
@@ -160,7 +161,7 @@ def write_tokenizer(input_dir, output_dir):
             src = input_path / filename
             if src.exists():
                 (Path(output_dir) / filename).write_bytes(src.read_bytes())
-    
+
     print("Tokenizer saved successfully.")
 
 
@@ -206,15 +207,15 @@ def main():
         help="Optional prompt for a quick generation test",
     )
     args = parser.parse_args()
-    
+
     write_model(
         args.input_dir,
         args.output_dir,
         safe_serialization=args.safe_serialization,
     )
-    
+
     write_tokenizer(args.input_dir, args.output_dir)
-    
+
     if args.test_prompt:
         run_test(args.output_dir, args.test_prompt)
 

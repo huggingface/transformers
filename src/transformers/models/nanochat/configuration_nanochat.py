@@ -21,7 +21,7 @@ class NanoChatConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NanoChatModel`]. It is used to instantiate a
     NanoChat model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [NanoChat-d32](https://huggingface.co/karpathy/nanochat-d32).
+    with the defaults will yield a similar configuration to that of the [karpathy/nanochat-d32](https://huggingface.co/karpathy/nanochat-d32).
     # TODO: check if we keep that link
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
