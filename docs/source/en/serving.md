@@ -380,7 +380,7 @@ CB is opt-in and currently applies to chat completions.
 ```sh
 transformers serve \
   --continuous-batching
-  --attn_implementation "sdpa"
+  --attn-implementation "sdpa"
 ```
 
 ### Performance tips
@@ -389,14 +389,14 @@ transformers serve \
 
 ```sh
 transformers serve \
-  --continuous_batching \
-  --attn_implementation "flash_attention_2"
+  --continuous-batching \
+  --attn-implementation "flash_attention_2"
 ```
 
 > [!TIP]
 
 - `--dtype {bfloat16|float16}` typically improve throughput and memory use vs. `float32`
 
-- `--load_in_4bit`/`--load_in_8bit` can reduce memory footprint for LoRA setups
+- `--load-in-4bit`/`--load-in-8bit` can reduce memory footprint for LoRA setups
 
 - `--force-model <repo_id>` avoids per-request model hints and helps produce stable, repeatable runs
