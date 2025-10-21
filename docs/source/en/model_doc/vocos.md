@@ -82,13 +82,6 @@ print(audio.shape)
 write_wav("vocos.wav", sampling_rate, audio[0].detach().cpu().numpy())
 ```
 
-To listen from an IPython notebook:
-```python
-from IPython.display import Audio
-
-Audio(audio.detach().numpy(), rate=sampling_rate)
-```
-
 ### Neural audio codec variant (with EnCodec)
 
 Instead of reconstructing audio from mel spectrograms, recent research has started to utilize learned neural audio codec features. Vocos supports [EnCodec](./encodec)-based reconstruction for high-quality audio generation.

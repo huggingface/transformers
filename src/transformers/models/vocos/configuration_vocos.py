@@ -32,7 +32,7 @@ class VocosConfig(PretrainedConfig):
     outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        input_channels (`int`, *optional*, defaults to 100):
+        n_mels (`int`, *optional*, defaults to 100):
             Number of mel-spectrogram input channels (i.e. number of mel filter bins).
         hidden_size (`int`, *optional*, defaults to 512):
             Hidden dimension for the ConvNeXt backbone.
@@ -75,24 +75,24 @@ class VocosConfig(PretrainedConfig):
 
     def __init__(
         self,
-        input_channels=100,
+        n_mels=100,
         hidden_size=512,
         intermediate_size=1536,
         num_layers=8,
         kernel_size=7,
         padding=3,
-        layer_scale_init_value=1 / 8,
+        layer_scale_init_value=0.125,
         use_adaptive_norm=False,
         layer_norm_eps=1e-6,
         n_fft=1024,
         hop_length=256,
         istft_padding="center",
         bandwidths=[1.5, 3.0, 6.0, 12.0],
-        sampling_rate=24000,
+        sample_rate=24000,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.input_channels = input_channels
+        self.n_mels = n_mels
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_layers = num_layers
@@ -104,8 +104,8 @@ class VocosConfig(PretrainedConfig):
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.istft_padding = istft_padding
-        self.bandwidths = list(bandwidths)
-        self.sampling_rate = sampling_rate
+        self.bandwidths = bandwidths
+        self.sample_rate = sample_rate
 
 
 __all__ = ["VocosConfig"]

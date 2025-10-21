@@ -20,10 +20,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...audio_utils import istft
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_vocos import VocosConfig
 
 
@@ -36,6 +34,86 @@ class VocosOutput(ModelOutput):
     """
 
     audio: torch.FloatTensor
+
+
+def vocos_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":
+    """
+    Performs the Inverse Short Time Fourier Transform (ISTFT) on STFT coefficients to reconstruct audio in the time domain.
+
+    Adds support for `same` padding as in Vocos:
+    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L7
+
+    Otherwise falls back to PyTorch's built-in ISTFT implementation `torch.istft`.
+
+    TODO (ebezzam): with sufficient tests, this more general function could be moved to `src/transformers/audio_utils.py`.
+
+    Args:
+        input (`torch.Tensor`): Complex-valued STFT coefficients of shape (batch_size, freq_bins, time_frames).
+        n_fft (`int`): Size of the FFT.
+        padding (`str`, *optional*): Padding mode. Either "center" or "same".
+        **kwargs: Additional arguments passed to torch.istft or used for "same" padding:
+            - win_length (`int`, *optional*): Window length. Defaults to n_fft.
+            - hop_length (`int`, *optional*): Hop length. Defaults to n_fft // 4.
+            - window (`torch.Tensor`, *optional*): Window function. Defaults to Hann window.
+            - center (`bool`, *optional*): Used only for "center" padding mode.
+
+    Returns:
+        `torch.Tensor`: Reconstructed audio waveform.
+
+    It computes ISTFT differently depending on padding:
+        if `center` : uses PyTorch's built-in ISTFT implementation since it uses `center=True` by default.
+        if `same` : uses custom implementation of ISTFT with the overlap-add method, since the Pytorch version fails the
+        Nonzero Overlap Add (NOLA) condition when center is False. See issue: https://github.com/pytorch/pytorch/issues/62323
+    """
+
+    if padding == "center" or padding is None:
+        # user may provide center=False in kwargs
+        center = kwargs.get("center", True)
+        audio = torch.istft(
+            input,
+            n_fft=n_fft,
+            center=center,
+            **kwargs,
+        )
+
+    elif padding == "same":
+        win_length = kwargs.get("win_length", n_fft)
+        hop_length = kwargs.get("hop_length", n_fft // 4)
+        window = kwargs.get("window", torch.hann_window(win_length))
+
+        _, _, num_time_frames = input.shape
+        pad = (win_length - hop_length) // 2
+        # the inverse FFT of each frame
+        inverse_fft = torch.fft.irfft(input, n=n_fft, dim=1, norm="backward")
+        inverse_fft = inverse_fft * window[None, :, None]
+
+        # combine the overlapping frame with windowing and normalizing by the sum of squared window values across overlapping frames
+        # to make sure the reconstruction of the audio is accurate
+        output_length = (num_time_frames - 1) * hop_length + win_length
+        audio = F.fold(
+            inverse_fft,
+            output_size=(1, output_length),
+            kernel_size=(1, win_length),
+            stride=(1, hop_length),
+        )[:, 0, 0, pad:-pad]
+        window_sqrt = window.square().expand(1, num_time_frames, -1).transpose(1, 2)
+        norm = F.fold(
+            window_sqrt,
+            output_size=(1, output_length),
+            kernel_size=(1, win_length),
+            stride=(1, hop_length),
+        ).squeeze()[pad:-pad]
+
+        if torch.any(norm <= 1e-11):
+            raise ValueError(
+                "Normalization tensor `norm` contains values ≤ 1e-11, it would cause division by zero. check the n_fft, hop_length and padding parameters."
+            )
+        audio = audio / norm
+
+    else:
+        raise ValueError(f"Unsupported padding mode: {padding}. Supported modes are 'center' and 'same'.")
+
+    return audio
 
 
 class VocosAdaptiveLayerNorm(nn.Module):
@@ -73,14 +151,11 @@ class VocosConvNeXtBlock(nn.Module):
         else:
             self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pwconv1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.act = nn.GELU()
+        self.act_fn = nn.GELU()
         self.pwconv2 = nn.Linear(config.intermediate_size, config.hidden_size)
-        if config.layer_scale_init_value > 0:
-            self.layer_scale_parameter = nn.Parameter(
-                config.layer_scale_init_value * torch.ones(config.hidden_size), requires_grad=True
-            )
-        else:
-            self.layer_scale_parameter = None
+        self.layer_scale_parameter = nn.Parameter(
+            config.layer_scale_init_value * torch.ones(config.hidden_size), requires_grad=True
+        )
 
     def forward(self, hidden_states: torch.Tensor, bandwidth_id: Optional[torch.LongTensor] = None) -> torch.Tensor:
         residual = hidden_states
@@ -91,41 +166,11 @@ class VocosConvNeXtBlock(nn.Module):
         else:
             hidden_states = self.norm(hidden_states)
         hidden_states = self.pwconv1(hidden_states)
-        hidden_states = self.act(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = self.pwconv2(hidden_states)
-        if self.layer_scale_parameter is not None:
-            hidden_states = self.layer_scale_parameter.to(hidden_states.device) * hidden_states
+        hidden_states = self.layer_scale_parameter.to(hidden_states.device) * hidden_states
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = residual.to(hidden_states.device) + hidden_states
-        return hidden_states
-
-
-class VocosBackbone(nn.Module):
-    """The convolutional backbone of Vocos based on ConvNeXt blocks."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.embed = nn.Conv1d(
-            config.input_channels, config.hidden_size, kernel_size=config.kernel_size, padding=config.padding
-        )
-        if config.use_adaptive_norm:
-            self.norm = VocosAdaptiveLayerNorm(config)
-        else:
-            self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layers = nn.ModuleList([VocosConvNeXtBlock(config) for _ in range(config.num_layers)])
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states, bandwidth_id=None):
-        hidden_states = self.embed(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
-        if isinstance(self.norm, VocosAdaptiveLayerNorm):
-            hidden_states = self.norm(hidden_states, bandwidth_id)
-        else:
-            hidden_states = self.norm(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, bandwidth_id)
-        hidden_states = self.final_layer_norm(hidden_states.transpose(1, 2))
         return hidden_states
 
 
@@ -170,7 +215,7 @@ class VocosISTFTHead(nn.Module):
         spectrogram_real = torch.cos(p)
         spectrogram_imag = torch.sin(p)
         spectrogram_complex = mag * (spectrogram_real + 1j * spectrogram_imag)
-        audio = istft(
+        audio = vocos_istft(
             spectrogram_complex,
             n_fft=self.n_fft,
             hop_length=self.hop_length,
@@ -221,9 +266,22 @@ class VocosPreTrainedModel(PreTrainedModel):
 class VocosModel(VocosPreTrainedModel):
     def __init__(self, config: VocosConfig):
         super().__init__(config)
-        self.backbone = VocosBackbone(config)
-        self.head = VocosISTFTHead(config)
+        
+        # `VocosBackbone` in original: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/models.py#L26
+        self.embed = nn.Conv1d(
+            config.n_mels, config.hidden_size, kernel_size=config.kernel_size, padding=config.padding
+        )
+        if config.use_adaptive_norm:
+            self.norm = VocosAdaptiveLayerNorm(config)
+        else:
+            self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layers = nn.ModuleList([VocosConvNeXtBlock(config) for _ in range(config.num_layers)])
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        
+        # Decoder (Linear + ISTFT)
+        self.decoder = VocosISTFTHead(config)
         self._bandwidth_to_id = {bandwidth: id for id, bandwidth in enumerate(config.bandwidths)}
+        
         self.post_init()
 
     @can_return_tuple
@@ -233,7 +291,7 @@ class VocosModel(VocosPreTrainedModel):
         audio_spectrogram: Optional[torch.FloatTensor] = None,
         input_features: Optional[torch.FloatTensor] = None,
         bandwidth: Optional[float] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        padding_mask: Optional[torch.BoolTensor] = None,
     ) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
         r"""
         audio_spectrogram (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
@@ -245,6 +303,8 @@ class VocosModel(VocosPreTrainedModel):
         bandwidth (`float`, *optional*):
             Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, to be provided if
             `input_features`is not None.
+        padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
+            Padding mask. Not used, but kept so processor outputs can be passed directly.
 
         Returns:
             `VocosOutput` or tuple `(audio,)`:
@@ -285,6 +345,7 @@ class VocosModel(VocosPreTrainedModel):
 
         ```
         """
+
         if input_features is None and audio_spectrogram is None:
             raise ValueError("One of `input_features` or `audio_spectrogram` should be provided.")
 
@@ -292,10 +353,24 @@ class VocosModel(VocosPreTrainedModel):
             if bandwidth is None:
                 raise ValueError("When passing `input_features`, `bandwidth` must be also be provided.")
             bandwidth_id = self._bandwidth_to_id[float(bandwidth)]
-            hidden_states = self.backbone(input_features, bandwidth_id)
+            hidden_states = input_features
         else:
-            hidden_states = self.backbone(audio_spectrogram)
-        audio = self.head(hidden_states)
+            bandwidth_id = None
+            hidden_states = audio_spectrogram
+        
+        hidden_states = self.embed(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)
+        if isinstance(self.norm, VocosAdaptiveLayerNorm):
+            hidden_states = self.norm(hidden_states, bandwidth_id)
+        else:
+            hidden_states = self.norm(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, bandwidth_id)
+        hidden_states = self.final_layer_norm(hidden_states.transpose(1, 2))
+        
+        # Decode back to audio (linear + ISTFT)
+        audio = self.decoder(hidden_states)
         return VocosOutput(audio=audio)
 
 

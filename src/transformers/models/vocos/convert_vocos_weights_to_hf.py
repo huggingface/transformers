@@ -32,8 +32,16 @@ def convert_old_keys_to_new_keys(original_state_dict) -> dict[str, torch.Tensor]
     for key, value in original_state_dict.items():
         if key.startswith("feature_extractor."):
             continue
-        key = key.replace("backbone.convnext.", "backbone.layers.")
+        # Remove backbone prefix and flatten the structure
+        key = key.replace("backbone.embed.", "embed.")
+        key = key.replace("backbone.norm.", "norm.")
+        key = key.replace("backbone.convnext.", "layers.")
+        key = key.replace("backbone.final_layer_norm.", "final_layer_norm.")
         key = key.replace(".gamma", ".layer_scale_parameter")
+        # Rename of ISTFT head
+        key = key.replace("head.", "decoder.")
+        if "istft.window" in key:
+            key = key.replace("istft.window", "window")
         converted_checkpoint[key] = value
     return converted_checkpoint
 
