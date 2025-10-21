@@ -42,7 +42,6 @@ from .utils import (
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
 
 if TYPE_CHECKING:
     import torch

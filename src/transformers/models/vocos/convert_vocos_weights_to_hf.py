@@ -19,11 +19,9 @@ import os
 import torch
 
 from transformers import (
-    EncodecModel,
     VocosConfig,
     VocosFeatureExtractor,
     VocosModel,
-    VocosProcessor,
 )
 
 
@@ -83,17 +81,10 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 
     feature_extractor = VocosFeatureExtractor()
 
-    # don't have to convert it here  because it's not used in mel variant
-    audio_tokenizer = EncodecModel.from_pretrained("facebook/encodec_24khz")
-
-    processor = VocosProcessor(feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer)
-
-    processor.save_pretrained(pytorch_dump_folder_path)
-
     if push_to_hub:
         model.push_to_hub(push_to_hub)
-        processor.push_to_hub(push_to_hub)
-        print(f"Pushed model and processor to {push_to_hub}")
+        feature_extractor.push_to_hub(push_to_hub)
+        print(f"Pushed model and feature extractor to {push_to_hub}")
 
 
 """

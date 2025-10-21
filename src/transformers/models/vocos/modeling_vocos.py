@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_vocos import VocosConfig
@@ -116,24 +117,6 @@ def vocos_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":
     return audio
 
 
-class VocosAdaptiveLayerNorm(nn.Module):
-    """
-    Weight and bias parameters come from a lookup table based on the target bandwidth.
-    """
-
-    def __init__(self, config: VocosConfig):
-        super().__init__()
-        self.eps = config.layer_norm_eps
-        self.hidden_size = config.hidden_size
-        adanorm_num_embeddings = len(config.bandwidths)
-        self.weight = nn.Parameter(torch.ones(adanorm_num_embeddings, config.hidden_size))
-        self.bias = nn.Parameter(torch.zeros(adanorm_num_embeddings, config.hidden_size))
-
-    def forward(self, hidden_states: torch.Tensor, cond_embedding_id: torch.LongTensor):
-        hidden_states = F.layer_norm(hidden_states, (self.hidden_size,), weight=None, bias=None, eps=self.eps)
-        return hidden_states * self.weight[cond_embedding_id].unsqueeze(0) + self.bias[cond_embedding_id].unsqueeze(0)
-
-
 class VocosConvNeXtBlock(nn.Module):
     """ConvNeXt block adapted for 1D convolutions in the Vocos architecture."""
 
@@ -146,25 +129,19 @@ class VocosConvNeXtBlock(nn.Module):
             padding=config.padding,
             groups=config.hidden_size,
         )
-        if config.use_adaptive_norm:
-            self.norm = VocosAdaptiveLayerNorm(config)
-        else:
-            self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pwconv1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.act_fn = nn.GELU()
+        self.act_fn = ACT2FN[config.hidden_act]
         self.pwconv2 = nn.Linear(config.intermediate_size, config.hidden_size)
         self.layer_scale_parameter = nn.Parameter(
             config.layer_scale_init_value * torch.ones(config.hidden_size), requires_grad=True
         )
 
-    def forward(self, hidden_states: torch.Tensor, bandwidth_id: Optional[torch.LongTensor] = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.dwconv(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
-        if isinstance(self.norm, VocosAdaptiveLayerNorm):
-            hidden_states = self.norm(hidden_states, cond_embedding_id=bandwidth_id)
-        else:
-            hidden_states = self.norm(hidden_states)
+        hidden_states = self.norm(hidden_states)
         hidden_states = self.pwconv1(hidden_states)
         hidden_states = self.act_fn(hidden_states)
         hidden_states = self.pwconv2(hidden_states)
@@ -207,8 +184,12 @@ class VocosISTFTHead(nn.Module):
             Tensor: Reconstructed time-domain audio signal of shape (B, T), where T is the length of the output signal.
             Tensor: Predicted STFT coefficients of shape (B, L, N+2), where N is the number of frequency bins.
         """
-        x_pred = self.out(x).transpose(1, 2)
-        mag, p = x_pred.chunk(2, dim=1)
+        x_pred = self.out(x)  # (B, L, n_fft+2)
+        # Split into magnitude and phase, then transpose to (B, freq_bins, time_frames)
+        mag, p = x_pred.chunk(2, dim=-1)  # Each: (B, L, freq_bins)
+        mag = mag.transpose(1, 2)  # (B, freq_bins, L)
+        p = p.transpose(1, 2)  # (B, freq_bins, L)
+
         mag = torch.exp(mag)
         mag = torch.clip(mag, max=1e2)  # safeguard to prevent excessively large magnitudes
         # wrapping happens here. These two lines produce real and imaginary value
@@ -251,37 +232,28 @@ class VocosPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, VocosAdaptiveLayerNorm):
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(1.0)
 
 
 @auto_docstring(
     custom_intro="""
-    Main Vocos model for neural vocoding for high-quality audio generation. This model can be paired with [`VocosProcessor`] to generate audio from either mel-spectrograms or EnCodec embeddings.
+    Main Vocos model for neural vocoding for high-quality audio generation.
     """
 )
 class VocosModel(VocosPreTrainedModel):
     def __init__(self, config: VocosConfig):
         super().__init__(config)
-        
+
         # `VocosBackbone` in original: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/models.py#L26
         self.embed = nn.Conv1d(
             config.n_mels, config.hidden_size, kernel_size=config.kernel_size, padding=config.padding
         )
-        if config.use_adaptive_norm:
-            self.norm = VocosAdaptiveLayerNorm(config)
-        else:
-            self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([VocosConvNeXtBlock(config) for _ in range(config.num_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        
+
         # Decoder (Linear + ISTFT)
         self.decoder = VocosISTFTHead(config)
-        self._bandwidth_to_id = {bandwidth: id for id, bandwidth in enumerate(config.bandwidths)}
-        
+
         self.post_init()
 
     @can_return_tuple
@@ -289,22 +261,13 @@ class VocosModel(VocosPreTrainedModel):
     def forward(
         self,
         audio_spectrogram: Optional[torch.FloatTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        bandwidth: Optional[float] = None,
         padding_mask: Optional[torch.BoolTensor] = None,
     ) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
         r"""
         audio_spectrogram (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
-            Mel-spectrogram features: computed directly from audio via (`processor(audio=waveform)`).
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
-            EnCodec neural audio codec features which can be computed either from precomputed EnCodec RVQ codes via
-            `processor(codes=codes, bandwidth=1.5)` or from raw audio via `processor(audio=waveform, bandwidth=1.5)`.
-            It must be provided with the corresponding EnCodec bandwidth.
-        bandwidth (`float`, *optional*):
-            Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, to be provided if
-            `input_features`is not None.
+            Mel-spectrogram features: computed directly from audio via (`VocosFeatureExtractor`).
         padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
-            Padding mask. Not used, but kept so processor outputs can be passed directly.
+            Padding mask. Not used, but kept so feature extractor outputs can be passed directly.
 
         Returns:
             `VocosOutput` or tuple `(audio,)`:
@@ -314,9 +277,9 @@ class VocosModel(VocosPreTrainedModel):
 
         ```python
         >>> from datasets import load_dataset, Audio
-        >>> from transformers import VocosProcessor, VocosModel
+        >>> from transformers import VocosFeatureExtractor, VocosModel
 
-        >>> processor = VocosProcessor.from_pretrained("hf-audio/vocos-mel-24khz")
+        >>> feature_extractor = VocosFeatureExtractor.from_pretrained("hf-audio/vocos-mel-24khz")
         >>> model = VocosModel.from_pretrained("hf-audio/vocos-mel-24khz")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -324,52 +287,25 @@ class VocosModel(VocosPreTrainedModel):
         >>> audio_sample= ds[0]["audio"]["array"]
 
         >>> # extract mel-spectrogram features from audio and reconstruct high-quality audio
-        >>> inputs = processor(audio=audio_sample)
-        >>> outputs = model(**inputs)
-        >>> reconstructed_audio = outputs.audio
-
-
-        >>> # Encode audio using EnCodec neural codec and reconstruct from audio from that
-        >>> processor = VocosProcessor.from_pretrained("hf-audio/vocos-encodec-24khz")
-        >>> model = VocosModel.from_pretrained("hf-audio/vocos-encodec-24khz")
-
-        >>> bandwidth = 6.0
-        >>> inputs = processor(audio=audio_sample, bandwidth=bandwidth)
-        >>> outputs = model(**inputs)
-        >>> reconstructed_audio = outputs.audio
-
-        >>> # Reconstruct audio directly from pre-computed EnCodec quantized codes
-        >>> inputs = processor(codes=audio_codes, bandwidth=bandwidth)
+        >>> inputs = feature_extractor(audio=audio_sample)
         >>> outputs = model(**inputs)
         >>> reconstructed_audio = outputs.audio
 
         ```
         """
+        hidden_states = self.embed(audio_spectrogram)  # (B, hidden_size, time_dim)
 
-        if input_features is None and audio_spectrogram is None:
-            raise ValueError("One of `input_features` or `audio_spectrogram` should be provided.")
+        # Apply initial norm in channel-last format
+        hidden_states = hidden_states.transpose(1, 2)  # (B, time_dim, hidden_size)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)  # back to (B, hidden_size, time_dim)
 
-        if input_features is not None:
-            if bandwidth is None:
-                raise ValueError("When passing `input_features`, `bandwidth` must be also be provided.")
-            bandwidth_id = self._bandwidth_to_id[float(bandwidth)]
-            hidden_states = input_features
-        else:
-            bandwidth_id = None
-            hidden_states = audio_spectrogram
-        
-        hidden_states = self.embed(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
-        if isinstance(self.norm, VocosAdaptiveLayerNorm):
-            hidden_states = self.norm(hidden_states, bandwidth_id)
-        else:
-            hidden_states = self.norm(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
+        # Process through ConvNeXt layers
         for layer in self.layers:
-            hidden_states = layer(hidden_states, bandwidth_id)
+            hidden_states = layer(hidden_states)
+
+        # Final norm and decoder expect channel-last format
         hidden_states = self.final_layer_norm(hidden_states.transpose(1, 2))
-        
-        # Decode back to audio (linear + ISTFT)
         audio = self.decoder(hidden_states)
         return VocosOutput(audio=audio)
 

@@ -46,21 +46,18 @@ class VocosConfig(PretrainedConfig):
             Padding applied to depthwise convolutions.
         layer_scale_init_value (`float`, *optional*, defaults to `1/8`):
             Initial value for layer-scale (if >0, enables per-block scaling).
-        use_adaptive_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use adaptive layer normalization.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for all LayerNorm operations.
         n_fft (`int`, *optional*, defaults to 1024):
-            FFT size for STFT/ISTFT used in `VocosISTFTHead`.
+            FFT size for ISTFT in the decoder.
         hop_length (`int`, *optional*, defaults to 256):
             Hop length between STFT frames used in `VocosISTFTHead`.
         istft_padding (`str`, *optional*, defaults to `"center"`):
             Padding mode for spectrogram inversion (`"center"` or `"same"`).
-        bandwidths (`List[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0]`):
-            Supported target bandwidths in kbps, This determines the number of quantizers/codebooks used in RVQ part of
-            EnCodec, namely [2, 4, 6, 8].
-        sampling_rate (`int`, *optional*, defaults to 24000):
-            The sampling rate at which the audio waveform should be digitalized expressed in Hertz (Hz).
+        sample_rate (`int`, *optional*, defaults to 24000):
+            The sample rate at which the audio waveform should be digitalized expressed in Hertz (Hz).
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function used inside the model.
 
     Example:
 
@@ -82,13 +79,12 @@ class VocosConfig(PretrainedConfig):
         kernel_size=7,
         padding=3,
         layer_scale_init_value=0.125,
-        use_adaptive_norm=False,
         layer_norm_eps=1e-6,
         n_fft=1024,
         hop_length=256,
         istft_padding="center",
-        bandwidths=[1.5, 3.0, 6.0, 12.0],
         sample_rate=24000,
+        hidden_act="gelu",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -99,13 +95,12 @@ class VocosConfig(PretrainedConfig):
         self.kernel_size = kernel_size
         self.padding = padding
         self.layer_scale_init_value = layer_scale_init_value
-        self.use_adaptive_norm = use_adaptive_norm
         self.layer_norm_eps = layer_norm_eps
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.istft_padding = istft_padding
-        self.bandwidths = bandwidths
         self.sample_rate = sample_rate
+        self.hidden_act = hidden_act
 
 
 __all__ = ["VocosConfig"]

@@ -51,7 +51,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
             The feature dimension of the extracted features.
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        num_mel_bins (`int`, *optional*, defaults to 100):
+        n_mels (`int`, *optional*, defaults to 100):
             Number of Mel-frequency bins.
         n_fft (`int`, *optional*, defaults to 1024):
             Size of the Fourier transform.
@@ -74,7 +74,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         self,
         feature_size=100,
         sampling_rate=24000,
-        num_mel_bins=100,
+        n_mels=100,
         n_fft=1024,
         hop_length=256,
         padding="center",
@@ -93,7 +93,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.win_length = n_fft
-        self.num_mel_bins = num_mel_bins
+        self.n_mels = n_mels
         if padding not in ["center", "same"]:
             raise ValueError("Padding must be either `center` or `same`.")
         self.padding = padding
@@ -101,7 +101,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         requires_backends(self, ["torchaudio"])
         self.mel_filters = torchaudio.transforms.MelSpectrogram(
             sample_rate=self.sampling_rate,
-            n_mels=self.num_mel_bins,
+            n_mels=self.n_mels,
             n_fft=self.n_fft,
             hop_length=self.hop_length,
             center=(self.padding == "center"),
