@@ -20,9 +20,9 @@ import torch
 
 from transformers import (
     EncodecModel,
-    VocosConfig,
+    VocosEncodecConfig,
     VocosFeatureExtractor,
-    VocosModel,
+    VocosEncodecModel,
     VocosProcessor,
 )
 from transformers.models.encodec.convert_encodec_checkpoint_to_pytorch import recursively_load_weights
@@ -87,19 +87,10 @@ def safe_load(path: str) -> dict[str, torch.Tensor]:
 
 @torch.no_grad()
 def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub=None):
-    # Original encodec variant of Vocos  has different slightly different architecture
-    config = VocosConfig(
-        n_mels=128,
-        hidden_size=384,
-        intermediate_size=1152,
-        n_fft=1280,
-        hop_length=320,
-        istft_padding="same",
-        use_adaptive_norm=True,
-    )
+    config = VocosEncodecConfig()
 
     with torch.device("meta"):
-        model = VocosModel(config)
+        model = VocosEncodecModel(config)
 
     original_state_dict = safe_load(checkpoint_path)
 

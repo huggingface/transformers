@@ -261,9 +261,13 @@ class VocosEncodecModel(VocosEncodecPreTrainedModel):
     def __init__(self, config: VocosEncodecConfig):
         super().__init__(config)
 
+        # TODO compute Encodec codes
+        # original: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L85
+        
+
         # `VocosBackbone` in original: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/models.py#L26
         self.embed = nn.Conv1d(
-            config.n_mels, config.hidden_size, kernel_size=config.kernel_size, padding=config.padding
+            config.codebook_dim, config.hidden_size, kernel_size=config.kernel_size, padding=config.padding
         )
         self.norm = VocosEncodecAdaptiveLayerNorm(config)
         self.layers = nn.ModuleList([VocosEncodecConvNeXtBlock(config) for _ in range(config.num_layers)])
