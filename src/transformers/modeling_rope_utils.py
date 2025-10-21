@@ -14,7 +14,7 @@
 
 import math
 from functools import wraps
-from typing import Optional, TypedDict, Union
+from typing import Optional, TypedDict
 
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_available, logging
@@ -27,7 +27,7 @@ if is_torch_available():
     import torch
 
 
-def standardize_rope_params(config, rope_theta: Optional[Union[float, dict[str, float]]] = None):
+def standardize_rope_params(config, rope_theta: float | dict[str, float] | None = None):
     """
     Helper to standardize the config's rope params field by ensuring the params are defined for each
     later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
