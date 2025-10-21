@@ -230,23 +230,23 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lw_detr_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="RTDetr does not use inputs_embeds")
+    @unittest.skip(reason="LwDetr does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not use test_inputs_embeds_matches_input_ids")
+    @unittest.skip(reason="LwDetr does not use test_inputs_embeds_matches_input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not support input and output embeddings")
+    @unittest.skip(reason="LwDetr does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not support input and output embeddings")
+    @unittest.skip(reason="LwDetr does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not use token embeddings")
+    @unittest.skip(reason="LwDetr does not use token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
