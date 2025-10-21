@@ -16,17 +16,17 @@
 import copy
 import gc
 import types
-import unittest
 from unittest.mock import patch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
-    _KERNEL_MODULE_MAPPING,
     _HUB_KERNEL_MAPPING,
+    _KERNEL_MODULE_MAPPING,
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
 )
+from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.testing_utils import (
     TestCasePlus,
@@ -57,6 +57,29 @@ class TestHubKernels(TestCasePlus):
         self.input = "Hello"
 
     def tearDown(self):
+        # Delete large objects to drop references early
+        for attr in [
+            "model_kernelized",
+            "model_not_kernelized",
+            "tokenizer",
+        ]:
+            if hasattr(self, attr):
+                try:
+                    delattr(self, attr)
+                except Exception:
+                    pass
+
+        # Clear any temporary kernel module cache entries populated by tests
+        try:
+            keys_to_remove = [
+                k for k, v in list(_KERNEL_MODULE_MAPPING.items()) if v is None or isinstance(v, types.ModuleType)
+            ]
+            for k in keys_to_remove:
+                _KERNEL_MODULE_MAPPING.pop(k, None)
+        except Exception:
+            pass
+
+        # Free accelerator memory/cache and trigger GC
         gc.collect()
         backend_empty_cache(torch_device)
         gc.collect()
@@ -130,7 +153,7 @@ class TestHubKernels(TestCasePlus):
 
     def test_kernelize(self):
         model = copy.deepcopy(self.model_not_kernelized)
-        kernelize(model, mode=Mode.INFERENCE, device=Device(type=model.device.type))
+        kernelize(model, mode=Mode.INFERENCE, device=Device(type=model.device.type))  # type: ignore[arg-type]
         self.test_kernelized_forward_is_different(model, self.model_not_kernelized)
         self.test_kernelized_forward_is_the_same(model, self.model_kernelized)
         del model
@@ -232,6 +255,8 @@ class TestKernelUtilities(TestCasePlus):
             self.assertIs(mod2, sentinel)
         finally:
             setattr(kernels_pkg, "get_kernel", original_get_kernel)
+            # Ensure cache is cleared to avoid holding onto module references across tests
+            _KERNEL_MODULE_MAPPING.pop("causal-conv1d", None)
 
     def test_lazy_load_kernel_unknown(self):
         name = "unknown-kernel-name"
@@ -239,6 +264,8 @@ class TestKernelUtilities(TestCasePlus):
         mod = lazy_load_kernel(name)
         self.assertIsNone(mod)
         self.assertIn(name, _KERNEL_MODULE_MAPPING)
+        # Cleanup cache entry to avoid growth across tests
+        _KERNEL_MODULE_MAPPING.pop(name, None)
 
     def test_lazy_load_kernel_version(self):
         HUB = _HUB_KERNEL_MAPPING
@@ -253,7 +280,7 @@ class TestKernelUtilities(TestCasePlus):
 
         try:
             # Inject dict-style mapping with repo_id and version
-            HUB[name] = {"repo_id": "kernels-community/causal-conv1d", "version": version_spec}
+            HUB[name] = {"repo_id": "kernels-community/causal-conv1d", "version": version_spec}  # type: ignore[assignment]
             _KERNEL_MODULE_MAPPING.pop(name, None)
 
             def fake_get_kernel(repo_id, revision=None, version=None, user_agent=None):
@@ -283,6 +310,7 @@ class TestKernelUtilities(TestCasePlus):
                 HUB[name] = original_entry
             _KERNEL_MODULE_MAPPING.pop(name, None)
 
+
 @require_kernels
 class TestAttentionKernelRegistration(TestCasePlus):
     def test_load_and_register_flash_attn_like_kernel(self):
@@ -295,6 +323,15 @@ class TestAttentionKernelRegistration(TestCasePlus):
             attn_impl = "org/model"
             load_and_register_attn_kernel(attn_impl)
             self.assertIn(attn_impl, ALL_ATTENTION_FUNCTIONS.valid_keys())
+            # Cleanup registration to avoid leaking functions across tests
+            try:
+                ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception:
+                pass
+            try:
+                ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception:
+                pass
 
     def test_load_and_register_named_function_kernel(self):
         def my_attention(*args, **kwargs):
@@ -305,6 +342,15 @@ class TestAttentionKernelRegistration(TestCasePlus):
             attn_impl = "org/model:my_func"
             load_and_register_attn_kernel(attn_impl)
             self.assertIn(attn_impl, ALL_ATTENTION_FUNCTIONS.valid_keys())
+            # Cleanup registration to avoid leaking functions across tests
+            try:
+                ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception:
+                pass
+            try:
+                ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception:
+                pass
 
 
 @require_kernels
@@ -314,6 +360,13 @@ class TestUseKernelsLifecycle(TestCasePlus):
         self.model = AutoModelForCausalLM.from_pretrained(self.model_id, use_kernels=False, device_map=torch_device)
 
     def tearDown(self):
+        # Delete large objects to drop references early
+        if hasattr(self, "model"):
+            try:
+                del self.model
+            except Exception:
+                pass
+        # Free accelerator memory/cache and trigger GC
         gc.collect()
         backend_empty_cache(torch_device)
         gc.collect()
