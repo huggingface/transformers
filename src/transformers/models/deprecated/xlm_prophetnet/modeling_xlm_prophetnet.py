@@ -36,7 +36,6 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_xlm_prophetnet import XLMProphetNetConfig
 
 
@@ -97,24 +96,6 @@ XLM_PROPHETNET_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
@@ -156,12 +137,6 @@ XLM_PROPHETNET_STANDALONE_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -651,13 +626,11 @@ class XLMProphetNetAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_attn_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         key_value_states: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
-        layer_head_mask: Optional[Tensor] = None,
         past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
     ) -> tuple[Tensor, Optional[Tensor]]:
@@ -721,18 +694,6 @@ class XLMProphetNetAttention(nn.Module):
             attn_weights_reshaped = None
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if layer_head_mask is not None:
-            assert layer_head_mask.size() == (self.num_attn_heads,), (
-                f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is"
-                f" {layer_head_mask.size()}"
-            )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
-                batch_size, self.num_attn_heads, tgt_len, src_len
-            )
-
-            # apply head_mask also on attn_weights_reshaped which is used for n-gram attention inside the model
-            attn_weights_reshaped = layer_head_mask.view(1, -1, 1, 1) * attn_weights_reshaped
 
         attn_probs = nn.functional.dropout(
             attn_weights,
@@ -810,13 +771,11 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         past_key_values: Optional[Cache] = None,
         attention_mask=None,
-        layer_head_mask=None,
         extended_predict_attention_mask=None,
         main_relative_position_buckets=None,
         predict_relative_position_buckets=None,
@@ -893,15 +852,6 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
             onnx_trace=self.onnx_trace,
         ).type_as(main_attn_weights)
 
-        if layer_head_mask is not None:
-            assert layer_head_mask.size() == (self.num_attn_heads,), (
-                f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is"
-                f" {layer_head_mask.size()}"
-            )
-            main_attn_probs = layer_head_mask.view(1, -1, 1, 1) * main_attn_probs.view(
-                batch_size, self.num_attn_heads, -1, sequence_length
-            )
-
         main_attn_probs = nn.functional.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
         # project to attn_output
         # [batch_size, number_heads, sequence_length, sequence_length]
@@ -954,13 +904,6 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
             dim=-1,
             onnx_trace=self.onnx_trace,
         ).type_as(predict_attn_weights)
-
-        if layer_head_mask is not None:
-            assert layer_head_mask.size() == (self.num_attn_heads,), (
-                f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is"
-                f" {layer_head_mask.size()}"
-            )
-            predict_attn_probs = layer_head_mask.view(1, 1, -1, 1, 1) * predict_attn_probs
 
         predict_attn_probs = nn.functional.dropout(
             predict_attn_probs, p=self.attention_dropout, training=self.training
@@ -1113,14 +1056,12 @@ class XLMProphetNetEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states,
         attention_mask,
-        layer_head_mask,
         output_attentions: bool = False,
     ):
         # 1st residual block
         attention_output, attn_weights, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = self.self_attn_layer_norm(attention_output + hidden_states)
@@ -1157,15 +1098,12 @@ class XLMProphetNetDecoderLayer(GradientCheckpointingLayer):
         self.feed_forward = XLMProphetNetFeedForward(config, config.decoder_ffn_dim)
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attn_mask=None,
-        layer_head_mask=None,
-        cross_attn_layer_head_mask=None,
         extended_predict_attention_mask=None,
         main_relative_position_buckets=None,
         predict_relative_position_buckets=None,
@@ -1176,12 +1114,11 @@ class XLMProphetNetDecoderLayer(GradientCheckpointingLayer):
     ):
         # 1st residual block
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
+        self_attn_past_key_values = past_key_values[:2] if past_key_values is not None else None
         ngram_attention_output, self_attn_weights, self_attn_weights_ngram, present_key_value = self.self_attn(
             hidden_states=hidden_states,
-            past_key_values=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_values,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             extended_predict_attention_mask=extended_predict_attention_mask,
             main_relative_position_buckets=main_relative_position_buckets,
             predict_relative_position_buckets=predict_relative_position_buckets,
@@ -1190,7 +1127,7 @@ class XLMProphetNetDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.self_attn_layer_norm(hidden_states + ngram_attention_output)
 
         # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-        cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
+        cross_attn_past_key_values = past_key_values[-2:] if past_key_values is not None else None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             # 2nd residual block
@@ -1198,8 +1135,7 @@ class XLMProphetNetDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attn_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_values=cross_attn_past_key_value,
+                past_key_values=cross_attn_past_key_values,
                 output_attentions=output_attentions,
             )
             hidden_states = self.cross_attn_layer_norm(attention_output + hidden_states)
@@ -1262,7 +1198,6 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1316,11 +1251,6 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
         encoder_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), (
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_hidden_states = encoder_hidden_states + (hidden_states,)
@@ -1328,7 +1258,6 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask=extended_attention_mask,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                 output_attentions=output_attentions,
             )
 
@@ -1396,8 +1325,6 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1412,11 +1339,6 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
 
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
@@ -1534,13 +1456,6 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
 
         present_key_values = () if use_cache else None
 
-        # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
-            if attn_mask is not None:
-                assert attn_mask.size()[0] == (len(self.layers)), (
-                    f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
-                    f" {head_mask.size()[0]}."
-                )
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 # grad cannot be kept because tensor is sliced
@@ -1553,8 +1468,6 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
                 attention_mask=extended_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attn_mask=extended_encoder_attention_mask,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 extended_predict_attention_mask=extended_predict_attention_mask,
                 main_relative_position_buckets=main_relative_position_buckets,
                 predict_relative_position_buckets=predict_relative_position_buckets,
@@ -1727,8 +1640,8 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.word_embeddings, self.word_embeddings)
-            self._tie_or_clone_weights(self.decoder.word_embeddings, self.word_embeddings)
+            self._tie_embedding_weights(self.encoder.word_embeddings, self.word_embeddings)
+            self._tie_embedding_weights(self.decoder.word_embeddings, self.word_embeddings)
 
     def get_encoder(self):
         return self.encoder
@@ -1741,9 +1654,6 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1784,7 +1694,6 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                head_mask=head_mask,
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1797,8 +1706,6 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             output_attentions=output_attentions,
@@ -1844,7 +1751,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.prophetnet.word_embeddings, self.lm_head)
+            self._tie_embedding_weights(self.prophetnet.word_embeddings, self.lm_head)
 
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
@@ -1857,9 +1764,6 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1906,9 +1810,6 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1988,9 +1889,6 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         decoder_input_ids,
         past_key_values=None,
         attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
         **kwargs,
@@ -2006,9 +1904,6 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
         }
 
@@ -2069,7 +1964,7 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
+            self._tie_embedding_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
 
     def set_decoder(self, decoder):
         self.prophetnet.decoder = decoder
@@ -2085,8 +1980,6 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -2102,11 +1995,6 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
 
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
@@ -2173,8 +2061,6 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -2244,7 +2130,6 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         input_ids,
         past_key_values=None,
         attention_mask=None,
-        head_mask=None,
         use_cache=None,
         **kwargs,
     ):
@@ -2258,7 +2143,6 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
-            "head_mask": head_mask,
             "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
@@ -2289,7 +2173,7 @@ class XLMProphetNetDecoderWrapper(XLMProphetNetPreTrainedModel):
         self.post_init()
 
     def _tie_weights(self):
-        self._tie_or_clone_weights(self.word_embeddings, self.decoder.get_input_embeddings())
+        self._tie_embedding_weights(self.word_embeddings, self.decoder.get_input_embeddings())
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

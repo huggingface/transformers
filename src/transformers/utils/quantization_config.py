@@ -134,7 +134,7 @@ class QuantizationConfigMixin:
         else:
             return config
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 
@@ -172,7 +172,7 @@ class QuantizationConfigMixin:
 
         Args:
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                If set to `True`, only the difference between the config instance and the default `PreTrainedConfig()`
                 is serialized to JSON string.
 
         Returns:
@@ -304,8 +304,8 @@ class HqqConfig(QuantizationConfigMixin):
         nbits: int = 4,
         group_size: int = 64,
         view_as_float: bool = False,
-        axis: Optional[int] = None,
-        dynamic_config: Optional[dict] = None,
+        axis: int | None = None,
+        dynamic_config: dict | None = None,
         skip_modules: list[str] = ["lm_head"],
         **kwargs,
     ):
@@ -315,12 +315,6 @@ class HqqConfig(QuantizationConfigMixin):
             raise ImportError(
                 "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
             )
-
-        for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
-            if deprecated_key in kwargs:
-                logger.info(
-                    deprecated_key + " is deprecated. This parameter will be ignored in quantization settings."
-                )
 
         if axis is None:
             axis = 1
@@ -335,12 +329,7 @@ class HqqConfig(QuantizationConfigMixin):
                 self.quant_config[key] = HQQBaseQuantizeConfig(**dynamic_config[key])
         else:
             self.quant_config = HQQBaseQuantizeConfig(
-                **{
-                    "nbits": nbits,
-                    "group_size": group_size,
-                    "view_as_float": view_as_float,
-                    "axis": axis,
-                }
+                nbits=nbits, group_size=group_size, view_as_float=view_as_float, axis=axis
             )
 
         self.quant_method = QuantizationMethod.HQQ
@@ -352,7 +341,6 @@ class HqqConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        pass
 
     @classmethod
     def from_dict(cls, config: dict[str, Any]):
@@ -406,8 +394,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
-
-    This replaces `load_in_8bit` or `load_in_4bit`therefore both options are mutually exclusive.
 
     Currently only supports `LLM.int8()`, `FP4`, and `NF4` quantization. If more methods are added to `bitsandbytes`,
     then more arguments will be added to this class.
@@ -565,13 +551,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise TypeError("bnb_4bit_use_double_quant must be a boolean")
 
-        if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-            "0.39.0"
-        ):
-            raise ValueError(
-                "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
-            )
-
     def is_quantizable(self):
         r"""
         Returns `True` if the model is quantizable, `False` otherwise.
@@ -711,26 +690,26 @@ class GPTQConfig(QuantizationConfigMixin):
         self,
         bits: int,
         tokenizer: Any = None,
-        dataset: Optional[Union[list[str], str]] = None,
+        dataset: list[str] | str | None = None,
         group_size: int = 128,
         damp_percent: float = 0.1,
         desc_act: bool = False,
         sym: bool = True,
         true_sequential: bool = True,
         checkpoint_format: str = "gptq",
-        meta: Optional[dict[str, Any]] = None,
-        backend: Optional[str] = None,
+        meta: dict[str, Any] | None = None,
+        backend: str | None = None,
         use_cuda_fp16: bool = False,
-        model_seqlen: Optional[int] = None,
-        block_name_to_quantize: Optional[str] = None,
-        module_name_preceding_first_block: Optional[list[str]] = None,
+        model_seqlen: int | None = None,
+        block_name_to_quantize: str | None = None,
+        module_name_preceding_first_block: list[str] | None = None,
         batch_size: int = 1,
-        pad_token_id: Optional[int] = None,
-        use_exllama: Optional[bool] = None,
-        max_input_length: Optional[int] = None,
-        exllama_config: Optional[dict[str, Any]] = None,
+        pad_token_id: int | None = None,
+        use_exllama: bool | None = None,
+        max_input_length: int | None = None,
+        exllama_config: dict[str, Any] | None = None,
         cache_block_outputs: bool = True,
-        modules_in_block_to_quantize: Optional[list[list[str]]] = None,
+        modules_in_block_to_quantize: list[list[str]] | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -782,11 +761,6 @@ class GPTQConfig(QuantizationConfigMixin):
             raise ValueError("damp_percent must between 0 and 1.")
         if self.dataset is not None:
             if isinstance(self.dataset, str):
-                if self.dataset in ["ptb", "ptb-new"]:
-                    raise ValueError(
-                        f"""{self.dataset} dataset was deprecated. You can only choose between
-                        ['wikitext2','c4','c4-new']"""
-                    )
                 if self.dataset not in ["wikitext2", "c4", "c4-new"]:
                     raise ValueError(
                         f"""You have entered a string value for dataset. You can only choose between
@@ -916,11 +890,11 @@ class AwqConfig(QuantizationConfigMixin):
         zero_point: bool = True,
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
-        do_fuse: Optional[bool] = None,
-        fuse_max_seq_len: Optional[int] = None,
-        modules_to_fuse: Optional[dict] = None,
-        modules_to_not_convert: Optional[list] = None,
-        exllama_config: Optional[dict[str, int]] = None,
+        do_fuse: bool | None = None,
+        fuse_max_seq_len: int | None = None,
+        modules_to_fuse: dict | None = None,
+        modules_to_not_convert: list | None = None,
+        exllama_config: dict[str, int] | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -1077,7 +1051,7 @@ class AqlmConfig(QuantizationConfigMixin):
         out_group_size: int = 1,
         num_codebooks: int = 1,
         nbits_per_codebook: int = 16,
-        linear_weights_not_to_quantize: Optional[list[str]] = None,
+        linear_weights_not_to_quantize: list[str] | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AQLM
@@ -1137,11 +1111,11 @@ class VptqLayerConfig(QuantizationConfigMixin):
         in_features: int = -1,
         indices_as_float: bool = False,
         is_indice_packed: bool = True,
-        num_centroids: tuple = [-1, -1],
-        num_res_centroids: tuple = [-1, -1],
+        num_centroids: list = [-1, -1],
+        num_res_centroids: list = [-1, -1],
         out_features: int = -1,
         outlier_size: int = 0,
-        vector_lens: tuple = [-1, -1],
+        vector_lens: list = [-1, -1],
         **kwargs,
     ):
         self.enable_norm = enable_norm
@@ -1187,7 +1161,7 @@ class VptqConfig(QuantizationConfigMixin):
         enable_proxy_error: bool = False,
         config_for_layers: dict[str, Any] = {},
         shared_layer_config: dict[str, Any] = {},
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.VPTQ
@@ -1227,7 +1201,7 @@ class QuantoConfig(QuantizationConfigMixin):
         self,
         weights="int8",
         activations=None,
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.QUANTO
@@ -1265,7 +1239,7 @@ class EetqConfig(QuantizationConfigMixin):
     def __init__(
         self,
         weights: str = "int8",
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.EETQ
@@ -1310,13 +1284,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        config_groups: Optional[dict[str, Union["QuantizationScheme", list[str]]]] = None,  # noqa: F821
+        config_groups: dict[str, Union["QuantizationScheme", list[str]]] | None = None,  # noqa: F821
         format: str = "dense",
         quantization_status: "QuantizationStatus" = "initialized",  # noqa: F821
         kv_cache_scheme: Optional["QuantizationArgs"] = None,  # noqa: F821
-        global_compression_ratio: Optional[float] = None,
-        ignore: Optional[list[str]] = None,
-        sparsity_config: Optional[dict[str, Any]] = None,
+        global_compression_ratio: float | None = None,
+        ignore: list[str] | None = None,
+        sparsity_config: dict[str, Any] | None = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
         **kwargs,
@@ -1481,7 +1455,7 @@ class FbgemmFp8Config(QuantizationConfigMixin):
     def __init__(
         self,
         activation_scale_ub: float = 1200.0,
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FBGEMM_FP8
@@ -1519,10 +1493,10 @@ class HiggsConfig(QuantizationConfigMixin):
         self,
         bits: int = 4,
         p: int = 2,
-        modules_to_not_convert: Optional[list[str]] = None,
+        modules_to_not_convert: list[str] | None = None,
         hadamard_size: int = 512,
         group_size: int = 256,
-        tune_metadata: Optional[dict[str, Any]] = None,
+        tune_metadata: dict[str, Any] | None = None,
         **kwargs,
     ):
         if tune_metadata is None:
@@ -1557,7 +1531,7 @@ class FPQuantConfig(QuantizationConfigMixin):
     FPQuantConfig is a configuration class for quantization using the FPQuant method.
 
     Args:
-        forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
+        forward_dtype (`str`, *optional*, defaults to `"nvfp4"`):
             The dtype to use for the forward pass.
         forward_method (`str`, *optional*, defaults to `"abs_max"`):
             The scaling to use for the forward pass. Can be `"abs_max"` or `"quest"`. `"abs_max"` is better for PTQ, `"quest"` is better for QAT.
@@ -1565,10 +1539,11 @@ class FPQuantConfig(QuantizationConfigMixin):
             The dtype to use for the backward pass.
         store_master_weights (`bool`, *optional*, defaults to `False`):
             Whether to store the master weights. Needed for QAT over layer weights.
-        hadamard_group_size (`int`, *optional*, defaults to 32):
-            The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32).
+        hadamard_group_size (`int`, *optional*):
+            The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32). If `None`, it will be set to 16 for `"nvfp4"` and 32 for `"mxfp4"`.
         pseudoquantization (`bool`, *optional*, defaults to `False`):
             Whether to use Triton-based pseudo-quantization. Is mandatory for non-Blackwell GPUs. Doesn't provide any speedup. For debugging purposes.
+        transform_init (`str`, *optional*, defaults to `"hadamard"`): a method to initialize the pre-processing matrix with. Can be `"hadamard"`, `"identity"` or `"gsr"`.
         modules_to_not_convert (`list`, *optional*):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
@@ -1576,13 +1551,14 @@ class FPQuantConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        forward_dtype: str = "mxfp4",
+        forward_dtype: str = "nvfp4",
         forward_method: str = "abs_max",
         backward_dtype: str = "bf16",
         store_master_weights: bool = False,
-        hadamard_group_size: int = 32,
+        hadamard_group_size: int | None = None,
         pseudoquantization: bool = False,
-        modules_to_not_convert: Optional[list[str]] = None,
+        transform_init: str = "hadamard",
+        modules_to_not_convert: list[str] | None = None,
         **kwargs,
     ):
         self.forward_dtype = forward_dtype
@@ -1591,6 +1567,7 @@ class FPQuantConfig(QuantizationConfigMixin):
         self.store_master_weights = store_master_weights
         self.hadamard_group_size = hadamard_group_size
         self.pseudoquantization = pseudoquantization
+        self.transform_init = transform_init
         self.modules_to_not_convert = modules_to_not_convert
 
         self.quant_method = QuantizationMethod.FPQUANT
@@ -1600,14 +1577,35 @@ class FPQuantConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        if self.forward_dtype not in ["mxfp4"]:
-            raise ValueError("Only 'mxfp4' is supported for forward_dtype for now.")
-        if self.forward_method not in ["abs_max", "quest"]:
-            raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for now.")
-        if self.backward_dtype not in ["bf16"]:
+
+        if self.hadamard_group_size is None:
+            if self.forward_dtype == "nvfp4":
+                self.hadamard_group_size = 16
+            else:
+                self.hadamard_group_size = 32
+
+        if self.forward_dtype == "mxfp4":
+            if self.forward_method not in ["abs_max", "quest"]:
+                raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for 'mxfp4'.")
+            if self.hadamard_group_size is None:
+                self.hadamard_group_size = 32
+            if self.hadamard_group_size not in [32, 64, 128]:
+                raise ValueError("Only a `hadamard_group_size` of [32, 64, 128] is supported for 'mxfp4'.")
+        elif self.forward_dtype == "nvfp4":
+            if self.forward_method != "abs_max":
+                raise ValueError("Only 'abs_max' is supported for forward_method for 'nvfp4'.")
+            if self.hadamard_group_size is None:
+                self.hadamard_group_size = 16
+            if self.hadamard_group_size not in [16, 32, 64, 128]:
+                raise ValueError("Only a `hadamard_group_size` of [16, 32, 64, 128] is supported for 'nvfp4'.")
+        else:
+            raise ValueError("Only 'mxfp4' and 'nvfp4' are supported for forward_dtype for now.")
+
+        if self.backward_dtype != "bf16":
             raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
-        if self.hadamard_group_size not in [32]:
-            raise ValueError("Only a hadamard_group_size of 32 is supported for now.")
+        if self.transform_init not in ["hadamard", "identity", "gsr"]:
+            raise ValueError("Only 'hadamard', 'identity' and 'gsr' are supported for transform_init.")
+
         if self.modules_to_not_convert is None:
             self.modules_to_not_convert = ["lm_head"]
 
@@ -1616,7 +1614,7 @@ class FPQuantConfig(QuantizationConfigMixin):
 class TorchAoConfig(QuantizationConfigMixin):
     quant_method: QuantizationMethod
     quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
-    modules_to_not_convert: Optional[list]
+    modules_to_not_convert: list | None
     quant_type_kwargs: dict[str, Any]
     include_input_output_embeddings: bool
     untie_embedding_weights: bool
@@ -1680,7 +1678,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     def __init__(
         self,
         quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         include_input_output_embeddings: bool = False,
         untie_embedding_weights: bool = False,
         **kwargs,
@@ -1881,11 +1879,11 @@ class BitNetQuantConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         linear_class: str = "bitlinear",
         quantization_mode: str = "offline",
         use_rms_norm: bool = False,
-        rms_norm_eps: Optional[float] = 1e-6,
+        rms_norm_eps: float | None = 1e-6,
         **kwargs,
     ):
         if linear_class not in ["bitlinear", "autobitlinear"]:
@@ -1904,7 +1902,6 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        pass
 
 
 @dataclass
@@ -1935,8 +1932,8 @@ class SpQRConfig(QuantizationConfigMixin):
         bits: int = 3,
         beta1: int = 16,
         beta2: int = 16,
-        shapes: Optional[dict[str, int]] = None,
-        modules_to_not_convert: Optional[list[str]] = None,
+        shapes: dict[str, int] | None = None,
+        modules_to_not_convert: list[str] | None = None,
         **kwargs,
     ):
         if shapes is None:
@@ -1988,7 +1985,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self,
         activation_scheme: str = "dynamic",
         weight_block_size: tuple[int, int] = (128, 128),
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FP8
@@ -2002,7 +1999,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         Safety checker that arguments are correct
         """
         self.activation_scheme = self.activation_scheme.lower()
-        if self.activation_scheme not in ["dynamic"]:
+        if self.activation_scheme != "dynamic":
             raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
         if len(self.weight_block_size) != 2:
             raise ValueError("weight_block_size must be a tuple of two integers")
@@ -2067,7 +2064,7 @@ class Mxfp4Config(QuantizationConfigMixin):
 
     def __init__(
         self,
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         dequantize: bool = False,
         **kwargs,
     ):

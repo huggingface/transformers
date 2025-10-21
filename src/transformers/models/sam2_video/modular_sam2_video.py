@@ -16,9 +16,9 @@
 
 import math
 from collections import OrderedDict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -28,7 +28,7 @@ from torch import Tensor
 from tqdm import tqdm
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -36,8 +36,6 @@ from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import (
     ModelOutput,
     auto_docstring,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
 )
 from ...utils.generic import OutputRecorder, TransformersKwargs
@@ -59,12 +57,6 @@ from ..sam2.modeling_sam2 import (
 from ..sam2.processing_sam2 import Sam2Processor
 
 
-if is_torchvision_available() and is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -76,15 +68,15 @@ class Sam2VideoMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
-class Sam2VideoConfig(PretrainedConfig):
+class Sam2VideoConfig(PreTrainedConfig):
     r"""
     [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
     SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
     [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
@@ -643,9 +635,9 @@ class Sam2VideoProcessor(Sam2Processor):
         self,
         video: Optional[VideoInput] = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Union[str, "torch.device"] = None,
-        processing_device: Union[str, "torch.device"] = None,
-        video_storage_device: Union[str, "torch.device"] = None,
+        inference_state_device: Optional[Union[str, "torch.device"]] = None,
+        processing_device: Optional[Union[str, "torch.device"]] = None,
+        video_storage_device: Optional[Union[str, "torch.device"]] = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):
@@ -994,6 +986,7 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
     config_class = Sam2VideoConfig
     base_model_prefix = "sam2_video"
     main_input_name = "pixel_values"
+    input_modalities = "video"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
@@ -1455,6 +1448,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 
 @auto_docstring
 class Sam2VideoModel(Sam2Model):
+    input_modalities = ["video", "text"]
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]

@@ -57,7 +57,6 @@ import os
 import re
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, Union
 
 from git import Repo
 
@@ -409,7 +408,7 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: list[str]) ->
             if not diff_obj.b_path.endswith(".py") and not diff_obj.b_path.endswith(".md"):
                 continue
             # We always add new python/md files
-            if diff_obj.change_type in ["A"]:
+            if diff_obj.change_type == "A":
                 code_diff.append(diff_obj.b_path)
             # Now for modified files
             elif diff_obj.change_type in ["M", "R"]:
@@ -555,7 +554,7 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
-def extract_imports(module_fname: str, cache: Optional[dict[str, list[str]]] = None) -> list[str]:
+def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None) -> list[str]:
     """
     Get the imports a given module makes.
 
@@ -637,7 +636,7 @@ def extract_imports(module_fname: str, cache: Optional[dict[str, list[str]]] = N
     return result
 
 
-def get_module_dependencies(module_fname: str, cache: Optional[dict[str, list[str]]] = None) -> list[str]:
+def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | None = None) -> list[str]:
     """
     Refines the result of `extract_imports` to remove subfolders and get a proper list of module filenames: if a file
     as an import `from utils import Foo, Bar`, with `utils` being a subfolder containing many files, this will traverse
@@ -734,7 +733,7 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     return list(set(edges))
 
 
-def get_tree_starting_at(module: str, edges: list[tuple[str, str]]) -> list[Union[str, list[str]]]:
+def get_tree_starting_at(module: str, edges: list[tuple[str, str]]) -> list[str | list[str]]:
     """
     Returns the tree starting at a given module following all edges.
 
@@ -876,14 +875,14 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     # all the modules impacted by that init.
     for m in [f for f in all_modules if f.endswith("__init__.py")]:
         direct_deps = get_module_dependencies(m, cache=cache)
-        deps = sum([reverse_map[d] for d in direct_deps if not d.endswith("__init__.py")], direct_deps)
+        deps = sum((reverse_map[d] for d in direct_deps if not d.endswith("__init__.py")), direct_deps)
         reverse_map[m] = list(set(deps) - {m})
 
     return reverse_map
 
 
 def create_module_to_test_map(
-    reverse_map: Optional[dict[str, list[str]]] = None, filter_models: bool = False
+    reverse_map: dict[str, list[str]] | None = None, filter_models: bool = False
 ) -> dict[str, list[str]]:
     """
     Extract the tests from the reverse_dependency_map and potentially filters the model tests.

@@ -28,6 +28,7 @@ rendered properly in your Markdown viewer.
 ## Architecture
 
 LFM2-VL consists of three main components: a language model backbone, a vision encoder, and a multimodal projector. LFM2-VL builds upon the LFM2 backbone, inheriting from either LFM2-1.2B (for LFM2-VL-1.6B) or LFM2-350M (for LFM2-VL-450M). For the vision tower, LFM2-VL uses SigLIP2 NaFlex encoders to convert input images into token sequences. Two variants are implemented:
+
 * Shape-optimized (400M) for more fine-grained vision capabilities for LFM2-VL-1.6B
 * Base (86M) for fast image processing for LFM2-VL-450M
 

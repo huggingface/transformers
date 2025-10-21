@@ -21,8 +21,9 @@
 
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
@@ -393,6 +394,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
 
     config: Aimv2Config
     base_model_prefix = "aimv2"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Aimv2EncoderLayer",
@@ -444,7 +446,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
         return self.embeddings.patch_embed
 
     @deprecate_kwarg("attention_mask", version="v4.58.0")
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -520,7 +522,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.token_embedding = value
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

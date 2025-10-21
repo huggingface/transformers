@@ -471,7 +471,6 @@ python examples/pytorch/text-classification/run_glue.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
 ```
 
 **需要注意的一些注意事项**
@@ -606,7 +605,6 @@ accelerate launch \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 4. 你也可以直接使用`accelerate launch`的cmd参数。上面的示例将映射到：
@@ -631,7 +629,6 @@ accelerate launch --num_processes=2 \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 有关更多信息，请参阅 🤗 Accelerate CLI 指南：[启动您的 🤗 Accelerate 脚本](https://huggingface.co/docs/accelerate/basic_tutorials/launch)。

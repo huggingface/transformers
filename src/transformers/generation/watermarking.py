@@ -24,14 +24,9 @@ from torch import nn
 from torch.nn import BCELoss
 
 from ..modeling_utils import PreTrainedModel
-from ..utils import ModelOutput, is_torch_available, logging
-from .configuration_utils import PretrainedConfig, WatermarkingConfig
-
-
-if is_torch_available():
-    import torch
-
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+from ..utils import ModelOutput, logging
+from .configuration_utils import PreTrainedConfig, WatermarkingConfig
+from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -80,7 +75,7 @@ class WatermarkDetector:
     See [the paper](https://huggingface.co/papers/2306.04634) for more information.
 
     Args:
-        model_config (`PretrainedConfig`):
+        model_config (`PreTrainedConfig`):
             The model config that will be used to get model specific arguments used when generating.
         device (`str`):
             The device which was used during watermarked text generation.
@@ -124,7 +119,7 @@ class WatermarkDetector:
 
     def __init__(
         self,
-        model_config: PretrainedConfig,
+        model_config: PreTrainedConfig,
         device: str,
         watermarking_config: Union[WatermarkingConfig, dict],
         ignore_repeated_ngrams: bool = False,
@@ -242,13 +237,13 @@ class WatermarkDetector:
         return prediction
 
 
-class BayesianDetectorConfig(PretrainedConfig):
+class BayesianDetectorConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BayesianDetectorModel`]. It is used to
     instantiate a Bayesian Detector model according to the specified arguments.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         watermarking_depth (`int`, *optional*):

@@ -38,6 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 from ...utils.import_utils import requires
 
@@ -47,6 +48,16 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class ConvNextImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    crop_pct (`float`, *optional*):
+        Percentage of the image to crop. Only has an effect if size < 384. Can be
+        overridden by `crop_pct` in the`preprocess` method.
+    """
+
+    crop_pct: float
 
 
 @requires(backends=("vision",))
@@ -87,6 +98,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = ConvNextImageProcessorKwargs
 
     def __init__(
         self,

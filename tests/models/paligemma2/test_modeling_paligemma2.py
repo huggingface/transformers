@@ -169,10 +169,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
-    fx_compatible = False
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
+
     _is_composite = True
 
     def setUp(self):
@@ -243,10 +240,6 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_model_parallelism(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma's SigLip encoder uses a non-standard initialization scheme")
-    def test_initialization(self):
         pass
 
     # TODO extend valid outputs to include this test @Molbap
