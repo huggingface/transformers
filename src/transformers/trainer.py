@@ -327,7 +327,6 @@ class Trainer:
             Processing class used to process the data. If provided, will be used to automatically process the inputs
             for the model, and it will be saved along the model to make it easier to rerun an interrupted training or
             reuse the fine-tuned model.
-            This supersedes the `tokenizer` argument, which is now deprecated.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -738,6 +737,10 @@ class Trainer:
         # Internal variables to help with automatic batch size reduction
         self._train_batch_size = args.train_batch_size
         self._created_lr_scheduler = False
+
+        # Set use_cache for the model
+        if getattr(self.model, "config", None) is not None:
+            self.model.config.use_cache = self.args.use_cache
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
@@ -3538,7 +3541,7 @@ class Trainer:
                 )
                 logs.update(speed_metrics("train", start_time, num_tokens=current_session_num_tokens))
 
-        output = {**logs, **{"step": self.state.global_step}}
+        output = {**logs, "step": self.state.global_step}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 

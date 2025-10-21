@@ -47,7 +47,7 @@ with efficient C++ and CUDA kernels, which allows NA to run up to 40% faster tha
 memory. We further present Neighborhood Attention Transformer (NAT), a new hierarchical transformer design based on NA
 that boosts image classification and downstream vision performance. Experimental results on NAT are competitive;
 NAT-Tiny reaches 83.2% top-1 accuracy on ImageNet, 51.4% mAP on MS-COCO and 48.4% mIoU on ADE20K, which is 1.9%
-ImageNet accuracy, 1.0% COCO mAP, and 2.6% ADE20K mIoU improvement over a Swin model with similar size. *
+ImageNet accuracy, 1.0% COCO mAP, and 2.6% ADE20K mIoU improvement over a Swin model with similar size.*
 
 <img
 src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/neighborhood-attention-pattern.jpg"

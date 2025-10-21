@@ -552,6 +552,7 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     config: PatchTSTConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
+    input_modalities = "time"
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module: nn.Module):
