@@ -1140,7 +1140,6 @@ class LwDetrModel(LwDetrPreTrainedModel):
 
     @check_model_inputs()
     @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
@@ -1330,9 +1329,9 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
 
         self.post_init()
 
+    @check_model_inputs()
     @can_return_tuple
     @auto_docstring
-    @check_model_inputs()
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
