@@ -302,7 +302,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = YolosImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[YolosImageProcessorKwargs]) -> None:
-        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask"))
+        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask", None))
 
         size = kwargs.pop("size", None)
         max_size = None if size is None else kwargs.pop("max_size", 1333)

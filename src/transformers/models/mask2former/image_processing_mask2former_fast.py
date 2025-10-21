@@ -109,7 +109,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = Mask2FormerImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[Mask2FormerImageProcessorKwargs]) -> None:
-        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask"))
+        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask", None))
 
         size = kwargs.pop("size", None)
         max_size = kwargs.pop("max_size", None)
