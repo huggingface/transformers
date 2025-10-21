@@ -44,4 +44,4 @@ jobs:
           build-args: |
             REF=fix_docker_file
           push: true
-          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
+          tags: huggingface/transformers-all-latest-gpu-test
