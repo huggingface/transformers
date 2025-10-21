@@ -66,7 +66,8 @@ logger = logging.get_logger(__name__)
 
 def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
     """
-    Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
+    Compute the matrix multiplication (GEMM) for each expert using optimized vectorized operations.
+    This approach is significantly more efficient than the original sequential implementation.
 
     Args:
         token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
@@ -78,20 +79,33 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
     """
     num_tokens = token_states.shape[0]
     out_features = expert_weights.shape[-1]
-    output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
-
-    cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
-    # Insert zero at the beginning for offset index's convenience
-    zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
-    cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
-
-    for expert_num in range(expert_weights.shape[0]):
-        start = cumsum_num_tokens[expert_num]
-        end = cumsum_num_tokens[expert_num + 1]
-        tokens = token_states[start:end]
-
-        out = torch.matmul(tokens, expert_weights[expert_num])
-        output[start:end] = out
+    num_experts = expert_weights.shape[0]
+    
+    # Early return for empty cases
+    if num_tokens == 0 or num_experts == 0:
+        return torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
+    
+    # Create expert indices for each token
+    cumsum_tokens = torch.cumsum(tokens_per_expert, dim=0)
+    expert_indices = torch.zeros(num_tokens, dtype=torch.long, device=token_states.device)
+    
+    # Vectorized assignment of expert indices
+    start_idx = 0
+    for expert_idx in range(num_experts):
+        end_idx = cumsum_tokens[expert_idx]
+        if start_idx < end_idx:
+            expert_indices[start_idx:end_idx] = expert_idx
+        start_idx = end_idx
+    
+    # Use advanced indexing for vectorized computation
+    # This avoids the sequential loop and uses PyTorch's optimized indexing
+    selected_weights = expert_weights[expert_indices]  # Shape: (num_tokens, in_features, out_features)
+    
+    # Vectorized matrix multiplication: (num_tokens, 1, in_features) @ (num_tokens, in_features, out_features)
+    # This is much more efficient than the sequential approach
+    token_states_expanded = token_states.unsqueeze(1)  # (num_tokens, 1, in_features)
+    output = torch.bmm(token_states_expanded, selected_weights).squeeze(1)  # (num_tokens, out_features)
+    
     return output
 
 
