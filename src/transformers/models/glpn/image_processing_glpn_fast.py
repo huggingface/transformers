@@ -26,11 +26,13 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
+
 from ...utils import (
     TensorType,
     auto_docstring,
     requires_backends,
 )
+from .image_processing_glpn import GLPNImageProcessorKwargs
 
 
 @auto_docstring
@@ -50,12 +52,10 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
     do_normalize = False
     resample = PILImageResampling.BILINEAR
     size_divisor = 32
-    # Don't persist an explicit `size` for GLPN (slow doesn't)
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
-    size = {"height": 480, "width": 640}  # only for validation; we still crop, not resize
     interpolation = F.InterpolationMode.BILINEAR
-    # valid_kwargs = GLPNImageProcessorKwargs
+    valid_kwargs = GLPNImageProcessorKwargs
 
     # If BaseImageProcessorFast supports it, this makes persistence explicit:
     try:
@@ -69,24 +69,26 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
             kwargs["size_divisor"] = kwargs.pop("ensure_multiple_of")
         # ensure resample default for validation
         kwargs.setdefault("resample", PILImageResampling.BILINEAR)
+        kwargs.setdefault("size", {"height": 480, "width": 640})
         super().__init__(**kwargs)
 
     @staticmethod
     def _crop_to_multiple(
         images: torch.Tensor,
         size_divisor: int = 32,
+        interpolation: "F.InterpolationMode" = F.InterpolationMode.BILINEAR,
     ) -> torch.Tensor:
         """
-        Crop images (B,C,H,W) by flooring H and W to nearest multiple of `size_divisor`.
-        No resampling; purely geometric crop to match slow GLPN behavior.
+        Resize images (B,C,H,W) by flooring H and W to nearest multiple of `size_divisor`.
+        Uses interpolation to match slow GLPN behavior.
         """
         _, _, h, w = images.shape
         new_h = (h // size_divisor) * size_divisor
         new_w = (w // size_divisor) * size_divisor
         if (new_h, new_w) == (h, w):
             return images
-        # Use top-left crop to mirror typical behavior; slow doesn't center-crop.
-        return images[..., :new_h, :new_w]
+        # Resize (not crop) to match slow processor behavior
+        return F.resize(images, size=(new_h, new_w), interpolation=interpolation, antialias=True)
 
     def _preprocess(
         self,
@@ -112,8 +114,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         - normalize (off by default)
         """
         # avoid validation error: inject dummy size/resample for validate_preprocess_arguments
-        if size is None:
-            size = {"height": 480, "width": 640}
+        
         if resample is None and interpolation is None:
             resample = self.resample
 
@@ -123,11 +124,10 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
 
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self._crop_to_multiple(stacked_images, sd)
-            if do_rescale:
-                stacked_images = self.rescale(stacked_images, rescale_factor)
-            if do_normalize:
-                stacked_images = self.normalize(stacked_images, image_mean, image_std)
+                stacked_images = self._crop_to_multiple(stacked_images, sd, interpolation)
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
             processed_groups[shape] = stacked_images
 
         reordered = reorder_images(processed_groups, grouped_index)
@@ -135,14 +135,25 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         if return_tensors:
             # Detect heterogeneous shapes
             shapes = {tuple(img.shape) for img in reordered}
-            if len(shapes) == 1:
-                # All images same shape -> safe to stack
-                processed = torch.stack(reordered, dim=0)
-                tensor_type = return_tensors
-            else:
-                # Keep as list of tensors - can't stack due to heterogeneous shapes
-                processed = reordered  # Already torch tensors, keep them that way
-                tensor_type = None  # Signal BatchFeature not to try converting
+            if len(shapes) > 1:
+                # Pad to max height and width in batch
+                max_height = max(img.shape[-2] for img in reordered)
+                max_width = max(img.shape[-1] for img in reordered)
+                
+                padded = []
+                for img in reordered:
+                    h, w = img.shape[-2:]
+                    if h < max_height or w < max_width:
+                        # Pad to max dimensions
+                        pad_h = max_height - h
+                        pad_w = max_width - w
+                        # Pad on right and bottom
+                        img = torch.nn.functional.pad(img, (0, pad_w, 0, pad_h))
+                    padded.append(img)
+                reordered = padded
+            
+            processed = torch.stack(reordered, dim=0)
+            tensor_type = return_tensors
         else:
             processed = reordered
             tensor_type = None
@@ -151,7 +162,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
 
     # ensure only slow keys are serialized
     def to_dict(self):
-        d = super().to_dict()
+        output_dict = super().to_dict()
 
         # Keep only these keys with their values (everything else gets set to None)
         keys_to_keep = {
@@ -166,13 +177,12 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         }
 
         # Set all other keys to None (don't persist their values)
-        for key in list(d.keys()):
+        for key in list(output_dict.keys()):
             if key not in keys_to_keep:
-                d[key] = None
+                output_dict[key] = None
 
-        return d
+        return output_dict
 
-    @torch.no_grad()
     def post_process_depth_estimation(self, outputs, target_sizes=None):
         """
         Convert raw model outputs to final depth predictions.

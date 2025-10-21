@@ -40,14 +40,21 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging, requires_backends
-
+from ...processing_utils import ImagesKwargs
 
 if is_torch_available():
     import torch
 
 
 logger = logging.get_logger(__name__)
-
+class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to 32):
+        When `do_resize` is `True`, images are resized so their height and width are rounded down to the closest
+        multiple of `size_divisor`.
+    """
+    size_divisor: int
+    resample: PILImageResampling
 
 @requires(backends=("vision",))
 class GLPNImageProcessor(BaseImageProcessor):
@@ -69,7 +76,7 @@ class GLPNImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
-
+    valid_kwargs = GLPNImageProcessorKwargs
     def __init__(
         self,
         do_resize: bool = True,
@@ -222,6 +229,28 @@ class GLPNImageProcessor(BaseImageProcessor):
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
+
+        if return_tensors:
+            shapes = {tuple(img.shape) for img in images}
+            if len(shapes) > 1:
+                # Find max dimensions
+                max_height = max(img.shape[-2] for img in images)
+                max_width = max(img.shape[-1] for img in images)
+                
+                # Pad each image to max dimensions
+                padded_images = []
+                for img in images:
+                    h, w = img.shape[-2:]
+                    if h < max_height or w < max_width:
+                        pad_h = max_height - h
+                        pad_w = max_width - w
+                        # Create padded array with zeros
+                        padded = np.zeros((*img.shape[:-2], max_height, max_width), dtype=img.dtype)
+                        padded[..., :h, :w] = img
+                        padded_images.append(padded)
+                    else:
+                        padded_images.append(img)
+                images = padded_images
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)

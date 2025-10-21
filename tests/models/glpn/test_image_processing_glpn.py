@@ -177,7 +177,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
         self.image_processing_class.num_channels = 3
 
-    def test_equivalence_slow_fast(self):
+    def test_slow_fast_equivalence(self):
         # Verify that the fast (torchvision) and slow (PIL) paths give identical pixel outputs
         if self.fast_image_processing_class is None:
             self.skipTest("TorchVision not available")
@@ -191,6 +191,27 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         out_fast = fast(images=image, return_tensors="pt")["pixel_values"]
 
         torch.testing.assert_close(out_slow, out_fast, atol=1e-7, rtol=1e-5)
+
+    def test_slow_fast_equivalence_batched(self):
+        # Verify that fast and slow processors handle batched heterogeneous images identically
+        if self.fast_image_processing_class is None:
+            self.skipTest("TorchVision not available")
+
+        # Create batch of images with different resolutions
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        
+        slow = self.image_processing_class(**self.image_processor_dict)
+        fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        out_slow = slow(images=image_inputs, return_tensors="pt")["pixel_values"]
+        out_fast = fast(images=image_inputs, return_tensors="pt")["pixel_values"]
+
+        # Check shapes match (padding should make them equal)
+        self.assertEqual(out_slow.shape, out_fast.shape)
+        
+        # Check pixel values are close
+        torch.testing.assert_close(out_slow, out_fast, atol=1e-1, rtol=1e-3)
+        self.assertLessEqual(torch.mean(torch.abs(out_slow - out_fast)).item(), 5e-3)
 
     def test_post_process_depth_equivalence(self):
         # Check that both processors produce equivalent post-processed depth maps
