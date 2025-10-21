@@ -300,7 +300,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         # Create inputs
-        text = ["<image>In this image, we see", "<image>In this image, there is a cat on"]
+        text = ["<image>In this image, we see", "<image>In this image, we see"]
         images = [[self.image2], [self.image]]
         inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
         inputs.to(device=torch_device, dtype=torch.bfloat16)
@@ -310,6 +310,6 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_generated_text = [
             "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
-            "In this image, there is a cat on a bed with a cat on a bed with a cat on a bed with a cat on a bed",
+            "In this image, we see a cat and a dog lying on a pink blanket. They are both sleeping peacefully. They are",
         ]
         self.assertListEqual(generated_texts, expected_generated_text)
