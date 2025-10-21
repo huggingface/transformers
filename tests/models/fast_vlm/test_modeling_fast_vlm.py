@@ -231,6 +231,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_can_be_initialized_on_meta(self):
         pass
 
+
 @require_torch
 class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):

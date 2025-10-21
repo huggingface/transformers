@@ -1251,7 +1251,9 @@ class ModelTesterMixin:
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             for k in config.sub_configs:
-                if self._is_composite and k == "vision_config":
+                if (
+                    self._is_composite and k == "vision_config"
+                ):  # skip because it's not needed and causes errors e.g with Timm
                     continue
                 if getattr(config, k) is not None:
                     getattr(config, k).output_attentions = True
@@ -1412,7 +1414,9 @@ class ModelTesterMixin:
         config.output_attentions = self.has_attentions
 
         for k in config.sub_configs:
-            if self._is_composite and k == "vision_config":  # to be generalized
+            if (
+                self._is_composite and k == "vision_config"
+            ):  # # skip because it's not needed and causes errors e.g with Timm
                 continue
             if getattr(config, k) is not None:
                 getattr(config, k).output_attentions = self.has_attentions
@@ -3196,9 +3200,9 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             if not all(
-                submodel._supports_flex_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
             ):
-                self.skipTest(reason="At least some parts of this model do not support flex attention")
+                self.skipTest(reason="At least some parts of this model do not support flash attention")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -3294,14 +3298,11 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            with init_empty_weights(include_buffers=True):
-                model = model_class(config)  # this model won't be used anywhere so we can initialize on meta
-                if not all(
-                    submodel._supports_flex_attn
-                    for submodel in model.modules()
-                    if isinstance(submodel, PreTrainedModel)
-                ):
-                    self.skipTest(reason="At least some parts of this model do not support flex attention")
+            model = model_class(config)  # let's construct it here to see if any submodels can't support flash attn
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason=f"At least some parts of this model do not support {attn_implementation}")
 
             # TODO: to change it in the future with other relevant auto classes
             fa_model = model_class._from_config(
