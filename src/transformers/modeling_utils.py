@@ -4742,10 +4742,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
-        model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, dtype, hf_quantizer)
+        model._move_missing_keys_from_meta_to_cpu(list(missing_keys )+ mismatched_keys, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
-        model._initialize_missing_keys(missing_keys + mismatched_keys, is_quantized)
+        model._initialize_missing_keys(list(missing_keys) + mismatched_keys, is_quantized)
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
@@ -4823,7 +4823,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
                 " to use it for predictions and inference."
             )
-
+        disk_offload_index = None
         return model, missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, error_msgs
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):

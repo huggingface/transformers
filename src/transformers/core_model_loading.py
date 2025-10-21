@@ -685,14 +685,13 @@ def convert_and_load_state_dict_in_model(
 
                 # Tensor-parallel plan matching on the *concrete* target key
                 matched_tp_pattern = match_glob(target_key, tp_plan_alt, tp_plan_by_group_name)
-                if matched_tp_pattern is not None:
+                if matched_tp_pattern is not None and device_mesh is not None:
                     if getattr(conversion, "distributed_operation", None) is None:
-                        conversion.distributed_operation = ALL_PARALLEL_STYLES[matched_tp_pattern].shard_tensor
+                        conversion.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
                     rank = device_mesh.get_local_rank() if device_mesh is not None else 0
-                    values = conversion.distributed_operation.convert(
+                    values = conversion.distributed_operation(
                         tensors_for_this_layer.values(),
-                        context={"tp_world_size": None, "tp_rank": rank},
-                        return_all=True,
+                        **{"tp_world_size": None, "tp_rank": rank},
                     )
                 else:
                     values = list(tensors_for_this_layer.values())
@@ -703,15 +702,19 @@ def convert_and_load_state_dict_in_model(
                 values = values[:][0]
                 if isinstance(values, list) and len(values) == 1:
                     values = values[0]
-
+            if isinstance(values, list):
+                values = [[k[:] for k in v] for v in values]
             for op in conversion.operations:
                 try:
                     values = op.convert(values)
                     used_operations.append(op)
                 except Exception as e:
-                    print(
-                        f"{e}\nFailed to apply {op.__class__.__name__} on tensors collected from {conversion.source_keys}. The checkpoints only contains: {tensors_for_this_layer}"
-                    )
+                    if target_key in unexpected_keys:
+                        print(f"Key is unexpected for {conversion.source_keys}")
+                    else:
+                        print(
+                            f"{e}\nFailed to apply {op.__class__.__name__} on tensors collected from {conversion.source_keys}. The checkpoints only contains: {tensors_for_this_layer}"
+                        )
             values = [values] if not isinstance(values, list) else values
             realized_value = {
                 k: t for k, t in zip(concrete_target_keys, values)
