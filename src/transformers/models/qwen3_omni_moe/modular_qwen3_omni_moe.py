@@ -581,8 +581,10 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
             Dimensionality of the hidden states and embeddings in the autoregressive transformer decoder.
         max_position_embeddings (`int`, *optional*, defaults to 8000):
             Maximum sequence length that the autoregressive decoder can handle. Determines positional embedding size.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period for rotary position embeddings (RoPE) applied to attention layers.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the decoder.
         num_key_value_heads (`int`, *optional*, defaults to 16):
@@ -632,7 +634,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         codebook_size=2048,
         hidden_size=1024,
         max_position_embeddings=8000,
-        rope_theta=10000,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         num_attention_heads=16,
         num_key_value_heads=16,
         attention_bias=False,
@@ -653,7 +655,6 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         self.codebook_size = codebook_size
         self.hidden_size = hidden_size
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.attention_bias = attention_bias
@@ -668,6 +669,15 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         self.upsampling_ratios = upsampling_ratios
         self.decoder_dim = decoder_dim
         self.attention_dropout = attention_dropout
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
     @property
     def layer_types(self):
