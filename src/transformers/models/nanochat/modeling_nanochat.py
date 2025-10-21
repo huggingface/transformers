@@ -41,10 +41,9 @@ from .configuration_nanochat import NanoChatConfig
 
 
 class NanoChatRMSNorm(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.hidden_size = hidden_size
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -92,6 +91,33 @@ class NanoChatRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -137,28 +163,12 @@ def rotate_half(x):
     return torch.cat((x2, -x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors using NanoChat's rotate_half."""
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 class NanoChatAttention(nn.Module):
-    """
-    Multi-headed attention from NanoChat with custom RoPE and QK normalization.
-
-    Based on: https://github.com/karpathy/nanochat/blob/main/nanochat/gpt.py#L64
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
-        # Temporarily add attention_bias and layer_types for Qwen3 compatibility
-        config.attention_bias = config.qkv_bias
-        if not hasattr(config, "layer_types"):
-            config.layer_types = ["full_attention"] * config.num_hidden_layers
+        config.attention_bias = config.qkv_bias  # FIXME: rename in conversion script instead
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -180,9 +190,8 @@ class NanoChatAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = NanoChatRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.sliding_window = None
+        self.q_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
+        self.k_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -193,13 +202,6 @@ class NanoChatAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """
-        NanoChat uses a different order than Qwen3: RoPE is applied before QK normalization.
-        Qwen3 order: project -> norm -> transpose -> RoPE
-        NanoChat order: project -> transpose -> RoPE -> norm
-
-        NanoChat also uses a custom rotate_half with flipped signs.
-        """
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -210,10 +212,12 @@ class NanoChatAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
+        # RoPE -> Norm (instead of usual Norm -> RoPE)
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
         if past_key_values is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -242,7 +246,7 @@ class NanoChatMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        # Override with bias=False for NanoChat
+        # TODO: check if the module names are respected in the conversion script
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
@@ -254,15 +258,16 @@ class NanoChatMLP(nn.Module):
 
 
 class NanoChatDecoderLayer(GradientCheckpointingLayer):
-    """NanoChat decoder layer with pre-norm architecture."""
-
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = NanoChatAttention(config, layer_idx)
+
+        self.self_attn = NanoChatAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = NanoChatMLP(config)
-        self.input_layernorm = NanoChatRMSNorm(config, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = NanoChatRMSNorm(config, eps=config.rms_norm_eps)
+
+        self.input_layernorm = NanoChatRMSNorm(eps=config.rms_norm_eps)
+        self.post_attention_layernorm = NanoChatRMSNorm(eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -311,7 +316,6 @@ class NanoChatPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-
     _can_record_outputs = {
         "hidden_states": NanoChatDecoderLayer,
         "attentions": NanoChatAttention,
@@ -333,12 +337,6 @@ class NanoChatPreTrainedModel(PreTrainedModel):
 class NanoChatModel(NanoChatPreTrainedModel):
     def __init__(self, config: NanoChatConfig):
         super().__init__(config)
-        self.initial_norm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layers = nn.ModuleList(
-            [NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = NanoChatRotaryEmbedding(config=config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -346,9 +344,11 @@ class NanoChatModel(NanoChatPreTrainedModel):
         self.layers = nn.ModuleList(
             [NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.rotary_emb = NanoChatRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+
+        self.initial_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -362,22 +362,22 @@ class NanoChatModel(NanoChatPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
+            cache_position: torch.Tensor = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
@@ -395,35 +395,33 @@ class NanoChatModel(NanoChatPreTrainedModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        hidden_states = self.initial_norm(hidden_states)
 
-        for decoder_layer in self.layers:
+        hidden_states = self.initial_norm(hidden_states)  # Additional norm before the layers
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
-
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            past_key_values=past_key_values,
         )
 
 
 @auto_docstring
 class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = None  # No tied weights
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config: NanoChatConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = NanoChatModel(config)
         self.vocab_size = config.vocab_size
@@ -447,13 +445,14 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
+        # FIXME: docs stay with karpathy repo?
         r"""
         Example:
 
         ```python
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-        >>> model = AutoModelForCausalLM.from_pretrained(model_id"karpathy/nanochat-d32")
+        >>> model = AutoModelForCausalLM.from_pretrained("karpathy/nanochat-d32")
 
         >>> tokenizer = AutoTokenizer.from_pretrained("karpathy/nanochat-d32")
 
@@ -466,7 +465,7 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
             ).to(device)
 
         >>> with torch.no_grad():
-            >>> outputs = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+        >>>     outputs = model.generate(**inputs, max_new_tokens=64, do_sample=False)
 
         >>> generated_tokens = outputs[0, inputs["input_ids"].shape[1] :]
         >>> output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
@@ -483,13 +482,13 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-        # Soft-cap the logits. The main difference to LlamaForCausalLM.forward.
-        if self.config.logits_soft_cap is not None:
-            cap = self.config.logits_soft_cap
-            logits = cap * torch.tanh(logits / cap)
+        # Soft-cap the logits. The main difference to LlamaForCausalLM
+        cap = self.config.logits_soft_cap
+        logits = cap * torch.tanh(logits / cap)
 
         loss = None
         if labels is not None:
