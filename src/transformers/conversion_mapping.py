@@ -12,8 +12,8 @@ _checkpoint_conversion_mapping = {
     "mixtral": [
         WeightConverter(
             source_keys=[
-                "experts.*.w1.weight",
-                "experts.*.w3.weight",
+                "block_sparse_moe.*.w1.weight",
+                "block_sparse_moe.*.w3.weight",
             ],  # you give me a list of 2 keys, I collect a list of tensors
             target_keys="experts.gate_up_proj",  # target key gets the list of two tensors
             operations=[
@@ -29,6 +29,6 @@ _checkpoint_conversion_mapping = {
             "self_attn.qkv_proj",
             Concatenate(dim=0),  # more like stack?
         ),
-        WeightConverter("experts.*.w2.weight", "experts.down_proj.weight"),
+        WeightConverter("block_sparse_moe.*.w2.weight", "experts.down_proj.weight"),
     ]
 }
