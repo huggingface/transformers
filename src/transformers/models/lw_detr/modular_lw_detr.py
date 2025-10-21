@@ -550,6 +550,10 @@ class LwDetrConvEncoder(ConditionalDetrConvEncoder):
 
 
 class LwDetrAttention(LlamaAttention):
+    def __init__(self, config: LwDetrConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.is_causal = False
+
     def forward(
         self,
         hidden_states: torch.Tensor,
