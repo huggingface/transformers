@@ -63,6 +63,7 @@ class NanoChatAttention(Qwen3Attention):
 
         super().__init__(config, layer_idx)
         del self.sliding_window
+        del self.layer_type
 
         self.q_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.k_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
@@ -70,8 +71,8 @@ class NanoChatAttention(Qwen3Attention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -194,17 +195,17 @@ class NanoChatModel(LlamaModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         hidden_states = self.initial_norm(hidden_states)  # Additional norm before the layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -217,8 +218,6 @@ class NanoChatModel(LlamaModel):
 
 @auto_docstring
 class NanoChatForCausalLM(LlamaForCausalLM):
-    _tied_weights_keys = None  # No tied weights
-
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -14,20 +14,15 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
-
-
-__all__ = ["NanoChatConfig"]
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class NanoChatConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NanoChatModel`]. It is used to instantiate a
     NanoChat model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the NanoChat-d32.
+    with the defaults will yield a similar configuration to that of the [NanoChat-d32](https://huggingface.co/karpathy/nanochat-d32).
+    # TODO: check if we keep that link
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -52,24 +47,20 @@ class NanoChatConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
-        max_position_embeddings (`int`, *optional*, defaults to 1024):
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         hidden_act (`str` or `function`, *optional*, defaults to `"relu2"`):
             The non-linear activation function (function or string) in the decoder.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        resid_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the residual connections.
         rms_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the rms normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -83,6 +74,8 @@ class NanoChatConfig(PretrainedConfig):
             End of stream token id.
         pad_token_id (`int`, *optional*, defaults to 1):
             Padding token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     ```python
     >>> from transformers import NanoChatModel, NanoChatConfig
@@ -105,38 +98,31 @@ class NanoChatConfig(PretrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.fc": "colwise",
-        "layers.*.mlp.proj": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
     }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
 
     def __init__(
         self,
         vocab_size: int = 50304,
         hidden_size: int = 768,
-        intermediate_size: int | None = None,
+        intermediate_size: int | None = None,  # TODO: default value
         num_hidden_layers: int = 12,
         num_attention_heads: int = 6,
         num_key_value_heads: int | None = None,
-        max_position_embeddings: int = 1024,
+        max_position_embeddings: int = 2048,  # TODO: check if this is ok (ckpt)
         hidden_act: str = "relu2",
         attention_dropout: float = 0.0,
-        resid_dropout: float = 0.0,
         rms_norm_eps: float = 1e-6,
         initializer_range: float = 0.02,
-        rope_theta: float = 10000.0,
-        rope_scaling: dict | None = None,
+        rope_parameters: RopeParameters | dict[RopeParameters] | None = None,  # TODO: check conversion script
         use_cache: bool = True,
         logits_soft_cap: float | None = 15.0,
-        qkv_bias: bool = False,
+        qkv_bias: bool = False,  # FIXME: attention_bias instead
         bos_token_id: int = 0,
         eos_token_id: int = 1,
         pad_token_id: int = 1,
+        tie_word_embeddings: bool = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -144,22 +130,34 @@ class NanoChatConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
         self.num_key_value_heads = num_key_value_heads
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
-        self.resid_dropout = resid_dropout
         self.rms_norm_eps = rms_norm_eps
         self.initializer_range = initializer_range
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.use_cache = use_cache
         self.logits_soft_cap = logits_soft_cap
         self.qkv_bias = qkv_bias
+
+        # Validate the correctness of rotary position embeddings parameters
+        self.rope_parameters = rope_parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["NanoChatConfig"]
