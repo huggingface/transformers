@@ -14,13 +14,10 @@
 # limitations under the License.
 """Testing suite for the ColQwen2 processor."""
 
-import shutil
-import tempfile
 import unittest
 
 import torch
 
-from transformers import AutoProcessor, Qwen2VLProcessor
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -40,24 +37,16 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ColQwen2Processor
+    model_id = "Qwen/Qwen2-VL-2B-Instruct"
 
-    @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen2VLProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-        processor.save_pretrained(cls.tmpdirname)
+    @unittest.skip("ColpaliProcessor can only process one of text or images at a time")
+    def test_processor_with_multiple_inputs(self):
+        pass
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+    @unittest.skip("ColpaliProcessor adds a prefix and suffix to the text")
+    def test_tokenizer_defaults(self):
+        pass
 
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
-
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 

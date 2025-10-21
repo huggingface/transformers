@@ -961,6 +961,7 @@ DEPRECATED_MODELS = [
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
         ("openai-gpt", "openai"),
+        ("blip-2", "blip_2"),
         ("data2vec-audio", "data2vec"),
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
