@@ -43,7 +43,7 @@ class VocosConfig(PretrainedConfig):
         kernel_size (`int`, *optional*, defaults to 7):
             Kernel size for depthwise convolutions.
         padding (`int`, *optional*, defaults to 3):
-            Padding applied to those convolutions.
+            Padding applied to depthwise convolutions.
         layer_scale_init_value (`float`, *optional*, defaults to `1/8`):
             Initial value for layer-scale (if >0, enables per-block scaling).
         use_adaptive_norm (`bool`, *optional*, defaults to `False`):
