@@ -17,7 +17,8 @@
 """PyTorch Doge model."""
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -25,14 +26,14 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import rope_config_validation
-from ...modeling_utils import AttentionInterface
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, is_torch_flex_attn_available
+from ...utils import TransformersKwargs, is_torch_flex_attn_available, logging
 from ...utils.generic import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
@@ -47,17 +48,19 @@ from ..llama.modeling_llama import (
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 
 
+logger = logging.get_logger(__name__)
+
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
 
-class DogeConfig(PretrainedConfig):
+class DogeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DogeModel`]. It is used to instantiate an Doge
     model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-320M](https://huggingface.co/SmallDoge/Doge-320M).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32768):
@@ -83,41 +86,10 @@ class DogeConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings.
-            NOTE: if you apply new rope type and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value accordingly.
-            Doge family of small models use `{ 'rope_type': 'dynamic', 'factor': 4.0, 'original_max_position_embeddings': 2048 }` as the default value.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope', 'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings.
-                    In most scaling types, a `factor` of x will enable the model to handle sequences of length x * original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'.
-                    The original max position embeddings used during pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation.
-                    If unspecified, it defaults to value recommended by the implementation, using the `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<`original_max_position_embeddings`).
-                    Must be a list of numbers with the same length as the hidden size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<`original_max_position_embeddings`).
-                    Must be a list of numbers with the same length as the hidden size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
@@ -125,7 +97,7 @@ class DogeConfig(PretrainedConfig):
             If `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used.
             When converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed by meanpooling all the original heads within that group.
-            For more details checkout [this paper](https://arxiv.org/pdf/2305.13245.pdf).
+            For more details checkout [this paper](https://huggingface.co/papers/2305.13245).
             If it is not specified, will default to `num_attention_heads`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
@@ -193,32 +165,31 @@ class DogeConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32768,
-        hidden_size=1024,
-        intermediate_size=2048,
-        num_hidden_layers=32,
-        hidden_dropout=0.0,
-        hidden_act="silu",
-        initializer_range=0.02,
-        rms_norm_eps=1e-06,
-        use_cache=True,
-        tie_word_embeddings=False,
-        max_position_embeddings=2048,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        num_attention_heads=8,
-        num_key_value_heads=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        sliding_window=None,
-        keep_window_size=2048,
-        is_moe=False,
-        num_experts=16384,
-        num_experts_per_tok=64,
-        norm_topk_prob=False,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
+        vocab_size: Optional[int] = 32768,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 2048,
+        num_hidden_layers: Optional[int] = 32,
+        hidden_dropout: Optional[float] = 0.0,
+        hidden_act: Optional[str] = "silu",
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-06,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        max_position_embeddings: Optional[int] = 2048,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        num_attention_heads: Optional[int] = 8,
+        num_key_value_heads: Optional[int] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        keep_window_size: Optional[int] = 2048,
+        is_moe: Optional[bool] = False,
+        num_experts: Optional[int] = 16384,
+        num_experts_per_tok: Optional[int] = 64,
+        norm_topk_prob: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
+        router_aux_loss_coef: Optional[float] = 0.001,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -233,8 +204,6 @@ class DogeConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.attention_bias = attention_bias
@@ -248,11 +217,13 @@ class DogeConfig(PretrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         # for backward compatibility
@@ -281,7 +252,6 @@ def flex_attention_forward(
     attention_mask: Union[torch.Tensor, "BlockMask"],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     block_mask = None
@@ -299,8 +269,6 @@ def flex_attention_forward(
             score = softcap * torch.tanh(score / softcap)
         if causal_mask is not None:
             score = score + causal_mask[batch_idx][head_idx][q_idx][kv_idx]
-        if head_mask is not None:
-            score = score + head_mask[batch_idx][head_idx][0][0]
         return score
 
     attn_output, attention_weights = compile_friendly_flex_attention(
@@ -362,8 +330,9 @@ class DogeAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -376,10 +345,10 @@ class DogeAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # calculate dynamic mask from value_states
         dt_states = self.dt_proj(
@@ -528,10 +497,10 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -544,7 +513,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
@@ -573,7 +542,7 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        LlamaPreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
                 module.A.data.zero_()
@@ -598,7 +567,7 @@ def load_balancing_loss_func(
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
@@ -705,7 +674,7 @@ class DogeForCausalLM(MixtralForCausalLM):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

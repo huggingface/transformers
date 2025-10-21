@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-06-02 and added to Hugging Face Transformers on 2023-06-20.*
 
 # EfficientFormer
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 <Tip warning={true}>
@@ -54,7 +54,7 @@ EfficientFormer-L7, obtains 83.3% accuracy with only 7.0 ms latency. Our work pr
 reach extremely low latency on mobile devices while maintaining high performance.*
 
 This model was contributed by [novice03](https://huggingface.co/novice03) and [Bearnardd](https://huggingface.co/Bearnardd).
-The original code can be found [here](https://github.com/snap-research/EfficientFormer). The TensorFlow version of this model was added by [D-Roberts](https://huggingface.co/D-Roberts).
+The original code can be found [here](https://github.com/snap-research/EfficientFormer).
 
 ## Documentation resources
 
@@ -68,9 +68,6 @@ The original code can be found [here](https://github.com/snap-research/Efficient
 
 [[autodoc]] EfficientFormerImageProcessor
     - preprocess
-
-<frameworkcontent>
-<pt>
 
 ## EfficientFormerModel
 
@@ -86,24 +83,3 @@ The original code can be found [here](https://github.com/snap-research/Efficient
 
 [[autodoc]] EfficientFormerForImageClassificationWithTeacher
     - forward
-
-</pt>
-<tf>
-
-## TFEfficientFormerModel
-
-[[autodoc]] TFEfficientFormerModel
-    - call
-
-## TFEfficientFormerForImageClassification
-
-[[autodoc]] TFEfficientFormerForImageClassification
-    - call
-
-## TFEfficientFormerForImageClassificationWithTeacher
-
-[[autodoc]] TFEfficientFormerForImageClassificationWithTeacher
-    - call
-
-</tf>
-</frameworkcontent>

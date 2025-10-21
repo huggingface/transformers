@@ -19,7 +19,6 @@ import os
 import unittest
 from copy import deepcopy
 from functools import partial
-from typing import Optional
 
 import datasets
 from parameterized import parameterized
@@ -518,7 +517,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(
-                local_rank=0,
                 fp16=fp16,
                 deepspeed=ds_config,
                 per_device_train_batch_size=per_device_train_batch_size,
@@ -552,7 +550,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
             trainer = get_regression_trainer(
-                a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict, output_dir=self.get_auto_remove_tmp_dir()
+                a=a, fp16=True, deepspeed=ds_config_zero2_dict, output_dir=self.get_auto_remove_tmp_dir()
             )
             trainer.train()
         new_a = trainer.model.a.item()
@@ -566,7 +564,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
             trainer = get_regression_trainer(
-                a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict, output_dir=self.get_auto_remove_tmp_dir()
+                a=a, fp16=True, deepspeed=ds_config_zero2_dict, output_dir=self.get_auto_remove_tmp_dir()
             )
             trainer.train()
         new_a = trainer.model.a.item()
@@ -580,7 +578,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
             trainer = get_regression_trainer(
-                a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict, output_dir=self.get_auto_remove_tmp_dir()
+                a=a, fp16=True, deepspeed=ds_config_zero2_dict, output_dir=self.get_auto_remove_tmp_dir()
             )
             trainer.train()
         new_a = trainer.model.a.item()
@@ -598,7 +596,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
             ds_config_zero3_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
             trainer = get_regression_trainer(
-                local_rank=0, fp16=True, deepspeed=ds_config_zero3_dict, output_dir=self.get_auto_remove_tmp_dir()
+                fp16=True, deepspeed=ds_config_zero3_dict, output_dir=self.get_auto_remove_tmp_dir()
             )
             with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
@@ -616,7 +614,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 return model
 
             trainer = get_regression_trainer(
-                local_rank=0,
                 fp16=True,
                 model_init=model_init,
                 deepspeed=ds_config_zero3_dict,
@@ -642,7 +639,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         ds_config_dict["zero_optimization"]["offload_optimizer"]["device"] = "cpu"
         ds_config_dict["zero_force_ds_cpu_optimizer"] = False  # offload is not efficient w/o CPUAdam
         with mockenv_context(**self.dist_env_1_gpu):
-            kwargs = {"local_rank": 0, "deepspeed": ds_config_dict, "output_dir": self.get_auto_remove_tmp_dir()}
+            kwargs = {"deepspeed": ds_config_dict, "output_dir": self.get_auto_remove_tmp_dir()}
             kwargs[dtype] = True
             trainer = get_regression_trainer(**kwargs)
             with CaptureLogger(deepspeed_logger) as cl:
@@ -659,7 +656,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # to reset `deepspeed_logger.handlers[0].setStream(sys.stdout)` or directly capture from the deepspeed_logger.
         with mockenv_context(**self.dist_env_1_gpu):
             kwargs = {
-                "local_rank": 0,
                 "deepspeed": self.get_config_dict(stage),
                 "output_dir": self.get_auto_remove_tmp_dir(),
             }
@@ -683,7 +679,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             kwargs = {
                 "a": a,
                 "b": b,
-                "local_rank": 0,
                 "train_len": 8,
                 "deepspeed": self.get_config_dict(stage),
                 "per_device_train_batch_size": 8,
@@ -729,7 +724,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         kwargs = {
             "a": a,
             "b": b,
-            "local_rank": 0,
             "train_len": train_len,
             "deepspeed": self.get_config_dict(stage),
             "output_dir": self.get_auto_remove_tmp_dir(),
@@ -1222,7 +1216,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         # this is just inference, so no optimizer should be loaded
         # it only works for z3 (makes no sense with z1-z2)
-        fp32 = True if dtype == "fp32" else False
+        fp32 = dtype == "fp32"
         self.run_and_check(
             stage=ZERO3,
             dtype=dtype,
@@ -1259,8 +1253,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         quality_checks: bool = True,
         fp32: bool = False,
-        extra_args_str: Optional[str] = None,
-        remove_args_str: Optional[str] = None,
+        extra_args_str: str | None = None,
+        remove_args_str: str | None = None,
     ):
         # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
@@ -1292,8 +1286,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         distributed: bool = True,
         fp32: bool = False,
-        extra_args_str: Optional[str] = None,
-        remove_args_str: Optional[str] = None,
+        extra_args_str: str | None = None,
+        remove_args_str: str | None = None,
     ):
         max_len = 32
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
@@ -1303,7 +1297,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --train_file {data_dir}/train.json
             --validation_file {data_dir}/val.json
             --output_dir {output_dir}
-            --overwrite_output_dir
             --max_source_length {max_len}
             --max_target_length {max_len}
             --val_max_target_length {max_len}
@@ -1337,13 +1330,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         if do_eval:
             actions += 1
-            args.extend(
-                """
-            --do_eval
-            --max_eval_samples 16
-            --per_device_eval_batch_size 2
-            """.split()
-            )
+            args.extend(["--do_eval", "--max_eval_samples", "16", "--per_device_eval_batch_size", "2"])
 
         assert actions > 0, "need at least do_train or do_eval for the test to run"
 
@@ -1379,7 +1366,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --train_file {data_dir}/sample_text.txt
             --validation_file {data_dir}/sample_text.txt
             --output_dir {output_dir}
-            --overwrite_output_dir
             --do_train
             --do_eval
             --max_train_samples 16
@@ -1416,7 +1402,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --train_file {data_dir}/sample_text.txt
             --validation_file {data_dir}/sample_text.txt
             --output_dir {output_dir}
-            --overwrite_output_dir
             --do_train
             --max_train_samples 4
             --per_device_train_batch_size 2

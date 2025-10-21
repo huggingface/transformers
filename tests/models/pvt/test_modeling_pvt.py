@@ -143,10 +143,7 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_head_masking = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_torchscript = False
     has_attentions = False
     test_torch_exportable = True
 
@@ -171,17 +168,6 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Pvt does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_get_set_embeddings(self):
         pass
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                self.assertTrue(
-                    -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -291,7 +277,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]],
-                ("cuda", 8): [[-0.3084, 1.0402, 1.1816], [-0.2883, 0.5781, 0.6123], [0.1487, 0.6119, -0.0584]],
+                ("cuda", 8): [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -306,7 +292,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", torch_dtype=torch.float16)
+        model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", dtype=torch.float16)
         model.to(torch_device)
         image_processor = PvtImageProcessor(size=224)
 

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-01-13 and added to Hugging Face Transformers on 2023-06-20.*
 
 # XLM-ProphetNet
 
@@ -39,7 +40,6 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 **DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title) and assign
 @patrickvonplaten
-
 
 ## Overview
 

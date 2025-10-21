@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_outputs import ImageClassifierOutputWithNoAttention
@@ -45,6 +44,7 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 @auto_docstring
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
+    input_modalities = ["image", "text"]
     _checkpoint_conversion_mapping = {
         "model.language_model.model": "model.model.language_model",
         "model.vision_tower": "model.model.vision_tower",
@@ -86,7 +86,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,

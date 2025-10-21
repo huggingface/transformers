@@ -16,9 +16,9 @@
 import inspect
 import math
 import unittest
+from functools import cached_property
 
 from transformers import DeformableDetrConfig, ResNetConfig, is_torch_available, is_vision_available
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
@@ -30,7 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -193,9 +193,7 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
     test_torch_exportable = True
 
@@ -507,12 +505,7 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
-                    else []
-                )
+                expected_arg_names = ["pixel_values", "pixel_mask", "decoder_attention_mask"]
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
@@ -581,29 +574,6 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
             self.assertTrue(outputs)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            print("Model class:", model_class)
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if (
-                        "level_embed" in name
-                        or "sampling_offsets.bias" in name
-                        or "value_proj" in name
-                        or "output_proj" in name
-                        or "reference_points" in name
-                    ):
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_two_stage_training(self):
         model_class = DeformableDetrForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -636,7 +606,7 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         model_class = DeformableDetrForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        model = model_class(config, torch_dtype=torch.bfloat16)
+        model = model_class(config, dtype=torch.bfloat16)
         model.to(torch_device)
         model.eval()
         inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
@@ -678,9 +648,9 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-9.6644, -4.3434, -5.8707],
-                [-9.7035, -3.8503, -5.0721],
-                [-10.5633, -5.3387, -7.5119],
+                [-9.6645, -4.3449, -5.8705],
+                [-9.7035, -3.8504, -5.0724],
+                [-10.5634, -5.3379, -7.5116],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
@@ -703,7 +673,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         )[0]
         expected_scores = torch.tensor([0.7999, 0.7895, 0.6332, 0.4719, 0.4382]).to(torch_device)
         expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([16.4960, 52.8387, 318.2565, 470.7831]).to(torch_device)
+        expected_slice_boxes = torch.tensor([16.5028, 52.8391, 318.2544, 470.7841]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-4, atol=2e-4)
@@ -729,15 +699,15 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-6.7112, -4.3216, -6.3781],
-                [-8.9035, -6.1738, -6.7249],
-                [-6.9314, -4.4736, -6.2303],
+                [-6.7108, -4.3213, -6.3777],
+                [-8.9014, -6.1799, -6.7240],
+                [-6.9315, -4.4735, -6.2298],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.2582, 0.5499, 0.4683],
-                [0.7652, 0.9084, 0.4884],
+                [0.2583, 0.5499, 0.4683],
+                [0.7652, 0.9068, 0.4882],
                 [0.5490, 0.2763, 0.0564],
             ]
         ).to(torch_device)

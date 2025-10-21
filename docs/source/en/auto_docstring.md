@@ -145,7 +145,6 @@ Arguments can also be passed directly to `@auto_docstring` for more control. Use
 
 The `Returns` and `Examples` parts of the docstring can also be manually specified.
 
-
 ```python
 MODEL_COMMON_CUSTOM_ARGS = r"""
     common_arg_1 (`torch.Tensor`, *optional*, defaults to `default_value`):
@@ -202,7 +201,6 @@ There are some rules for documenting different types of arguments and they're li
 
     If a standard argument behaves differently in your model, then you can override it locally in a `r""" """` block. This local definition has a higher priority. For example, the `labels` argument is often customized per model and typically requires overriding.
 
-
 - New or custom arguments should be documented within an `r""" """` block after the signature if it is a function or in the `__init__` method's docstring if it is a class.
 
     ```py
@@ -212,9 +210,9 @@ There are some rules for documenting different types of arguments and they're li
         This can span multiple lines.
     ```
 
-    * Include `type` in backticks.
-    * Add *optional* if the argument is not required or has a default value.
-    * Add "defaults to X" if it has a default value. You don't need to add "defaults to `None`" if the default value is `None`.
+  * Include `type` in backticks.
+  * Add *optional* if the argument is not required or has a default value.
+  * Add "defaults to X" if it has a default value. You don't need to add "defaults to `None`" if the default value is `None`.
 
     These arguments can also be passed to `@auto_docstring` as a `custom_args` argument. It is used to define the docstring block for new arguments once if they are repeated in multiple places in the modeling file.
 
@@ -290,11 +288,11 @@ The `@auto_docstring` decorator automatically generates docstrings by:
 
 7. Adding return values to the docstring. For methods like `forward`, the decorator automatically generates the `Returns` field in the docstring based on the method's return type annotation.
 
-    For example, if a method returns a [`~transformers.utils.ModelOutput`] subclass, `@auto_docstring` extracts the field descriptions from the class' docstring to create a comprehensive return value description. You can also manually specifiy a custom `Returns` field in a functions docstring.
+    For example, if a method returns a [`~transformers.utils.ModelOutput`] subclass, `@auto_docstring` extracts the field descriptions from the class' docstring to create a comprehensive return value description. You can also manually specify a custom `Returns` field in a functions docstring.
 
 8. Unrolling kwargs typed with the unpack operator. For specific methods (defined in `UNROLL_KWARGS_METHODS`) or classes (defined in `UNROLL_KWARGS_CLASSES`), the decorator processes `**kwargs` parameters that are typed with `Unpack[KwargsTypedDict]`. It extracts the documentations from the `TypedDict` and adds each parameter to the function's docstring.
 
-    Currently only supported for [`FastImageProcessorKwargs`].
+    Currently only supported for [`ImagesKwargs`].
 
 ## Best practices
 

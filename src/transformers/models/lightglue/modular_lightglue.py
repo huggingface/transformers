@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...image_utils import ImageInput, is_vision_available, to_numpy_array
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -43,15 +44,15 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class LightGlueConfig(PretrainedConfig):
+class LightGlueConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LightGlueForKeypointMatching`]. It is used to
     instantiate a LightGlue model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LightGlue
     [ETH-CVG/lightglue_superpoint](https://huggingface.co/ETH-CVG/lightglue_superpoint) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
@@ -68,7 +69,7 @@ class LightGlueConfig(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         depth_confidence (`float`, *optional*, defaults to 0.95):
             The confidence threshold used to perform early stopping
@@ -362,6 +363,10 @@ class LightGluePositionalEncoder(nn.Module):
 
 
 class LightGlueAttention(LlamaAttention):
+    def __init__(self, config: LightGlueConfig, layer_idx: int):
+        super().__init__()
+        del self.rotary_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -370,7 +375,7 @@ class LightGlueAttention(LlamaAttention):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -582,6 +587,7 @@ class LightGluePreTrainedModel(PreTrainedModel):
     config: LightGlueConfig
     base_model_prefix = "lightglue"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -658,7 +664,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     The correspondence ids use -1 to indicate non-matching points.
 
     Philipp Lindenberger, Paul-Edouard Sarlin and Marc Pollefeys. LightGlue: Local Feature Matching at Light Speed.
-    In ICCV 2023. https://arxiv.org/pdf/2306.13643.pdf
+    In ICCV 2023. https://huggingface.co/papers/2306.13643
     """
 
     def __init__(self, config: LightGlueConfig):
@@ -786,6 +792,10 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         matching_scores,
     ):
         early_stops_indices = torch.stack(early_stops_indices)
+        # Rearrange tensors to have the same order as the input batch
+        ids = torch.arange(early_stops_indices.shape[0])
+        order_indices = early_stops_indices[ids]
+        early_stops_indices = early_stops_indices[order_indices]
         matches, final_pruned_keypoints_indices = (
             pad_sequence(tensor, batch_first=True, padding_value=-1)
             for tensor in [matches, final_pruned_keypoints_indices]
@@ -848,7 +858,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         descriptors: torch.Tensor,
         height: int,
         width: int,
-        mask: torch.Tensor = None,
+        mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple, tuple]:

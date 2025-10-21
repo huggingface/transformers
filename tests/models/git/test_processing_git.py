@@ -112,7 +112,7 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
+        self.assertSetEqual(set(inputs.keys()), {"input_ids", "attention_mask", "pixel_values"})
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -130,17 +130,3 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = GitProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        # For now the processor supports only ['input_ids', 'attention_mask', 'pixel_values']
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])

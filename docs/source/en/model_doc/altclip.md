@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-11-12 and added to Hugging Face Transformers on 2023-01-04.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -39,7 +40,7 @@ import requests
 from PIL import Image
 from transformers import AltCLIPModel, AltCLIPProcessor
 
-model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", torch_dtype=torch.bfloat16)
+model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", dtype=torch.bfloat16)
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -73,7 +74,7 @@ from transformers import AltCLIPModel, AltCLIPProcessor, TorchAoConfig
 model = AltCLIPModel.from_pretrained(
     "BAAI/AltCLIP",
     quantization_config=TorchAoConfig("int4_weight_only", group_size=128),
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
@@ -99,22 +100,29 @@ for label, prob in zip(labels, probs[0]):
 - [`AltCLIPProcessor`] combines [`CLIPImageProcessor`] and [`XLMRobertaTokenizer`] into a single instance to encode text and prepare images.
 
 ## AltCLIPConfig
+
 [[autodoc]] AltCLIPConfig
 
 ## AltCLIPTextConfig
+
 [[autodoc]] AltCLIPTextConfig
 
 ## AltCLIPVisionConfig
+
 [[autodoc]] AltCLIPVisionConfig
 
 ## AltCLIPModel
+
 [[autodoc]] AltCLIPModel
 
 ## AltCLIPTextModel
+
 [[autodoc]] AltCLIPTextModel
 
 ## AltCLIPVisionModel
+
 [[autodoc]] AltCLIPVisionModel
 
 ## AltCLIPProcessor
+
 [[autodoc]] AltCLIPProcessor

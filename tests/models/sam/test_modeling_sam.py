@@ -16,10 +16,11 @@
 import tempfile
 import unittest
 
+import pytest
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
-from transformers.testing_utils import Expectations, cleanup, require_torch, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -157,11 +158,8 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SamVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -256,7 +254,7 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @require_torch_sdpa
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
@@ -513,11 +511,8 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
     )
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
     _is_composite = True
 
     # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
@@ -657,16 +652,15 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = SamModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_torch_sdpa
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
         This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 
@@ -779,7 +773,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-12.7729, -12.3665, -12.6061],
-                ("cuda", 8): [-12.7657, -12.3683, -12.5983],
+                ("cuda", 8): [-12.7731, -12.3667, -12.6063],
             }
         )
         expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)

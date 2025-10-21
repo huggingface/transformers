@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
 import shutil
 import tempfile
@@ -23,7 +22,7 @@ import pytest
 from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
-from transformers.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -74,12 +73,8 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_std": [0.26862954, 0.26130258, 0.27577711],
             "do_convert_rgb": True,
         }
-        cls.image_processor_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
-
         tokenizer = cls.get_tokenizer()
-        image_processor = cls.get_image_processor()
+        image_processor = ChineseCLIPImageProcessor(**image_processor_map)
         processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(cls.tmpdirname)
 
@@ -184,7 +179,7 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
+        self.assertSetEqual(set(inputs.keys()), {"input_ids", "token_type_ids", "attention_mask", "pixel_values"})
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -202,16 +197,3 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "Alexandra，T-shirt的价格是15便士。"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)

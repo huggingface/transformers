@@ -16,9 +16,10 @@ import unittest
 import warnings
 
 import numpy as np
+import pytest
 
-from transformers.configuration_utils import PretrainedConfig
-from transformers.modeling_outputs import BaseModelOutput
+from transformers.configuration_utils import PreTrainedConfig
+from transformers.modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from transformers.testing_utils import require_torch
 from transformers.utils import (
     can_return_tuple,
@@ -138,6 +139,19 @@ class GenericTester(unittest.TestCase):
 
         self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
 
+    def test_model_output_subclass(self):
+        # testing with “dict-like init” case
+        out = CausalLMOutputWithPast({"logits": torch.ones(2, 3, 4)})
+        self.assertTrue(out["logits"] is not None)
+        self.assertTrue(out.loss is None)
+        self.assertTrue(len(out.to_tuple()) == 1)
+
+        # testing with dataclass init case
+        out = CausalLMOutputWithPast(logits=torch.ones(2, 3, 4))
+        self.assertTrue(out["logits"] is not None)
+        self.assertTrue(out.loss is None)
+        self.assertTrue(len(out.to_tuple()) == 1)
+
 
 class ValidationDecoratorTester(unittest.TestCase):
     def test_cases_no_warning(self):
@@ -236,7 +250,7 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
         """Test that the can_return_tuple decorator works with eager mode."""
 
         # test nothing is set
-        config = PretrainedConfig()
+        config = PreTrainedConfig()
         model = self._get_model(config)
         inputs = torch.tensor(10)
         output = model(inputs)
@@ -247,7 +261,7 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
         # test all explicit cases
         for config_return_dict in [True, False, None]:
             for return_dict in [True, False, None]:
-                config = PretrainedConfig(return_dict=config_return_dict)
+                config = PreTrainedConfig(return_dict=config_return_dict)
                 model = self._get_model(config)
                 output = model(torch.tensor(10), return_dict=return_dict)
 
@@ -261,9 +275,10 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
                 message = f"output should be a {expected_type.__name__} when config.use_return_dict={config_return_dict} and return_dict={return_dict}"
                 self.assertIsInstance(output, expected_type, message)
 
+    @pytest.mark.torch_compile_test
     def test_decorator_compiled(self):
         """Test that the can_return_tuple decorator works with compiled mode."""
-        config = PretrainedConfig()
+        config = PreTrainedConfig()
 
         # Output object
         model = self._get_model(config)
@@ -277,25 +292,17 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
         output = compiled_model(torch.tensor(10), return_dict=False)
         self.assertIsInstance(output, tuple)
 
+    @pytest.mark.torch_export_test
     def test_decorator_torch_export(self):
         """Test that the can_return_tuple decorator works with torch.export."""
-        config = PretrainedConfig()
+        config = PreTrainedConfig()
         model = self._get_model(config)
         torch.export.export(model, args=(torch.tensor(10),))
-
-    def test_decorator_torchscript(self):
-        """Test that the can_return_tuple decorator works with torch.jit.trace."""
-        config = PretrainedConfig(return_dict=False)
-        model = self._get_model(config)
-        inputs = torch.tensor(10)
-        traced_module = torch.jit.trace(model, inputs)
-        output = traced_module(inputs)
-        self.assertIsInstance(output, tuple)
 
     def test_attribute_cleanup(self):
         """Test that the `_is_top_level_module` attribute is removed after the forward call."""
 
-        config = PretrainedConfig(return_dict=False)
+        config = PreTrainedConfig(return_dict=False)
         inputs = torch.tensor(10)
 
         # working case

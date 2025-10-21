@@ -338,7 +338,7 @@ def gen_sine_position_embeddings(pos_tensor, hidden_size=256):
         pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
     else:
         raise ValueError(f"Unknown pos_tensor shape(-1):{pos_tensor.size(-1)}")
-    return pos
+    return pos.to(pos_tensor.dtype)
 
 
 def inverse_sigmoid(x, eps=1e-5):
@@ -812,6 +812,7 @@ class DabDetrPreTrainedModel(PreTrainedModel):
     config: DabDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]
 
     def _init_weights(self, module):
@@ -824,8 +825,6 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
             nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1203,9 +1202,6 @@ class DabDetrModel(DabDetrPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(False)
@@ -1461,11 +1457,7 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         self.post_init()
 
     # taken from https://github.com/Atten4Vis/conditionalDETR/blob/master/models/dab_detr.py
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @auto_docstring

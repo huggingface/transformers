@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-06-27 and added to Hugging Face Transformers on 2025-06-02.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -48,8 +49,8 @@ model_name = "vidore/colqwen2-v1.0-hf"
 
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
+    dtype=torch.bfloat16,
+    device_map="auto",  # "cpu", "cuda", "xpu" or "mps" for Apple Silicon
     attn_implementation="flash_attention_2" if is_flash_attn_2_available() else "sdpa",
 )
 processor = ColQwen2Processor.from_pretrained(model_name)
@@ -107,9 +108,10 @@ import torch
 from PIL import Image
 
 from transformers import BitsAndBytesConfig, ColQwen2ForRetrieval, ColQwen2Processor
-
+from accelerate import Accelerator
 
 model_name = "vidore/colqwen2-v1.0-hf"
+device = Accelerator().device
 
 # 4-bit quantization configuration
 bnb_config = BitsAndBytesConfig(
@@ -122,7 +124,7 @@ bnb_config = BitsAndBytesConfig(
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
     quantization_config=bnb_config,
-    device_map="cuda",
+    device_map=device,
 ).eval()
 
 processor = ColQwen2Processor.from_pretrained(model_name)

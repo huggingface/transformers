@@ -456,16 +456,16 @@ def get_contrastive_denoising_training_group(
     input_query_class = class_embed(input_query_class)
 
     target_size = num_denoising_queries + num_queries
-    attn_mask = torch.full([target_size, target_size], False, dtype=torch.bool, device=device)
+    attn_mask = torch.full([target_size, target_size], 0, dtype=torch.float, device=device)
     # match query cannot see the reconstruction
-    attn_mask[num_denoising_queries:, :num_denoising_queries] = True
+    attn_mask[num_denoising_queries:, :num_denoising_queries] = -torch.inf
 
     # reconstructions cannot see each other
     for i in range(num_groups_denoising_queries):
         idx_block_start = max_gt_num * 2 * i
         idx_block_end = max_gt_num * 2 * (i + 1)
-        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
-        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
+        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = -torch.inf
+        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = -torch.inf
 
     denoising_meta_values = {
         "dn_positive_idx": denoise_positive_idx,
@@ -854,6 +854,10 @@ class RTDetrMultiheadAttention(nn.Module):
                     f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
                 )
+            if attention_mask.dtype == torch.bool:
+                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
+                    attention_mask, -torch.inf
+                )
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
             attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
 
@@ -1003,6 +1007,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     config: RTDetrConfig
     base_model_prefix = "rt_detr"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]
 
     def _init_weights(self, module):
@@ -1147,7 +1152,7 @@ class RTDetrHybridEncoder(nn.Module):
     ):
         grid_w = torch.arange(torch_int(width), device=device).to(dtype)
         grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
         pos_dim = embed_dim // 4
@@ -1157,7 +1162,7 @@ class RTDetrHybridEncoder(nn.Module):
         out_w = grid_w.flatten()[..., None] @ omega[None]
         out_h = grid_h.flatten()[..., None] @ omega[None]
 
-        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
+        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
 
     def forward(
         self,
@@ -1257,7 +1262,7 @@ class RTDetrHybridEncoder(nn.Module):
             new_fpn_feature_map = fpn_block(fused_feature_map)
             fpn_feature_maps.append(new_fpn_feature_map)
 
-        fpn_feature_maps = fpn_feature_maps[::-1]
+        fpn_feature_maps.reverse()
 
         # bottom-up PAN
         pan_feature_maps = [fpn_feature_maps[0]]
@@ -1539,9 +1544,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():
@@ -1841,11 +1843,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
     @auto_docstring

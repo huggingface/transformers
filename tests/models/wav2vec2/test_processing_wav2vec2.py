@@ -20,7 +20,6 @@ import unittest
 
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor, Wav2Vec2Processor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
-from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 from ...test_processing_common import ProcessorTesterMixin
 from .test_feature_extraction_wav2vec2 import floats_list
@@ -52,15 +51,13 @@ class Wav2Vec2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         cls.tmpdirname = tempfile.mkdtemp()
         cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
         with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-
-        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(feature_extractor_map) + "\n")
-
         tokenizer = cls.get_tokenizer()
-        tokenizer.save_pretrained(cls.tmpdirname)
+
+        feature_extractor = Wav2Vec2FeatureExtractor(**feature_extractor_map)
+        processor = Wav2Vec2Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def get_tokenizer(cls, **kwargs_init):
@@ -157,13 +154,11 @@ class Wav2Vec2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
+        processor = self.get_processor()
 
-        processor = Wav2Vec2Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        text = "lower newer"
+        audio_inputs = self.prepare_audio_inputs()
 
-        self.assertListEqual(
-            processor.model_input_names,
-            feature_extractor.model_input_names,
-            msg="`processor` and `feature_extractor` model input names do not match",
-        )
+        inputs = processor(text=text, audio=audio_inputs, return_attention_mask=True, return_tensors="pt")
+
+        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))

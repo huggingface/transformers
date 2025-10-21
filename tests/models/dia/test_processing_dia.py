@@ -119,15 +119,6 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertTrue(check_models_equal(processor.audio_tokenizer, audio_tokenizer_add_kwargs))
         self.assertIsInstance(processor.audio_tokenizer, DacModel)
 
-    def test_model_input_names(self):
-        tokenizer = self.get_tokenizer()
-
-        self.assertListEqual(
-            self.processor.model_input_names,
-            list(dict.fromkeys(tokenizer.model_input_names + ["decoder_input_ids", "decoder_attention_mask"])),
-            msg="`processor` model input names do not match the expected names.",
-        )
-
     def test_tokenize(self):
         tokenizer = self.get_tokenizer()
         random_text = ["This is a processing test for tokenization", "[S1] Dia template style [S2] Nice"]

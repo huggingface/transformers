@@ -34,9 +34,6 @@ if is_torch_available():
         xLSTMModel,
     )
     from transformers.models.xlstm.modeling_xlstm import xLSTMBlock, xLSTMCache
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_2
-else:
-    is_torch_greater_or_equal_than_2_2 = False
 
 
 class xLSTMModelTester:
@@ -88,10 +85,6 @@ class xLSTMModelTester:
         self.sequence_kernel = sequence_kernel
         self.step_kernel = step_kernel
         self.tie_word_embeddings = tie_word_embeddings
-
-    def get_large_model_config(self):
-        cfg = xLSTMConfig.from_pretrained("NX-AI/xLSTM-7b")
-        return cfg
 
     def prepare_config_and_inputs(self, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -157,11 +150,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     all_model_classes = (xLSTMModel, xLSTMForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (xLSTMForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # xLSTM does not support attentions
-    fx_compatible = False
-    test_torchscript = False
-    test_model_parallel = False
-    test_pruning = False
-    test_head_masking = False  # xLSTM does not have attention heads
 
     pipeline_model_mapping = (
         {"feature-extraction": xLSTMModel, "text-generation": xLSTMForCausalLM} if is_torch_available() else {}
@@ -172,17 +160,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.config_tester = ConfigTester(
             self, config_class=xLSTMConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
-
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                if "D" in name:
-                    if param.requires_grad:
-                        # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
 
     @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     def test_generate_without_input_ids(self):
@@ -281,7 +258,7 @@ class xLSTMIntegrationTest(unittest.TestCase):
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        model = xLSTMForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device)
+        model = xLSTMForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map=torch_device)
         input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
             torch_device
         )
@@ -304,7 +281,7 @@ class xLSTMIntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = xLSTMForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device)
+        model = xLSTMForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map=torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
@@ -332,7 +309,7 @@ class xLSTMIntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = xLSTMForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device)
+        model = xLSTMForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map=torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)

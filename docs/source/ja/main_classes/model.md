@@ -99,16 +99,16 @@ device_map = {"shared": 0, "encoder": 0, "decoder": 1, "lm_head": 1}
 
 Pytorch では、モデルは通常 `torch.float32` 形式でインスタンス化されます。これは、しようとすると問題になる可能性があります
 重みが fp16 にあるモデルをロードすると、2 倍のメモリが必要になるためです。この制限を克服するには、次のことができます。
-`torch_dtype` 引数を使用して、目的の `dtype` を明示的に渡します。
+`dtype` 引数を使用して、目的の `dtype` を明示的に渡します。
 
 ```python
-model = T5ForConditionalGeneration.from_pretrained("t5", torch_dtype=torch.float16)
+model = T5ForConditionalGeneration.from_pretrained("t5", dtype=torch.float16)
 ```
 または、モデルを常に最適なメモリ パターンでロードしたい場合は、特別な値 `"auto"` を使用できます。
 そして、`dtype` はモデルの重みから自動的に導出されます。
 
 ```python
-model = T5ForConditionalGeneration.from_pretrained("t5", torch_dtype="auto")
+model = T5ForConditionalGeneration.from_pretrained("t5", dtype="auto")
 ```
 
 スクラッチからインスタンス化されたモデルには、どの `dtype` を使用するかを指示することもできます。
@@ -124,26 +124,6 @@ Pytorch の設計により、この機能は浮動小数点 dtype でのみ使�
 
 [[autodoc]] modeling_utils.ModuleUtilsMixin
 
-## TFPreTrainedModel
-
-[[autodoc]] TFPreTrainedModel
-    - push_to_hub
-    - all
-
-## TFModelUtilsMixin
-
-[[autodoc]] modeling_tf_utils.TFModelUtilsMixin
-
-## FlaxPreTrainedModel
-
-[[autodoc]] FlaxPreTrainedModel
-    - push_to_hub
-    - all
-
 ## Pushing to the Hub
 
 [[autodoc]] utils.PushToHubMixin
-
-## Sharded checkpoints
-
-[[autodoc]] modeling_utils.load_sharded_checkpoint

@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutlmv2 import LayoutLMv2Processor, LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+from transformers.utils import is_pytesseract_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -67,9 +67,10 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        self.image_processing_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.image_processing_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(image_processor_map) + "\n")
+
+        image_processor = LayoutLMv2ImageProcessor(**image_processor_map)
+        processor = LayoutLMv2Processor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
@@ -132,20 +133,6 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = LayoutLMv2Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        # add extra args
-        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
     @slow
     def test_overflowing_tokens(self):

@@ -33,13 +33,12 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...video_utils import VideoInput, make_batched_videos
 
 
 logger = logging.get_logger(__name__)
@@ -172,10 +171,9 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: Optional[list[ImageInput]] = None,
-        videos: Optional[list[VideoInput]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
         do_rescale: Optional[bool] = None,
@@ -195,9 +193,6 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             images (`ImageInput`, *optional*):
                 List of images to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            videos (`VideoInput`, *optional*):
-                List of videos to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
-                passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`dict[str, int]`, *optional*, defaults to `self.size`):
@@ -226,10 +221,8 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -257,78 +250,42 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         if images is not None:
-            images = make_list_of_images(images)
+            images = self.fetch_images(images)
+            images = make_flat_list_of_images(images)
 
         if images is not None and not valid_images(images):
-            raise ValueError(
-                "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
+            raise ValueError("Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+
+        pixel_values_images = [
+            self._preprocess_image(
+                image=image,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                do_center_crop=do_center_crop,
+                crop_size=crop_size,
+                do_convert_rgb=do_convert_rgb,
+                data_format=data_format,
+                input_data_format=input_data_format,
             )
-
-        data = {}
-        if videos is not None:
-            logger.warning(
-                "`VideoLlavaImageProcessor` works only with image inputs and doesn't process videos anymore. "
-                "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `VideoLlavaVideoProcessor`. "
-            )
-            videos = make_batched_videos(videos)
-            pixel_values_videos = [
-                [
-                    self._preprocess_image(
-                        image=frame,
-                        do_resize=do_resize,
-                        size=size,
-                        resample=resample,
-                        do_rescale=do_rescale,
-                        rescale_factor=rescale_factor,
-                        do_normalize=do_normalize,
-                        image_mean=image_mean,
-                        image_std=image_std,
-                        do_center_crop=do_center_crop,
-                        crop_size=crop_size,
-                        do_convert_rgb=do_convert_rgb,
-                        data_format=data_format,
-                        input_data_format=input_data_format,
-                    )
-                    for frame in video
-                ]
-                for video in videos
-            ]
-            data["pixel_values_videos"] = pixel_values_videos
-
-        if images is not None:
-            pixel_values_images = [
-                self._preprocess_image(
-                    image=image,
-                    do_resize=do_resize,
-                    size=size,
-                    resample=resample,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                    do_center_crop=do_center_crop,
-                    crop_size=crop_size,
-                    do_convert_rgb=do_convert_rgb,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                )
-                for image in images
-            ]
-            data["pixel_values_images"] = pixel_values_images
-
+            for image in images
+        ]
+        data = {"pixel_values_images": pixel_values_images}
         encoded_outputs = BatchFeature(data, tensor_type=return_tensors)
 
         return encoded_outputs
 
     def _preprocess_image(
         self,
-        image: ImageInput = None,
+        image: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,

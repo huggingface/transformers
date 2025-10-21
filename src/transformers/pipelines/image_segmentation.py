@@ -68,9 +68,6 @@ class ImageSegmentationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
         requires_backends(self, "vision")
         mapping = MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES.copy()
         mapping.update(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES)
@@ -99,11 +96,11 @@ class ImageSegmentationPipeline(Pipeline):
     def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+    def __call__(self, inputs: list[str] | list["Image.Image"], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self, inputs: Union[str, "Image.Image", list[str], list["Image.Image"]], **kwargs: Any
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Perform segmentation (detect masks & classes) in the image(s) passed as inputs.
 
@@ -160,18 +157,16 @@ class ImageSegmentationPipeline(Pipeline):
             else:
                 kwargs = {"task_inputs": [subtask]}
             inputs = self.image_processor(images=[image], return_tensors="pt", **kwargs)
-            if self.framework == "pt":
-                inputs = inputs.to(self.torch_dtype)
+            inputs = inputs.to(self.dtype)
             inputs["task_inputs"] = self.tokenizer(
                 inputs["task_inputs"],
                 padding="max_length",
                 max_length=self.model.config.task_seq_len,
-                return_tensors=self.framework,
+                return_tensors="pt",
             )["input_ids"]
         else:
             inputs = self.image_processor(images=[image], return_tensors="pt")
-            if self.framework == "pt":
-                inputs = inputs.to(self.torch_dtype)
+            inputs = inputs.to(self.dtype)
         inputs["target_size"] = target_size
         return inputs
 

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-04-02 and added to Hugging Face Transformers on 2022-06-01.*
 
 # LeViT
 
@@ -35,7 +36,7 @@ in vision transformers. As a result, we propose LeVIT: a hybrid neural network f
 We consider different measures of efficiency on different hardware platforms, so as to best reflect a wide range of
 application scenarios. Our extensive experiments empirically validate our technical choices and show they are suitable
 to most architectures. Overall, LeViT significantly outperforms existing convnets and vision transformers with respect
-to the speed/accuracy tradeoff. For example, at 80% ImageNet top-1 accuracy, LeViT is 5 times faster than EfficientNet on CPU. *
+to the speed/accuracy tradeoff. For example, at 80% ImageNet top-1 accuracy, LeViT is 5 times faster than EfficientNet on CPU.*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/levit_architecture.png"
 alt="drawing" width="600"/>
@@ -67,7 +68,7 @@ This model was contributed by [anugunj](https://huggingface.co/anugunj). The ori
   prepare images for the model.
 - [`LevitForImageClassificationWithTeacher`] currently supports only inference and not training or fine-tuning.
 - You can check out demo notebooks regarding inference as well as fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer)
-  (you can just replace [`ViTFeatureExtractor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
+  (you can just replace [`ViTImageProcessor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
 
 ## Resources
 
@@ -83,11 +84,6 @@ If you're interested in submitting a resource to be included here, please feel f
 ## LevitConfig
 
 [[autodoc]] LevitConfig
-
-## LevitFeatureExtractor
-
-[[autodoc]] LevitFeatureExtractor
-    - __call__
 
 ## LevitImageProcessor
 

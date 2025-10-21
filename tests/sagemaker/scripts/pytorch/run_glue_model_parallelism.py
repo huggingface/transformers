@@ -20,28 +20,24 @@ import os
 import random
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 from datasets import load_dataset, load_metric
 
 import transformers
-from transformers import (  # Trainer,; TrainingArguments,
+from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
-    PretrainedConfig,
+    PreTrainedConfig,
     default_data_collator,
     set_seed,
 )
-
-# Will import SageMaker Model parallelism specific Trainer
-from transformers.sagemaker import SageMakerTrainer as Trainer
-from transformers.sagemaker import SageMakerTrainingArguments as TrainingArguments
-from transformers.trainer_utils import get_last_checkpoint
+from transformers.trainer import Trainer
+from transformers.training_args import TrainingArguments
 from transformers.utils import check_min_version
 
 
@@ -73,7 +69,7 @@ class DataTrainingArguments:
     the command line.
     """
 
-    task_name: Optional[str] = field(
+    task_name: str | None = field(
         default=None,
         metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())},
     )
@@ -98,7 +94,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -107,7 +103,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_val_samples: Optional[int] = field(
+    max_val_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -116,7 +112,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_test_samples: Optional[int] = field(
+    max_test_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -125,13 +121,13 @@ class DataTrainingArguments:
             )
         },
     )
-    train_file: Optional[str] = field(
+    train_file: str | None = field(
         default=None, metadata={"help": "A csv or a json file containing the training data."}
     )
-    validation_file: Optional[str] = field(
+    validation_file: str | None = field(
         default=None, metadata={"help": "A csv or a json file containing the validation data."}
     )
-    test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
+    test_file: str | None = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
 
     def __post_init__(self):
         if self.task_name is not None:
@@ -158,13 +154,13 @@ class ModelArguments:
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    tokenizer_name: Optional[str] = field(
+    tokenizer_name: str | None = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
@@ -175,15 +171,6 @@ class ModelArguments:
     model_revision: str = field(
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
-    )
-    use_auth_token: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Will use the token generated when running `hf auth login` (necessary to use this script "
-                "with private models)."
-            )
-        },
     )
 
 
@@ -200,21 +187,6 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    # Detecting last checkpoint.
-    last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif last_checkpoint is not None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
-
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -225,8 +197,8 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        + f"distributed training: {bool(training_args.parallel_mode.value == 'distributed')}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
     if training_args.should_log:
@@ -313,14 +285,12 @@ def main():
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
@@ -328,7 +298,6 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
     )
 
     # Preprocessing the datasets
@@ -355,7 +324,7 @@ def main():
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
     if (
-        model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id
+        model.config.label2id != PreTrainedConfig(num_labels=num_labels).label2id
         and data_args.task_name is not None
         and not is_regression
     ):
@@ -461,9 +430,7 @@ def main():
     # Training
     if training_args.do_train:
         checkpoint = None
-        if last_checkpoint is not None:
-            checkpoint = last_checkpoint
-        elif os.path.isdir(model_args.model_name_or_path):
+        if os.path.isdir(model_args.model_name_or_path):
             # Check the config from that potential checkpoint has the right number of labels before using it as a
             # checkpoint.
             if AutoConfig.from_pretrained(model_args.model_name_or_path).num_labels == num_labels:

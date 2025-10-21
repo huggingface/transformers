@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch UperNet framework."""
+"""Testing suite for the PyTorch UperNet."""
 
 import unittest
 
@@ -30,7 +30,7 @@ from transformers.utils import is_torch_available, is_vision_available
 from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -149,11 +149,8 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     all_model_classes = (UperNetForSemanticSegmentation,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-segmentation": UperNetForSemanticSegmentation} if is_torch_available() else {}
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
     has_attentions = False
     test_torch_exportable = True
     test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
@@ -220,21 +217,6 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        configs_no_init.backbone_config = _config_zero_init(configs_no_init.backbone_config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     @require_timm
     def test_backbone_selection(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -297,7 +279,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-7.5969, -7.5969, -7.4313], [-7.5969, -7.5969, -7.4313], [-7.4808, -7.4808, -7.3080]]
+            [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
         ).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 

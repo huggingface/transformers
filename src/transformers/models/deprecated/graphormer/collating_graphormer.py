@@ -14,7 +14,7 @@ if is_cython_available():
     import pyximport
 
     pyximport.install(setup_args={"include_dirs": np.get_include()})
-    from . import algos_graphormer  # noqa E402
+    from . import algos_graphormer
 
 
 def convert_to_single_emb(x, offset: int = 512):

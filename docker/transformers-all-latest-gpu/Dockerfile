@@ -9,11 +9,9 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.7.1'
+ARG PYTORCH='2.8.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
-# Disable kernel mapping for now until all tests pass
-ENV DISABLE_KERNEL_MAPPING=1
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
@@ -26,13 +24,15 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 # 1. Put several commands in a single `RUN` to avoid image/layer exporting issue. Could be revised in the future.
 # 2. Regarding `torch` part, We might need to specify proper versions for `torchvision` and `torchaudio`.
 #    Currently, let's not bother to specify their versions explicitly (so installed with their latest release versions).
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime] && [ ${#PYTORCH} -gt 0 -a "$PYTORCH" != "pre" ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile && echo torch=$VERSION && [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA && python3 -m pip uninstall -y tensorflow tensorflow_text tensorflow_probability
-
-RUN python3 -m pip uninstall -y flax jax
+# 3. For `torchcodec<0.8`: this is quickly added as torch 2.9.0 + torchcodec 0.8.0 fails on our CI env. Need to remove later once they work.
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime] && [ ${#PYTORCH} -gt 0 -a "$PYTORCH" != "pre" ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile && echo torch=$VERSION && [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio "torchcodec<0.8" --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
 RUN python3 -m pip install --no-cache-dir -U timm
 
-RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract
+RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git || echo "Don't install detectron2 with nightly torch"
+
+RUN python3 -m pip install --no-cache-dir pytesseract
+
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
@@ -41,6 +41,8 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 
 # For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
+# For kernels
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/kernels@main#egg=kernels
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
@@ -51,14 +53,13 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # Some tests require quanto
 RUN python3 -m pip install --no-cache-dir quanto
 
+# After using A10 as CI runner, let's run FA2 tests
+RUN [ "$PYTORCH" != "pre" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
+
+# TODO (ydshieh): check this again
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
 # (`deformable_detr`, `rwkv`, `mra`)
 RUN python3 -m pip uninstall -y ninja
-
-# For `dinat` model
-# The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
-# pin `0.17.4` otherwise `cannot import name 'natten2dav' from 'natten.functional'`
-RUN python3 -m pip install --no-cache-dir natten==0.17.4+torch250cu121 -f https://shi-labs.com/natten/wheels
 
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein

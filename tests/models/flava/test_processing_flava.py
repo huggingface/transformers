@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
 import random
 import shutil
@@ -24,7 +23,7 @@ import pytest
 from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -76,9 +75,9 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "codebook_image_std": FLAVA_CODEBOOK_STD,
         }
 
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
+        image_processor = FlavaImageProcessor(**image_processor_map)
+        processor = FlavaProcessor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
@@ -186,21 +185,21 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
+        self.assertSetEqual(set(inputs.keys()), {"input_ids", "token_type_ids", "attention_mask", "pixel_values"})
 
         # add extra args
         inputs = processor(text=input_str, images=image_input, return_codebook_pixels=True, return_image_mask=True)
 
-        self.assertListEqual(
-            list(inputs.keys()),
-            [
+        self.assertSetEqual(
+            set(inputs.keys()),
+            {
                 "input_ids",
                 "token_type_ids",
                 "attention_mask",
                 "pixel_values",
                 "codebook_pixel_values",
                 "bool_masked_pos",
-            ],
+            },
         )
 
         # test if it raises when no input is passed
@@ -219,16 +218,3 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = FlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)

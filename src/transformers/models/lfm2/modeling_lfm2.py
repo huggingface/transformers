@@ -17,13 +17,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
@@ -66,22 +67,53 @@ class Lfm2RMSNorm(nn.Module):
 
 
 class Lfm2RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Lfm2Config, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Lfm2Config] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -119,7 +151,7 @@ class Lfm2MLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
-class Lfm2HybridConvCache(DynamicCache):
+class Lfm2HybridConvCache:
     """
     Attention and conv cache for Lfm2.
 
@@ -160,8 +192,9 @@ class Lfm2HybridConvCache(DynamicCache):
                 dtype=self._dtype,
                 device=device,
             )
-            torch._dynamo.mark_static_address(conv_state)
             self.conv_cache.append(conv_state)
+            self.key_cache.append(torch.tensor([]))
+            self.value_cache.append(torch.tensor([]))
 
     def update(
         self,
@@ -187,35 +220,27 @@ class Lfm2HybridConvCache(DynamicCache):
             A tuple containing the updated key and value states.
         """
         # Update the cache
-        if key_states is not None:
-            if len(self.key_cache) <= layer_idx:
-                # There may be skipped layers, fill them with empty lists
-                for _ in range(len(self.key_cache), layer_idx):
-                    self.key_cache.append(torch.tensor([]))
-                    self.value_cache.append(torch.tensor([]))
-                self.key_cache.append(key_states)
-                self.value_cache.append(value_states)
-            elif (
-                not self.key_cache[layer_idx].numel()  # prefers not t.numel() to len(t) == 0 to export the model
-            ):  # fills previously skipped layers; checking for tensor causes errors
-                self.key_cache[layer_idx] = key_states
-                self.value_cache[layer_idx] = value_states
-            else:
-                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+        if self.key_cache[layer_idx].numel() == 0:
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+            if self.key_cache[layer_idx].numel():
+                device = self.key_cache[layer_idx].device
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.value_cache[layer_idx].device
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-            device = self.conv_cache[layer_idx].device
-            self.conv_cache[layer_idx] = self.conv_cache[layer_idx].index_select(0, beam_idx.to(device))
+            if self.conv_cache[layer_idx].numel():
+                device = self.conv_cache[layer_idx].device
+                self.conv_cache[layer_idx] = self.conv_cache[layer_idx].index_select(0, beam_idx.to(device))
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
@@ -251,15 +276,8 @@ class Lfm2HybridConvCache(DynamicCache):
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
-        raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
-
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
+    def __len__(self) -> int:
+        return len(self.key_cache)
 
     def reset(self):
         for layer_idx in range(len(self.conv_cache)):
@@ -362,10 +380,11 @@ class Lfm2Attention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -376,9 +395,9 @@ class Lfm2Attention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -440,7 +459,7 @@ class Lfm2ShortConv(nn.Module):
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -451,19 +470,19 @@ class Lfm2ShortConv(nn.Module):
         Bx = B * x
 
         conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_key_value is not None and cache_position[0] > 0:
+        if past_key_values is not None and cache_position[0] > 0:
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
-                past_key_value.conv_cache[self.layer_idx],
+                past_key_values.conv_cache[self.layer_idx],
                 conv_weights,
                 self.conv.bias,
                 None,
             )
             conv_out = conv_out.unsqueeze(-1)
         else:
-            if past_key_value is not None:
+            if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                past_key_value.conv_cache[self.layer_idx].copy_(conv_state)
+                past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
 
             conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None)
 
@@ -474,7 +493,7 @@ class Lfm2ShortConv(nn.Module):
     def slow_forward(
         self,
         x: torch.Tensor,
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -486,21 +505,21 @@ class Lfm2ShortConv(nn.Module):
 
         Bx = B * x
 
-        if past_key_value is not None and cache_position[0] > 0:
-            conv_state = past_key_value.conv_cache[self.layer_idx]
+        if past_key_values is not None and cache_position[0] > 0:
+            conv_state = past_key_values.conv_cache[self.layer_idx]
             cache_position = cache_position.clamp(0, self.L_cache - 1)
             conv_state = conv_state.roll(shifts=-1, dims=-1)
             conv_state[:, :, cache_position] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
-            past_key_value.conv_cache[self.layer_idx].copy_(conv_state)
+            past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
             conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
             if self.bias:
                 conv_out += self.conv.bias
 
             conv_out = conv_out.unsqueeze(-1)
         else:
-            if past_key_value is not None:
+            if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                past_key_value.conv_cache[self.layer_idx].copy_(conv_state)
+                past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
 
             conv_out = self.conv(Bx)[..., :seqlen]
 
@@ -512,13 +531,13 @@ class Lfm2ShortConv(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not torch._dynamo.is_compiling():
-            return self.cuda_kernels_forward(hidden_states, past_key_value, cache_position, attention_mask)
-        return self.slow_forward(hidden_states, past_key_value, cache_position, attention_mask)
+            return self.cuda_kernels_forward(hidden_states, past_key_values, cache_position, attention_mask)
+        return self.slow_forward(hidden_states, past_key_values, cache_position, attention_mask)
 
 
 class Lfm2DecoderLayer(GradientCheckpointingLayer):
@@ -537,10 +556,10 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -551,14 +570,14 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 **kwargs,
             )
         else:
             hidden_states = self.conv(
                 hidden_states=self.operator_norm(hidden_states),
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 attention_mask=attention_mask,
             )
@@ -599,13 +618,12 @@ class Lfm2Model(Lfm2PreTrainedModel):
         )
         self.rotary_emb = Lfm2RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.pos_emb = Lfm2RotaryEmbedding(config)
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -649,17 +667,17 @@ class Lfm2Model(Lfm2PreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.pos_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_values,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -685,12 +703,6 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

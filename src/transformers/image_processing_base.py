@@ -16,30 +16,24 @@
 import copy
 import json
 import os
-import warnings
-from io import BytesIO
 from typing import Any, Optional, TypeVar, Union
 
 import numpy as np
-import requests
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
+from .image_utils import is_valid_image, load_image
 from .utils import (
     IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
     PushToHubMixin,
-    cached_file,
     copy_func,
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_vision_available,
     logging,
 )
-
-
-if is_vision_available():
-    from PIL import Image
+from .utils.hub import cached_file
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -60,7 +54,7 @@ class BatchFeature(BaseBatchFeature):
         data (`dict`):
             Dictionary of lists/arrays/tensors returned by the __call__ method ('pixel_values', etc.).
         tensor_type (`Union[None, str, TensorType]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
     """
 
@@ -124,9 +118,6 @@ class ImageProcessingMixin(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the image processor files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -188,18 +179,6 @@ class ImageProcessingMixin(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         if token is not None:
             kwargs["token"] = token
 
@@ -222,19 +201,6 @@ class ImageProcessingMixin(PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -290,10 +256,8 @@ class ImageProcessingMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
@@ -301,17 +265,6 @@ class ImageProcessingMixin(PushToHubMixin):
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "image processor", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -335,19 +288,27 @@ class ImageProcessingMixin(PushToHubMixin):
             image_processor_file = image_processor_filename
             try:
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_image_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    image_processor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                )
+                resolved_image_processor_files = [
+                    resolved_file
+                    for filename in [image_processor_file, PROCESSOR_NAME]
+                    if (
+                        resolved_file := cached_file(
+                            pretrained_model_name_or_path,
+                            filename=filename,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            local_files_only=local_files_only,
+                            token=token,
+                            user_agent=user_agent,
+                            revision=revision,
+                            subfolder=subfolder,
+                            _raise_exceptions_for_missing_entries=False,
+                        )
+                    )
+                    is not None
+                ]
+                resolved_image_processor_file = resolved_image_processor_files[0]
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -366,6 +327,7 @@ class ImageProcessingMixin(PushToHubMixin):
             with open(resolved_image_processor_file, encoding="utf-8") as reader:
                 text = reader.read()
             image_processor_dict = json.loads(text)
+            image_processor_dict = image_processor_dict.get("image_processor", image_processor_dict)
 
         except json.JSONDecodeError:
             raise OSError(
@@ -514,25 +476,19 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def fetch_images(self, image_url_or_urls: Union[str, list[str]]):
+    def fetch_images(self, image_url_or_urls: Union[str, list[str], list[list[str]]]):
         """
         Convert a single or a list of urls into the corresponding `PIL.Image` objects.
 
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0"
-                " Safari/537.36"
-            )
-        }
         if isinstance(image_url_or_urls, list):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
-            response = requests.get(image_url_or_urls, stream=True, headers=headers)
-            response.raise_for_status()
-            return Image.open(BytesIO(response.content))
+            return load_image(image_url_or_urls)
+        elif is_valid_image(image_url_or_urls):
+            return image_url_or_urls
         else:
             raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 

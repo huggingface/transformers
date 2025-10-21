@@ -18,7 +18,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -49,6 +50,8 @@ class MLCDMLP(nn.Module):
 
 
 class MLCDRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
@@ -551,6 +554,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
 class MLCDVisionModel(MLCDPreTrainedModel):
     config: MLCDVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = ["MLCDEncoderLayer"]
 
     def __init__(self, config: MLCDVisionConfig):

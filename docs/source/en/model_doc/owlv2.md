@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-06-16 and added to Hugging Face Transformers on 2023-10-13.*
 
 # OWLv2
 
@@ -89,7 +90,6 @@ Usage of OWLv2 is identical to [OWL-ViT](owlvit) with a new, updated image proce
 ## Owlv2Config
 
 [[autodoc]] Owlv2Config
-    - from_text_vision_configs
 
 ## Owlv2TextConfig
 

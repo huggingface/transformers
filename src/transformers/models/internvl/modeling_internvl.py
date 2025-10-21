@@ -21,8 +21,9 @@
 
 
 import collections.abc
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -31,12 +32,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
@@ -124,8 +125,7 @@ class InternVLVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = hidden_states.size()
 
@@ -160,34 +160,7 @@ class InternVLVisionAttention(nn.Module):
         output = self.projection_layer(attn_output)
         output = self.projection_dropout(output)
 
-        outputs = (output, attn_weights) if output_attentions else (output, None)
-        return outputs
-
-
-@auto_docstring
-class InternVLVisionPreTrainedModel(PreTrainedModel):
-    config: InternVLVisionConfig
-    base_model_prefix = "internvl_vision"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["InternVLVisionLayer"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, InternVLVisionEmbeddings):
-            module.cls_token.data.zero_()
-            if module.mask_token is not None:
-                module.mask_token.data.zero_()
-            if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
-        elif isinstance(module, InternVLVisionLayer):
-            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+        return output, attn_weights
 
 
 @dataclass
@@ -376,11 +349,9 @@ class InternVLVisionLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        attention_output, attention_weights = self.attention(
+        attention_output, _ = self.attention(
             self.layernorm_before(hidden_states),  # in InternVLVision, layernorm is applied before self-attention
-            output_attentions=output_attentions,
         )
 
         attention_output = self.lambda_1 * attention_output
@@ -400,7 +371,7 @@ class InternVLVisionLayer(GradientCheckpointingLayer):
         # second residual connection
         layer_output = layer_output + hidden_states
 
-        return layer_output, attention_weights
+        return layer_output
 
 
 class InternVLVisionEncoder(nn.Module):
@@ -410,35 +381,48 @@ class InternVLVisionEncoder(nn.Module):
         self.layer = nn.ModuleList([InternVLVisionLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
     ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(hidden_states, output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
+
+
+@auto_docstring
+class InternVLVisionPreTrainedModel(PreTrainedModel):
+    config: InternVLVisionConfig
+    base_model_prefix = "internvl_vision"
+    main_input_name = "pixel_values"
+    input_modalities = ["image", "video"]
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["InternVLVisionLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+    _can_record_outputs = {
+        "hidden_states": InternVLVisionLayer,
+        "attentions": InternVLVisionAttention,
+    }
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, InternVLVisionEmbeddings):
+            module.cls_token.data.zero_()
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+            if module.position_embeddings is not None:
+                module.position_embeddings.data.zero_()
+        elif isinstance(module, InternVLVisionLayer):
+            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
+            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -460,31 +444,20 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
     ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
+        encoder_outputs = self.encoder(embedding_output)
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
@@ -499,6 +472,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 class InternVLPreTrainedModel(PreTrainedModel):
     config: InternVLConfig
     base_model_prefix = ""
+    input_modalities = ["image", "text", "video"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -537,8 +511,7 @@ class InternVLMultiModalProjector(nn.Module):
 class InternVLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -604,6 +577,7 @@ class InternVLModel(InternVLPreTrainedModel):
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
         )
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
@@ -635,7 +609,7 @@ class InternVLModel(InternVLPreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -659,26 +633,17 @@ class InternVLModel(InternVLPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, InternVLModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -711,10 +676,6 @@ class InternVLModel(InternVLPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -776,8 +737,7 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -788,7 +748,7 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
@@ -843,7 +803,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -860,8 +820,8 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -869,10 +829,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
@@ -888,7 +844,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         >>> torch_device = "cuda"
         >>> processor = AutoProcessor.from_pretrained("OpenGVLab/InternVL3-1B-hf")
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "OpenGVLab/InternVL3-1B-hf", torch_dtype=torch.bfloat16, device_map=torch_device
+        ...     "OpenGVLab/InternVL3-1B-hf", dtype=torch.bfloat16, device_map=torch_device
         ... )
 
         >>> messages = [
@@ -913,11 +869,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         >>> print(processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
         The images depict the Statue of Liberty and the Golden Gate Bridge.
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -936,10 +887,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             inputs_embeds=inputs_embeds,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,

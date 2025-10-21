@@ -97,22 +97,11 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 Now create a batch of examples using [`DataCollatorWithPadding`]. It's more efficient to *dynamically pad* the sentences to the longest length in a batch during collation, instead of padding the whole dataset to the maximum length.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorWithPadding
 
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 ```
-</pt>
-<tf>
-```py
->>> from transformers import DataCollatorWithPadding
-
->>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -147,8 +136,6 @@ Before you start training your model, create a map of the expected ids to their 
 >>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
 ```
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -209,104 +196,11 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-If you aren't familiar with finetuning a model with Keras, take a look at the basic tutorial [here](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-To finetune a model in TensorFlow, start by setting up an optimizer function, learning rate schedule, and some training hyperparameters:
-
-```py
->>> from transformers import create_optimizer
->>> import tensorflow as tf
-
->>> batch_size = 16
->>> num_epochs = 5
->>> batches_per_epoch = len(tokenized_imdb["train"]) // batch_size
->>> total_train_steps = int(batches_per_epoch * num_epochs)
->>> optimizer, schedule = create_optimizer(init_lr=2e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
-```
-
-Then you can load DistilBERT with [`TFAutoModelForSequenceClassification`] along with the number of expected labels, and the label mappings:
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained(
-...     "distilbert/distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
-... )
-```
-
-Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_imdb["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_imdb["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-The last two things to setup before you start training is to compute the accuracy from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](../main_classes/keras_callbacks).
-
-Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-Specify where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-Then bundle your callbacks together:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-Finally, you're ready to start training your model! Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) with your training and validation datasets, the number of epochs, and your callbacks to finetune the model:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=callbacks)
-```
-
-Once training is completed, your model is automatically uploaded to the Hub so everyone can use it!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
 For a more in-depth example of how to finetune a model for text classification, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)
-or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
+[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb).
 
 </Tip>
 
@@ -332,8 +226,6 @@ The simplest way to try out your finetuned model for inference is to use it in a
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
-<frameworkcontent>
-<pt>
 Tokenize the text and return PyTorch tensors:
 
 ```py
@@ -360,32 +252,3 @@ Get the class with the highest probability, and use the model's `id2label` mappi
 >>> model.config.id2label[predicted_class_id]
 'POSITIVE'
 ```
-</pt>
-<tf>
-Tokenize the text and return TensorFlow tensors:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_model")
->>> inputs = tokenizer(text, return_tensors="tf")
-```
-
-Pass your inputs to the model and return the `logits`:
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("stevhliu/my_awesome_model")
->>> logits = model(**inputs).logits
-```
-
-Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a text label:
-
-```py
->>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
->>> model.config.id2label[predicted_class_id]
-'POSITIVE'
-```
-</tf>
-</frameworkcontent>

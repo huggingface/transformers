@@ -17,20 +17,17 @@
 import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
+import torch
+
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import center_to_corners_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import TensorType, auto_docstring, is_torch_available, logging
+from ...utils import TensorType, auto_docstring, logging
+from .image_processing_owlvit import _scale_boxes, box_iou
 
 
 if TYPE_CHECKING:
     from .modeling_owlvit import OwlViTObjectDetectionOutput
-
-
-if is_torch_available():
-    import torch
-
-    from .image_processing_owlvit import _scale_boxes, box_iou
 
 
 logger = logging.get_logger(__name__)
@@ -68,7 +65,6 @@ class OwlViTImageProcessorFast(BaseImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        # TODO: (amy) add support for other frameworks
         warnings.warn(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",

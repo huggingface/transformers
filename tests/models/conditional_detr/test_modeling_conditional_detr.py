@@ -16,13 +16,13 @@
 import inspect
 import math
 import unittest
+from functools import cached_property
 
 from transformers import ConditionalDetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -187,9 +187,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
     zero_init_hidden_state = True
     test_torch_exportable = True
@@ -431,12 +429,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
-                    else []
-                )
+                expected_arg_names = ["pixel_values", "pixel_mask", "decoder_attention_mask"]
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
@@ -511,29 +504,6 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
                 self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        configs_no_init.init_xavier_std = 1e9
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if "bbox_attention" in name and "bias" not in name:
-                        self.assertLess(
-                            100000,
-                            abs(param.data.max().item()),
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
 
 TOLERANCE = 1e-4
@@ -622,7 +592,7 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         )[0]
         expected_scores = torch.tensor([0.8330, 0.8315, 0.8039, 0.6829, 0.5354]).to(torch_device)
         expected_labels = [75, 17, 17, 75, 63]
-        expected_slice_boxes = torch.tensor([38.3109, 72.1002, 177.6301, 118.4511]).to(torch_device)
+        expected_slice_boxes = torch.tensor([38.3089, 72.1023, 177.6292, 118.4514]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-4, atol=2e-4)

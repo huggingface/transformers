@@ -17,13 +17,12 @@
 import importlib
 import json
 import os
-import warnings
 from collections import OrderedDict
 from typing import Any, Optional, Union
 
 from transformers.utils.import_utils import is_mistral_common_available
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils import PreTrainedTokenizer
@@ -105,6 +104,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("blip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("blip-2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
+        ("blt", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("bridgetower", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("bros", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("byt5", ("ByT5Tokenizer", None)),
@@ -167,7 +167,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("cpmant", ("CpmAntTokenizer", None)),
+        ("csm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("ctrl", ("CTRLTokenizer", None)),
+        (
+            "cwm",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
         ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("dbrx", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -244,6 +252,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
         ),
         ("flaubert", ("FlaubertTokenizer", None)),
+        ("flex_olmo", (None, "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
         ("fsmt", ("FSMTTokenizer", None)),
         ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
@@ -294,6 +303,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("glm4", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4_moe", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4v", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("glm4v_moe", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
         ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("gpt_bigcode", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -342,6 +352,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("kosmos-2.5", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
@@ -403,6 +414,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("mega", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        (
+            "metaclip_2",
+            (
+                "XLMRobertaTokenizer",
+                "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("mgp-str", ("MgpstrTokenizer", None)),
         (
             "minimax",
@@ -475,6 +493,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         ("olmo2", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+        ("olmo3", (None, "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("olmoe", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         (
             "omdet-turbo",
@@ -489,6 +508,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("owlv2", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("paligemma", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+        ("parakeet", (None, "ParakeetTokenizerFast" if is_tokenizers_available() else None)),
         (
             "pegasus",
             (
@@ -566,6 +586,16 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "Qwen2TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        (
+            "qwen3_next",
+            (
+                "Qwen2Tokenizer",
+                "Qwen2TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        ("qwen3_omni_moe", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
+        ("qwen3_vl", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
+        ("qwen3_vl_moe", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
         ("rag", ("RagTokenizer", None)),
         ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
         (
@@ -771,7 +801,7 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
             module_name = model_type_to_module_name(module_name)
-            if module_name in ["mistral", "mixtral"] and class_name == "MistralCommonTokenizer":
+            if module_name in ["mistral", "mixtral", "ministral"] and class_name == "MistralCommonTokenizer":
                 module = importlib.import_module(".tokenization_mistral_common", "transformers")
             else:
                 module = importlib.import_module(f".{module_name}", "transformers.models")
@@ -798,7 +828,6 @@ def get_tokenizer_config(
     pretrained_model_name_or_path: Union[str, os.PathLike[str]],
     cache_dir: Optional[Union[str, os.PathLike[str]]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -824,9 +853,6 @@ def get_tokenizer_config(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -867,23 +893,12 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     commit_hash = kwargs.get("_commit_hash")
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         TOKENIZER_CONFIG_FILE,
         cache_dir=cache_dir,
         force_download=force_download,
-        resume_download=resume_download,
         proxies=proxies,
         token=token,
         revision=revision,
@@ -921,7 +936,9 @@ class AutoTokenizer:
 
     @classmethod
     @replace_list_option_in_docstrings(TOKENIZER_MAPPING_NAMES)
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
+    def from_pretrained(
+        cls, pretrained_model_name_or_path, *inputs, **kwargs
+    ) -> Union[PreTrainedTokenizer, PreTrainedTokenizerFast]:
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
 
@@ -943,7 +960,7 @@ class AutoTokenizer:
                       applicable to all derived classes)
             inputs (additional positional arguments, *optional*):
                 Will be passed along to the Tokenizer `__init__()` method.
-            config ([`PretrainedConfig`], *optional*)
+            config ([`PreTrainedConfig`], *optional*)
                 The configuration object used to determine the tokenizer class to instantiate.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
@@ -951,9 +968,6 @@ class AutoTokenizer:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download the model weights and configuration files and override the
                 cached versions if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -996,18 +1010,6 @@ class AutoTokenizer:
         >>> # Download vocabulary from huggingface.co and define model-specific arguments
         >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", add_prefix_space=True)
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
@@ -1060,7 +1062,7 @@ class AutoTokenizer:
 
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 if gguf_file:
                     gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
                     config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
@@ -1118,7 +1120,7 @@ class AutoTokenizer:
         # Otherwise we have to be creative.
         # if model is an encoder decoder, the encoder tokenizer class is used by default
         if isinstance(config, EncoderDecoderConfig):
-            if type(config.decoder) is not type(config.encoder):  # noqa: E721
+            if type(config.decoder) is not type(config.encoder):
                 logger.warning(
                     f"The encoder model config class: {config.encoder.__class__} is different from the decoder model "
                     f"config class: {config.decoder.__class__}. It is not recommended to use the "
@@ -1154,7 +1156,7 @@ class AutoTokenizer:
 
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             slow_tokenizer_class ([`PretrainedTokenizer`], *optional*):
                 The slow tokenizer to register.

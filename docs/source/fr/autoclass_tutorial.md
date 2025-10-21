@@ -71,7 +71,7 @@ Pour les tâches de vision, un processeur d'image traite l'image pour la formate
     <figcaption class="mt-2 text-center text-sm text-gray-500">Un backbone Swin avec plusieurs étapes pour produire une carte de caractéristiques.</figcaption>
 </div>
 
-[`AutoBackbone`] vous permet d'utiliser des modèles pré-entraînés comme backbones pour obtenir des cartes de caractéristiques à partir de différentes étapes du backbone. Vous devez spécifier l'un des paramètres suivants dans [`~PretrainedConfig.from_pretrained`] :
+[`AutoBackbone`] vous permet d'utiliser des modèles pré-entraînés comme backbones pour obtenir des cartes de caractéristiques à partir de différentes étapes du backbone. Vous devez spécifier l'un des paramètres suivants dans [`~PreTrainedConfig.from_pretrained`] :
 
 * `out_indices` est l'index de la couche dont vous souhaitez obtenir la carte de caractéristiques
 * `out_features` est le nom de la couche dont vous souhaitez obtenir la carte de caractéristiques
@@ -136,8 +136,6 @@ Chargez un processeur avec [`AutoProcessor.from_pretrained`]:
 
 ## AutoModel
 
-<frameworkcontent>
-<pt>
 Enfin, les classes `AutoModelFor` vous permettent de charger un modèle pré-entraîné pour une tâche donnée (voir [ici](model_doc/auto) pour une liste complète des tâches disponibles). Par exemple, chargez un modèle pour la classification de séquence avec [`AutoModelForSequenceClassification.from_pretrained`]:
 
 ```py
@@ -163,24 +161,3 @@ Les points de contrôle TensorFlow et Flax ne sont pas concernés, et peuvent ê
 </Tip>
 
 En général, nous recommandons d'utiliser les classes `AutoTokenizer` et `AutoModelFor` pour charger des instances pré-entraînées de tokenizers et modèles respectivement. Cela vous permettra de charger la bonne architecture à chaque fois. Dans le prochain [tutoriel](preprocessing), vous apprenez à utiliser un tokenizer, processeur d'image, extracteur de caractéristiques et processeur pour pré-traiter un jeu de données pour le fine-tuning.
-</pt>
-<tf>
-Enfin, les classes `TFAutoModelFor` vous permettent de charger un modèle pré-entraîné pour une tâche donnée (voir [ici](model_doc/auto) pour une liste complète des tâches disponibles). Par exemple, chargez un modèle pour la classification de séquence avec [`TFAutoModelForSequenceClassification.from_pretrained`]:
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Réutilisez facilement le même ensemble de poids pour charger une architecture pour une tâche différente :
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-En général, nous recommandons d'utiliser les classes `AutoTokenizer` et `TFAutoModelFor` pour charger des instances pré-entraînées de tokenizers et modèles respectivement. Cela vous permettra de charger la bonne architecture à chaque fois. Dans le prochain [tutoriel](preprocessing), vous apprenez à utiliser un tokenizer, processeur d'image, extracteur de caractéristiques et processeur pour pré-traiter un jeu de données pour le fine-tuning.
-</tf>
-</frameworkcontent>

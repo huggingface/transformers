@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension
 from transformers.testing_utils import require_torch, require_vision
@@ -246,6 +247,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     @unittest.skip(
         reason="LlavaOnevisionImageProcessorFast doesn't compile (infinitely) when using class transforms"
     )  # FIXME yoni
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         pass
 
@@ -283,3 +285,18 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
                 encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
             )
             self.assertEqual(encoded_image_shape, image_shape)
+
+    def test_call_without_padding(self):
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], do_pad=False).pixel_values
+            self.assertEqual(len(encoded_images), 1)
+
+            # Test batched
+            encoded_images = image_processing(image_inputs, do_pad=False).pixel_values
+            self.assertEqual(len(encoded_images), len(image_inputs))
