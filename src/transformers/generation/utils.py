@@ -410,7 +410,6 @@ class GenerationMixin(ContinuousMixin):
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
-                pass
             # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
             if hasattr(self, "load_custom_generate"):
                 try:
@@ -1941,7 +1940,7 @@ class GenerationMixin(ContinuousMixin):
                 "minimax",
                 "xlnet",
                 "lfm2",
-                "lfm2-vl",
+                "lfm2_vl",
             ]
         )
 

@@ -265,7 +265,7 @@ class JukeboxResnet1D(nn.Module):
             blocks.append(JukeboxResConv1DBlock(config, conv_width, block_depth, res_scale))
 
         if reverse_dilation:
-            blocks = blocks[::-1]
+            blocks.reverse()
         self.resnet_block = nn.ModuleList(blocks)
 
     def forward(self, hidden_states):
