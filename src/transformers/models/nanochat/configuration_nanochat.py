@@ -28,54 +28,54 @@ class NanoChatConfig(PretrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50304):
-            Vocabulary size of the NanoChat model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`NanoChatModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*):
-            Dimension of the MLP representations. If `None`, it will be computed based on the model architecture.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with.
-        hidden_act (`str` or `function`, *optional*, defaults to `"relu2"`):
-            The non-linear activation function (function or string) in the decoder.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the rms normalization layers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        logits_soft_cap (`float`, *optional*, defaults to 15.0):
-            Scaling factor when applying tanh softcapping on the logits. If `None`, no softcapping is applied.
-        qkv_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, and value projection layers during self-attention.
-        bos_token_id (`int`, *optional*, defaults to 0):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 1):
-            End of stream token id.
-        pad_token_id (`int`, *optional*, defaults to 1):
-            Padding token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+            vocab_size (`int`, *optional*, defaults to 50304):
+                Vocabulary size of the NanoChat model. Defines the number of different tokens that can be represented by the
+                `inputs_ids` passed when calling [`NanoChatModel`].
+            hidden_size (`int`, *optional*, defaults to 768):
+                Dimension of the hidden representations.
+            intermediate_size (`int`, *optional*):
+                Dimension of the MLP representations. If `None`, it will be computed based on the model architecture.
+            num_hidden_layers (`int`, *optional*, defaults to 12):
+                Number of hidden layers in the Transformer decoder.
+            num_attention_heads (`int`, *optional*, defaults to 6):
+                Number of attention heads for each attention layer in the Transformer decoder.
+            num_key_value_heads (`int`, *optional*):
+                This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+                `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+                `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+                converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+                by meanpooling all the original heads within that group. For more details, check out [this
+                paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+                `num_attention_heads`.
+            max_position_embeddings (`int`, *optional*, defaults to 2048):
+                The maximum sequence length that this model might ever be used with.
+            hidden_act (`str` or `function`, *optional*, defaults to `"relu2"`):
+                The non-linear activation function (function or string) in the decoder.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+                The epsilon used by the rms normalization layers.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            rope_parameters (`RopeParameters`, *optional*):
+                Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+                a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+                with longer `max_position_embeddings`.
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models). Only
+                relevant if `config.is_decoder=True`.
+            logits_soft_cap (`float`, *optional*, defaults to 15.0):
+                Scaling factor when applying tanh softcapping on the logits. If `None`, no softcapping is applied.
+            qkv_bias (`bool`, *optional*, defaults to `False`):
+                Whether to use a bias in the query, key, and value projection layers during self-attention.
+            bos_token_id (`int`, *optional*, defaults to 0):
+                Beginning of stream token id.
+            eos_token_id (`int`, *optional*, defaults to 1):
+                End of stream token id.
+            pad_token_id (`int`, *optional*, defaults to 1):
+                Padding token id.
+            tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+                Whether to tie weight embeddings
 
     ```python
     >>> from transformers import NanoChatModel, NanoChatConfig
