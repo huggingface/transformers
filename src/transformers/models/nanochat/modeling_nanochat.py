@@ -274,7 +274,6 @@ class NanoChatMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        # TODO: check if the module names are respected in the conversion script
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
