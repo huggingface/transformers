@@ -567,16 +567,12 @@ class Ernie4_5_VLTextModel(Ernie4_5_VLPreTrainedModel):
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
-        # NOTE: we need to pass text position ids for packing. Qwen2-VL uses 3D positions
+        # NOTE: we need to pass text position ids for packing. Ernie 4.5 VL uses 3D positions
         # where each dim indicates visual spatial positions for temporal/height/width grids.
-        # There are two scenarios when FA2-like packed masking might be activated.
+        # There are is only one scenario when FA2-like packed masking might be activated.
         # 1. User specifically passed packed `position_ids` and no attention mask.
         #    In this case we expect the useer to create correct position ids for all 3 grids
         #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
-        # 2. User runs forward with no attention mask and no position ids. In this case, position ids
-        #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
-        #    prepended by us when creating positions so that the mask is constructed correctly. NOTE: failing to pass
-        #    text-only positions will cause incorrect mask construction, do not change `prepare_input_for_generation`
         if position_ids.ndim == 3 and position_ids.shape[0] == 4:
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
