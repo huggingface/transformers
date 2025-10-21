@@ -389,16 +389,11 @@ transformers serve is compatible with all [quantization methods](https://hugging
 
 #### Pre-quantized Models
 
-For models that are already quantized (e.g., GPTQ, AWQ, bitsandbytes), simply pass the quantized model name when serving.
+For models that are already quantized (e.g., GPTQ, AWQ, bitsandbytes), simply choose a quantized model name for serving.
 Make sure to install the required libraries listed in the quantization documentation.
-
-```sh
-transformers serve --quantization Qwen/Qwen3-4B-bnb
-```
 
 > [!TIP]
 > Pre-quantized models generally provide the best balance of performance and accuracy.
-
 
 #### On the fly quantization
 
@@ -425,7 +420,5 @@ transformers serve \
 > [!TIP]
 
 - `--dtype {bfloat16|float16}` typically improve throughput and memory use vs. `float32`
-
-- `--load_in_4bit`/`--load_in_8bit` can reduce memory footprint for LoRA setups
 
 - `--force-model <repo_id>` avoids per-request model hints and helps produce stable, repeatable runs
