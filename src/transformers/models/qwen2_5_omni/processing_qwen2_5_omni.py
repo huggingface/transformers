@@ -341,11 +341,13 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
+        video_processor_input_names = self.video_processor.model_input_names
         return list(
             dict.fromkeys(
                 tokenizer_input_names
                 + feature_extractor_input_names
                 + image_processor_input_names
+                + video_processor_input_names
                 + ["feature_attention_mask"]
                 + ["video_second_per_grid"]
             )
