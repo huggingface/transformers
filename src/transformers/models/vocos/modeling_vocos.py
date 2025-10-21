@@ -37,11 +37,11 @@ class VocosOutput(ModelOutput):
     audio: torch.FloatTensor
 
 
-def vocos_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":
+def custom_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":
     """
     Performs the Inverse Short Time Fourier Transform (ISTFT) on STFT coefficients to reconstruct audio in the time domain.
 
-    Adds support for `same` padding as in Vocos:
+    Adds support for `same` padding as in:
     https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L7
 
     Otherwise falls back to PyTorch's built-in ISTFT implementation `torch.istft`.
@@ -153,7 +153,7 @@ class VocosConvNeXtBlock(nn.Module):
 
 class VocosISTFTHead(nn.Module):
     """
-    As in original Vocos code:
+    As in original code:
     https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/heads.py#L26
     - Projects the hidden states to STFT coefficients (magnitude and phase)
     - Applies ISTFT to reconstruct the time-domain audio signal
@@ -196,7 +196,7 @@ class VocosISTFTHead(nn.Module):
         spectrogram_real = torch.cos(p)
         spectrogram_imag = torch.sin(p)
         spectrogram_complex = mag * (spectrogram_real + 1j * spectrogram_imag)
-        audio = vocos_istft(
+        audio = custom_istft(
             spectrogram_complex,
             n_fft=self.n_fft,
             hop_length=self.hop_length,
@@ -208,11 +208,6 @@ class VocosISTFTHead(nn.Module):
 
 
 class VocosPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = VocosConfig
     base_model_prefix = "vocos"
     main_input_name = "audio_spectrogram"
@@ -262,7 +257,7 @@ class VocosModel(VocosPreTrainedModel):
         self,
         audio_spectrogram: Optional[torch.FloatTensor] = None,
         padding_mask: Optional[torch.BoolTensor] = None,
-    ) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
+    ) -> VocosOutput:
         r"""
         audio_spectrogram (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
             Mel-spectrogram features: computed directly from audio via (`VocosFeatureExtractor`).

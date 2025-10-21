@@ -71,7 +71,7 @@ class VocosEncodecConfig(PretrainedConfig):
     ```
     """
 
-    model_type = "vocos"
+    model_type = "vocos_encodec"
 
     def __init__(
         self,
@@ -87,6 +87,7 @@ class VocosEncodecConfig(PretrainedConfig):
         hop_length=320,
         istft_padding="same",
         sample_rate=24000,
+        hidden_act="gelu",
         bandwidths=[1.5, 3.0, 6.0, 12.0],
         **kwargs,
     ):
@@ -103,6 +104,7 @@ class VocosEncodecConfig(PretrainedConfig):
         self.hop_length = hop_length
         self.istft_padding = istft_padding
         self.sample_rate = sample_rate
+        self.hidden_act = hidden_act
         self.bandwidths = bandwidths
 
 

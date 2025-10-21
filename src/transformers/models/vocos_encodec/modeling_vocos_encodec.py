@@ -324,9 +324,13 @@ class VocosEncodecModel(VocosEncodecPreTrainedModel):
         bandwidth_id = self._bandwidth_to_id[float(bandwidth)]
 
         hidden_states = self.embed(input_features)
+
+        # Apply initial norm in channel-last format
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = self.norm(hidden_states, bandwidth_id)
         hidden_states = hidden_states.transpose(1, 2)
+
+        # Process through ConvNeXt layers
         for layer in self.layers:
             hidden_states = layer(hidden_states, bandwidth_id)
         hidden_states = self.final_layer_norm(hidden_states.transpose(1, 2))
