@@ -117,7 +117,6 @@ class NanoChatAttention(Qwen3Attention):
 class NanoChatMLP(CLIPMLP):
     def __init__(self, config):
         super().__init__(config)
-        # TODO: check if the module names are respected in the conversion script
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
@@ -231,7 +230,6 @@ class NanoChatForCausalLM(LlamaForCausalLM):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
-        # FIXME: docs stay with karpathy repo?
         r"""
         Example:
 
