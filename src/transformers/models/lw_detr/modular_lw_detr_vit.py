@@ -1,5 +1,6 @@
 import math
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 from torch import nn
@@ -355,8 +356,7 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
 class LwDetrViTBackbone(VitDetBackbone):
     @can_return_tuple
     @auto_docstring
-    @check_model_inputs
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
+    def forward(self, pixel_values: torch.Tensor = None, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:
 

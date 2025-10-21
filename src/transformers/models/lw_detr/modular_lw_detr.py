@@ -1,6 +1,7 @@
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F  # noqa: F401
@@ -939,12 +940,11 @@ class LwDetrModel(DeformableDetrModel):
         object_query = object_query.masked_fill(~output_proposals_valid, float(0))
         return object_query, output_proposals
 
+    @check_model_inputs()
     @auto_docstring
-    @check_model_inputs
-    @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.FloatTensor = None,
         pixel_mask: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrModelOutput:
@@ -1104,10 +1104,9 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
 
     @can_return_tuple
     @auto_docstring
-    @check_model_inputs
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.FloatTensor = None,
         pixel_mask: Optional[torch.LongTensor] = None,
         labels: Optional[list[dict]] = None,
         **kwargs: Unpack[TransformersKwargs],

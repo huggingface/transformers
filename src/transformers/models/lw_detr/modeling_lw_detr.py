@@ -7,8 +7,9 @@
 import copy
 import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F  # noqa: F401
@@ -29,7 +30,6 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_lw_detr import LwDetrConfig
 
@@ -525,7 +525,6 @@ class LwDetrAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1139,12 +1138,12 @@ class LwDetrModel(LwDetrPreTrainedModel):
         object_query = object_query.masked_fill(~output_proposals_valid, float(0))
         return object_query, output_proposals
 
+    @check_model_inputs()
     @auto_docstring
-    @check_model_inputs
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.FloatTensor = None,
         pixel_mask: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrModelOutput:
@@ -1333,10 +1332,10 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.FloatTensor = None,
         pixel_mask: Optional[torch.LongTensor] = None,
         labels: Optional[list[dict]] = None,
         **kwargs: Unpack[TransformersKwargs],
