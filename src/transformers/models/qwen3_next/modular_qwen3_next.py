@@ -34,7 +34,7 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_linear_attention_available,
 )
-from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
+from ..bamba.modeling_bamba import apply_mask_to_padding_states
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..llama.modeling_llama import (
@@ -249,7 +249,7 @@ class Qwen3NextAttention(Qwen3MoeAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

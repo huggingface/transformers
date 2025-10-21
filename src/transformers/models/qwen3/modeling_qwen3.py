@@ -29,7 +29,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...integrations.hub_kernels import lazy_load_kernel
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -252,6 +251,8 @@ class Qwen3Attention(nn.Module):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
         # Load and cache the rotary kernel once during initialization to improve performance
+        from ...integrations.hub_kernels import lazy_load_kernel
+
         rotary_kernel = lazy_load_kernel("rotary_emb")
         self.rotary_fn = rotary_kernel.apply_rotary_kernel if rotary_kernel is not None else apply_rotary_pos_emb
 
@@ -508,7 +509,6 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        use_kernels = getattr(self, "use_kernels", False)
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -517,7 +517,6 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
-            use_kernels=use_kernels,
             **kwargs,
         )
 

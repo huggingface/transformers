@@ -199,36 +199,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_rotary_kernel(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """
-    Rotary kernel implementation wrapper
-    Adapts rotary kernels implementation to match HuggingFace apply_rotary_pos_emb signature
-    """
-    from ...integrations.hub_kernels import rotary_kernel
-
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    q_rotated = q.clone()
-    k_rotated = k.clone()
-
-    # Get half dimension for rotation
-    half_dim = q.shape[-1] // 2
-    q1 = q_rotated[..., :half_dim]
-    q2 = q_rotated[..., half_dim:]
-    k1 = k_rotated[..., :half_dim]
-    k2 = k_rotated[..., half_dim:]
-    if cos.shape[-1] != half_dim:
-        # Trim cos/sin to match half_dim
-        cos = cos[..., :half_dim]
-        sin = sin[..., :half_dim]
-
-    # Apply rotary embedding using our kernel
-    rotary_kernel.apply_rotary(q1, q2, cos, sin, q1, q2, False)
-    rotary_kernel.apply_rotary(k1, k2, cos, sin, k1, k2, False)
-    return q_rotated, k_rotated
-
-
 class Dots1Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -262,7 +232,8 @@ class Dots1Attention(nn.Module):
         # Load and cache the rotary kernel once during initialization to improve performance
         from ...integrations.hub_kernels import lazy_load_kernel
 
-        self._rotary_kernel_loaded = lazy_load_kernel("rotary_emb")
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = rotary_kernel.apply_rotary_kernel if rotary_kernel is not None else apply_rotary_pos_emb
 
     def forward(
         self,
@@ -281,11 +252,7 @@ class Dots1Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        # Use the cached kernel loaded during initialization
-        if self._rotary_kernel_loaded is not None:
-            query_states, key_states = apply_rotary_kernel(query_states, key_states, cos, sin)
-        else:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -648,7 +615,6 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        use_kernels = getattr(self, "use_kernels", False)
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -657,7 +623,6 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
-            use_kernels=use_kernels,
             **kwargs,
         )
 

@@ -267,11 +267,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
-
-    Removes the interleaving of cos and sin from GLM
 
     Args:
         q (`torch.Tensor`): The query tensor.
@@ -292,19 +289,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
@@ -375,6 +361,12 @@ class Qwen3NextAttention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
 
+        # Load and cache the rotary kernel once during initialization to improve performance
+        from ...integrations.hub_kernels import lazy_load_kernel
+
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = rotary_kernel.apply_rotary_kernel if rotary_kernel is not None else apply_rotary_pos_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -397,7 +389,7 @@ class Qwen3NextAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

@@ -1430,36 +1430,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def apply_rotary_kernel(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """
-    Rotary kernel implementation wrapper
-    Adapts rotary kernels implementation to match HuggingFace apply_rotary_pos_emb signature
-    """
-    from ...integrations.hub_kernels import rotary_kernel
-
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    q_rotated = q.clone()
-    k_rotated = k.clone()
-
-    # Get half dimension for rotation
-    half_dim = q.shape[-1] // 2
-    q1 = q_rotated[..., :half_dim]
-    q2 = q_rotated[..., half_dim:]
-    k1 = k_rotated[..., :half_dim]
-    k2 = k_rotated[..., half_dim:]
-    if cos.shape[-1] != half_dim:
-        # Trim cos/sin to match half_dim
-        cos = cos[..., :half_dim]
-        sin = sin[..., :half_dim]
-
-    # Apply rotary embedding using our kernel
-    rotary_kernel.apply_rotary(q1, q2, cos, sin, q1, q2, False)
-    rotary_kernel.apply_rotary(k1, k2, cos, sin, k1, k2, False)
-    return q_rotated, k_rotated
-
-
 class Qwen3OmniMoeThinkerTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1493,6 +1463,12 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         )  # thus post q_norm does not need reshape
         self.sliding_window = None
 
+        # Load and cache the rotary kernel once during initialization to improve performance
+        from ...integrations.hub_kernels import lazy_load_kernel
+
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = rotary_kernel.apply_rotary_kernel if rotary_kernel is not None else apply_rotary_pos_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1510,16 +1486,7 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        # Check if use_kernels is passed in kwargs
-        use_kernels = kwargs.get("use_kernels", False)
-        if use_kernels:
-            try:
-                query_states, key_states = apply_rotary_kernel(query_states, key_states, cos, sin, cache_position)
-            except (ImportError, AttributeError, RuntimeError):
-                # Fallback to regular rotary position embedding if kernel is not available
-                query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        else:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -2348,6 +2315,12 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
         )  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
+        # Load and cache the rotary kernel once during initialization to improve performance
+        from ...integrations.hub_kernels import lazy_load_kernel
+
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = rotary_kernel.apply_rotary_kernel if rotary_kernel is not None else apply_rotary_pos_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -2365,16 +2338,7 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        # Check if use_kernels is passed in kwargs
-        use_kernels = kwargs.get("use_kernels", False)
-        if use_kernels:
-            try:
-                query_states, key_states = apply_rotary_kernel(query_states, key_states, cos, sin, cache_position)
-            except (ImportError, AttributeError, RuntimeError):
-                # Fallback to regular rotary position embedding if kernel is not available
-                query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        else:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -3431,6 +3395,12 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         self.k_norm = nn.Identity()
         self.sliding_window = config.sliding_window
 
+        # Load and cache the rotary kernel once during initialization to improve performance
+        from ...integrations.hub_kernels import lazy_load_kernel
+
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = rotary_kernel.apply_rotary_kernel if rotary_kernel is not None else apply_rotary_pos_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -3448,16 +3418,7 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        # Check if use_kernels is passed in kwargs
-        use_kernels = kwargs.get("use_kernels", False)
-        if use_kernels:
-            try:
-                query_states, key_states = apply_rotary_kernel(query_states, key_states, cos, sin, cache_position)
-            except (ImportError, AttributeError, RuntimeError):
-                # Fallback to regular rotary position embedding if kernel is not available
-                query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        else:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

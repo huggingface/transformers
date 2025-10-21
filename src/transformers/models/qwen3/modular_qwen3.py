@@ -20,7 +20,6 @@ from typing import Optional, Union
 import torch
 
 from ...cache_utils import Cache
-from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -69,6 +68,8 @@ class Qwen3Attention(LlamaAttention):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
         # Load and cache the rotary kernel once during initialization to improve performance
+        from ...integrations.hub_kernels import lazy_load_kernel
+
         rotary_kernel = lazy_load_kernel("rotary_emb")
         self.rotary_fn = rotary_kernel.apply_rotary_kernel if rotary_kernel is not None else apply_rotary_pos_emb
 
