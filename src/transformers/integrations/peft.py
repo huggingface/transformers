@@ -217,6 +217,9 @@ class PeftAdapterMixin:
         if "token" in adapter_kwargs:
             token = adapter_kwargs.pop("token")
 
+        # Remove _adapter_model_path if present, as it's not a parameter of find_adapter_config_file
+        adapter_kwargs.pop("_adapter_model_path", None)
+
         if peft_config is None:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
