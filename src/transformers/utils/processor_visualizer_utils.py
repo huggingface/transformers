@@ -4,7 +4,6 @@ from typing import Optional, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
-import torch
 from PIL import Image
 
 from ..image_transforms import convert_to_rgb, to_pil_image, unnormalize
@@ -163,7 +162,14 @@ class ImageVisualizer:
 
         return image_array
 
-    def _display_single_image(self, image_array: np.ndarray, show_patch_grid: bool, figsize=(7, 7), patch_grid_rows=None, patch_grid_cols=None):
+    def _display_single_image(
+        self,
+        image_array: np.ndarray,
+        show_patch_grid: bool,
+        figsize=(7, 7),
+        patch_grid_rows=None,
+        patch_grid_cols=None,
+    ):
         plt.figure(figsize=figsize)
         plt.imshow(image_array)
         plt.xticks([])
@@ -369,24 +375,24 @@ class ImageVisualizer:
         patch_grid_rows = None
         patch_grid_cols = None
 
-        if hasattr(self.processor, 'image_processor') and hasattr(self.processor.image_processor, 'get_num_patches_from_image_size'):
+        if hasattr(self.processor, "image_processor") and hasattr(
+            self.processor.image_processor, "get_num_patches_from_image_size"
+        ):
             num_patches, grid_rows, grid_cols = self.processor.image_processor.get_num_patches_from_image_size(
                 img_width, img_height
             )
 
-        if pixel_values.ndim == 2 and 'image_grid_thw' in processed_inputs:
+        if pixel_values.ndim == 2 and "image_grid_thw" in processed_inputs:
             num_patches, flattened_size = pixel_values.shape
-            grid_thw = processed_inputs['image_grid_thw'][0]
+            grid_thw = processed_inputs["image_grid_thw"][0]
             temporal_frames, patch_grid_h, patch_grid_w = grid_thw.tolist()
 
-            patch_size = getattr(self.processor.image_processor, 'patch_size', 14)
-            temporal_patch_size = getattr(self.processor.image_processor, 'temporal_patch_size', 1)
+            patch_size = getattr(self.processor.image_processor, "patch_size", 14)
+            temporal_patch_size = getattr(self.processor.image_processor, "temporal_patch_size", 1)
 
             expected_size = temporal_patch_size * 3 * patch_size * patch_size
             if flattened_size == expected_size:
-                pixel_values = pixel_values.reshape(
-                    num_patches, temporal_patch_size, 3, patch_size, patch_size
-                )
+                pixel_values = pixel_values.reshape(num_patches, temporal_patch_size, 3, patch_size, patch_size)
                 pixel_values = pixel_values[:, 0, :, :, :]
 
                 pixel_values = pixel_values.reshape(patch_grid_h, patch_grid_w, 3, patch_size, patch_size)
