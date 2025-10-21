@@ -4,17 +4,17 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_lw_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from .configuration_lw_detr_vit import LwDetrViTConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class LwDetrConfig(PretrainedConfig):
+class LwDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LwDetrModel`]. It is used to instantiate
     a LW-DETR model according to the specified arguments, defining the model architecture. Instantiating a
@@ -123,6 +123,7 @@ class LwDetrConfig(PretrainedConfig):
         "num_attention_heads": "decoder_self_attention_heads",
         "num_key_value_heads": "decoder_self_attention_heads",
     }
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -182,6 +183,7 @@ class LwDetrConfig(PretrainedConfig):
                 num_attention_heads=12,
                 window_block_indices=[0, 1, 3, 6, 7, 9],
                 out_indices=[2, 4, 5, 9],
+                **kwargs,
             )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.pop("model_type")

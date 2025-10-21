@@ -8,13 +8,14 @@ import torch.nn.functional as F  # noqa: F401
 from torch import nn
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
+from ..auto.configuration_auto import AutoConfig
 from ..conditional_detr.modeling_conditional_detr import (
     ConditionalDetrConvEncoder,
 )
@@ -139,7 +140,7 @@ class LwDetrObjectDetectionOutput(ModelOutput):
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
 
-class LwDetrConfig(PretrainedConfig):
+class LwDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LwDetrModel`]. It is used to instantiate
     a LW-DETR model according to the specified arguments, defining the model architecture. Instantiating a
@@ -248,6 +249,7 @@ class LwDetrConfig(PretrainedConfig):
         "num_attention_heads": "decoder_self_attention_heads",
         "num_key_value_heads": "decoder_self_attention_heads",
     }
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -307,6 +309,7 @@ class LwDetrConfig(PretrainedConfig):
                 num_attention_heads=12,
                 window_block_indices=[0, 1, 3, 6, 7, 9],
                 out_indices=[2, 4, 5, 9],
+                **kwargs,
             )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.pop("model_type")
