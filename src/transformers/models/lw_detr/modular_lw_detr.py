@@ -639,7 +639,6 @@ class LwDetrMLP(nn.Module):
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
-        self.layer_norm = nn.LayerNorm(config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
@@ -649,7 +648,6 @@ class LwDetrMLP(nn.Module):
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.layer_norm(hidden_states)
         return hidden_states
 
 
@@ -672,8 +670,9 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
         )
         self.cross_attn_layer_norm = nn.LayerNorm(config.d_model)
 
-        # ffn
-        self.ffn = LwDetrMLP(config)
+        # mlp
+        self.mlp = LwDetrMLP(config)
+        self.layer_norm = nn.LayerNorm(config.d_model)
 
     def forward(
         self,
@@ -711,7 +710,8 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states + cross_attention_output
         hidden_states = self.cross_attn_layer_norm(hidden_states)
 
-        hidden_states = self.ffn(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
 
         return hidden_states
 
