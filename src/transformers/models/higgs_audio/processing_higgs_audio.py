@@ -45,7 +45,6 @@ logger = logging.get_logger(__name__)
 
 class HiggsAudioProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {"pad_token_id": 128001},
         "audio_kwargs": {
             "sampling_rate": 24000,
             "audio_in_token": "<|AUDIO|>",
@@ -239,9 +238,17 @@ class HiggsAudioProcessor(ProcessorMixin):
         tokenizer,
         audio_tokenizer,
         chat_template=None,
+        audio_token="<|AUDIO|>",
+        audio_bos_token="<|audio_bos|>",
+        audio_eos_token="<|audio_eos|>",
     ):
         if chat_template is None:
             chat_template = self.default_chat_template
+
+        self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
+        self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
+        self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
 
         super().__init__(
             feature_extractor,
@@ -250,213 +257,47 @@ class HiggsAudioProcessor(ProcessorMixin):
             chat_template=chat_template,
         )
 
-    def _extract_audio(self, convos: list[list[dict]]) -> Optional[list]:
-        audio = []
-        for messages in convos:
-            for msg in messages:
-                if isinstance(msg.get("content"), list):
-                    for ele in msg["content"]:
-                        if isinstance(ele, dict) and ele.get("type") == "audio" and "audio_url" in ele:
-                            audio_data, _ = librosa.load(
-                                BytesIO(urlopen(ele["audio_url"]).read()),
-                                sr=self.audio_tokenizer.sampling_rate,
-                            )
-                            audio.append(audio_data)
-        return audio or None
-
-    def apply_chat_template(
-        self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
-        chat_template: Optional[str] = None,
-        **kwargs: Unpack[AllKwargsForChatTemplate],
-    ) -> str:
-        """
-        Apply the processor's chat template to a conversation and optionally tokenize the result.
-
-        This method resolves the correct chat template (from a string or a set of named templates),
-        renders the conversation into a formatted prompt, and—if `tokenize=True`—prepares model inputs
-        including audio features. Text formatting is handled via [`~render_jinja_template`], while audio
-        inputs are loaded with `librosa` and resampled to the processor's configured sampling rate.
-        for tokenization, it relies on HiggsAudioTokenizer's
-        [`~HiggsAudioTokenizer.apply_chat_template`] to prepare input ids to the model and on DacFeatureExtractor's
-        [`~DacFeatureExtractor.__call__`] to prepare input features to the model.
-
-        audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "audio", "audio_url": audio_url},
-                    {"type": "text", "text": "Transcribe this audio."},
-                ],
-            },
-        ]
-
-        Args:
-            conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
-                The conversation to format.
-            chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
-                chat template is used.
-        """
-        if chat_template is None:
-            if isinstance(self.chat_template, dict) and "default" in self.chat_template:
-                chat_template = self.chat_template["default"]
-            elif isinstance(self.chat_template, dict):
-                raise ValueError(
-                    'The processor has multiple chat templates but none of them are named "default". You need to specify'
-                    " which one to use by passing the `chat_template` argument. Available templates are: "
-                    f"{', '.join(self.chat_template.keys())}"
-                )
-            elif self.chat_template is not None:
-                chat_template = self.chat_template
-            else:
-                raise ValueError(
-                    "Cannot use apply_chat_template because this processor does not have a chat template."
-                )
-        else:
-            if isinstance(self.chat_template, dict) and chat_template in self.chat_template:
-                # It's the name of a template, not a full template string
-                chat_template = self.chat_template[chat_template]
-            else:
-                # It's a template string, render it directly
-                pass
-
-        is_tokenizers_fast = hasattr(self, "tokenizer") and self.tokenizer.__class__.__name__.endswith("Fast")
-
-        if kwargs.get("continue_final_message", False):
-            if kwargs.get("add_generation_prompt", False):
-                raise ValueError(
-                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
-                )
-            if kwargs.get("return_assistant_tokens_mask", False):
-                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
-
-        if kwargs.get("return_assistant_tokens_mask", False):
-            if not is_tokenizers_fast:
-                raise ValueError(
-                    "`return_assistant_tokens_mask` is not possible with slow tokenizers. Make sure you have `tokenizers` installed. "
-                    "If the error persists, open an issue to support a Fast tokenizer for your model."
-                )
-            else:
-                kwargs["return_offsets_mapping"] = True  # force offset mapping so we can infer token boundaries
-
-        # Fill sets of kwargs that should be used by different parts of template
-        processed_kwargs = {
-            "mm_load_kwargs": {},
-            "template_kwargs": {},
-        }
-
-        for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
-                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
-                default_value = getattr(kwarg_type_defaults, key, None)
-                value = kwargs.pop(key, default_value)
-                if value is not None and not isinstance(value, dict):
-                    processed_kwargs[kwarg_type][key] = value
-
-        # Pass unprocessed custom kwargs
-        processed_kwargs["template_kwargs"].update(kwargs)
-
-        if isinstance(conversation, (list, tuple)) and (
-            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
-        ):
-            is_batched = True
-            conversations = conversation
-        else:
-            is_batched = False
-            conversations = [conversation]
-
-        tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
-
-        prompt, _ = render_jinja_template(
-            conversations=conversations,
-            chat_template=chat_template,
-            **processed_kwargs["template_kwargs"],  # different flags such as `return_assistant_mask`
-            **self.tokenizer.special_tokens_map,  # tokenizer special tokens are used by some templates
-        )
-
-        if tokenize:
-            convos = conversation if isinstance(conversation[0], list) else [conversation]
-            audio = self._extract_audio(convos)
-            return self(
-                text=prompt,
-                audio=audio,
-                return_tensors="pt",
-                padding=True,
-                output_labels=True,
-            )
-
-        return prompt if is_batched else prompt[0]
-
     def __call__(
         self,
         text: Union[str, list[str]],
         audio: Optional[Union[np.ndarray, list[np.ndarray]]] = None,
         output_labels: Optional[bool] = False,
-        pad_left=False,
         **kwargs: Unpack[HiggsAudioProcessorKwargs],
-    ) -> BatchFeature:
-        """
-        Main method to prepare inputs for the model from text and audio.
-
-        Args:
-            text: Single text string or list of text strings (chat format)
-            audio: Optional audio input as numpy array(s)
-            output_labels: Whether to generate label tokens for training
-            pad_left: Whether to apply left padding, set to true if use_cache for inference
-            **kwargs: Additional arguments
-
-        Returns:
-            BatchFeature of model inputs including tokenized text and processed audio
-        """
-        if not is_torch_available():
-            raise ValueError(
-                "The `HiggsAudioProcessor` requires `torch` but we couldn't "
-                "find it in your environment. You can install torch via `pip install torch`."
-            )
-        # Handle text input
-        if text is None:
-            raise ValueError("You need to specify `text` input to process.")
-        elif isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
+    ):
         output_kwargs = self._merge_kwargs(
             HiggsAudioProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        # common_kwargs = output_kwargs["common_kwargs"]
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        audio_in_token = audio_kwargs["audio_in_token"]
-        audio_out_token = audio_kwargs["audio_out_token"]
+        return_tensors = text_kwargs.get("return_tensors", None)
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        # return_tensors = common_kwargs.pop("return_tensors", None)
-        # if return_tensors != "pt":
-        #     raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+        if isinstance(text, str):
+            text = [text]
+        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+        n_audio_in_text = [t.count(self.audio_token) for t in text]
 
-        # If text is already a rendered string (single item), use it directly
-        num_audio_tokens = []
-        for rendered_text in text:
-            # Extract audio count from the rendered text for validation
-            num_audio_token = rendered_text.count(audio_in_token) + rendered_text.count(audio_out_token)
-            num_audio_tokens.append(num_audio_token)
-
-        # Validate audio input count
+        n_audio = 0
         if audio is not None:
-            num_audios = 1 if isinstance(audio, np.ndarray) else len(audio)
-            if sum(num_audio_tokens) != num_audios:
+            audio = make_list_of_audio(audio)
+            n_audio = len(audio)
+
+        if sum(n_audio_in_text) > 0 and n_audio != sum(n_audio_in_text):
+            if audio is None:
+                raise ValueError("No audio were provided, but there are audio tokens in the prompt")
+            else:
                 raise ValueError(
-                    f"Found {num_audio_tokens} {audio_in_token} and {audio_out_token} token{'s' if num_audio_tokens > 1 else ''} "
-                    f"in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
+                    f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
+                    f"number of provided audios ({n_audio})."
                 )
 
         # Process audio and expand audio tokens if needed
         audio_ids_list = []
-
         if audio is not None:
             # Ensure audio is a list
             if isinstance(audio, np.ndarray):
@@ -476,253 +317,38 @@ class HiggsAudioProcessor(ProcessorMixin):
                     input_values["input_values"][0], device=self.audio_tokenizer.device
                 ).unsqueeze(0)
                 audio_ids = self.audio_tokenizer.encode(input_values)
-                audio_ids_list.append(audio_ids[0].squeeze(0).cpu())
+                audio_ids_list.append(audio_ids[0].squeeze(0).transpose(0, 1).cpu())
 
-        # Create samples
-        samples = []
-        cumsum_audio_tokens = np.cumsum([0] + num_audio_tokens)
-        for index, rendered_text in enumerate(text):
-            input_tokens = self.tokenizer.encode(rendered_text, add_special_tokens=False)
+            # Get the actual number of audio tokens from encoded audio
+            num_audio_tokens_list = [len(audio_ids) for audio_ids in audio_ids_list]
+            num_audio_tokens_list_copy = num_audio_tokens_list.copy()
 
-            sliced_audio_ids_list = audio_ids_list[cumsum_audio_tokens[index] : cumsum_audio_tokens[index + 1]]
+            # expand the text to repeat the audio token for the corresponding number of frames
+            expanded_text = []
+            for sample in text:
+                replace_str = []
+                while self.audio_token in sample:
+                    num_audio_tokens = num_audio_tokens_list_copy.pop(0)
+                    expanded_audio_token = self.audio_token * num_audio_tokens
 
-            # Prepare audio data for sample
-            if sliced_audio_ids_list:
-                audio_ids_start = torch.tensor(
-                    np.cumsum([0] + [ids.shape[1] for ids in sliced_audio_ids_list])[:-1], dtype=torch.long
-                )
-                audio_ids_concat = torch.cat(sliced_audio_ids_list, dim=1)
-            else:
-                audio_ids_start = None
-                audio_ids_concat = None
+                    replace_str.append(expanded_audio_token)
+                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
 
-            # Create dataset sample
-            sample = HiggsAudioChatSample(
-                input_ids=torch.LongTensor(input_tokens),
-                label_ids=torch.LongTensor(input_tokens) if output_labels else None,
-                audio_ids_concat=audio_ids_concat,
-                audio_ids_start=audio_ids_start,
-            )
+                while "<placeholder>" in sample:
+                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
+                expanded_text.append(sample)
 
-            samples.append(sample)
+            text = expanded_text
 
-        # Use collator to process the sample
-        batch_data = self.process_sample(
-            samples,
-            audio_in_token_idx=audio_kwargs["audio_in_token_idx"],
-            audio_out_token_idx=audio_kwargs["audio_out_token_idx"],
-            audio_stream_bos_id=audio_kwargs["audio_stream_bos_id"],
-            audio_stream_eos_id=audio_kwargs["audio_stream_eos_id"],
-            pad_token_id=text_kwargs["pad_token_id"],
-            audio_num_codebooks=audio_kwargs["audio_num_codebooks"],
-            pad_left=pad_left,
-        )
-        inputs = asdict(batch_data) if hasattr(batch_data, "__dict__") else batch_data._asdict()
-        inputs = {k: v for k, v in inputs.items() if v is not None}
+        encoding = self.tokenizer(text, **text_kwargs)
+        data = {}
+        data.update(encoding)
+        if audio is not None:
+            data.update({
+                "audio_input_ids": torch.stack(audio_ids_list, dim=0),
+            })
 
-        return BatchFeature(data=inputs, tensor_type="pt")
-
-    @staticmethod
-    def process_sample(
-        batch: list[HiggsAudioChatSample],
-        audio_in_token_idx=128015,
-        audio_out_token_idx=128016,
-        audio_stream_bos_id=1024,
-        audio_stream_eos_id=1025,
-        pad_token_id=128001,
-        audio_num_codebooks=8,
-        pad_left=False,
-    ):
-        """Collate the input data with support for long audio processing."""
-        pad_left = bool(pad_left or len(batch) == 1)
-
-        label_ids = None
-        label_audio_ids = None
-        if all(ele.label_ids is None for ele in batch):
-            return_labels = False
-        else:
-            return_labels = True
-
-        processed_batch = batch
-
-        # Get the max sequence length based on processed batch
-        max_seq_length = max([len(sample.input_ids) for sample in processed_batch])
-
-        # Get the ids for audio-in and audio-out for each batch
-        audio_in_ids_l = []
-        audio_out_ids_l = []
-
-        if return_labels:
-            audio_out_no_train_flag = []  # Whether the audio-out data should be trained on or not.
-
-        # Process the audio inputs and outputs
-        for i in range(len(processed_batch)):
-            chat_sample = processed_batch[i]
-            audio_in_mask = chat_sample.input_ids == audio_in_token_idx
-            audio_out_mask = chat_sample.input_ids == audio_out_token_idx
-            audio_ids = torch.ones_like(chat_sample.input_ids)
-            audio_ids[audio_in_mask ^ audio_out_mask] = torch.cumsum(audio_ids[audio_in_mask ^ audio_out_mask], 0) - 1
-            audio_in_ids = audio_ids[audio_in_mask]
-            audio_out_ids = audio_ids[audio_out_mask]
-
-            if return_labels:
-                audio_out_no_train_flag.append(chat_sample.label_ids[audio_out_mask] < 0)
-                chat_sample.label_ids[audio_out_mask] = -100
-
-            # Process audio inputs
-            if chat_sample.audio_ids_concat is not None:
-                audio_in_ids_l.extend(
-                    [chat_sample.get_audio_codes(idx)[:audio_num_codebooks, :] for idx in audio_in_ids]
-                )
-
-                audio_out_ids_l.extend(
-                    [chat_sample.get_audio_codes(idx)[:audio_num_codebooks, :] for idx in audio_out_ids]
-                )
-
-        if return_labels:
-            audio_out_no_train_flag = torch.cat(audio_out_no_train_flag, dim=0)
-
-        # Process audio input tokens
-        if len(audio_in_ids_l) > 0:
-            # Append audio-stream-bos and eos tokens
-            new_audio_in_ids_l = []
-            for ele in audio_in_ids_l:
-                audio_codes = torch.cat(
-                    [
-                        torch.full((ele.shape[0], 1), audio_stream_bos_id, dtype=torch.long),
-                        ele,
-                        torch.full((ele.shape[0], 1), audio_stream_eos_id, dtype=torch.long),
-                    ],
-                    dim=1,
-                )
-                audio_codes = build_delay_pattern_mask(
-                    audio_codes.unsqueeze(0),
-                    bos_token_id=audio_stream_bos_id,
-                    pad_token_id=audio_stream_eos_id,
-                )[0].squeeze(0)
-                new_audio_in_ids_l.append(audio_codes)
-            audio_in_ids = torch.cat(new_audio_in_ids_l, dim=1).long()
-            audio_in_ids_start = torch.cumsum(
-                torch.tensor([0] + [audio_codes.shape[1] for audio_codes in new_audio_in_ids_l[:-1]]), dim=0
-            )
-        else:
-            audio_in_ids = torch.zeros((0, 0), dtype=torch.long)
-            audio_in_ids_start = torch.zeros(0, dtype=torch.long)
-
-        # Process audio output tokens
-        if len(audio_out_ids_l) > 0:
-            new_audio_out_ids_l = []
-            label_audio_ids_l = []
-            for idx, ele in enumerate(audio_out_ids_l):
-                audio_codes = torch.cat(
-                    [
-                        torch.full((ele.shape[0], 1), audio_stream_bos_id, dtype=torch.long),
-                        ele,
-                        torch.full((ele.shape[0], 1), audio_stream_eos_id, dtype=torch.long),
-                    ],
-                    dim=1,
-                )
-                if return_labels:
-                    label_audio_ids = torch.cat(
-                        [
-                            torch.full((ele.shape[0], 1), -100, dtype=torch.long),
-                            ele,
-                            torch.full((ele.shape[0], 1), audio_stream_eos_id, dtype=torch.long),
-                        ],
-                        dim=1,
-                    )
-
-                audio_codes = build_delay_pattern_mask(
-                    audio_codes.unsqueeze(0),
-                    bos_token_id=audio_stream_bos_id,
-                    pad_token_id=audio_stream_eos_id,
-                )[0].squeeze(0)
-                if return_labels:
-                    label_audio_ids = build_delay_pattern_mask(
-                        label_audio_ids.unsqueeze(0),
-                        bos_token_id=-100,
-                        pad_token_id=-100,
-                    )[0].squeeze(0)
-                new_audio_out_ids_l.append(audio_codes)
-
-                if return_labels:
-                    if audio_out_no_train_flag[idx]:
-                        label_audio_ids[:] = -100
-                    label_audio_ids_l.append(label_audio_ids)
-
-            audio_out_ids = torch.cat(new_audio_out_ids_l, dim=1).long()
-            if return_labels:
-                label_audio_ids = torch.cat(label_audio_ids_l, dim=1).long()
-            audio_out_ids_start = torch.cumsum(
-                torch.tensor([0] + [audio_codes.shape[1] for audio_codes in new_audio_out_ids_l[:-1]]), dim=0
-            )
-        else:
-            audio_out_ids = torch.zeros((0, 0), dtype=torch.long)
-            audio_out_ids_start = torch.zeros(0, dtype=torch.long)
-            if return_labels:
-                label_audio_ids = torch.zeros((0, 0), dtype=torch.long)
-
-        # Handle right padding for input ids and attention mask
-        if pad_left:
-            input_ids = torch.stack(
-                [
-                    F.pad(ele.input_ids, (max_seq_length - len(ele.input_ids), 0), value=pad_token_id)
-                    for ele in processed_batch
-                ]
-            )
-            if return_labels:
-                label_ids = torch.stack(
-                    [
-                        F.pad(ele.label_ids, (max_seq_length - len(ele.label_ids), 0), value=-100)
-                        for ele in processed_batch
-                    ]
-                )
-            attention_mask = torch.stack(
-                [
-                    F.pad(torch.ones_like(ele.input_ids), (max_seq_length - len(ele.input_ids), 0), value=0)
-                    for ele in processed_batch
-                ]
-            )
-        else:
-            input_ids = torch.stack(
-                [
-                    F.pad(ele.input_ids, (0, max_seq_length - len(ele.input_ids)), value=pad_token_id)
-                    for ele in processed_batch
-                ]
-            )
-            if return_labels:
-                label_ids = torch.stack(
-                    [
-                        F.pad(ele.label_ids, (0, max_seq_length - len(ele.label_ids)), value=-100)
-                        for ele in processed_batch
-                    ]
-                )
-            attention_mask = torch.stack(
-                [
-                    F.pad(torch.ones_like(ele.input_ids), (0, max_seq_length - len(ele.input_ids)), value=0)
-                    for ele in processed_batch
-                ]
-            )
-
-        # Apply audio_num_codebooks limit if specified
-        if audio_num_codebooks is not None:
-            if audio_in_ids is not None:
-                audio_in_ids = audio_in_ids[:audio_num_codebooks]
-            if audio_out_ids is not None:
-                audio_out_ids = audio_out_ids[:audio_num_codebooks]
-            if label_audio_ids is not None:
-                label_audio_ids = label_audio_ids[:audio_num_codebooks]
-
-        return HiggsAudioBatchInput(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            audio_out_ids=audio_out_ids,
-            audio_out_ids_start=audio_out_ids_start,
-            audio_in_ids=audio_in_ids,
-            audio_in_ids_start=audio_in_ids_start,
-            label_ids=label_ids,
-            label_audio_ids=label_audio_ids,
-        )
+        return BatchFeature(data=data, tensor_type="pt")
 
     def batch_decode(
         self,
@@ -731,48 +357,6 @@ class HiggsAudioProcessor(ProcessorMixin):
         prompt_token_length: int,
     ) -> list["torch.Tensor"]:
         raise NotImplementedError("Higgs Audio currently only supports single sample generation")
-
-    def get_prompt_len(
-        self,
-        model_inputs_ids: "torch.Tensor",
-    ) -> int:
-        """Utility function to get the input prompt length."""
-        return model_inputs_ids.shape[1]
-
-    # Copied from transformers.models.dia.processing_dia.DiaProcessor.save_audio with Dia->HiggsAudio
-    def save_audio(
-        self,
-        audio: AudioInput,
-        saving_path: Union[str, Path, list[Union[str, Path]]],
-        **kwargs: Unpack[HiggsAudioProcessorKwargs],
-    ):
-        # TODO: @eustlb, this should be in AudioProcessor
-        if not is_soundfile_available():
-            raise ImportError("Please install `soundfile` to save audio files.")
-
-        # ensure correct audio input
-        audio = make_list_of_audio(audio)
-
-        # ensure correct saving path
-        if isinstance(saving_path, (str, Path)):
-            saving_path = [saving_path]
-        elif not (isinstance(saving_path, (list, tuple)) and all(isinstance(p, (str, Path)) for p in saving_path)):
-            raise ValueError("Invalid input path. Please provide a string, or a list of strings")
-
-        if len(audio) != len(saving_path):
-            raise ValueError("The number of audio and saving paths must be the same")
-
-        output_kwargs = self._merge_kwargs(
-            HiggsAudioProcessorKwargs,
-            **kwargs,
-        )
-        audio_kwargs = output_kwargs["audio_kwargs"]
-        sampling_rate = audio_kwargs["sampling_rate"]
-
-        for audio_value, p in zip(audio, saving_path):
-            if isinstance(audio_value, torch.Tensor):
-                audio_value = audio_value.cpu().float().numpy()
-            sf.write(p, audio_value, sampling_rate)
 
     def decode(
         self,
@@ -811,72 +395,5 @@ class HiggsAudioProcessor(ProcessorMixin):
             generated_text=generated_text,
             sampling_rate=self.audio_tokenizer.sampling_rate,
         )
-
-    @property
-    def default_chat_template(self):
-        """
-        ChatML template that handles multimodal messages with text and audio content.
-
-        For each message:
-        - Formats with role headers using <|start_header_id|>role<|end_header_id|>
-        - Handles text content directly
-        - Replaces audio content with appropriate tokens:
-          - User/system audio: <|audio_bos|><|AUDIO|><|audio_eos|>
-          - Assistant audio: <|audio_out_bos|><|AUDIO_OUT|><|audio_eos|>
-        - Adds recipient information for assistant messages when present
-        - Ends messages with <|eot_id|> or <|eom_id|> for consecutive assistant turns
-
-        Example:
-        ```python
-        messages = [
-            {'role': 'user', 'content': [
-                {'type': 'text', 'text': 'Hello'},
-                {'type': 'audio', 'audio_url': 'audio.wav'}
-            ]},
-            {'role': 'assistant', 'content': 'Hi there!', 'recipient': 'user'}
-        ]
-        ```
-        """
-        return (
-            "{% set loop_total = messages|length %}"
-            "{% for message in messages %}"
-            "{% if loop.first %}"
-            "<|begin_of_text|>"
-            "{% endif %}"
-            "<|start_header_id|>{{ message['role'] }}<|end_header_id|>\n\n"
-            # Handle recipient for assistant messages
-            "{% if message.get('recipient') and message['role'] == 'assistant' %}"
-            "{{ message['recipient'] }}<|recipient|>"
-            "{% endif %}"
-            # Process content
-            "{% if message['content'] is string %}"
-            "{{ message['content'] }}"
-            "{% else %}"
-            "{% for content in message['content'] %}"
-            "{% if content['type'] == 'text' %}"
-            "{{ content['text'] }}"
-            "{% elif content['type'] == 'audio' %}"
-            "{% if message['role'] in ['user', 'system'] %}"
-            "<|audio_bos|><|AUDIO|><|audio_eos|>"
-            "{% elif message['role'] == 'assistant' %}"
-            "<|audio_out_bos|><|AUDIO_OUT|><|audio_eos|>"
-            "{% endif %}"
-            "{% endif %}"
-            "{% endfor %}"
-            "{% endif %}"
-            # Add appropriate ending token
-            "{% set next_idx = loop.index %}"
-            "{% if message['role'] == 'assistant' and next_idx < loop_total and messages[next_idx]['role'] == 'assistant' %}"
-            "<|eom_id|>"
-            "{% else %}"
-            "<|eot_id|>"
-            "{% endif %}"
-            "{% endfor %}"
-            # Add generation prompt if needed
-            "{% if add_generation_prompt %}"
-            "<|start_header_id|>assistant<|end_header_id|>\n\n"
-            "{% endif %}"
-        )
-
 
 __all__ = ["HiggsAudioProcessor"]
