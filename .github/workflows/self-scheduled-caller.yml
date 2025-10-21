@@ -6,7 +6,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - adding_kernels_tests
+      - add_tests_for_kernels
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
