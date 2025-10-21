@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_vocos_encodec import VocosEncodecConfig
@@ -36,7 +37,7 @@ class VocosEncodecOutput(ModelOutput):
     audio: torch.FloatTensor
 
 
-def vocos_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":
+def custom_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":
     """
     Performs the Inverse Short Time Fourier Transform (ISTFT) on STFT coefficients to reconstruct audio in the time domain.
 
@@ -148,7 +149,7 @@ class VocosEncodecConvNeXtBlock(nn.Module):
         )
         self.norm = VocosEncodecAdaptiveLayerNorm(config)
         self.pwconv1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.act_fn = nn.GELU()
+        self.act_fn = ACT2FN[config.hidden_act]
         self.pwconv2 = nn.Linear(config.intermediate_size, config.hidden_size)
         self.layer_scale_parameter = nn.Parameter(
             config.layer_scale_init_value * torch.ones(config.hidden_size), requires_grad=True
@@ -201,15 +202,19 @@ class VocosEncodecISTFTHead(nn.Module):
             Tensor: Reconstructed time-domain audio signal of shape (B, T), where T is the length of the output signal.
             Tensor: Predicted STFT coefficients of shape (B, L, N+2), where N is the number of frequency bins.
         """
-        x_pred = self.out(x).transpose(1, 2)
-        mag, p = x_pred.chunk(2, dim=1)
+        x_pred = self.out(x)  # (B, L, n_fft+2)
+        # Split into magnitude and phase, then transpose to (B, freq_bins, time_frames)
+        mag, p = x_pred.chunk(2, dim=-1)  # Each: (B, L, freq_bins)
+        mag = mag.transpose(1, 2)  # (B, freq_bins, L)
+        p = p.transpose(1, 2)  # (B, freq_bins, L)
+
         mag = torch.exp(mag)
         mag = torch.clip(mag, max=1e2)  # safeguard to prevent excessively large magnitudes
         # wrapping happens here. These two lines produce real and imaginary value
         spectrogram_real = torch.cos(p)
         spectrogram_imag = torch.sin(p)
         spectrogram_complex = mag * (spectrogram_real + 1j * spectrogram_imag)
-        audio = vocos_istft(
+        audio = custom_istft(
             spectrogram_complex,
             n_fft=self.n_fft,
             hop_length=self.hop_length,
@@ -221,11 +226,6 @@ class VocosEncodecISTFTHead(nn.Module):
 
 
 class VocosEncodecPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = VocosEncodecConfig
     base_model_prefix = "vocos_encodec"
     main_input_name = "input_features"
@@ -296,7 +296,7 @@ class VocosEncodecModel(VocosEncodecPreTrainedModel):
             Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, to be provided if
             `input_features`is not None.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
-            Padding mask. Not used, but kept so processor outputs can be passed directly.
+            Padding mask. Not used, but kept so feature extractor outputs can be passed directly.
 
         Returns:
             `VocosOutput` or tuple `(audio,)`:
