@@ -1416,7 +1416,7 @@ class ModelTesterMixin:
         for k in config.sub_configs:
             if (
                 self._is_composite and k == "vision_config"
-            ):  # # skip because it's not needed and causes errors e.g with Timm
+            ):  # skip because it's not needed and causes errors e.g with Timm
                 continue
             if getattr(config, k) is not None:
                 getattr(config, k).output_attentions = self.has_attentions
