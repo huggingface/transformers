@@ -178,6 +178,11 @@ class Qwen3MoeAttention(nn.Module):
         self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = getattr(config, "sliding_window", None)
 
+        # Load and cache the rotary kernel once during initialization to improve performance
+        from ...integrations.hub_kernels import lazy_load_kernel
+
+        self._rotary_kernel_loaded = lazy_load_kernel("rotary_emb")
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -195,14 +200,9 @@ class Qwen3MoeAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        # Check if use_kernels is passed in kwargs
-        use_kernels = kwargs.get("use_kernels", False)
-        if use_kernels:
-            try:
-                query_states, key_states = apply_rotary_kernel(query_states, key_states, cos, sin, cache_position)
-            except (ImportError, AttributeError, RuntimeError):
-                # Fallback to regular rotary position embedding if kernel is not available
-                query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        # Use the cached kernel loaded during initialization
+        if self._rotary_kernel_loaded is not None:
+            query_states, key_states = apply_rotary_kernel(query_states, key_states, cos, sin)
         else:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 

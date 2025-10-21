@@ -14,12 +14,13 @@
 # limitations under the License.
 """PyTorch Qwen3 model."""
 
-from typing import Callable, Optional, Union
 from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 
 from ...cache_utils import Cache
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -47,36 +48,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen3-8B"
 
 
-def apply_rotary_kernel(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """
-    Rotary kernel implementation wrapper
-    Adapts rotary kernels implementation to match HuggingFace apply_rotary_pos_emb signature
-    """
-    from ...integrations.hub_kernels import rotary_kernel
-
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    q_rotated = q.clone()
-    k_rotated = k.clone()
-
-    # Get half dimension for rotation
-    half_dim = q.shape[-1] // 2
-    q1 = q_rotated[..., :half_dim]
-    q2 = q_rotated[..., half_dim:]
-    k1 = k_rotated[..., :half_dim]
-    k2 = k_rotated[..., half_dim:]
-    if cos.shape[-1] != half_dim:
-        # Trim cos/sin to match half_dim
-        cos = cos[..., :half_dim]
-        sin = sin[..., :half_dim]
-
-    # Apply rotary embedding using our kernel
-    rotary_kernel.apply_rotary(q1, q2, cos, sin, q1, q2, False)
-    rotary_kernel.apply_rotary(k1, k2, cos, sin, k1, k2, False)
-    return q_rotated, k_rotated
-
-
 class Qwen3RMSNorm(Qwen2RMSNorm):
     pass
 
@@ -97,6 +68,10 @@ class Qwen3Attention(LlamaAttention):
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
+        # Load and cache the rotary kernel once during initialization to improve performance
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = rotary_kernel.apply_rotary_kernel if rotary_kernel is not None else apply_rotary_pos_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -114,16 +89,7 @@ class Qwen3Attention(LlamaAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        # Check if use_kernels is passed in kwargs
-        use_kernels = kwargs.get("use_kernels", False)
-        if use_kernels:
-            try:
-                query_states, key_states = apply_rotary_kernel(query_states, key_states, cos, sin, cache_position)
-            except (ImportError, AttributeError, RuntimeError):
-                # Fallback to regular rotary position embedding if kernel is not available
-                query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        else:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -187,7 +153,6 @@ class Qwen3ForCausalLM(Qwen2ForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        use_kernels = getattr(self, "use_kernels", False)
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -196,7 +161,6 @@ class Qwen3ForCausalLM(Qwen2ForCausalLM):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
-            use_kernels=use_kernels,
             **kwargs,
         )
 
