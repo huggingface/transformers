@@ -126,7 +126,7 @@ class LwDetrModelTester:
                 target["class_labels"] = torch.randint(
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
-                target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
+                target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device, dtype=pixel_values.dtype)
                 labels.append(target)
 
         config = self.get_config()
