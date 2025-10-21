@@ -275,7 +275,6 @@ class MetaClip2PreTrainedModel(CLIPPreTrainedModel):
 
 
 class MetaClip2TextTransformer(CLIPTextTransformer):
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -353,13 +352,7 @@ class MetaClip2TextModel(CLIPTextModel):
     >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
     ```"""
 
-    def __init__(self, config: MetaClip2TextConfig):
-        super().__init__(config)
-        self.text_model = MetaClip2TextTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -422,18 +415,7 @@ class MetaClip2TextModelWithProjection(CLIPTextModelWithProjection):
     >>> text_embeds = outputs.text_embeds
     ```"""
 
-    def __init__(self, config: MetaClip2TextConfig):
-        super().__init__(config)
-
-        text_model = MetaClip2TextModel._from_config(config)
-        self.text_model = text_model.text_model
-
-        self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -669,7 +651,7 @@ class MetaClip2VisionModel(CLIPVisionModel):
     >>> pooled_output = outputs.pooler_output  # pooled CLS states
     ```"""
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -740,7 +722,7 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
     >>> image_embeds = outputs.image_embeds
     ```"""
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -786,9 +768,7 @@ __all__ = [
     "MetaClip2PreTrainedModel",
     "MetaClip2TextModel",
     "MetaClip2TextModelWithProjection",
-    "MetaClip2TextTransformer",
     "MetaClip2VisionModel",
     "MetaClip2VisionModelWithProjection",
-    "MetaClip2VisionTransformer",  # noqa: F822
     "MetaClip2ForImageClassification",
 ]

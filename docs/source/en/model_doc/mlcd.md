@@ -75,11 +75,6 @@ print(f"Extracted features shape: {features.shape}")
 
 [[autodoc]] MLCDVisionConfig
 
-## MLCDVisionTransformer
-
-[[autodoc]] MLCDVisionTransformer
-    - forward
-
 ## MLCDVisionModel
 
 [[autodoc]] MLCDVisionModel

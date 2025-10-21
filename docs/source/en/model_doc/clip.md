@@ -129,11 +129,6 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
     - get_text_features
     - get_image_features
 
-## CLIPTextTransformer
-
-[[autodoc]] CLIPTextTransformer
-    - forward
-
 ## CLIPTextModel
 
 [[autodoc]] CLIPTextModel
@@ -147,11 +142,6 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 ## CLIPVisionModelWithProjection
 
 [[autodoc]] CLIPVisionModelWithProjection
-    - forward
-
-## CLIPVisionTransformer
-
-[[autodoc]] CLIPVisionTransformer
     - forward
 
 ## CLIPVisionModel

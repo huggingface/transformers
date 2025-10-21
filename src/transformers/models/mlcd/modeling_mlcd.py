@@ -29,7 +29,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_int
+from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import check_model_inputs
 from .configuration_mlcd import MLCDVisionConfig
 
@@ -362,6 +362,7 @@ class MLCDEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([MLCDEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -446,12 +447,11 @@ class MLCDPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-class MLCDVisionTransformer(MLCDPreTrainedModel):
+class MLCDVisionTransformer(nn.Module):
     def __init__(self, config: MLCDVisionConfig):
-        super().__init__(config)
+        super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-        self.gradient_checkpointing = False
 
         self.embeddings = MLCDVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
@@ -460,7 +460,6 @@ class MLCDVisionTransformer(MLCDPreTrainedModel):
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
 
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -517,7 +516,7 @@ class MLCDVisionModel(MLCDPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -552,4 +551,4 @@ class MLCDVisionModel(MLCDPreTrainedModel):
         )
 
 
-__all__ = ["MLCDPreTrainedModel", "MLCDVisionTransformer", "MLCDVisionModel"]
+__all__ = ["MLCDPreTrainedModel", "MLCDVisionModel"]
