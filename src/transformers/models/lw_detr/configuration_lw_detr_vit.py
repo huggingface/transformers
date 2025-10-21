@@ -6,8 +6,6 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
 
-import numpy as np
-
 from ...configuration_utils import PretrainedConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -54,8 +52,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate.
         window_block_indices (`list[int]`, *optional*, defaults to `[]`):
             List of indices of blocks that should have window attention instead of regular global self-attention.
         use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
@@ -112,7 +108,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        drop_path_rate=0.0,
         window_block_indices=[],
         use_absolute_position_embeddings=True,
         out_features=None,
@@ -136,7 +131,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.drop_path_rate = drop_path_rate
         self.window_block_indices = window_block_indices
         self.use_absolute_position_embeddings = use_absolute_position_embeddings
 
@@ -156,7 +150,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
             )
         self.num_windows = num_windows
         self.num_windows_side = int(math.sqrt(num_windows))
-        self.drop_path_rates = [x.item() for x in np.linspace(0, self.drop_path_rate, self.num_hidden_layers)]
 
 
 __all__ = ["LwDetrViTConfig"]

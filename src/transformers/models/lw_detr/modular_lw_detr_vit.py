@@ -1,7 +1,6 @@
 import math
 from typing import Callable, Optional
 
-import numpy as np
 import torch
 from torch import nn
 
@@ -15,7 +14,6 @@ from ..vit.modeling_vit import ViTAttention, ViTEncoder, ViTSelfAttention, eager
 from ..vitdet.configuration_vitdet import VitDetConfig
 from ..vitdet.modeling_vitdet import (
     VitDetBackbone,
-    VitDetDropPath,
     VitDetEmbeddings,
     VitDetMlp,
     VitDetPreTrainedModel,
@@ -67,8 +65,6 @@ class LwDetrViTConfig(VitDetConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate.
         window_block_indices (`list[int]`, *optional*, defaults to `[]`):
             List of indices of blocks that should have window attention instead of regular global self-attention.
         use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
@@ -125,7 +121,6 @@ class LwDetrViTConfig(VitDetConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        drop_path_rate=0.0,
         window_block_indices=[],
         use_absolute_position_embeddings=True,
         out_features=None,
@@ -148,7 +143,6 @@ class LwDetrViTConfig(VitDetConfig):
             patch_size=patch_size,
             num_channels=num_channels,
             qkv_bias=qkv_bias,
-            drop_path_rate=drop_path_rate,
             window_block_indices=window_block_indices,
             use_absolute_position_embeddings=use_absolute_position_embeddings,
             out_features=out_features,
@@ -158,6 +152,7 @@ class LwDetrViTConfig(VitDetConfig):
         del self.residual_block_indices
         del self.use_relative_position_embeddings
         del self.window_size
+        del self.drop_path_rate
 
         self.cae_init_values = cae_init_values
         if num_windows % math.sqrt(num_windows) != 0:
@@ -170,7 +165,6 @@ class LwDetrViTConfig(VitDetConfig):
             )
         self.num_windows = num_windows
         self.num_windows_side = int(math.sqrt(num_windows))
-        self.drop_path_rates = [x.item() for x in np.linspace(0, self.drop_path_rate, self.num_hidden_layers)]
 
 
 class LwDetrViTSelfAttention(ViTSelfAttention):
@@ -236,10 +230,6 @@ class LwDetrViTAttention(ViTAttention):
         return output
 
 
-class LwDetrViTDropPath(VitDetDropPath):
-    pass
-
-
 class LwDetrViTMlp(VitDetMlp):
     pass
 
@@ -260,9 +250,6 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
 
         self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
         self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
-
-        drop_path_rate = config.drop_path_rates[layer_idx]
-        self.drop_path = LwDetrViTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.window = layer_idx in config.window_block_indices
         self.num_windows = config.num_windows
@@ -291,14 +278,13 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
             if head_mask is not None:
                 head_mask = head_mask.reshape(batch_size, seq_len)
 
-        # first residual connection
-        hidden_states = hidden_states + self.drop_path(attention_output)
+        hidden_states = hidden_states + attention_output
 
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
         layer_output = layer_output * self.gamma_2
 
-        hidden_states = hidden_states + self.drop_path(layer_output)
+        hidden_states = hidden_states + layer_output
 
         return hidden_states
 

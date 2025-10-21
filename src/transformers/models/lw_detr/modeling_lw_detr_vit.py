@@ -150,35 +150,6 @@ class LwDetrViTAttention(nn.Module):
         return output
 
 
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class LwDetrViTDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class LwDetrViTMlp(nn.Module):
     def __init__(self, config, in_features: int, hidden_features: int) -> None:
         super().__init__()
@@ -214,9 +185,6 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
         self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
         self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
 
-        drop_path_rate = config.drop_path_rates[layer_idx]
-        self.drop_path = LwDetrViTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
-
         self.window = layer_idx in config.window_block_indices
         self.num_windows = config.num_windows
 
@@ -244,14 +212,13 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
             if head_mask is not None:
                 head_mask = head_mask.reshape(batch_size, seq_len)
 
-        # first residual connection
-        hidden_states = hidden_states + self.drop_path(attention_output)
+        hidden_states = hidden_states + attention_output
 
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
         layer_output = layer_output * self.gamma_2
 
-        hidden_states = hidden_states + self.drop_path(layer_output)
+        hidden_states = hidden_states + layer_output
 
         return hidden_states
 
