@@ -276,7 +276,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = DetrImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[DetrImageProcessorKwargs]) -> None:
-        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask", None))
+        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask", self.do_pad))
 
         size = kwargs.pop("size", None)
         max_size = None if size is None else kwargs.pop("max_size", 1333)
