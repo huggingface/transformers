@@ -30,10 +30,10 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_torch_available():
     import torch
 
-    from transformers import VocosEncodecModel
+    from transformers import VocosEncodecModel, VocosEncodecProcessor
 
     # TODO remove/replace
-    from transformers import VocosModel, VocosProcessor
+    from transformers import VocosModel
 
 
 from transformers import VocosConfig
@@ -254,7 +254,7 @@ class VocosEncodecModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         hf_repo_id = "bezzam/vocos-encodec-24khz"
         model = VocosEncodecModel.from_pretrained(hf_repo_id).to(torch_device).eval()
-        processor = VocosProcessor.from_pretrained(hf_repo_id)
+        processor = VocosEncodecProcessor.from_pretrained(hf_repo_id)
 
         audio_np = self._load_datasamples(1)[0]
         audio = torch.tensor(audio_np, dtype=torch.float32).unsqueeze(0).to(torch_device)
@@ -296,7 +296,7 @@ class VocosEncodecModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_batch(self):
         repo_id = "bezzam/vocos-encodec-24khz"
-        processor = VocosProcessor.from_pretrained(repo_id)
+        processor = VocosEncodecProcessor.from_pretrained(repo_id)
         model = VocosEncodecModel.from_pretrained(repo_id).to(torch_device).eval()
 
         # reconstruction from batch of audios

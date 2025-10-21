@@ -30,7 +30,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_torch_available():
     import torch
 
-    from transformers import VocosModel, VocosProcessor
+    from transformers import VocosModel, VocosFeatureExtractor
 
 
 from transformers import VocosConfig
@@ -250,7 +250,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_inference(self):
         hf_repo_id = "hf-audio/vocos-mel-24khz"
-        processor = VocosProcessor.from_pretrained(hf_repo_id)
+        processor = VocosFeatureExtractor.from_pretrained(hf_repo_id)
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
 
         audio_np = self._load_datasamples(1)[0]
@@ -273,7 +273,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_inference_batch(self):
         repo_id = "hf-audio/vocos-mel-24khz"
-        processor = VocosProcessor.from_pretrained(repo_id)
+        processor = VocosFeatureExtractor.from_pretrained(repo_id)
         model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
 
         audios = self._load_datasamples(3)

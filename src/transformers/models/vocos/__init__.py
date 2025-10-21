@@ -21,9 +21,6 @@ if TYPE_CHECKING:
     from .configuration_vocos import *
     from .feature_extraction_vocos import *
     from .modeling_vocos import *
-
-    # TODO remove
-    from .processing_vocos import *
 else:
     import sys
 

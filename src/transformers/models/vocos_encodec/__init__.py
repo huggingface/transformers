@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_vocos_encodec import *
     from .modeling_vocos_encodec import *
+    from .processing_vocos_encodec import *
 else:
     import sys
 

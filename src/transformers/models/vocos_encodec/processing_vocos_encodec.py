@@ -43,7 +43,7 @@ class VocosProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class VocosProcessor(ProcessorMixin):
+class VocosEncodecProcessor(ProcessorMixin):
     r"""
     Constructs a Vocos processor which wraps a [`VocosFeatureExtractor`] and an audio tokenizer [`EncodecModel`]  into
     a single processor that can handle both mel-spectrogram feature extraction and EnCodec neural codec based
@@ -173,4 +173,4 @@ class VocosProcessor(ProcessorMixin):
         return BatchFeature(data, tensor_type=return_tensors)
 
 
-__all__ = ["VocosProcessor"]
+__all__ = ["VocosEncodecProcessor"]

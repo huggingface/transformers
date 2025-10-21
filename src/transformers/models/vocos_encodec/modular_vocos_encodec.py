@@ -102,8 +102,8 @@ class VocosEncodecModel(VocosModel):
         )
         self.norm = VocosEncodecAdaptiveLayerNorm(config)
 
-        # TODO compute Encodec codes
-        # original: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L85
+        # TODO store original Encodec model?
+        # original: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L75
         self._bandwidth_to_id = {bandwidth: id for id, bandwidth in enumerate(config.bandwidths)}
 
     @can_return_tuple
