@@ -653,7 +653,7 @@ class LwDetrMLP(nn.Module):
 
 class LwDetrDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LwDetrConfig, layer_idx: int):
-        GradientCheckpointingLayer.__init__(self)
+        nn.Module.__init__(self)
 
         # self-attention
         self.self_attn = LwDetrAttention(config, layer_idx=layer_idx)
