@@ -47,7 +47,9 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # TODO: update path
         processor = Ernie4_5_VLProcessor.from_pretrained(
             "/raid/anton/code/forks/transformers/src/transformers/models/ernie4_5_vl/AntonV/ErnieVL",
-            patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28
+            patch_size=4,
+            max_pixels=56 * 56,
+            min_pixels=28 * 28,
         )
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token

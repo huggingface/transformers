@@ -1513,7 +1513,7 @@ class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
         },
         "videos_kwargs": {
             "do_sample_frames": True,
-        }
+        },
     }
 
 

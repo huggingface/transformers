@@ -112,7 +112,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Ernie4_5_VLVideoProcessorInitKwargs]):
-        temporal_patch_size = kwargs.get("temporal_patch_size", None)
+        temporal_patch_size = kwargs.get("temporal_patch_size")
         if temporal_patch_size is None or temporal_patch_size != 2:
             raise ValueError("`Ernie 4.5 VL` only supports a temporal patch size of 2")
 
@@ -154,7 +154,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         num_frames = min(max(total_num_frames, min_frames), max_frames)
 
         indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
-        #test = np.linspace(start=0, stop=total_num_frames, num=num_frames + 1).astype(int)[:-1]
+        # test = np.linspace(start=0, stop=total_num_frames, num=num_frames + 1).astype(int)[:-1]
 
         return indices
 
@@ -208,9 +208,9 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             # Check for attributes that are necessary to draw timestamps on frames
             if metadata is None or (metadata.fps is None or metadata.frames_indices is None):
                 raise ValueError(
-                "`Ernie 4.5 VL` needs the video metadata with its fps and frame indices. "
-                f"Found `metadata={metadata}` instead."
-            )
+                    "`Ernie 4.5 VL` needs the video metadata with its fps and frame indices. "
+                    f"Found `metadata={metadata}` instead."
+                )
 
             # `make_batched_videos` always returns a 4D array per video
             if isinstance(video, np.ndarray):
@@ -227,7 +227,9 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             # TODO: check for correctness
             # See `timestamp_converting` and `render_single_image_with_timestamp` in og
             for idx, frame in enumerate(video):
-                video[idx] = self._render_image_with_timestamp(frame, self._convert_timestamp(metadata.timestamps[idx]))
+                video[idx] = self._render_image_with_timestamp(
+                    frame, self._convert_timestamp(metadata.timestamps[idx])
+                )
 
             # last frame is copied if uneven (mitigating issues for temporal patch size)
             if video.shape[0] % 2 != 0:
