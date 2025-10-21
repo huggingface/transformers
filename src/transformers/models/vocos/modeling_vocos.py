@@ -210,7 +210,7 @@ class VocosISTFTHead(nn.Module):
 class VocosPreTrainedModel(PreTrainedModel):
     config_class = VocosConfig
     base_model_prefix = "vocos"
-    main_input_name = "audio_spectrogram"
+    main_input_name = "input_features"
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
@@ -255,11 +255,11 @@ class VocosModel(VocosPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        audio_spectrogram: Optional[torch.FloatTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         padding_mask: Optional[torch.BoolTensor] = None,
     ) -> VocosOutput:
         r"""
-        audio_spectrogram (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
             Mel-spectrogram features: computed directly from audio via (`VocosFeatureExtractor`).
         padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
             Padding mask. Not used, but kept so feature extractor outputs can be passed directly.
@@ -288,7 +288,7 @@ class VocosModel(VocosPreTrainedModel):
 
         ```
         """
-        hidden_states = self.embed(audio_spectrogram)  # (B, hidden_size, time_dim)
+        hidden_states = self.embed(input_features)  # (B, hidden_size, time_dim)
 
         # Apply initial norm in channel-last format
         hidden_states = hidden_states.transpose(1, 2)  # (B, time_dim, hidden_size)

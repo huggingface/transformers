@@ -68,7 +68,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
 
     """
 
-    model_input_names = ["audio_spectrogram"]
+    model_input_names = ["input_features"]
 
     def __init__(
         self,
@@ -118,6 +118,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         truncation: Optional[bool] = False,
         sampling_rate: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        # TODO remove `return_audio_only` 
         return_audio_only: Optional[bool] = False,
         device: Optional[str] = None,
         **kwargs,
@@ -200,7 +201,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         if isinstance(audio[0], np.ndarray):
             audio = [torch.from_numpy(_audio) for _audio in audio]
         audio = [_audio.view(-1, 1) for _audio in audio]
-        batch = BatchFeature({"audio_spectrogram": audio})
+        batch = BatchFeature({"input_features": audio})
 
         # Full tensor is needed for torchaudio's Mel spectrogram method
         padded_inputs = self.pad(
@@ -212,7 +213,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=True,
             return_tensors="pt",
         )
-        audio = padded_inputs.pop("audio_spectrogram").squeeze(-1).to(device)
+        audio = padded_inputs.pop("input_features").squeeze(-1).to(device)
         if padding:
             padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
         if return_audio_only:
@@ -231,7 +232,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         audio_spectrogram = self.mel_filters(audio)
         # `safe_log`` as in original: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/modules.py#L194
         audio_spectrogram = torch.log(torch.clip(audio_spectrogram, min=1e-7))
-        padded_inputs["audio_spectrogram"] = audio_spectrogram
+        padded_inputs["input_features"] = audio_spectrogram
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

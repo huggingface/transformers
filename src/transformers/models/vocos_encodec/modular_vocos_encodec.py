@@ -66,7 +66,6 @@ class VocosEncodecConvNeXtBlock(VocosConvNeXtBlock):
 class VocosEncodecPreTrainedModel(VocosPreTrainedModel):
     config_class = VocosEncodecConfig
     base_model_prefix = "vocos_encodec"
-    main_input_name = "input_features"
 
     def _init_weights(self, module):
         """Initialize the weights"""
