@@ -462,6 +462,8 @@ class TrainingArguments:
             fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`.
 
             A List of config and its options:
+                - fsdp_version (`int`, *optional*, defaults to `1`):
+                    The version of FSDP to use. Defaults to 1.
                 - min_num_params (`int`, *optional*, defaults to `0`):
                     FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
                     passed).
@@ -2742,9 +2744,10 @@ class TrainingArguments:
                         fsdp_plugin_args["min_num_params"] = self.fsdp_config["min_num_params"]
                         fsdp_plugin_args["auto_wrap_policy"] = FSDP_AUTO_WRAP_POLICY[1]
                     elif self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None:
-                        fsdp_plugin_args["transformer_layer_cls_to_wrap"] = ",".join(
+                        fsdp_plugin_args["transformer_cls_names_to_wrap"] = ",".join(
                             self.fsdp_config["transformer_layer_cls_to_wrap"]
                         )
+            fsdp_plugin_args["fsdp_version"] = self.fsdp_config.get("fsdp_version", 1)
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
             fsdp_plugin_args["forward_prefetch"] = str(self.fsdp_config.get("forward_prefetch", "false")).lower()
