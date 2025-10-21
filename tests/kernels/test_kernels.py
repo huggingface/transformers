@@ -16,7 +16,6 @@
 
 
 import copy
-import gc
 import types
 from unittest.mock import patch
 
@@ -32,9 +31,10 @@ from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.testing_utils import (
     TestCasePlus,
-    backend_empty_cache,
+    cleanup,
     require_kernels,
     require_torch_accelerator,
+    slow,
     torch_device,
 )
 from transformers.utils import is_kernels_available
@@ -46,17 +46,19 @@ if is_kernels_available():
 
 
 @require_kernels
+@slow
 class TestHubKernels(TestCasePlus):
-    def setUp(self):
-        self.model_id = "unsloth/Llama-3.2-1B-Instruct"
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        self.model_kernelized = AutoModelForCausalLM.from_pretrained(
-            self.model_id, use_kernels=True, device_map=torch_device
+    @classmethod
+    def setUpClass(cls):
+        cls.model_id = "unsloth/Llama-3.2-1B-Instruct"
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+        cls.model_kernelized = AutoModelForCausalLM.from_pretrained(
+            cls.model_id, use_kernels=True, device_map=torch_device
         )
-        self.model_not_kernelized = AutoModelForCausalLM.from_pretrained(
-            self.model_id, use_kernels=False, device_map=torch_device
+        cls.model_not_kernelized = AutoModelForCausalLM.from_pretrained(
+            cls.model_id, use_kernels=False, device_map=torch_device
         )
-        self.input = "Hello"
+        cls.input = "Hello"
 
     def tearDown(self):
         # Delete large objects to drop references early
@@ -82,9 +84,7 @@ class TestHubKernels(TestCasePlus):
             pass
 
         # Free accelerator memory/cache and trigger GC
-        gc.collect()
-        backend_empty_cache(torch_device)
-        gc.collect()
+        cleanup(torch_device, gc_collect=True)
 
     @require_torch_accelerator
     def test_forward(self):
@@ -369,9 +369,7 @@ class TestUseKernelsLifecycle(TestCasePlus):
             except Exception:
                 pass
         # Free accelerator memory/cache and trigger GC
-        gc.collect()
-        backend_empty_cache(torch_device)
-        gc.collect()
+        cleanup(torch_device, gc_collect=True)
 
     def test_setting_use_kernels_twice_does_not_rekernelize(self):
         call_count = {"n": 0}

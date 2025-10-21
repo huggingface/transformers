@@ -483,7 +483,11 @@ jobs:
       - name: Reinstall transformers in edit mode
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[testing]
-
+  
+      - name: Install kernels
+        working-directory: /transformers
+        run: python3 -m pip install -U kernels
+  
       - name: NVIDIA-SMI
         run: nvidia-smi
 
@@ -505,11 +509,7 @@ jobs:
             machine_type=${{ matrix.machine_type }}
           fi
           echo "machine_type=$machine_type" >> $GITHUB_ENV
-
-      - name: Install kernels
-        working-directory: /transformers
-        run: python3 -m pip install -U kernels
-
+    
       - name: Run kernel tests on GPU
         working-directory: /transformers
         run: |
