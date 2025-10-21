@@ -44,9 +44,6 @@ INCOMPATIBLE_MODELS = [
     "perceiver",
     "perception_lm",
     "phi4_multimodal",
-    "qwen2_5_omni",
-    "qwen2_5_vl",
-    "qwen2_vl",
     "regnet",
     "resnet",
     "superglue",
@@ -389,13 +386,23 @@ class ImageVisualizer:
 
             patch_size = getattr(self.processor.image_processor, "patch_size", 14)
             temporal_patch_size = getattr(self.processor.image_processor, "temporal_patch_size", 1)
+            merge_size = getattr(self.processor.image_processor, "merge_size", 2)
 
             expected_size = temporal_patch_size * 3 * patch_size * patch_size
             if flattened_size == expected_size:
                 pixel_values = pixel_values.reshape(num_patches, temporal_patch_size, 3, patch_size, patch_size)
                 pixel_values = pixel_values[:, 0, :, :, :]
 
-                pixel_values = pixel_values.reshape(patch_grid_h, patch_grid_w, 3, patch_size, patch_size)
+                super_grid_h = patch_grid_h // merge_size
+                super_grid_w = patch_grid_w // merge_size
+
+                pixel_values = pixel_values.reshape(
+                    super_grid_h, super_grid_w, merge_size, merge_size, 3, patch_size, patch_size
+                )
+                pixel_values = pixel_values.permute(0, 2, 1, 3, 4, 5, 6).contiguous()
+                pixel_values = pixel_values.reshape(
+                    super_grid_h * merge_size, super_grid_w * merge_size, 3, patch_size, patch_size
+                )
                 pixel_values = pixel_values.permute(0, 3, 1, 4, 2).contiguous()
                 pixel_values = pixel_values.reshape(patch_grid_h * patch_size, patch_grid_w * patch_size, 3)
                 pixel_values = pixel_values.unsqueeze(0)
