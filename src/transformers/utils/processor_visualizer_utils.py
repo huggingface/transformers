@@ -8,6 +8,7 @@ import torch
 from PIL import Image
 
 from ..image_transforms import convert_to_rgb, to_pil_image, unnormalize
+from ..image_utils import ChannelDimension, infer_channel_dimension_format
 from ..models.auto import AutoConfig, AutoProcessor
 
 
@@ -67,9 +68,10 @@ DEFAULT_IMAGE_URL = (
 )
 
 
-def _looks_like_global(tile: np.ndarray, base: Image.Image, *, mae_tol: float = 0.3) -> bool:
+def _looks_like_global(tile: np.ndarray, base: Image.Image, *, mae_tol: float = 0.05) -> bool:
     """
-    Very simple visualizer heuristic.
+    Heuristic to check if a tile is a downscaled version of the original image.
+    Uses mean absolute error with a strict threshold.
     """
     base_r = base.convert("RGB").resize(tile.shape[:2][::-1], Image.BILINEAR)
     base_np = np.asarray(base_r).astype(np.float32) / 255.0
@@ -80,6 +82,26 @@ def _looks_like_global(tile: np.ndarray, base: Image.Image, *, mae_tol: float = 
 
     mae = np.abs(tile_f32 - base_np).mean()
     return mae < mae_tol
+
+
+def _find_global_tile_index(tiles: np.ndarray, base: Image.Image) -> Optional[int]:
+    """
+    Find which tile (if any) is the global/downscaled image.
+    Checks first and last tiles only, as models place global images at these positions.
+
+    Returns:
+        Index of global tile (0 or len-1), or None if not found
+    """
+    if tiles.shape[0] <= 1:
+        return None
+
+    if _looks_like_global(tiles[0], base):
+        return 0
+
+    if _looks_like_global(tiles[-1], base):
+        return tiles.shape[0] - 1
+
+    return None
 
 
 class ImageVisualizer:
@@ -109,37 +131,39 @@ class ImageVisualizer:
         self.patch_size = getattr(self.vision_config, "patch_size", getattr(image_processor, "patch_size", 14))
         self.merge_size = getattr(image_processor, "merge_size", 1)
 
-    def _pixel_values_as_tensor(
-        self, pixel_values: Union[torch.Tensor, np.ndarray, list[np.ndarray], list[torch.Tensor]]
-    ):
+    def _prepare_images_for_display(self, image_array: np.ndarray) -> np.ndarray:
         """
-        Normalize input to a 4D tensor with shape (batch, channels, height, width).
-        Supports input of shape:
-          - (B, C, H, W)
-          - (B, N, C, H, W)  -> flattened to (B*N, C, H, W)
-          - (C, H, W)        -> expanded to (1, C, H, W)
-          - list/tuple of arrays or tensors
+        Convert unnormalized images to NHWC format for display, flattening any extra batch dimensions.
+
+        Args:
+            image_array: Array of shape [..., C, H, W] or [..., H, W, C]
+
+        Returns:
+            Array of shape [N, H, W, C] suitable for plotting
         """
-        if isinstance(pixel_values, (list, tuple)):
-            tensor_list = [pv if isinstance(pv, torch.Tensor) else torch.tensor(pv) for pv in pixel_values]
-            pixel_values = torch.stack(tensor_list, dim=0)
+        input_format = infer_channel_dimension_format(image_array)
 
-        if not isinstance(pixel_values, torch.Tensor):
-            pixel_values = torch.tensor(pixel_values)
+        if input_format == ChannelDimension.FIRST:
+            if image_array.ndim == 3:
+                image_array = image_array[np.newaxis, ...]
+            elif image_array.ndim > 4:
+                batch_size = int(np.prod(image_array.shape[: image_array.ndim - 3]))
+                num_channels, height, width = image_array.shape[-3:]
+                image_array = image_array.reshape(batch_size, num_channels, height, width)
 
-        if pixel_values.ndim == 5:
-            batch_size, num_images, num_channels, height, width = pixel_values.shape
-            pixel_values = pixel_values.view(batch_size * num_images, num_channels, height, width)
-        elif pixel_values.ndim == 4:
-            pass
-        elif pixel_values.ndim == 3:
-            pixel_values = pixel_values.unsqueeze(0)
+            if image_array.ndim == 4:
+                image_array = np.transpose(image_array, (0, 2, 3, 1))
         else:
-            raise ValueError(f"Unexpected pixel tensor shape {pixel_values.shape}")
+            if image_array.ndim == 3:
+                image_array = image_array[np.newaxis, ...]
+            elif image_array.ndim > 4:
+                batch_size = int(np.prod(image_array.shape[: image_array.ndim - 3]))
+                height, width, num_channels = image_array.shape[-3:]
+                image_array = image_array.reshape(batch_size, height, width, num_channels)
 
-        return pixel_values
+        return image_array
 
-    def _display_single_image(self, image_array: np.ndarray, show_patch_grid: bool, figsize=(7, 7)):
+    def _display_single_image(self, image_array: np.ndarray, show_patch_grid: bool, figsize=(7, 7), patch_grid_rows=None, patch_grid_cols=None):
         plt.figure(figsize=figsize)
         plt.imshow(image_array)
         plt.xticks([])
@@ -147,11 +171,20 @@ class ImageVisualizer:
 
         if show_patch_grid:
             height, width = image_array.shape[:2]
-            step = max(1, min(height, width) // self.patch_size)
-            for x_pos in range(0, width, step):
-                plt.axvline(x_pos, color="red", linewidth=0.5)
-            for y_pos in range(0, height, step):
-                plt.axhline(y_pos, color="red", linewidth=0.5)
+
+            if patch_grid_rows is not None and patch_grid_cols is not None:
+                step_h = height / patch_grid_rows
+                step_w = width / patch_grid_cols
+                for i in range(1, patch_grid_cols):
+                    plt.axvline(i * step_w, color="red", linewidth=0.5)
+                for i in range(1, patch_grid_rows):
+                    plt.axhline(i * step_h, color="red", linewidth=0.5)
+            else:
+                step = max(1, min(height, width) // self.patch_size)
+                for x_pos in range(0, width, step):
+                    plt.axvline(x_pos, color="red", linewidth=0.5)
+                for y_pos in range(0, height, step):
+                    plt.axhline(y_pos, color="red", linewidth=0.5)
 
         caption = f"{width}×{height} | mean={', '.join(f'{m:.3f}' for m in self.channel_means)} | std={', '.join(f'{s:.3f}' for s in self.channel_stds)}"
         plt.tight_layout()
@@ -167,25 +200,22 @@ class ImageVisualizer:
         aspect_ratio: float = 1.0,
         add_grid: bool = True,
         figsize=(7, 7),
+        global_tile: Optional[np.ndarray] = None,
     ):
         """
-        Display a grid of image tiles. Attempts to detect and preserve the original/global image tile,
-        which is then shown separately at the end.
+        Display a grid of image tiles with optional global image display.
+
+        Args:
+            tiles_array: Array of tiles to display in grid format
+            source_image: Original source image
+            rows: Number of rows in the grid
+            cols: Number of columns in the grid
+            aspect_ratio: Aspect ratio for grid layout calculation
+            add_grid: Whether to add patch grid overlay
+            figsize: Figure size for matplotlib
+            global_tile: Optional global/downscaled image to display separately
         """
         num_tiles = tiles_array.shape[0]
-
-        original_tile_index = None
-        saved_original_tile = None
-
-        for idx in (0, num_tiles - 1):
-            if _looks_like_global(tiles_array[idx], source_image):
-                original_tile_index = idx
-                break
-
-        if original_tile_index is not None:
-            saved_original_tile = tiles_array[original_tile_index]
-            tiles_array = np.delete(tiles_array, original_tile_index, axis=0)
-            num_tiles -= 1
 
         # Infer grid if not specified
         grid_rows, grid_cols = rows, cols
@@ -228,15 +258,15 @@ class ImageVisualizer:
         fig.text(0.5, 0.02, caption, ha="center", va="bottom", fontsize=12)
         plt.show()
 
-        if saved_original_tile is not None:
+        if global_tile is not None:
             fig2, ax2 = plt.subplots(figsize=figsize)
-            ax2.imshow(saved_original_tile)
+            ax2.imshow(global_tile)
             ax2.set_xticks([])
             ax2.set_yticks([])
             ax2.set_aspect("equal", adjustable="box")
-            fig2.subplots_adjust(left=0, right=1, top=1, bottom=0)  # no clipping
-            h0, w0 = saved_original_tile.shape[:2]
-            caption = f"{w0}×{h0} | mean={', '.join(f'{m:.3f}' for m in self.channel_means)} | std={', '.join(f'{s:.3f}' for s in self.channel_stds)}"
+            fig2.subplots_adjust(left=0, right=1, top=1, bottom=0)
+            h0, w0 = global_tile.shape[:2]
+            caption = f"Global: {w0}×{h0} | mean={', '.join(f'{m:.3f}' for m in self.channel_means)} | std={', '.join(f'{s:.3f}' for s in self.channel_stds)}"
             fig2.text(0.5, 0.02, caption, ha="center", va="bottom", fontsize=12)
             plt.show()
 
@@ -333,21 +363,91 @@ class ImageVisualizer:
 
         processed_inputs = self.processor(images=pil_images, text=self.default_prompt, return_tensors="pt")
         pixel_values = processed_inputs["pixel_values"]
+
+        grid_rows = None
+        grid_cols = None
+        patch_grid_rows = None
+        patch_grid_cols = None
+
+        if hasattr(self.processor, 'image_processor') and hasattr(self.processor.image_processor, 'get_num_patches_from_image_size'):
+            num_patches, grid_rows, grid_cols = self.processor.image_processor.get_num_patches_from_image_size(
+                img_width, img_height
+            )
+
+        if pixel_values.ndim == 2 and 'image_grid_thw' in processed_inputs:
+            num_patches, flattened_size = pixel_values.shape
+            grid_thw = processed_inputs['image_grid_thw'][0]
+            temporal_frames, patch_grid_h, patch_grid_w = grid_thw.tolist()
+
+            patch_size = getattr(self.processor.image_processor, 'patch_size', 14)
+            temporal_patch_size = getattr(self.processor.image_processor, 'temporal_patch_size', 1)
+
+            expected_size = temporal_patch_size * 3 * patch_size * patch_size
+            if flattened_size == expected_size:
+                pixel_values = pixel_values.reshape(
+                    num_patches, temporal_patch_size, 3, patch_size, patch_size
+                )
+                pixel_values = pixel_values[:, 0, :, :, :]
+
+                pixel_values = pixel_values.reshape(patch_grid_h, patch_grid_w, 3, patch_size, patch_size)
+                pixel_values = pixel_values.permute(0, 3, 1, 4, 2).contiguous()
+                pixel_values = pixel_values.reshape(patch_grid_h * patch_size, patch_grid_w * patch_size, 3)
+                pixel_values = pixel_values.unsqueeze(0)
+
+                patch_grid_rows = patch_grid_h
+                patch_grid_cols = patch_grid_w
+            else:
+                raise ValueError(
+                    f"Cannot reshape pixel_values: expected flattened size {expected_size} "
+                    f"(temporal={temporal_patch_size} × channels=3 × patch={patch_size}×{patch_size}), "
+                    f"but got {flattened_size}"
+                )
+        elif pixel_values.ndim == 5:
+            batch_size, num_tiles, num_channels, height, width = pixel_values.shape
+            pixel_values = pixel_values.view(batch_size * num_tiles, num_channels, height, width)
+        elif pixel_values.ndim == 4:
+            pass
+        elif pixel_values.ndim == 3:
+            pixel_values = pixel_values.unsqueeze(0)
+        else:
+            raise ValueError(f"Unexpected pixel_values shape: {pixel_values.shape}")
+
         unnormalized = unnormalize(pixel_values, mean=self.channel_means, std=self.channel_stds)
-        if unnormalized.ndim == 3 or unnormalized.shape[0] == 1:
+        display_ready = self._prepare_images_for_display(unnormalized)
+
+        if display_ready.shape[0] == 1:
             self._display_single_image(
-                unnormalized[0] if unnormalized.ndim == 4 else unnormalized,
+                display_ready[0],
                 show_patch_grid=add_grid,
                 figsize=figsize,
+                patch_grid_rows=patch_grid_rows,
+                patch_grid_cols=patch_grid_cols,
             )
             return
-        elif unnormalized.ndim != 4:
-            raise ValueError(f"Unsupported shape after unnormalization: {unnormalized.shape}")
 
-        num_tiles = unnormalized.shape[0]
+        num_tiles = display_ready.shape[0]
+        global_tile = None
+
+        if grid_rows is not None and grid_cols is not None and grid_rows * grid_cols + 1 == num_tiles:
+            global_tile = display_ready[-1]
+            display_ready = display_ready[:-1]
+            num_tiles = display_ready.shape[0]
+            if rows is None:
+                rows = grid_rows
+            if cols is None:
+                cols = grid_cols
+        else:
+            global_idx = _find_global_tile_index(display_ready, pil_images[0])
+            if global_idx is not None:
+                global_tile = display_ready[global_idx]
+                if global_idx == 0:
+                    display_ready = display_ready[1:]
+                else:
+                    display_ready = display_ready[:-1]
+                num_tiles = display_ready.shape[0]
 
         if rows is None or cols is None:
-            tile_h, tile_w = unnormalized.shape[1:3]
+            tile_h, tile_w = display_ready.shape[1:3]
             tile_aspect = tile_w / tile_h if tile_h > 0 else 1.0
             target_aspect = aspect_ratio / tile_aspect
 
@@ -362,12 +462,14 @@ class ImageVisualizer:
 
             rows = best_rows
             cols = best_cols
-            self._display_tiled_images(
-                unnormalized,
-                pil_images[0],
-                rows=rows,
-                cols=cols,
-                aspect_ratio=aspect_ratio,
-                add_grid=add_grid,
-                figsize=figsize,
-            )
+
+        self._display_tiled_images(
+            display_ready,
+            pil_images[0],
+            rows=rows,
+            cols=cols,
+            aspect_ratio=aspect_ratio,
+            add_grid=add_grid,
+            figsize=figsize,
+            global_tile=global_tile,
+        )

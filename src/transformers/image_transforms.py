@@ -448,96 +448,66 @@ def unnormalize(
     std: Union[float, Collection[float]],
     data_format: Optional[ChannelDimension] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-):
+) -> np.ndarray:
     """
     Inverse of `normalize`:
 
         image = image * std + mean
 
-    Accepts NumPy arrays or PyTorch tensors and mirrors `normalize`'s API,
-    but also handles 4D/5D by broadcasting along the channel axis and
-    collapsing leading batch dims. Defaults to NHWC output for visualization.
+    Args:
+        image (`np.ndarray` or `torch.Tensor`):
+            The image to unnormalize.
+        mean (`float` or `Collection[float]`):
+            The mean to use for unnormalization.
+        std (`float` or `Collection[float]`):
+            The standard deviation to use for unnormalization.
+        data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the output image. If unset, will use the inferred format from the input.
+        input_data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the input image. If unset, will use the inferred format from the input.
+
+    Returns:
+        `np.ndarray`: The unnormalized image.
     """
-    # type check
-    is_np = isinstance(image, np.ndarray)
-    is_torch = isinstance(image, torch.Tensor)
-    if not (is_np or is_torch):
+    is_torch_input = isinstance(image, torch.Tensor)
+    if is_torch_input:
+        image = image.detach().cpu().numpy()
+    elif not isinstance(image, np.ndarray):
         raise TypeError("image must be a numpy array or a torch tensor")
 
-    # infer layout
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(image)
 
-    # cast policy (match normalize): cast only if not floating
-    if is_np:
-        if not np.issubdtype(image.dtype, np.floating):
-            image = image.astype(np.float32)
+    if not np.issubdtype(image.dtype, np.floating):
+        image = image.astype(np.float32)
+
+    channel_axis = get_channel_dimension_axis(image, input_data_format=input_data_format)
+    num_channels = image.shape[channel_axis]
+
+    if isinstance(mean, Collection):
+        if len(mean) != num_channels:
+            raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(mean)}")
     else:
-        if not image.is_floating_point():
-            image = image.float()
+        mean = [mean] * num_channels
+    mean = np.array(mean, dtype=image.dtype)
 
-    # channel axis and sizes
-    ch_axis = get_channel_dimension_axis(image, input_data_format=input_data_format)
-    num_channels = int(image.shape[ch_axis])
-
-    # normalize mean/std to per-channel vectors
-    def _as_seq(x, n):
-        if isinstance(x, Collection):
-            if len(x) != n:
-                raise ValueError(f"value must have {n} elements if it is an iterable, got {len(x)}")
-            return x
-        return [x] * n
-
-    mean_seq = _as_seq(mean, num_channels)
-    std_seq = _as_seq(std, num_channels)
-
-    # make broadcastable tensors/arrays shaped [1, ..., C (at ch_axis), ..., 1]
-    bshape = [1] * image.ndim
-    bshape[ch_axis] = num_channels
-
-    if is_np:
-        mean_arr = np.asarray(mean_seq, dtype=image.dtype).reshape(bshape)
-        std_arr = np.asarray(std_seq, dtype=image.dtype).reshape(bshape)
-        image = image * std_arr + mean_arr
+    if isinstance(std, Collection):
+        if len(std) != num_channels:
+            raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(std)}")
     else:
-        mean_arr = torch.as_tensor(mean_seq, dtype=image.dtype, device=image.device).view(bshape)
-        std_arr = torch.as_tensor(std_seq, dtype=image.dtype, device=image.device).view(bshape)
-        image = image * std_arr + mean_arr
+        std = [std] * num_channels
+    std = np.array(std, dtype=image.dtype)
 
-    # convert to numpy for plotting
-    if is_torch:
-        image = image.detach().cpu().numpy()
-        is_np = True  # from here on
-
-    # target layout: default to NHWC so downstream viz works out of the box
-    target_format = data_format or ChannelDimension.LAST
-
-    # collapse any leading batch dims into one, preserving (C,H,W) or (H,W,C)
-    if input_data_format == ChannelDimension.FIRST:
-        # layout: [*, C, H, W]
-        lead = int(np.prod(image.shape[: image.ndim - 3])) if image.ndim > 3 else 1
-        if image.ndim == 3:
-            c, h, w = image.shape
-            image = image.reshape(1, c, h, w)
-            lead = 1
-        else:
-            c, h, w = image.shape[-3:]
-        image = image.reshape(lead, c, h, w)
-        if target_format == ChannelDimension.LAST:
-            image = np.transpose(image, (0, 2, 3, 1))  # -> [N, H, W, C]
+    if input_data_format == ChannelDimension.LAST:
+        image = image * std + mean
     else:
-        # layout: [*, H, W, C]
-        lead = int(np.prod(image.shape[: image.ndim - 3])) if image.ndim > 3 else 1
-        if image.ndim == 3:
-            h, w, c = image.shape
-            image = image.reshape(1, h, w, c)
-            lead = 1
-        else:
-            h, w, c = image.shape[-3:]
-        image = image.reshape(lead, h, w, c)
-        if target_format == ChannelDimension.FIRST:
-            image = np.transpose(image, (0, 3, 1, 2))  # -> [N, C, H, W]
+        shape = [1] * image.ndim
+        shape[channel_axis] = num_channels
+        mean = mean.reshape(shape)
+        std = std.reshape(shape)
+        image = image * std + mean
 
+    image = to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
     return image
 
 
