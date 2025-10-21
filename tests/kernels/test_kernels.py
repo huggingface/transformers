@@ -99,7 +99,7 @@ class TestHubKernels(TestCasePlus):
         self.assertTrue(self.model_kernelized.use_kernels)
         self.assertFalse(self.model_not_kernelized.use_kernels)
 
-    def test_kernelized_forward_is_different(self, kernelized_model, not_kernelized_model):
+    def assert_kernelized_forward_is_different(self, kernelized_model, not_kernelized_model):
         """
         Iterate over modules and check if the forward method is different between
         the kernelized and not kernelized models. Break on first difference, else continue.
@@ -126,7 +126,7 @@ class TestHubKernels(TestCasePlus):
             "No module's forward method was different between kernelized and not kernelized models.",
         )
 
-    def test_kernelized_forward_is_the_same(self, model_1, model_2):
+    def assert_kernelized_forward_is_the_same(self, model_1, model_2):
         """
         Iterate over modules and check if the forward method is the same between
         the kernelized and not kernelized models. Break on first difference, else continue.
@@ -154,16 +154,16 @@ class TestHubKernels(TestCasePlus):
     def test_kernelize(self):
         model = copy.deepcopy(self.model_not_kernelized)
         kernelize(model, mode=Mode.INFERENCE, device=Device(type=model.device.type))  # type: ignore[arg-type]
-        self.test_kernelized_forward_is_different(model, self.model_not_kernelized)
-        self.test_kernelized_forward_is_the_same(model, self.model_kernelized)
+        self.assert_kernelized_forward_is_different(model, self.model_not_kernelized)
+        self.assert_kernelized_forward_is_the_same(model, self.model_kernelized)
         del model
 
     def test_setter_use_kernels(self):
         model = copy.deepcopy(self.model_not_kernelized)
         model.use_kernels = True
         self.assertTrue(model.use_kernels)
-        self.test_kernelized_forward_is_different(model, self.model_not_kernelized)
-        self.test_kernelized_forward_is_the_same(model, self.model_kernelized)
+        self.assert_kernelized_forward_is_different(model, self.model_not_kernelized)
+        self.assert_kernelized_forward_is_the_same(model, self.model_kernelized)
         del model
 
     def test_unkernelize(self):
