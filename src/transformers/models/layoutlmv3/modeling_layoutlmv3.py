@@ -423,7 +423,7 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
         else:
             attn_mask = None
             if attention_mask is not None:
-                attn_mask = attention_mask > 0
+                attn_mask = attention_mask >= 0
             
             attn_output = torch.nn.functional.scaled_dot_product_attention(
                 query_layer,
@@ -454,13 +454,13 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
     def _upad_input(self, query_states, key_states, value_states, attention_mask, query_length):
         batch_size, seq_len, num_heads, head_dim = query_states.shape
         
-        indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(query_states, attention_mask)
-        indices_k, cu_seqlens_k, max_seqlen_k = unpad_input(key_states, attention_mask)
-        indices_v, cu_seqlens_v, max_seqlen_v = unpad_input(value_states, attention_mask)
-        
         query_states = query_states.view(-1, num_heads, head_dim)
         key_states = key_states.view(-1, num_heads, head_dim)
         value_states = value_states.view(-1, num_heads, head_dim)
+        
+        query_states, indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(query_states, attention_mask)
+        key_states, indices_k, cu_seqlens_k, max_seqlen_k = unpad_input(key_states, attention_mask)
+        value_states, indices_v, cu_seqlens_v, max_seqlen_v = unpad_input(value_states, attention_mask)
         
         return (
             query_states,
