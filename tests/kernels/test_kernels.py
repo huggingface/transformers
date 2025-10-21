@@ -242,7 +242,7 @@ class TestKernelUtilities(TestCasePlus):
         original_get_kernel = getattr(kernels_pkg, "get_kernel")
         try:
 
-            def fake_get_kernel(repo_id, revision=None):
+            def fake_get_kernel(repo_id, revision=None, version=None):
                 self.assertIn(repo_id, {"kernels-community/causal-conv1d"})
                 return sentinel
 
