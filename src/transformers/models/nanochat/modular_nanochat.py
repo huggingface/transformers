@@ -29,7 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import CLIPMLP
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaPreTrainedModel, LlamaRotaryEmbedding, eager_attention_forward
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, eager_attention_forward
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from .configuration_nanochat import NanoChatConfig
@@ -174,22 +174,15 @@ class NanoChatPreTrainedModel(LlamaPreTrainedModel):
 
 
 @auto_docstring
-class NanoChatModel(NanoChatPreTrainedModel):
+class NanoChatModel(LlamaModel):
     def __init__(self, config: NanoChatConfig):
-        super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.initial_norm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layers = nn.ModuleList(
             [NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = NanoChatRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
-
-        self.post_init()
+        super().__init__(config)
 
     @check_model_inputs()
     @auto_docstring
@@ -204,8 +197,6 @@ class NanoChatModel(NanoChatPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        output_attentions = kwargs.get("output_attentions", False)
-        output_hidden_states = kwargs.get("output_hidden_states", False)
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -238,13 +229,7 @@ class NanoChatModel(NanoChatPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         hidden_states = self.initial_norm(hidden_states)
 
-        # Collect hidden states and attentions if requested
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
         for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
@@ -256,19 +241,11 @@ class NanoChatModel(NanoChatPreTrainedModel):
                 **kwargs,
             )
 
-            if output_attentions:
-                self_attn_weights = decoder_layer.self_attn.attn_weights
-                all_self_attns = all_self_attns + (self_attn_weights,)
-
         hidden_states = self.norm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
 

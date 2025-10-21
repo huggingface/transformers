@@ -333,11 +333,16 @@ class NanoChatPreTrainedModel(PreTrainedModel):
 class NanoChatModel(NanoChatPreTrainedModel):
     def __init__(self, config: NanoChatConfig):
         super().__init__(config)
+        self.initial_norm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layers = nn.ModuleList(
+            [NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = NanoChatRotaryEmbedding(config=config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.initial_norm = NanoChatRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layers = nn.ModuleList(
             [NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -345,6 +350,7 @@ class NanoChatModel(NanoChatPreTrainedModel):
         self.rotary_emb = NanoChatRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @check_model_inputs()
@@ -360,9 +366,6 @@ class NanoChatModel(NanoChatPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        output_attentions = kwargs.get("output_attentions", False)
-        output_hidden_states = kwargs.get("output_hidden_states", False)
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -394,13 +397,7 @@ class NanoChatModel(NanoChatPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         hidden_states = self.initial_norm(hidden_states)
 
-        # Collect hidden states and attentions if requested
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
         for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
@@ -412,19 +409,11 @@ class NanoChatModel(NanoChatPreTrainedModel):
                 **kwargs,
             )
 
-            if output_attentions:
-                self_attn_weights = decoder_layer.self_attn.attn_weights
-                all_self_attns = all_self_attns + (self_attn_weights,)
-
         hidden_states = self.norm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
 
