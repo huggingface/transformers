@@ -419,10 +419,6 @@ class NanoChatModel(NanoChatPreTrainedModel):
 
 @auto_docstring
 class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
-    """
-    The NanoChat Model transformer with a language modeling head on top.
-    """
-
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -430,14 +426,11 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
     def __init__(self, config: NanoChatConfig):
         super().__init__(config)
         self.model = NanoChatModel(config)
+        self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, new_embeddings: nn.Embedding) -> None:
-        self.model.set_input_embeddings(new_embeddings)
 
     @can_return_tuple
     @auto_docstring
@@ -478,7 +471,7 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         >>> generated_tokens = outputs[0, inputs["input_ids"].shape[1] :]
         >>> output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         ```"""
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -492,6 +485,8 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        # Soft-cap the logits. The main difference to LlamaForCausalLM.forward.
         if self.config.logits_soft_cap is not None:
             cap = self.config.logits_soft_cap
             logits = cap * torch.tanh(logits / cap)

@@ -29,7 +29,14 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import CLIPMLP
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, eager_attention_forward
+from ..llama.modeling_llama import (
+    LlamaForCausalLM,
+    LlamaDecoderLayer,
+    LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
+    eager_attention_forward,
+)
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from .configuration_nanochat import NanoChatConfig
@@ -109,7 +116,7 @@ class NanoChatAttention(Qwen3Attention):
         key_states = self.k_norm(key_states)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} 
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
@@ -197,7 +204,6 @@ class NanoChatModel(LlamaModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -250,26 +256,12 @@ class NanoChatModel(LlamaModel):
 
 
 @auto_docstring
-class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
-    """
-    The NanoChat Model transformer with a language modeling head on top.
-    """
-
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
+class NanoChatForCausalLM(LlamaForCausalLM, GenerationMixin):
     def __init__(self, config: NanoChatConfig):
         super().__init__(config)
         self.model = NanoChatModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, new_embeddings: nn.Embedding) -> None:
-        self.model.set_input_embeddings(new_embeddings)
 
     @can_return_tuple
     @auto_docstring
@@ -305,12 +297,12 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
             ).to(device)
 
         >>> with torch.no_grad():
-            >>> outputs = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+        >>>     outputs = model.generate(**inputs, max_new_tokens=64, do_sample=False)
 
         >>> generated_tokens = outputs[0, inputs["input_ids"].shape[1] :]
         >>> output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         ```"""
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -324,6 +316,8 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        # Soft-cap the logits. The main difference to LlamaForCausalLM.forward.
         if self.config.logits_soft_cap is not None:
             cap = self.config.logits_soft_cap
             logits = cap * torch.tanh(logits / cap)
