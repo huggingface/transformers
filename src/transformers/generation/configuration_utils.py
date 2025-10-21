@@ -388,6 +388,17 @@ class GenerationConfig(PushToHubMixin):
         else:
             self.watermarking_config = WatermarkingConfig.from_dict(watermarking_config)
 
+        # Safety parameters for content moderation
+        self.safety_checker = kwargs.pop("safety_checker", None)
+        self.safety_checker_kwargs = kwargs.pop("safety_checker_kwargs", None)
+        self.safety_check_input = kwargs.pop("safety_check_input", True)
+        self.safety_check_output = kwargs.pop("safety_check_output", True)
+        self.safety_stop_on_violation = kwargs.pop("safety_stop_on_violation", True)
+        self.safety_filter_violations = kwargs.pop("safety_filter_violations", False)
+        self.safety_violation_replacement = kwargs.pop("safety_violation_replacement", "[Content filtered for safety]")
+        self.safety_check_frequency = kwargs.pop("safety_check_frequency", 1)
+        self.safety_penalty_value = kwargs.pop("safety_penalty_value", float("-inf"))
+
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
         self.output_attentions = kwargs.pop("output_attentions", False)
