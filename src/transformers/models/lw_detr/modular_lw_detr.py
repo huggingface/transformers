@@ -294,7 +294,6 @@ class LwDetrConfig(PreTrainedConfig):
         auxiliary_loss=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.batch_norm_eps = batch_norm_eps
 
         # backbone
@@ -368,6 +367,7 @@ class LwDetrConfig(PreTrainedConfig):
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
+        super().__init__(**kwargs)
 
     @property
     def hidden_size(self) -> int:
