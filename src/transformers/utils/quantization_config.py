@@ -329,12 +329,7 @@ class HqqConfig(QuantizationConfigMixin):
                 self.quant_config[key] = HQQBaseQuantizeConfig(**dynamic_config[key])
         else:
             self.quant_config = HQQBaseQuantizeConfig(
-                **{
-                    "nbits": nbits,
-                    "group_size": group_size,
-                    "view_as_float": view_as_float,
-                    "axis": axis,
-                }
+                nbits=nbits, group_size=group_size, view_as_float=view_as_float, axis=axis
             )
 
         self.quant_method = QuantizationMethod.HQQ
@@ -346,7 +341,6 @@ class HqqConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        pass
 
     @classmethod
     def from_dict(cls, config: dict[str, Any]):
@@ -1908,7 +1902,6 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        pass
 
 
 @dataclass

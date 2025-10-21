@@ -3541,7 +3541,7 @@ class Trainer:
                 )
                 logs.update(speed_metrics("train", start_time, num_tokens=current_session_num_tokens))
 
-        output = {**logs, **{"step": self.state.global_step}}
+        output = {**logs, "step": self.state.global_step}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 

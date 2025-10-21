@@ -215,6 +215,17 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         self.assertEqual(base_config.patch_size, 8)
         self.assertNotEqual(base_config.vision_config.patch_size, 8)
 
+        # Test for making sure config save and load preserves correct model type
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        self.assertEqual(config.model_type, "qwen2_vl")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+
+            loaded_config = Qwen2VLConfig.from_pretrained(tmp_dir)
+            self.assertEqual(loaded_config.model_type, "qwen2_vl")
+
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong

@@ -94,8 +94,6 @@ class MetaClip2TextConfig(CLIPTextConfig):
     >>> configuration = model.config
     ```"""
 
-    pass
-
 
 class MetaClip2VisionConfig(CLIPVisionConfig):
     r"""
@@ -152,8 +150,6 @@ class MetaClip2VisionConfig(CLIPVisionConfig):
     >>> configuration = model.config
     ```"""
 
-    pass
-
 
 class MetaClip2Config(CLIPConfig):
     r"""
@@ -200,8 +196,6 @@ class MetaClip2Config(CLIPConfig):
 
     >>> config = MetaClip2Config(text_config=config_text, vision_config=config_vision)
     ```"""
-
-    pass
 
 
 class MetaClip2TextEmbeddings(CLIPTextEmbeddings):
