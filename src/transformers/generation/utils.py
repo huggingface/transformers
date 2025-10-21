@@ -1338,6 +1338,32 @@ class GenerationMixin(ContinuousMixin):
                     )
                 )
 
+        # Safety checking should be before watermarking but after other logits processing
+        if generation_config.safety_checker is not None and generation_config.safety_filter_violations:
+            from .safety import SafetyLogitsProcessor, get_safety_checker
+
+            safety_checker = get_safety_checker(
+                generation_config.safety_checker,
+                generation_config.safety_checker_kwargs
+            )
+            if safety_checker is not None:
+                # Get tokenizer from model_kwargs if available
+                tokenizer = model_kwargs.get("tokenizer") if model_kwargs else None
+                if tokenizer is None:
+                    warnings.warn(
+                        "Safety logits filtering is enabled but no tokenizer is available. "
+                        "Safety logits processor will be skipped. Pass tokenizer via model_kwargs to enable it.",
+                        UserWarning,
+                    )
+                else:
+                    processors.append(
+                        SafetyLogitsProcessor(
+                            safety_checker=safety_checker,
+                            tokenizer=tokenizer,
+                            generation_config=generation_config,
+                        )
+                    )
+
         # Watermarking should be after all logits processing is finished (see #34630)
         if generation_config.watermarking_config is not None:
             processors.append(
@@ -1386,6 +1412,30 @@ class GenerationMixin(ContinuousMixin):
             criteria.append(
                 ConfidenceCriteria(assistant_confidence_threshold=generation_config.assistant_confidence_threshold)
             )
+
+        # Safety stopping criteria
+        if generation_config.safety_checker is not None and generation_config.safety_stop_on_violation:
+            from .safety import SafetyStoppingCriteria, get_safety_checker
+
+            safety_checker = get_safety_checker(
+                generation_config.safety_checker,
+                generation_config.safety_checker_kwargs
+            )
+            if safety_checker is not None:
+                if tokenizer is None:
+                    raise ValueError(
+                        "Safety checking is enabled but no tokenizer is available. "
+                        "When using safety_checker in generation_config, you must pass the model's tokenizer "
+                        "to the `tokenizer` argument of `generate`."
+                    )
+                criteria.append(
+                    SafetyStoppingCriteria(
+                        safety_checker=safety_checker,
+                        tokenizer=tokenizer,
+                        generation_config=generation_config,
+                    )
+                )
+
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 

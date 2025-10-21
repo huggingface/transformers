@@ -102,6 +102,14 @@ else:
         "BayesianDetectorConfig",
         "SynthIDTextWatermarkDetector",
     ]
+    _import_structure["safety"] = [
+        "SafetyChecker",
+        "SafetyCheckResult",
+        "KeywordSafetyChecker",
+        "SafetyStoppingCriteria",
+        "SafetyLogitsProcessor",
+        "get_safety_checker",
+    ]
 
 
 if TYPE_CHECKING:
@@ -178,6 +186,14 @@ if TYPE_CHECKING:
             GenerateDecoderOnlyOutput,
             GenerateEncoderDecoderOutput,
             GenerationMixin,
+        )
+        from .safety import (
+            KeywordSafetyChecker,
+            SafetyChecker,
+            SafetyCheckResult,
+            SafetyLogitsProcessor,
+            SafetyStoppingCriteria,
+            get_safety_checker,
         )
         from .watermarking import (
             BayesianDetectorConfig,
