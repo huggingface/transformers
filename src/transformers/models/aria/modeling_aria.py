@@ -250,15 +250,15 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
     num_tokens = token_states.shape[0]
     out_features = expert_weights.shape[-1]
     num_experts = expert_weights.shape[0]
-    
+
     # Early return for empty cases
     if num_tokens == 0 or num_experts == 0:
         return torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
-    
+
     # Create expert indices for each token
     cumsum_tokens = torch.cumsum(tokens_per_expert, dim=0)
     expert_indices = torch.zeros(num_tokens, dtype=torch.long, device=token_states.device)
-    
+
     # Vectorized assignment of expert indices
     start_idx = 0
     for expert_idx in range(num_experts):
@@ -266,16 +266,16 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
         if start_idx < end_idx:
             expert_indices[start_idx:end_idx] = expert_idx
         start_idx = end_idx
-    
+
     # Use advanced indexing for vectorized computation
     # This avoids the sequential loop and uses PyTorch's optimized indexing
     selected_weights = expert_weights[expert_indices]  # Shape: (num_tokens, in_features, out_features)
-    
+
     # Vectorized matrix multiplication: (num_tokens, 1, in_features) @ (num_tokens, in_features, out_features)
     # This is much more efficient than the sequential approach
     token_states_expanded = token_states.unsqueeze(1)  # (num_tokens, 1, in_features)
     output = torch.bmm(token_states_expanded, selected_weights).squeeze(1)  # (num_tokens, out_features)
-    
+
     return output
 
 

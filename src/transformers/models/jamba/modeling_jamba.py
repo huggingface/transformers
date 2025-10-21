@@ -511,7 +511,7 @@ class JambaMambaMixer(nn.Module):
         # 3.c perform the recurrence y ← SSM(A, B, C)(x) - OPTIMIZED VERSION
         # Vectorized computation to avoid sequential loop
         scan_outputs = torch.zeros(batch_size, self.intermediate_size, seq_len, dtype=dtype, device=hidden_states.device)
-        
+
         # Pre-compute all discrete_A and deltaB_u for vectorized operations
         # This avoids the sequential loop and uses vectorized operations
         for i in range(seq_len):
@@ -519,7 +519,7 @@ class JambaMambaMixer(nn.Module):
             # Vectorized computation: (batch, intermediate, ssm_state) @ (batch, ssm_state, 1)
             scan_output = torch.bmm(ssm_state.to(dtype).transpose(1, 2), C[:, i, :].unsqueeze(-1))
             scan_outputs[:, :, i] = scan_output[:, :, 0]
-        
+
         scan_output = scan_outputs
         scan_output = scan_output + (hidden_states * self.D[None, :, None])
         scan_output = (scan_output * self.act(gate))
