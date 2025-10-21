@@ -282,7 +282,6 @@ class TestKernelUtilities(TestCasePlus):
             else:
                 HUB[name] = original_entry
             _KERNEL_MODULE_MAPPING.pop(name, None)
-       
 
 @require_kernels
 class TestAttentionKernelRegistration(TestCasePlus):
