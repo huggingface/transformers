@@ -316,7 +316,6 @@ class NanoChatPreTrainedModel(PreTrainedModel):
         "hidden_states": NanoChatDecoderLayer,
         "attentions": NanoChatAttention,
     }
-    config_class = NanoChatConfig
 
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
