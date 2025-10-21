@@ -140,8 +140,6 @@ class DinoDetrEncoderDecoderOutput(ModelOutput):
             Final hidden states of the encoder.
         reference_points_encoder (`Optional[torch.FloatTensor]`, *optional*):
             Final reference points of the encoder.
-        init_box_proposal (`Optional[torch.FloatTensor]`, *optional*):
-            Initial box proposals used in the decoder.
         encoder_states (`Optional[torch.FloatTensor]`, *optional*):
             Hidden states of the encoder at the output of each layer.
         encoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
@@ -154,7 +152,6 @@ class DinoDetrEncoderDecoderOutput(ModelOutput):
     reference_points: Optional[torch.FloatTensor] = None
     hidden_states_encoder: Optional[torch.FloatTensor] = None
     reference_points_encoder: Optional[torch.FloatTensor] = None
-    init_box_proposal: Optional[torch.FloatTensor] = None
     encoder_states: Optional[torch.FloatTensor] = None
     encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -176,8 +173,6 @@ class DinoDetrModelOutput(ModelOutput):
             Sequence of hidden states at the output of the last layer of the encoder of the model.
         encoder_reference (`Optional[torch.FloatTensor]`, *optional*):
             Reference points at the output of the encoder.
-        init_box_proposal (`Optional[torch.FloatTensor]`, *optional*):
-            Initial box proposals used in the decoder.
         denoising_meta (`Optional[dict]`, *optional*):
             Metadata related to denoising tasks.
         encoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
@@ -195,7 +190,6 @@ class DinoDetrModelOutput(ModelOutput):
     references: Optional[list[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_reference: Optional[torch.FloatTensor] = None
-    init_box_proposal: Optional[torch.FloatTensor] = None
     denoising_meta: Optional[dict] = None
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -537,7 +531,7 @@ def gen_sine_position_embeddings(reference_points: torch.FloatTensor, d_model: i
     return pos
 
 
-def gen_encoder_output_proposals(
+def generate_initial_queries(
     memory: torch.FloatTensor,
     memory_padding_mask: torch.LongTensor,
     spatial_shapes: torch.FloatTensor,
@@ -561,9 +555,9 @@ def gen_encoder_output_proposals(
 
     Returns:
         `Tuple[torch.FloatTensor, torch.FloatTensor]`:
-            - `output_memory` (`torch.FloatTensor`): A tensor of shape `(batch_size, total_spatial_elements, d_model)`
+            - `queries_init` (`torch.FloatTensor`): A tensor of shape `(batch_size, total_spatial_elements, d_model)`
               containing the processed memory with padding and invalid proposals masked.
-            - `output_proposals` (`torch.FloatTensor`): A tensor of shape `(batch_size, total_spatial_elements, 4)`
+            - `query_reference_points_init` (`torch.FloatTensor`): A tensor of shape `(batch_size, total_spatial_elements, 4)`
               containing the bounding box proposals in the format `(center_x, center_y, width, height)`.
 
     Raises:
@@ -597,17 +591,25 @@ def gen_encoder_output_proposals(
         proposals.append(proposal)
         current_height_width_prod += height * width
 
-    output_proposals = torch.cat(proposals, 1)
-    output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-    output_proposals = torch.log(output_proposals / (1 - output_proposals))  # unsigmoid
-    output_proposals = output_proposals.masked_fill(memory_padding_mask.unsqueeze(-1), float("inf"))
-    output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+    query_reference_points_init = torch.cat(proposals, 1)
+    query_reference_points_init_valid = (
+        (query_reference_points_init > 0.01) & (query_reference_points_init < 0.99)
+    ).all(-1, keepdim=True)
+    query_reference_points_init = torch.log(
+        query_reference_points_init / (1 - query_reference_points_init)
+    )  # unsigmoid
+    query_reference_points_init = query_reference_points_init.masked_fill(
+        memory_padding_mask.unsqueeze(-1), float("inf")
+    )
+    query_reference_points_init = query_reference_points_init.masked_fill(
+        ~query_reference_points_init_valid, float("inf")
+    )
 
-    output_memory = memory
-    output_memory = output_memory.masked_fill(memory_padding_mask.unsqueeze(-1), float(0))
-    output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
+    queries_init = memory
+    queries_init = queries_init.masked_fill(memory_padding_mask.unsqueeze(-1), float(0))
+    queries_init = queries_init.masked_fill(~query_reference_points_init_valid, float(0))
 
-    return output_memory, output_proposals
+    return queries_init, query_reference_points_init
 
 
 class DinoDetrPreTrainedModel(PreTrainedModel):
@@ -1234,7 +1236,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             - `reference_points` (`torch.FloatTensor`): The final reference points of the decoder.
             - `hidden_states_encoder` (`Optional[torch.FloatTensor]`): The final hidden states of the encoder.
             - `reference_points_encoder` (`Optional[torch.FloatTensor]`): The final reference points of the encoder.
-            - `init_box_proposal` (`Optional[torch.FloatTensor]`): The initial box proposals used in the decoder.
             - `encoder_states` (`Optional[Tuple[torch.FloatTensor]]`): Hidden states of the encoder at each layer.
             - `encoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the encoder at each layer.
             - `decoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the decoder at each layer.
@@ -1349,7 +1350,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
                 - `reference_points` (`torch.FloatTensor`): The final reference points of the decoder.
                 - `hidden_states_encoder` (`Optional[torch.FloatTensor]`): The final hidden states of the encoder.
                 - `reference_points_encoder` (`Optional[torch.FloatTensor]`): The final reference points of the encoder.
-                - `init_box_proposal` (`Optional[torch.FloatTensor]`): The initial box proposals used in the decoder.
                 - `encoder_states` (`Optional[Tuple[torch.FloatTensor]]`): Hidden states of the encoder at each layer.
                 - `encoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the encoder at each layer.
                 - `decoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the decoder at each layer.
@@ -1361,7 +1361,7 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
         decoder_attentions = None
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Format input for encoder
+        # Format input for encoder, mainly flatten
         src_flatten = []
         mask_flatten = []
         level_pos_embed_flatten = []
@@ -1429,37 +1429,42 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             if output_attentions:
                 encoder_attentions = outputs_encoder_part["attentions"]
 
-        # Create and select topk queries. gen_encoder_output_proposals initializes bounding boxes on a 2d grid,
+        # Create and select topk queries. generate_initial_queries initializes bounding boxes on a 2d grid,
         # memory is simply masked
         mask_flatten = ~mask_flatten
         input_hw = None
-        output_memory, output_proposals = gen_encoder_output_proposals(memory, mask_flatten, spatial_shapes, input_hw)
-        output_memory = self.enc_output_norm(self.enc_output(output_memory))
-        enc_outputs_class_unselected = self.enc_out_class_embed(output_memory)
-        enc_outputs_coord_unselected = self.enc_out_bbox_embed(output_memory) + output_proposals
-        topk_proposals = torch.topk(enc_outputs_class_unselected.max(-1)[0], self.num_queries, dim=1)[1]
+        queries_init, query_reference_points_init = generate_initial_queries(
+            memory, mask_flatten, spatial_shapes, input_hw
+        )
+        queries_init = self.enc_output_norm(self.enc_output(queries_init))
+        query_reference_points_init = self.enc_out_bbox_embed(queries_init) + query_reference_points_init
+        queries_class_init = self.enc_out_class_embed(queries_init)
+        topk_indices = torch.topk(queries_class_init.max(-1)[0], self.num_queries, dim=1)[1]
 
         # Create topk reference_points
-        query_reference_points_undetach = torch.gather(
-            enc_outputs_coord_unselected,
+        query_reference_points = torch.gather(
+            query_reference_points_init,
             1,
-            topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
+            topk_indices.unsqueeze(-1).repeat(1, 1, 4),
         )
-        query_reference_points = query_reference_points_undetach.detach()
 
         # Create topk queries
-        init_box_proposal = torch.gather(output_proposals, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)).sigmoid()
-        queries_undetach = torch.gather(
-            output_memory,
+        queries = torch.gather(
+            queries_init,
             1,
-            topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model),
+            topk_indices.unsqueeze(-1).repeat(1, 1, self.d_model),
         )
 
+        # Create encoder decoder output
+        hidden_states_encoder = queries.unsqueeze(0)
+        reference_points_encoder = query_reference_points.sigmoid().unsqueeze(0)
+
         # Either use learnable queries (shared across all train/test images) or use per sample queries
+        query_reference_points = query_reference_points.detach()
         if self.embed_init_tgt:
             queries = self.content_query_embeddings.weight[:, None, :].repeat(1, batch_size, 1).transpose(0, 1)
         else:
-            queries = queries_undetach.detach()
+            queries = queries.detach()
 
         # Combine queries and reference points with their contrastive denoising versions
         if contrastive_query_reference_points is not None and contrastive_queries is not None:
@@ -1495,10 +1500,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             if output_attentions:
                 decoder_attentions = outputs_decoder_part["attentions"]
 
-        # Create encoder decoder output
-        hidden_states_encoder = queries_undetach.unsqueeze(0)
-        reference_points_encoder = query_reference_points_undetach.sigmoid().unsqueeze(0)
-
         if not return_dict:
             return tuple(
                 v
@@ -1507,7 +1508,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
                     reference_points,
                     hidden_states_encoder,
                     reference_points_encoder,
-                    init_box_proposal,
                     encoder_states,
                     encoder_attentions,
                     decoder_attentions,
@@ -1519,7 +1519,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             reference_points=reference_points,
             hidden_states_encoder=hidden_states_encoder,
             reference_points_encoder=reference_points_encoder,
-            init_box_proposal=init_box_proposal,
             encoder_states=encoder_states,
             encoder_attentions=encoder_attentions,
             decoder_attentions=decoder_attentions,
@@ -1784,7 +1783,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 reference_points,
                 hidden_states_encoder,
                 reference_points_encoder,
-                init_box_proposal,
                 encoder_states,
             ) = (
                 outputs_transformer_part[0],
@@ -1792,7 +1790,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 outputs_transformer_part[2],
                 outputs_transformer_part[3],
                 outputs_transformer_part[4],
-                outputs_transformer_part[5],
             )
             if output_attentions:
                 encoder_attentions = outputs_transformer_part[-2]
@@ -1803,14 +1800,12 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 reference_points,
                 hidden_states_encoder,
                 reference_points_encoder,
-                init_box_proposal,
                 encoder_states,
             ) = (
                 outputs_transformer_part["hidden_states"],
                 outputs_transformer_part["reference_points"],
                 outputs_transformer_part["hidden_states_encoder"],
                 outputs_transformer_part["reference_points_encoder"],
-                outputs_transformer_part["init_box_proposal"],
                 outputs_transformer_part["encoder_states"],
             )
             if output_attentions:
@@ -1826,7 +1821,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                     reference_points,
                     hidden_states_encoder,
                     reference_points_encoder,
-                    init_box_proposal,
                     dn_meta,
                     (hidden_states if output_hidden_states or self.config.output_hidden_states else None),
                     (encoder_states if output_hidden_states or self.config.output_hidden_states else None),
@@ -1841,7 +1835,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             references=reference_points,
             encoder_last_hidden_state=hidden_states_encoder,
             encoder_reference=reference_points_encoder,
-            init_box_proposal=init_box_proposal,
             denoising_meta=dn_meta,
             decoder_hidden_states=(
                 hidden_states if output_hidden_states or self.config.output_hidden_states else None
