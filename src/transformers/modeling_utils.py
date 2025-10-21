@@ -4705,7 +4705,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         all_pointer = {}
         for k, v in sharded_metadata["weight_map"].items():
             if v not in all_pointer:
-                file_pointer = safe_open(os.path.join(checkpoint_files[0].rsplit("/")[0],v), framework="pt", device="cpu")
+                file_pointer = safe_open(
+                    os.path.join(checkpoint_files[0].rsplit("/")[0], v), framework="pt", device="cpu"
+                )
                 all_pointer[v] = file_pointer
             merged_state_dict[k] = all_pointer[v].get_slice(k)  # don't meterialize yet
             tp_plan = getattr(model, "_tp_plan", None)
@@ -4742,7 +4744,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
-        model._move_missing_keys_from_meta_to_cpu(list(missing_keys )+ mismatched_keys, dtype, hf_quantizer)
+        model._move_missing_keys_from_meta_to_cpu(list(missing_keys) + mismatched_keys, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(list(missing_keys) + mismatched_keys, is_quantized)

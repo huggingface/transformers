@@ -687,7 +687,9 @@ def convert_and_load_state_dict_in_model(
                 matched_tp_pattern = match_glob(target_key, tp_plan_alt, tp_plan_by_group_name)
                 if matched_tp_pattern is not None and device_mesh is not None:
                     if getattr(conversion, "distributed_operation", None) is None:
-                        conversion.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
+                        conversion.distributed_operation = ALL_PARALLEL_STYLES[
+                            model.tp_plan[matched_tp_pattern]
+                        ].shard_tensor
                     rank = device_mesh.get_local_rank() if device_mesh is not None else 0
                     values = conversion.distributed_operation(
                         tensors_for_this_layer.values(),
