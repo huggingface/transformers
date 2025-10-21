@@ -59,8 +59,6 @@ def rotate_half(x):
 
 class NanoChatAttention(Qwen3Attention):
     def __init__(self, config: NanoChatConfig, layer_idx: int):
-        config.attention_bias = config.qkv_bias  # FIXME: rename in conversion script instead
-
         super().__init__(config, layer_idx)
         del self.sliding_window
         del self.layer_type

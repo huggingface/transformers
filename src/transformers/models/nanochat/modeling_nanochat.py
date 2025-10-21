@@ -197,7 +197,6 @@ class NanoChatAttention(nn.Module):
 
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__()
-        config.attention_bias = config.qkv_bias  # FIXME: rename in conversion script instead
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)

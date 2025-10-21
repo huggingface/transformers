@@ -67,7 +67,7 @@ class NanoChatConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         logits_soft_cap (`float`, *optional*, defaults to 15.0):
             Scaling factor when applying tanh softcapping on the logits. If `None`, no softcapping is applied.
-        qkv_bias (`bool`, *optional*, defaults to `False`):
+        attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, and value projection layers during self-attention.
         bos_token_id (`int`, *optional*, defaults to 0):
             Beginning of stream token id.
@@ -116,10 +116,10 @@ class NanoChatConfig(PretrainedConfig):
         attention_dropout: float = 0.0,
         rms_norm_eps: float = 1e-6,
         initializer_range: float = 0.02,
-        rope_parameters: RopeParameters | dict[RopeParameters] | None = None,  # TODO: check conversion script
+        rope_parameters: RopeParameters | dict[RopeParameters] | None = None,
         use_cache: bool = True,
         logits_soft_cap: float | None = 15.0,
-        qkv_bias: bool = False,  # FIXME: attention_bias instead
+        attention_bias: bool = False,
         bos_token_id: int = 0,
         eos_token_id: int = 1,
         pad_token_id: int = 1,
@@ -144,7 +144,7 @@ class NanoChatConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.logits_soft_cap = logits_soft_cap
-        self.qkv_bias = qkv_bias
+        self.attention_bias = attention_bias
 
         # Validate the correctness of rotary position embeddings parameters
         self.rope_parameters = rope_parameters
