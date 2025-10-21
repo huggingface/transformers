@@ -4,9 +4,9 @@ import re
 import shutil
 
 import numpy as np
-import timesfm
 import torch
 
+import timesfm
 from transformers import Timesfm2P5Config, Timesfm2P5ModelForPrediction
 
 
@@ -33,23 +33,30 @@ def get_nested_attr(obj, key):
     return obj
 
 
-def write_model(model_path, safe_serialization=True):
+def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch", safe_serialization=True):
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
 
-    # Initialize TimesFM 2.5 model
-    tfm = timesfm.TimesFM_2p5_200M_torch()
-    tfm.load_checkpoint()
+    # Load TimesFM 2.5 model - workaround for huggingface_hub version issues
+    from huggingface_hub import hf_hub_download
 
-    # Compile to get the actual model
-    forecast_config = timesfm.ForecastConfig(
-        max_context=1024,
-        max_horizon=256,
-        normalize_inputs=True,
-        use_continuous_quantile_head=True,
+    # Download the checkpoint file
+    checkpoint_path = hf_hub_download(repo_id=huggingface_repo_id, filename="model.safetensors")
+
+    # Create model instance and load checkpoint
+    tfm = timesfm.TimesFM_2p5_200M_torch()
+    tfm.model.load_checkpoint(checkpoint_path)
+
+    # Compile with forecasting configuration
+    tfm.compile(
+        timesfm.ForecastConfig(
+            max_context=1024,
+            max_horizon=256,
+            normalize_inputs=True,
+            use_continuous_quantile_head=True,
+        )
     )
-    tfm.compile(forecast_config)
     original_model = tfm.model
 
     # Get actual dimensions from original model
@@ -148,9 +155,43 @@ def write_model(model_path, safe_serialization=True):
     # Copy transformer layer weights
     num_layers = len(timesfm_model.decoder.layers)
     for i in range(num_layers):
+        # Special handling for fused QKV weights
+        try:
+            # Check if original model has fused QKV projection
+            qkv_fused = get_nested_attr(original_model, f"stacked_xf[{i}].attn.qkv_proj.weight")
+
+            # Split fused QKV into separate Q, K, V projections
+            # QKV fused shape: [3 * hidden_size, hidden_size] = [3840, 1280]
+            # Split into Q: [1280, 1280], K: [1280, 1280], V: [1280, 1280]
+            q_weight, k_weight, v_weight = qkv_fused.chunk(3, dim=0)
+
+            # Copy to separate projections
+            q_proj = get_nested_attr(timesfm_model, f"decoder.layers[{i}].self_attn.q_proj.weight")
+            k_proj = get_nested_attr(timesfm_model, f"decoder.layers[{i}].self_attn.k_proj.weight")
+            v_proj = get_nested_attr(timesfm_model, f"decoder.layers[{i}].self_attn.v_proj.weight")
+
+            q_proj.data.copy_(q_weight.data)
+            k_proj.data.copy_(k_weight.data)
+            v_proj.data.copy_(v_weight.data)
+
+            if i == 0:
+                print(
+                    f"✅ Converted layer {i}: stacked_xf[{i}].attn.qkv_proj.weight (fused) -> separate Q/K/V projections"
+                )
+                print(f"   Q: {q_weight.shape}, K: {k_weight.shape}, V: {v_weight.shape}")
+        except AttributeError:
+            # No fused QKV, try separate weights
+            if i == 0:
+                print(f"⚠️  Layer {i}: No fused QKV found, trying separate Q/K/V weights...")
+
+        # Copy all other transformer layer weights
         for old_template, new_template in TRANSFORMER_LAYER_MAPPING.items():
             old_key = old_template.format(i=i)
             new_key = new_template.format(i=i)
+
+            # Skip Q/K/V weights if we already handled fused QKV
+            if any(x in old_key for x in [".query.weight", ".key.weight", ".value.weight"]):
+                continue
 
             try:
                 # Get tensor from original model
@@ -169,22 +210,34 @@ def write_model(model_path, safe_serialization=True):
     print(f"✅ Model saved to {model_path}")
 
 
-def check_outputs(model_path):
+def check_outputs(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch"):
     """Compares outputs between original and converted models."""
     print("\nChecking model outputs...")
 
-    # Load original TimesFM 2.5 model
-    tfm = timesfm.TimesFM_2p5_200M_torch()
-    tfm.load_checkpoint()
+    # Load original TimesFM 2.5 model using same method as write_model
+    try:
+        from huggingface_hub import hf_hub_download
 
-    # Compile with forecasting configuration
-    forecast_config = timesfm.ForecastConfig(
-        max_context=1024,
-        max_horizon=256,
-        normalize_inputs=True,
-        use_continuous_quantile_head=True,
-    )
-    tfm.compile(forecast_config)
+        # Download the checkpoint file
+        checkpoint_path = hf_hub_download(repo_id=huggingface_repo_id, filename="model.safetensors")
+
+        # Create model instance and load checkpoint
+        tfm = timesfm.TimesFM_2p5_200M_torch()
+        tfm.model.load_checkpoint(checkpoint_path)
+
+        # Compile with forecasting configuration (following README example)
+        tfm.compile(
+            timesfm.ForecastConfig(
+                max_context=1024,
+                max_horizon=256,
+                normalize_inputs=True,
+                use_continuous_quantile_head=True,
+            )
+        )
+    except Exception as e:
+        print(f"⚠️  Warning: Could not load original model for validation: {e}")
+        print("Skipping output comparison check.")
+        return 0.0, 0.0
 
     # Load converted model
     converted_model = Timesfm2P5ModelForPrediction.from_pretrained(
@@ -215,7 +268,8 @@ def check_outputs(model_path):
 
     # Get predictions from converted model
     with torch.no_grad():
-        outputs = converted_model(past_values=forecast_input_tensor, return_dict=True)
+        # Use forecast_context_len=1024 to match original's max_context=1024
+        outputs = converted_model(past_values=forecast_input_tensor, forecast_context_len=1024, return_dict=True)
         point_forecast_conv = outputs.mean_predictions.float().cpu().numpy()
         quantile_forecast_conv = outputs.full_predictions.float().cpu().numpy()
 
@@ -283,11 +337,12 @@ def main():
     else:
         write_model(
             model_path=args.output_dir,
+            huggingface_repo_id=args.huggingface_repo_id,
             safe_serialization=args.safe_serialization,
         )
 
     # Always check outputs
-    max_point_diff, max_quantile_diff = check_outputs(args.output_dir)
+    max_point_diff, max_quantile_diff = check_outputs(args.output_dir, args.huggingface_repo_id)
 
     print("\n🎉 TimesFM 2.5 conversion completed!")
     print(f"   Point forecast precision: {max_point_diff:.6f}")

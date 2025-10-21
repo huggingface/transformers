@@ -620,8 +620,12 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         patch_padding = patched_masks_bool[..., -1]
         attention_mask = self._make_attention_mask(patch_padding, input_embeddings.dtype)
 
+        # Compute position IDs accounting for padding (matches original TimesFM implementation)
+        # position = arange(n_patches) - num_masked
+        # This ensures padded positions get negative values and real data starts at position 0
         sequence_length = input_embeddings.shape[1]
-        position_ids = torch.arange(sequence_length, device=input_embeddings.device).unsqueeze(0)
+        num_masked = patch_padding.to(torch.int32).sum(dim=-1, keepdim=True)
+        position_ids = torch.arange(sequence_length, device=input_embeddings.device).unsqueeze(0) - num_masked
         position_embeddings = self.rotary_emb(input_embeddings, position_ids)
 
         hidden_states = input_embeddings
@@ -703,11 +707,14 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         )
 
         # Replace the parent's horizon_ff_layer with TimesFM 2.5 separate output projections
-        # Point prediction projection: 1280 -> 1280
+        # Point prediction projection: hidden_size -> horizon_length * num_quantiles
+        # Example: 1280 -> 128 * 10 = 1280 (for original config)
+        num_quantiles = len(config.quantiles) + 1
+        point_output_size = config.horizon_length * num_quantiles
         self.output_projection_point = Timesfm2P5ResidualBlock(
-            input_dims=config.hidden_size,  # 1280
-            hidden_dims=config.hidden_size,  # 1280
-            output_dims=config.hidden_size,  # 1280
+            input_dims=config.hidden_size,
+            hidden_dims=config.hidden_size,
+            output_dims=point_output_size,
             use_bias=config.use_bias,  # False
             activation=config.activation,  # "swish"
         )
@@ -728,37 +735,33 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         self.post_init()
 
     def _preprocess(
-        self, inputs: Sequence[torch.Tensor], freq: Sequence[int]
+        self, inputs: Sequence[torch.Tensor], freq: Sequence[int], context_len: Optional[int] = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Formats and pads raw inputs to feed into the model.
-
-        This function both pads each time series to match the context length, and
-        pads the inputs to meet the SPMD shape requirement.
+        """Override parent's _preprocess to support custom context_len for forecasting.
 
         Args:
-          inputs: A list of 1d Tensors. Each Tensor is the context time series of
-            a single forecast task.
+          inputs: A list of 1d Tensors. Each Tensor is the context time series.
           freq: list of frequencies
+          context_len: Optional context length to pad to. If None, uses self.context_len.
 
         Returns:
-        A tuple of:
-        - the padded input time series to meet the model required context.
-        - the padding indicator.
-        - the number of padded examples for SPMD so that each core has the same
-            number (a multiple of `batch_size`) of examples.
+          Tuple of (padded inputs, padding mask, frequencies)
         """
+        if context_len is None:
+            context_len = self.context_len
+
         input_ts, input_padding, inp_freq = [], [], []
 
         for i, ts in enumerate(inputs):
             input_len = ts.shape[0]
             padding = torch.zeros(input_len + self.horizon_len, dtype=ts.dtype, device=ts.device)
-            if input_len < self.context_len:
-                num_front_pad = self.context_len - input_len
+            if input_len < context_len:
+                num_front_pad = context_len - input_len
                 ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
                 padding = torch.cat([torch.ones(num_front_pad, dtype=ts.dtype, device=padding.device), padding], dim=0)
-            elif input_len > self.context_len:
-                ts = ts[-self.context_len :]
-                padding = padding[-(self.context_len + self.horizon_len) :]
+            elif input_len > context_len:
+                ts = ts[-context_len:]
+                padding = padding[-(context_len + self.horizon_len) :]
 
             input_ts.append(ts)
             input_padding.append(padding)
@@ -806,26 +809,32 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Timesfm2P5OutputForPrediction:
-        r"""
-        return_dict (`bool`, *optional*):
-            Whether or not to return a ModelOutput instead of a plain tuple.
-        past_values (`Sequence[torch.Tensor]`):
-            Past values of the time series that serves as input to the model.
-            Each tensor is a 1D time series of variable length.
-        window_size (`int`, *optional*):
-            Window size of trend + residual decomposition. If None then we do not do decomposition.
-        future_values (`torch.Tensor`, *optional*):
-            Optional future time series values to be used for loss computation.
-        forecast_context_len (`int`, *optional*):
-            Optional max context length.
-        return_forecast_on_context (`bool`, *optional*):
-            True to return the forecast on the context when available.
-        truncate_negative (`bool`, *optional*):
-            Truncate to only non-negative values if any contexts have non-negative values.
-        output_attentions (`bool`, *optional*):
-            Whether to output the attentions.
-        output_hidden_states (`bool`, *optional*):
-            Whether to output the hidden states.
+        """
+        TimesFM 2.5 forward method matching original forecast operations.
+
+        TimesFM 2.5 simplified API - no frequency parameter needed as the model
+        automatically adapts to different time series frequencies.
+
+        Args:
+            past_values (`Sequence[torch.Tensor]`):
+                Past values of the time series that serves as input to the model.
+                Each tensor is a 1D time series of variable length.
+            window_size (`int`, *optional*):
+                Window size of trend + residual decomposition. If None then we do not do decomposition.
+            future_values (`torch.Tensor`, *optional*):
+                Optional future time series values to be used for loss computation.
+            forecast_context_len (`int`, *optional*):
+                Optional max context length.
+            return_forecast_on_context (`bool`, *optional*):
+                True to return the forecast on the context when available.
+            truncate_negative (`bool`, *optional*):
+                Truncate to only non-negative values if any contexts have non-negative values.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a ModelOutput instead of a plain tuple.
+            output_attentions (`bool`, *optional*):
+                Whether to output the attentions.
+            output_hidden_states (`bool`, *optional*):
+                Whether to output the hidden states.
 
         Returns:
             Timesfm2P5OutputForPrediction: Output with mean_predictions, full_predictions, and optional loss.
@@ -856,7 +865,8 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
 
-        input_ts, input_padding, _ = self._preprocess(inputs, freq)
+        # Pass fcontext_len to _preprocess so it pads to the correct length
+        input_ts, input_padding, _ = self._preprocess(inputs, freq, context_len=fcontext_len)
         input_ts = input_ts.to(device)
         input_padding = input_padding.to(device)
 
@@ -888,30 +898,35 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         point_output = self.decoder._revin(point_output_norm, context_mu, context_sigma, reverse=True)
         quantile_output = self.decoder._revin(quantile_output_norm, context_mu, context_sigma, reverse=True)
 
-        batch_size, num_patches, hidden_size = point_output.shape
+        # Reshape point output: [batch, num_patches, horizon_len * num_quantiles] -> [batch, num_patches, horizon_len, num_quantiles]
+        batch_size, num_patches, _ = point_output.shape
         num_quantiles = len(self.config.quantiles) + 1
-        output_patch_len = hidden_size // num_quantiles
-        point_output = point_output.view(batch_size, num_patches, output_patch_len, num_quantiles)
-        pf_outputs = point_output[:, -1, :, :]
+        point_output = point_output.view(batch_size, num_patches, self.config.horizon_length, num_quantiles)
+        pf_outputs = point_output[:, -1, :, :]  # Take last patch: [batch, horizon_len, num_quantiles]
 
-        quantile_hidden_size = quantile_output.shape[-1]
-        quantile_patch_len = quantile_hidden_size // num_quantiles
-        quantile_output = quantile_output.view(batch_size, num_patches, quantile_patch_len, num_quantiles)
-        quantile_spreads = quantile_output[:, -1, :, :]
+        # Reshape quantile output: [batch, num_patches, output_quantile_len * num_quantiles] -> [batch, num_patches, output_quantile_len, num_quantiles]
+        output_quantile_len = getattr(self.config, "output_quantile_len", 1024)
+        quantile_output = quantile_output.view(batch_size, num_patches, output_quantile_len, num_quantiles)
+        quantile_spreads = quantile_output[:, -1, :, :]  # Take last patch: [batch, output_quantile_len, num_quantiles]
 
         horizon = min(self.horizon_len, pf_outputs.shape[1])
         full_forecast = pf_outputs[:, :horizon, :].clone()
-        quantile_spreads_slice = quantile_spreads[:, :horizon, :]
 
         median_index = min(self.config.decode_index, full_forecast.shape[-1] - 1)
-        if self.config.use_continuous_quantile_head and quantile_spreads_slice.shape[-1] == full_forecast.shape[-1]:
-            for idx in (1, 2, 3, 4, 6, 7, 8, 9):
-                if idx < full_forecast.shape[-1]:
-                    full_forecast[:, :, idx] = (
-                        quantile_spreads_slice[:, :, idx]
-                        - quantile_spreads_slice[:, :, median_index]
-                        + full_forecast[:, :, median_index]
-                    )
+        if self.config.use_continuous_quantile_head:
+            # Use up to horizon worth of quantile spread data (matching max_horizon behavior in original)
+            # quantile_spreads has shape [batch, quantile_patch_len, num_quantiles] where quantile_patch_len=1024
+            # We use the first 'horizon' elements to match full_forecast shape
+            max_quantile_horizon = min(horizon, quantile_spreads.shape[1])
+            for idx, _ in enumerate(self.config.quantiles, start=1):
+                if idx == median_index or idx >= full_forecast.shape[-1]:
+                    continue
+                # Apply continuous quantile head formula
+                full_forecast[:, :max_quantile_horizon, idx] = (
+                    quantile_spreads[:, :max_quantile_horizon, idx]
+                    - quantile_spreads[:, :max_quantile_horizon, median_index]
+                    + full_forecast[:, :max_quantile_horizon, median_index]
+                )
 
         full_predictions = self.decoder._revin(full_forecast, mu_global, sigma_global, reverse=True)
         decode_index = min(self.config.decode_index, full_predictions.shape[-1] - 1)
@@ -945,27 +960,6 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
             mean_predictions=mean_predictions,
             full_predictions=full_predictions,
             loss=loss,
-        )
-        if return_forecast_on_context:
-            # TODO: Implement context forecasting for TimesFM 2.5 if needed
-            # Currently, TimesFM 2.5 does direct horizon prediction without iterative decoding
-            pass
-
-        # Compute loss if future_values is provided (inherited from TimesFmModelForPrediction)
-        loss = None
-        if future_values is not None:
-            mse_loss = F.mse_loss(mean_predictions, future_values)
-            quantile_loss = self._quantile_loss(
-                quantile_predictions[:, :, :-1], future_values
-            )  # Exclude mean from quantiles
-            loss = mse_loss + quantile_loss
-
-        return Timesfm2P5OutputForPrediction(
-            mean_predictions=mean_predictions,
-            full_predictions=quantile_predictions,
-            loss=loss,
-            hidden_states=model_outputs.hidden_states if output_hidden_states else None,
-            attentions=model_outputs.attentions if output_attentions else None,
         )
 
     @staticmethod

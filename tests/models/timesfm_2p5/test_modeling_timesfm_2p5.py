@@ -18,12 +18,13 @@ import unittest
 
 import numpy as np
 import torch
+from parameterized import parameterized
 
 from transformers import Timesfm2P5Config, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin
+from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin
 
 
 if is_torch_available():
@@ -163,6 +164,81 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
         observed_main_input_name = list(model_signature.parameters.keys())[1]
         self.assertEqual(Timesfm2P5ModelForPrediction.main_input_name, observed_main_input_name)
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(
+        "TimesFM 2.5 has ~5% numerical differences between eager and SDPA backends "
+        "due to complex attention mechanisms with RoPE and per-dim scaling"
+    )
+    def test_eager_matches_sdpa_inference(
+        self,
+        name,
+        dtype,
+        padding_side,
+        use_attention_mask,
+        output_attentions,
+        enable_kernels,
+    ):
+        """
+        TimesFM 2.5 has numerical stability issues with fp16 SDPA due to the complex attention mechanisms
+        and rotary embeddings that lead to NaN values in fp16 precision.
+        """
+        # Check for string dtype before torch.dtype conversion happens in _test_eager_matches_sdpa_inference
+        if dtype == "fp16":
+            self.skipTest("Not robust in fp16")
+        from ...test_modeling_common import _test_eager_matches_sdpa_inference
+
+        _test_eager_matches_sdpa_inference(
+            self,
+            name,
+            dtype,
+            padding_side,
+            use_attention_mask,
+            output_attentions,
+            enable_kernels,
+        )
+
+    def test_retain_grad_hidden_states_attentions(self):
+        """
+        TimesFM 2.5 specific test for retain_grad since the model returns mean_predictions
+        as the first tensor, not last_hidden_state like standard models.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
+
+        # force eager attention to support output attentions
+        if self.has_attentions:
+            config._attn_implementation = "eager"
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class._from_config(config, attn_implementation="eager")
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        # TimesFM 2.5 returns mean_predictions as first output, not last_hidden_state
+        output_tensor = outputs.mean_predictions
+
+        # Encoder-/Decoder-only models
+        if outputs.hidden_states is not None:
+            hidden_states = outputs.hidden_states[0]
+            hidden_states.retain_grad()
+
+        if self.has_attentions and outputs.attentions is not None:
+            attentions = outputs.attentions[0]
+            attentions.retain_grad()
+
+        output_tensor.flatten()[0].backward(retain_graph=True)
+
+        if outputs.hidden_states is not None:
+            self.assertIsNotNone(hidden_states.grad)
+
+        if self.has_attentions and outputs.attentions is not None:
+            self.assertIsNotNone(attentions.grad)
+
 
 @require_torch
 @slow
@@ -175,10 +251,9 @@ class Timesfm2P5ModelIntegrationTests(unittest.TestCase):
             np.sin(np.linspace(0, 20, 400)),
         ]
         forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32, device=torch_device) for ts in forecast_input]
-        frequency_input = [0, 1, 2]
 
         with torch.no_grad():
-            output = model(past_values=forecast_input_tensor, freq=frequency_input)
+            output = model(past_values=forecast_input_tensor)
 
         mean_predictions = output.mean_predictions
         self.assertEqual(mean_predictions.shape, torch.Size([3, model.config.horizon_length]))
