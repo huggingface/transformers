@@ -6,7 +6,8 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import collections.abc
 import math
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 from torch import nn
@@ -16,10 +17,8 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import check_model_inputs
 from .configuration_lw_detr_vit import LwDetrViTConfig
 
 
@@ -29,23 +28,22 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
     # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    # This is actually dropping out entire tokens to attend to, which might
-    # seem a bit unusual, but is taken from the original Transformer paper.
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
     if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -119,25 +117,6 @@ class LwDetrViTAttention(nn.Module):
         super().__init__()
         self.attention = LwDetrViTSelfAttention(config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: set[int]):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -337,6 +316,7 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
     config: LwDetrViTConfig
     base_model_prefix = "lw_detr_vit"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LwDetrViTEmbeddings", "LwDetrViTLayer"]
     _supports_sdpa = True
@@ -395,8 +375,7 @@ class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
 
     @can_return_tuple
     @auto_docstring
-    @check_model_inputs
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
+    def forward(self, pixel_values: torch.Tensor = None, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:
 

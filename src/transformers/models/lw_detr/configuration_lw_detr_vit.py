@@ -6,11 +6,11 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
-class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
+class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LwDetrViTModel`]. It is used to instantiate an
     LW-DETR ViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
