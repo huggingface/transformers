@@ -457,7 +457,6 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
         key_states = key_states.view(-1, num_heads, head_dim)
         value_states = value_states.view(-1, num_heads, head_dim)
         
-        # For self-attention, all tensors have same structure - only need to unpad once
         query_states, indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(query_states, attention_mask)
         key_states = key_states[indices_q]
         value_states = value_states[indices_q]
