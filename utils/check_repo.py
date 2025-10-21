@@ -1052,7 +1052,6 @@ def ignore_undocumented(name: str) -> bool:
         or name.endswith("Layer")
         or name.endswith("Embeddings")
         or name.endswith("Attention")
-        or name.endswith("OnnxConfig")
     ):
         return True
     # Submodules are not documented.
