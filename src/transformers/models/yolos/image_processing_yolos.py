@@ -805,7 +805,7 @@ class YolosImageProcessor(BaseImageProcessor):
         self.do_convert_annotations = do_convert_annotations
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self.do_pad = do_pad
+        self.do_pad = kwargs.pop("pad_and_return_pixel_mask", do_pad)
         self.pad_size = pad_size
         self._valid_processor_keys = [
             "images",

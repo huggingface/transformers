@@ -27,7 +27,6 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
@@ -263,8 +262,7 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = ConditionalDetrImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[ConditionalDetrImageProcessorKwargs]) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
+        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask"))
 
         size = kwargs.pop("size", None)
         max_size = None if size is None else kwargs.pop("max_size", 1333)
@@ -278,18 +276,6 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `ConditionalDetrImageProcessorFast.from_pretrained(checkpoint, size=600,
-        max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     def prepare_annotation(
         self,
@@ -509,21 +495,6 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         pixel_mask[: original_size[0], : original_size[1]] = 1
 
         return image, pixel_mask, annotation
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[ConditionalDetrImageProcessorKwargs],
-    ) -> BatchFeature:
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
-            logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-                "use `do_pad` instead."
-            )
-
-        return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,

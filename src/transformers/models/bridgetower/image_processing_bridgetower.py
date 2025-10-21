@@ -192,9 +192,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_pad: bool = True,
         **kwargs,
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 288}
         size = get_size_dict(size, default_to_square=False)
@@ -208,7 +205,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-        self.do_pad = do_pad
+        self.do_pad = kwargs.pop("pad_and_return_pixel_mask", do_pad)
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
 

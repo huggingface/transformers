@@ -815,9 +815,6 @@ class DetrImageProcessor(BaseImageProcessor):
         pad_size: Optional[dict[str, int]] = None,
         **kwargs,
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
         max_size = None if size is None else kwargs.pop("max_size", 1333)
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
@@ -837,7 +834,7 @@ class DetrImageProcessor(BaseImageProcessor):
         self.do_convert_annotations = do_convert_annotations
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self.do_pad = do_pad
+        self.do_pad = kwargs.pop("pad_and_return_pixel_mask", do_pad)
         self.pad_size = pad_size
         self._valid_processor_keys = [
             "images",
@@ -860,18 +857,6 @@ class DetrImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `DetrImageProcessor.from_pretrained(checkpoint, size=600,
-        max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     def prepare_annotation(
         self,
@@ -1270,12 +1255,6 @@ class DetrImageProcessor(BaseImageProcessor):
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
                 height and width in the batch.
         """
-        if "pad_and_return_pixel_mask" in kwargs:
-            logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-                "use `do_pad` instead."
-            )
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
