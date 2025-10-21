@@ -519,8 +519,5 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def from_dict(self):
-        raise NotImplementedError("No need to override this method for RT-DETR yet.")
-
 
 __all__ = ["RTDetrImageProcessorFast"]
