@@ -13,52 +13,68 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-01-02 and added to Hugging Face Transformers on 2021-08-17.*
+*This model was released on 2021-01-02 and added to Hugging Face Transformers on 2021-08-17 and contributed by [yuvalkirstain](https://huggingface.co/yuvalkirstain) and [oriram](https://huggingface.co/oriram).*
 
 # Splinter
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Splinter](https://huggingface.co/papers/2101.00438) is an encoder-only transformer pretrained using the recurring span selection task on a large corpus of Wikipedia and the Toronto Book Corpus. This pretraining scheme involves masking recurring spans in a passage and asking the model to select the correct span, with masked spans replaced by a special token. The model demonstrates strong performance in few-shot question answering scenarios, achieving 72.7 F1 on SQuAD with just 128 training examples, while also maintaining competitive results in high-resource settings.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Splinter model was proposed in [Few-Shot Question Answering by Pretraining Span Selection](https://huggingface.co/papers/2101.00438) by Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy. Splinter
-is an encoder-only transformer (similar to BERT) pretrained using the recurring span selection task on a large corpus
-comprising Wikipedia and the Toronto Book Corpus.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline("question-answering", model="tau/splinter-base", dtype="auto")
+question = "How do plants create energy?"
+context = "Plants create energy through a process known as photosynthesis, which converts sunlight into chemical energy using chlorophyll in their leaves."
+pipeline(question=question, context=context)
+```
 
-In several question answering benchmarks, pretrained models have reached human parity through fine-tuning on an order
-of 100,000 annotated questions and answers. We explore the more realistic few-shot setting, where only a few hundred
-training examples are available, and observe that standard models perform poorly, highlighting the discrepancy between
-current pretraining objectives and question answering. We propose a new pretraining scheme tailored for question
-answering: recurring span selection. Given a passage with multiple sets of recurring spans, we mask in each set all
-recurring spans but one, and ask the model to select the correct span in the passage for each masked span. Masked spans
-are replaced with a special token, viewed as a question representation, that is later used during fine-tuning to select
-the answer span. The resulting model obtains surprisingly good results on multiple benchmarks (e.g., 72.7 F1 on SQuAD
-with only 128 training examples), while maintaining competitive performance in the high-resource setting.
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirstain) and [oriram](https://huggingface.co/oriram). The original code can be found [here](https://github.com/oriram/splinter).
+```py
+import torch
+from transformers import SplinterForQuestionAnswering, SplinterTokenizer
+
+tokenizer = SplinterTokenizer.from_pretrained("tau/splinter-base")
+model = SplinterForQuestionAnswering.from_pretrained("tau/splinter-base", dtype="auto")
+
+question = "How do plants create energy?"
+context = "Plants create energy through a process known as photosynthesis, which converts sunlight into chemical energy using chlorophyll in their leaves."
+inputs = tokenizer(question, context, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+start_scores = outputs.start_logits[0]
+end_scores = outputs.end_logits[0]
+
+start_idx = start_scores.argmax().item()
+end_idx = end_scores.argmax().item()
+
+answer_tokens = inputs.input_ids[0][start_idx:end_idx+1]
+answer = tokenizer.decode(answer_tokens, skip_special_tokens=True)
+
+print(f"Answer: {answer}")
+print(f"Starting position: {start_idx}, Ending position: {end_idx}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- Splinter was trained to predict answers spans conditioned on a special [QUESTION] token. These tokens contextualize
-  to question representations which are used to predict the answers. This layer is called QASS, and is the default
-  behaviour in the [`SplinterForQuestionAnswering`] class. Therefore:
-- Use [`SplinterTokenizer`] (rather than [`BertTokenizer`]), as it already
-  contains this special token. Also, its default behavior is to use this token when two sequences are given (for
-  example, in the *run_qa.py* script).
-- If you plan on using Splinter outside *run_qa.py*, please keep in mind the question token - it might be important for
-  the success of your model, especially in a few-shot setting.
-- Please note there are two different checkpoints for each size of Splinter. Both are basically the same, except that
-  one also has the pretrained weights of the QASS layer (*tau/splinter-base-qass* and *tau/splinter-large-qass*) and one
-  doesn't (*tau/splinter-base* and *tau/splinter-large*). This is done to support randomly initializing this layer at
-  fine-tuning, as it is shown to yield better results for some cases in the paper.
-
-## Resources
-
-- [Question answering task guide](../tasks/question-answering)
+- Splinter was trained to predict answer spans conditioned on a special `[QUESTION]` token. These tokens contextualize to question representations for answer prediction.
+- The QASS layer is the default behavior in [`SplinterForQuestionAnswering`]. It handles question-aware span selection.
+- Use [`SplinterTokenizer`] instead of [`BertTokenizer`]. It contains the special token and uses it by default when two sequences are given.
+- Keep the question token in mind when using Splinter outside `run_qa.py`. It's important for model success, especially in few-shot settings.
+- Two checkpoint variants exist for each Splinter size:
+  - `tau/splinter-base-qass` and `tau/splinter-large-qass`: Include pretrained QASS layer weights
+  - `tau/splinter-base` and `tau/splinter-large`: Don't include QASS weights for random initialization during fine-tuning
+- Random initialization of the QASS layer during fine-tuning yields better results in some cases.
 
 ## SplinterConfig
 
@@ -90,3 +106,4 @@ This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirsta
 
 [[autodoc]] SplinterForPreTraining
     - forward
+

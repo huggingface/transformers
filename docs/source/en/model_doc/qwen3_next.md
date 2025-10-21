@@ -15,61 +15,51 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-10.*
 
-## Overview
+# Qwen3-Next
 
-The Qwen3-Next series represents our next-generation foundation models, optimized for extreme context length and large-scale parameter efficiency.
-The series introduces a suite of architectural innovations designed to maximize performance while minimizing computational cost:
+[Qwen3-Next](https://qwen.ai/blog?id=3425e8f58e31e252f5c53dd56ec47363045a3f6b&from=research.research-list) introduces a hybrid attention mechanism, a highly sparse Mixture-of-Experts (MoE) structure, multi-token prediction, and training-stability optimizations to improve efficiency in long-context and large-parameter settings. Its base model, Qwen3-Next-80B-A3B-Base, has 80 billion parameters but activates only 3 billion during inference, achieving comparable performance to the dense Qwen3-32B while using less than 10% of the training cost and delivering over 10× higher throughput for contexts beyond 32K tokens. Two post-trained versions, Qwen3-Next-80B-A3B-Instruct and Qwen3-Next-80B-A3B-Thinking, address RL stability and efficiency, excelling in ultra-long context tasks (up to 256K tokens) and complex reasoning, outperforming higher-cost models and approaching top-tier model performance. Overall, Qwen3-Next demonstrates extreme efficiency in both training and inference without sacrificing accuracy or reasoning capability.
 
-- **Hybrid Attention**: Replaces standard attention with the combination of **Gated DeltaNet** and **Gated Attention**, enabling efficient context modeling.
-- **High-Sparsity MoE**: Achieves an extreme low activation ratio as 1:50 in MoE layers — drastically reducing FLOPs per token while preserving model capacity.
-- **Multi-Token Prediction(MTP)**: Boosts pretraining model performance, and accelerates inference.
-- **Other Optimizations**: Includes techniques such as **zero-centered and weight-decayed layernorm**, **Gated Attention**, and other stabilizing enhancements for robust training.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-Built on this architecture, we trained and open-sourced Qwen3-Next-80B-A3B — 80B total parameters, only 3B active — achieving extreme sparsity and efficiency.
+```py
+import torch
+from transformers import pipeline
 
-Despite its ultra-efficiency, it outperforms Qwen3-32B on downstream tasks — while requiring **less than 1/10 of the training cost**.
-Moreover, it delivers over **10x higher inference throughput** than Qwen3-32B when handling contexts longer than 32K tokens.
+pipeline = pipeline(task="text-generation", model="Qwen/Qwen3-Next-80B-A3B-Instruct", dtype="auto",)
+messages = [ 
+    {"role": "system", "content": "You are a plant biologist."}, 
+    {"role": "user", "content": "Can you explain how plants create energy?"}, 
+    {"role": "assistant", "content": "Plants create energy through photosynthesis, which is a process that converts sunlight into chemical energy. During photosynthesis, plants use chlorophyll in their leaves to capture light energy from the sun. They combine this energy with carbon dioxide from the air and water from the soil to produce glucose (sugar) and oxygen. The glucose serves as the plant's food source and energy storage."}, 
+    {"role": "user", "content": "What are the key components needed for photosynthesis?"}, 
+] 
+pipeline(messages)
+```
 
-For more details, please visit our blog [Qwen3-Next](qwen3_next) ([blog post](https://qwenlm.github.io/blog/qwen3_next/)).
+</hfoption>
+<hfoption id="AutoModel">
 
-## Usage examples
-
-```python
+```py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-Next-80B-A3B-Instruct")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-Next-80B-A3B-Instruct", dtype="auto",)
 
-# load the tokenizer and the model
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    dtype="auto",
-    device_map="auto"
-)
+messages = [ 
+    {"role": "system", "content": "You are a plant biologist."}, 
+    {"role": "user", "content": "Can you explain how plants create energy?"}, 
+    {"role": "assistant", "content": "Plants create energy through photosynthesis, which is a process that converts sunlight into chemical energy. During photosynthesis, plants use chlorophyll in their leaves to capture light energy from the sun. They combine this energy with carbon dioxide from the air and water from the soil to produce glucose (sugar) and oxygen. The glucose serves as the plant's food source and energy storage."}, 
+    {"role": "user", "content": "What are the key components needed for photosynthesis?"}, 
+] 
 
-# prepare the model input
-prompt = "Give me a short introduction to large language model."
-messages = [
-    {"role": "user", "content": prompt}
-]
-text = tokenizer.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True,
-)
-model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
-
-# conduct text completion
-generated_ids = model.generate(
-    **model_inputs,
-    max_new_tokens=512
-)
-output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
-
-content = tokenizer.decode(output_ids, skip_special_tokens=True)
-
-print("content:", content)
+inputs = tokenizer.apply_chat_template(messages, tokenize=True, return_tensors="pt")
+outputs = model.generate(**inputs, max_length=200)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Qwen3NextConfig
 

@@ -13,27 +13,40 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-04-11 and added to Hugging Face Transformers on 2024-04-10.*
+*This model was released on 2024-04-11 and added to Hugging Face Transformers on 2024-04-10 and contributed by [ArthurZ](https://huggingface.co/ArthurZ).*
 
 # RecurrentGemma
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[RecurrentGemma](https://huggingface.co/papers/RecurrentGemma:MovingPastTransformersForEfficientOpenLanguageModels) utilizes Google’s Griffin architecture, integrating linear recurrences with local attention to enhance language processing. It features a fixed-sized state, optimizing memory usage and facilitating efficient inference on extended sequences. Available in both pre-trained and instruction-tuned variants with 2B non-embedding parameters, RecurrentGemma matches Gemma-2B’s performance despite being trained on a smaller dataset.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Recurrent Gemma model was proposed in [RecurrentGemma: Moving Past Transformers for Efficient Open Language Models](https://huggingface.co/papers/2404.07839) by the Griffin, RLHF and Gemma Teams of Google.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="text-generation", model="google/recurrentgemma-2b", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-*We introduce RecurrentGemma, an open language model which uses Google’s novel Griffin architecture. Griffin combines linear recurrences with local attention to achieve excellent performance on language. It has a fixed-sized state, which reduces memory use and enables efficient inference on long sequences. We provide a pre-trained model with 2B non-embedding parameters, and an instruction tuned variant. Both models achieve comparable performance to Gemma-2B despite being trained on fewer tokens.*
+</hfoption>
+<hfoption id="AutoModel">
 
-Tips:
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-- The original checkpoints can be converted using the conversion script [`src/transformers/models/recurrent_gemma/convert_recurrent_gemma_weights_to_hf.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/recurrent_gemma/convert_recurrent_gemma_to_hf.py).
+tokenizer = AutoTokenizer.from_pretrained("google/recurrentgemma-2b")
+model = AutoModelForCausalLM.from_pretrained("google/recurrentgemma-2b", dtype="auto",)
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). The original code can be found [here](https://github.com/google-deepmind/recurrentgemma).
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## RecurrentGemmaConfig
 
@@ -48,3 +61,4 @@ This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). T
 
 [[autodoc]] RecurrentGemmaForCausalLM
     - forward
+

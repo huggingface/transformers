@@ -13,59 +13,50 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2020-11-16 and contributed by [sgugger](https://huggingface.co/sgugger).*
 
 # Funnel Transformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Funnel-Transformer: Filtering out Sequential Redundancy for Efficient Language Processing](https://huggingface.co/papers/2006.03236) proposes a bidirectional transformer model that incorporates pooling operations after each block of layers, similar to CNNs. This model compresses the sequence of hidden states to reduce computational cost, allowing for deeper or wider architectures. It can also recover deep representations for each token via a decoder, enabling token-level predictions. Empirically, Funnel-Transformer outperforms standard Transformers on various sequence-level prediction tasks with comparable or fewer floating-point operations.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Funnel Transformer model was proposed in the paper [Funnel-Transformer: Filtering out Sequential Redundancy for
-Efficient Language Processing](https://huggingface.co/papers/2006.03236). It is a bidirectional transformer model, like
-BERT, but with a pooling operation after each block of layers, a bit like in traditional convolutional neural networks
-(CNN) in computer vision.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="fill-mask", model="funnel-transformer/small", dtype="auto")
+pipeline("Plants create <mask> through a process known as photosynthesis.")
+```
 
-*With the success of language pretraining, it is highly desirable to develop more efficient architectures of good
-scalability that can exploit the abundant unlabeled data at a lower cost. To improve the efficiency, we examine the
-much-overlooked redundancy in maintaining a full-length token-level presentation, especially for tasks that only
-require a single-vector presentation of the sequence. With this intuition, we propose Funnel-Transformer which
-gradually compresses the sequence of hidden states to a shorter one and hence reduces the computation cost. More
-importantly, by re-investing the saved FLOPs from length reduction in constructing a deeper or wider model, we further
-improve the model capacity. In addition, to perform token-level predictions as required by common pretraining
-objectives, Funnel-Transformer is able to recover a deep representation for each token from the reduced hidden sequence
-via a decoder. Empirically, with comparable or fewer FLOPs, Funnel-Transformer outperforms the standard Transformer on
-a wide variety of sequence-level prediction tasks, including text classification, language understanding, and reading
-comprehension.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [sgugger](https://huggingface.co/sgugger). The original code can be found [here](https://github.com/laiguokun/Funnel-Transformer).
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+model = AutoModelForMaskedLM.from_pretrained("funnel-transformer/small", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("funnel-transformer/small")
+
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- Since Funnel Transformer uses pooling, the sequence length of the hidden states changes after each block of layers. This way, their length is divided by 2, which speeds up the computation of the next hidden states.
-  The base model therefore has a final sequence length that is a quarter of the original one. This model can be used
-  directly for tasks that just require a sentence summary (like sequence classification or multiple choice). For other
-  tasks, the full model is used; this full model has a decoder that upsamples the final hidden states to the same
-  sequence length as the input.
-- For tasks such as classification, this is not a problem, but for tasks like masked language modeling or token classification, we need a hidden state with the same sequence length as the original input. In those cases, the final hidden states are upsampled to the input sequence length and go through two additional layers. That's why there are two versions of each checkpoint. The version suffixed with “-base” contains only the three blocks, while the version without that suffix contains the three blocks and the upsampling head with its additional layers.
-- The Funnel Transformer checkpoints are all available with a full version and a base version. The first ones should be
-  used for [`FunnelModel`], [`FunnelForPreTraining`],
-  [`FunnelForMaskedLM`], [`FunnelForTokenClassification`] and
-  [`FunnelForQuestionAnswering`]. The second ones should be used for
-  [`FunnelBaseModel`], [`FunnelForSequenceClassification`] and
-  [`FunnelForMultipleChoice`].
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+- Funnel Transformer uses pooling, so sequence length changes after each block. Length divides by 2, speeding up computation. The base model has a final sequence length that's a quarter of the original.
+- Use the base model directly for tasks requiring sentence summaries (sequence classification or multiple choice). Use the full model for other tasks. The full model has a decoder that upsamples final hidden states to match input sequence length.
+- For classification tasks, this works fine. For masked language modeling or token classification, you need hidden states with the same sequence length as the original input. Final hidden states get upsampled to input sequence length and go through two additional layers.
+- Two checkpoint versions exist. The `-base` version contains only three blocks. The version without that suffix contains three blocks plus the upsampling head with additional layers.
 
 ## FunnelConfig
 
@@ -126,3 +117,4 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 
 [[autodoc]] FunnelForQuestionAnswering
     - forward
+

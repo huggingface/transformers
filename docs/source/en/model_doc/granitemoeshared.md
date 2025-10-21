@@ -13,42 +13,40 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-08-23 and added to Hugging Face Transformers on 2025-02-14.*
+*This model was released on 2024-08-23 and added to Hugging Face Transformers on 2025-02-14 and contributed by [mayank-mishra](https://huggingface.co/mayank-mishra), [shawntan](https://huggingface.co/shawntan), and [SukritiSharma](https://huggingface.co/SukritiSharma).*
 
 # GraniteMoeShared
 
-## Overview
+[GraniteMoeShared](https://huggingface.co/papers/2408.13359) adds shared experts for the mixture-of-experts (MoE).
 
-The GraniteMoe model was proposed in [Power Scheduler: A Batch Size and Token Number Agnostic Learning Rate Scheduler](https://huggingface.co/papers/2408.13359) by Yikang Shen, Matthew Stallone, Mayank Mishra, Gaoyuan Zhang, Shawn Tan, Aditya Prasad, Adriana Meza Soria, David D. Cox and Rameswar Panda.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-Additionally this class GraniteMoeSharedModel adds shared experts for Moe.
+```py
+import torch
+from transformers import pipeline
 
-```python
+pipeline = pipeline(task="text-generation", model="ibm-research/moe-7b-1b-active-shared-experts", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_path = "ibm-research/moe-7b-1b-active-shared-experts"
-tokenizer = AutoTokenizer.from_pretrained(model_path)
+tokenizer = AutoTokenizer.from_pretrained("ibm-research/moe-7b-1b-active-shared-experts")
+model = AutoModelForCausalLM.from_pretrained("ibm-research/moe-7b-1b-active-shared-experts", dtype="auto",)
 
-# drop device_map if running on CPU
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
-model.eval()
-
-# change input text as desired
-prompt = "Write a code to find the maximum value in a list of numbers."
-
-# tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
-# generate output tokens
-output = model.generate(**input_tokens, max_new_tokens=100)
-# decode output tokens into text
-output = tokenizer.batch_decode(output)
-# loop over the batch to print, in this example the batch size is 1
-for i in output:
-    print(i)
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
-This HF implementation is contributed by [Mayank Mishra](https://huggingface.co/mayank-mishra), [Shawn Tan](https://huggingface.co/shawntan) and [Sukriti Sharma](https://huggingface.co/SukritiSharma).
+</hfoption>
+</hfoptions>
 
 ## GraniteMoeSharedConfig
 

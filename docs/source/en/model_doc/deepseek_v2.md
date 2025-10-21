@@ -13,16 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-05-07 and added to Hugging Face Transformers on 2025-07-09.*
+
+*This model was released on 2024-05-07 and added to Hugging Face Transformers on 2025-07-09 and contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber).*
 
 # DeepSeek-V2
 
-## Overview
-
-The DeepSeek-V2 model was proposed in [DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model](https://huggingface.co/papers/2405.04434) by DeepSeek-AI Team.
-
-The abstract from the paper is the following:
-We present DeepSeek-V2, a strong Mixture-of-Experts (MoE) language model characterized by economical training and efficient inference. It comprises 236B total parameters, of which 21B are activated for each token, and supports a context length of 128K tokens. DeepSeek-V2 adopts innovative architectures including Multi-head Latent Attention (MLA) and DeepSeekMoE. MLA guarantees efficient inference through significantly compressing the Key-Value (KV) cache into a latent vector, while DeepSeekMoE enables training strong models at an economical cost through sparse computation. Compared with DeepSeek 67B, DeepSeek-V2 achieves significantly stronger performance, and meanwhile saves 42.5% of training costs, reduces the KV cache by 93.3%, and boosts the maximum generation throughput to 5.76 times. We pretrain DeepSeek-V2 on a high-quality and multi-source corpus consisting of 8.1T tokens, and further perform Supervised Fine-Tuning (SFT) and Reinforcement Learning (RL) to fully unlock its potential. Evaluation results show that, even with only 21B activated parameters, DeepSeek-V2 and its chat versions still achieve top-tier performance among open-source models.
+[DeepSeek-V2](https://huggingface.co/papers/2405.04434) is a Mixture-of-Experts (MoE) language model with 236B total parameters, where 21B are active per token, and supports a 128K token context length. It utilizes Multi-head Latent Attention (MLA) to compress the Key-Value (KV) cache and DeepSeekMoE for cost-effective training. Compared to DeepSeek 67B, DeepSeek-V2 offers superior performance, reduced training costs by 42.5%, decreased KV cache by 93.3%, and increased generation throughput by 5.76 times. Trained on an 8.1T token corpus and enhanced with Supervised Fine-Tuning and Reinforcement Learning, DeepSeek-V2 achieves top-tier performance with only 21B active parameters.
 
 This model was contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber).
 The original code can be found [here](https://huggingface.co/deepseek-ai/DeepSeek-V2).
@@ -32,6 +28,17 @@ The original code can be found [here](https://huggingface.co/deepseek-ai/DeepSee
 The model uses Multi-head Latent Attention (MLA) and DeepSeekMoE architectures for efficient inference and cost-effective training. It employs an auxiliary-loss-free strategy for load balancing and multi-token prediction training objective. The model can be used for various language tasks after being pre-trained on 14.8 trillion tokens and going through Supervised Fine-Tuning and Reinforcement Learning stages.
 
 ## DeepseekV2Config
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
+tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
+
+inputs = tokenizer("Hello, my name is", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
 
 [[autodoc]] DeepseekV2Config
 
@@ -49,3 +56,4 @@ The model uses Multi-head Latent Attention (MLA) and DeepSeekMoE architectures f
 
 [[autodoc]] DeepseekV2ForSequenceClassification
     - forward
+

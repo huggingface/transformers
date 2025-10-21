@@ -12,83 +12,59 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
-*This model was released on 2020-06-17 and added to Hugging Face Transformers on 2021-11-18.*
+*This model was released on 2019-12-03 and added to Hugging Face Transformers on 2021-11-18 and contributed by [nielsr](https://huggingface.co/nielsr) and [7](https://github.com/openai/image-gpt/issues/7).*
 
 # ImageGPT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ImageGPT](https://huggingface.co/papers/1912.04958) is a GPT-2-like model designed to predict the next pixel value in an image, enabling both unconditional and conditional image generation. Trained on low-resolution ImageNet without labels, the model demonstrates strong image representations through linear probing and fine-tuning. It achieves 96.3% accuracy on CIFAR-10 with a linear probe, surpassing a supervised Wide ResNet, and 99.0% accuracy with full fine-tuning, matching top supervised pre-trained models. Additionally, it competes with self-supervised benchmarks on ImageNet when using pixel-based encodings, achieving 69.0% top-1 accuracy with a linear probe.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The ImageGPT model was proposed in [Generative Pretraining from Pixels](https://openai.com/blog/image-gpt) by Mark
-Chen, Alec Radford, Rewon Child, Jeffrey Wu, Heewoo Jun, David Luan, Ilya Sutskever. ImageGPT (iGPT) is a GPT-2-like
-model trained to predict the next pixel value, allowing for both unconditional and conditional image generation.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the [paper](https://cdn.openai.com/papers/Generative_Pretraining_from_Pixels_V1_ICML.pdf) is the following:
+pipeline = pipeline(task="image-classification", model="openai/imagegpt-small", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-*Inspired by progress in unsupervised representation learning for natural language, we examine whether similar models
-can learn useful representations for images. We train a sequence Transformer to auto-regressively predict pixels,
-without incorporating knowledge of the 2D input structure. Despite training on low-resolution ImageNet without labels,
-we find that a GPT-2 scale model learns strong image representations as measured by linear probing, fine-tuning, and
-low-data classification. On CIFAR-10, we achieve 96.3% accuracy with a linear probe, outperforming a supervised Wide
-ResNet, and 99.0% accuracy with full fine-tuning, matching the top supervised pre-trained models. We are also
-competitive with self-supervised benchmarks on ImageNet when substituting pixels for a VQVAE encoding, achieving 69.0%
-top-1 accuracy on a linear probe of our features.*
+</hfoption>
+<hfoption id="AutoModel">
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/imagegpt_architecture.png"
-alt="drawing" width="600"/>
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-<small> Summary of the approach. Taken from the [original paper](https://cdn.openai.com/papers/Generative_Pretraining_from_Pixels_V2.pdf). </small>
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr), based on [this issue](https://github.com/openai/image-gpt/issues/7). The original code can be found
-[here](https://github.com/openai/image-gpt).
+image_processor = AutoImageProcessor.from_pretrained("openai/imagegpt-small")
+model = AutoModelForImageClassification.from_pretrained("openai/imagegpt-small", dtype="auto")
+
+inputs = image_processor(image, return_tensors="pt")
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- ImageGPT is almost exactly the same as [GPT-2](gpt2), with the exception that a different activation
-  function is used (namely "quick gelu"), and the layer normalization layers don't mean center the inputs. ImageGPT
-  also doesn't have tied input- and output embeddings.
-- As the time- and memory requirements of the attention mechanism of Transformers scales quadratically in the sequence
-  length, the authors pre-trained ImageGPT on smaller input resolutions, such as 32x32 and 64x64. However, feeding a
-  sequence of 32x32x3=3072 tokens from 0..255 into a Transformer is still prohibitively large. Therefore, the authors
-  applied k-means clustering to the (R,G,B) pixel values with k=512. This way, we only have a 32*32 = 1024-long
-  sequence, but now of integers in the range 0..511. So we are shrinking the sequence length at the cost of a bigger
-  embedding matrix. In other words, the vocabulary size of ImageGPT is 512, + 1 for a special "start of sentence" (SOS)
-  token, used at the beginning of every sequence. One can use [`ImageGPTImageProcessor`] to prepare
-  images for the model.
-- Despite being pre-trained entirely unsupervised (i.e. without the use of any labels), ImageGPT produces fairly
-  performant image features useful for downstream tasks, such as image classification. The authors showed that the
-  features in the middle of the network are the most performant, and can be used as-is to train a linear model (such as
-  a sklearn logistic regression model for example). This is also referred to as "linear probing". Features can be
-  easily obtained by first forwarding the image through the model, then specifying `output_hidden_states=True`, and
-  then average-pool the hidden states at whatever layer you like.
-- Alternatively, one can further fine-tune the entire model on a downstream dataset, similar to BERT. For this, you can
-  use [`ImageGPTForImageClassification`].
-- ImageGPT comes in different sizes: there's ImageGPT-small, ImageGPT-medium and ImageGPT-large. The authors did also
-  train an XL variant, which they didn't release. The differences in size are summarized in the following table:
-
-| **Model variant** | **Depths** | **Hidden sizes** | **Decoder hidden size** | **Params (M)** | **ImageNet-1k Top 1** |
-|---|---|---|---|---|---|
-| MiT-b0 | [2, 2, 2, 2] | [32, 64, 160, 256] | 256 | 3.7 | 70.5 |
-| MiT-b1 | [2, 2, 2, 2] | [64, 128, 320, 512] | 256 | 14.0 | 78.7 |
-| MiT-b2 | [3, 4, 6, 3] | [64, 128, 320, 512] | 768 | 25.4 | 81.6 |
-| MiT-b3 | [3, 4, 18, 3] | [64, 128, 320, 512] | 768 | 45.2 | 83.1 |
-| MiT-b4 | [3, 8, 27, 3] | [64, 128, 320, 512] | 768 | 62.6 | 83.6 |
-| MiT-b5 | [3, 6, 40, 3] | [64, 128, 320, 512] | 768 | 82.0 | 83.8 |
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ImageGPT.
-
-<PipelineTag pipeline="image-classification"/>
-
-- Demo notebooks for ImageGPT can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ImageGPT).
-- [`ImageGPTForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+- ImageGPT is almost exactly the same as GPT-2, with two exceptions: it uses a different activation function ("quick gelu") and the layer normalization layers don't mean center the inputs. ImageGPT also doesn't have tied input and output embeddings.
+- The attention mechanism of Transformers scales quadratically with sequence length. The authors pre-trained ImageGPT on smaller input resolutions like 32x32 and 64x64. However, feeding a sequence of 32x32x3=3072 tokens from 0..255 into a Transformer is still prohibitively large.
+- The authors applied k-means clustering to the (R,G,B) pixel values with k=512. This creates a 32*32 = 1024-long sequence of integers in the range 0..511. This shrinks the sequence length at the cost of a bigger embedding matrix. The vocabulary size of ImageGPT is 512, plus 1 for a special "start of sentence" (SOS) token used at the beginning of every sequence.
+- Use [`ImageGPTImageProcessor`] to prepare images for the model.
+- Despite being pre-trained entirely unsupervised (without any labels), ImageGPT produces performant image features useful for downstream tasks like image classification. The authors showed that features in the middle of the network are the most performant and work as-is to train a linear model (like a sklearn logistic regression model). This is called "linear probing".
+- Obtain features by first forwarding the image through the model, then specifying `output_hidden_states=True`, and then average-pool the hidden states at whatever layer you like.
+- Fine-tune the entire model on a downstream dataset, similar to BERT. Use [`ImageGPTForImageClassification`] for this.
 
 ## ImageGPTConfig
 
@@ -118,3 +94,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ImageGPTForImageClassification
     - forward
+

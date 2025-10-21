@@ -13,127 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-05-28 and added to Hugging Face Transformers on 2021-06-01.*
-<div style="float: right;">
-  <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-  </div>
-</div>
+*This model was released on 2021-05-28 and added to Hugging Face Transformers on 2021-06-01 and contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).*
 
 # ByT5
 
-[ByT5](https://huggingface.co/papers/2105.13626) is tokenizer-free version of the [T5](./t5) model designed to works directly on raw UTF-8 bytes. This means it can process any language, more robust to noise like typos, and simpler to use because it doesn't require a preprocessing pipeline.
-
-You can find all the original ByT5 checkpoints under the [Google](https://huggingface.co/google?search_models=byt5) organization.
-
-> [!TIP]
-> Refer to the [T5](./t5) docs for more examples of how to apply ByT5 to different language tasks.
-
-The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
+[ByT5: Towards a token-free future with pre-trained byte-to-byte models](https://huggingface.co/papers/2105.13626) explores the use of standard Transformer architectures to process byte sequences directly, eliminating the need for tokenization. This approach offers benefits such as language-agnostic processing, robustness to noise, and reduced preprocessing complexity. The study demonstrates that byte-level models can compete with token-level models in terms of parameter count, training computational cost, and inference speed. Additionally, byte-level models show superior performance on tasks sensitive to spelling and pronunciation. The paper introduces a new set of pre-trained byte-level Transformer models based on the T5 architecture.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
+```py
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="text2text-generation",
-    model="google/byt5-small",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("translate English to French: The weather is nice today")
+pipeline = pipeline(task="text2text-generation", model="google/byt5-small", dtype="auto")
+pipeline("translate English to French: Plants generate energy through a process known as photosynthesis.")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```python
+```py
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "google/byt5-small"
-)
-model = AutoModelForSeq2SeqLM.from_pretrained(
-    "google/byt5-small",
-    dtype=torch.float16,
-    device_map="auto"
-)
+model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/byt5-small")
 
-input_ids = tokenizer("summarize: Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy.", return_tensors="pt").to(model.device)
-
-output = model.generate(**input_ids)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
+inputs = tokenizer("translate English to French: Plants generate energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
-</hfoption>
-<hfoption id="transformers">
-
-```bash
-echo -e "translate English to French: Life is beautiful." | transformers run --task text2text-generation --model google/byt5-small --device 0
-```
-
-</hfoption>
+</hfopton>
 </hfoptions>
 
-## Quantization
+## Usage tips
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
-
-```python
-# pip install torchao
-import torch
-from transformers import TorchAoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
-
-quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
-
-model = AutoModelForSeq2SeqLM.from_pretrained(
-    "google/byt5-xl",
-    dtype=torch.bfloat16,
-    device_map="auto",
-    quantization_config=quantization_config
-)
-
-tokenizer = AutoTokenizer.from_pretrained("google/byt5-xl")
-input_ids = tokenizer("translate English to French: The weather is nice today.", return_tensors="pt").to(model.device)
-
-output = model.generate(**input_ids)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-## Notes
-
-- It is recommended to use the tokenizer for batched inference and training.
-- The example below shows how to use the model without a tokenizer.
-
-    ```python
-    import torch
-    from transformers import AutoModelForSeq2SeqLM
-
-    model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small")
-
-    num_special_tokens = 3
-
-    input_ids = torch.tensor([list("Life is like a box of chocolates.".encode("utf-8"))]) + num_special_tokens
-    labels = torch.tensor([list("La vie est comme une boîte de chocolat.".encode("utf-8"))]) + num_special_tokens
-    loss = model(input_ids, labels=labels).loss
-    loss.item()
-    ```
-
-- ByT5 uses the top byte values (258, 257, etc.) for masking instead of sentinel tokens like `{extra_id_0}`.
-
-    ```python
-    # Example: character-level denoising with mask tokens
-    input_ids = tokenizer("The dog chases a ball in the park.").input_ids
-    masked_input = torch.tensor([input_ids[:8] + [258] + input_ids[14:21] + [257] + input_ids[28:]])
-    output = model.generate(masked_input, max_length=100)
-    ```
+- Use the tokenizer for batched inference and training.
+- ByT5 uses top byte values (258, 257, etc.) for masking instead of sentinel tokens like `{extra_id_0}`.
 
 ## ByT5Tokenizer
 
 [[autodoc]] ByT5Tokenizer
+
+See [`ByT5Tokenizer`] for all details.
+

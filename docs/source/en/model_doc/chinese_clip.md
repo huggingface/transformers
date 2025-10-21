@@ -13,65 +13,41 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-11-02 and added to Hugging Face Transformers on 2022-12-01.*
+*This model was released on 2022-11-02 and added to Hugging Face Transformers on 2022-12-01 and contributed by [OFA-Sys](https://huggingface.co/OFA-Sys).*
 
 # Chinese-CLIP
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Chinese-CLIP](https://huggingface.co/papers/2211.01335) constructs a large-scale dataset of Chinese image-text pairs and pretrains models of varying sizes, from 77 to 958 million parameters. It employs a two-stage pretraining method, initially freezing the image encoder before optimizing all parameters. Experiments show superior performance on MUGE, Flickr30K-CN, and COCO-CN for zero-shot learning and finetuning, and competitive results in zero-shot image classification on the ELEVATER benchmark.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="ChineseCLIPModel">
 
-The Chinese-CLIP model was proposed in [Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese](https://huggingface.co/papers/2211.01335) by An Yang, Junshu Pan, Junyang Lin, Rui Men, Yichang Zhang, Jingren Zhou, Chang Zhou.
-Chinese-CLIP is an implementation of CLIP (Radford et al., 2021) on a large-scale dataset of Chinese image-text pairs. It is capable of performing cross-modal retrieval and also playing as a vision backbone for vision tasks like zero-shot image classification, open-domain object detection, etc. The original Chinese-CLIP code is released [at this link](https://github.com/OFA-Sys/Chinese-CLIP).
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, ChineseCLIPModel
 
-The abstract from the paper is the following:
+model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16", dtype="auto")
+processor = AutoProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
-*The tremendous success of CLIP (Radford et al., 2021) has promoted the research and application of contrastive learning for vision-language pretraining. In this work, we construct a large-scale dataset of image-text pairs in Chinese, where most data are retrieved from publicly available datasets, and we pretrain Chinese CLIP models on the new dataset. We develop 5 Chinese CLIP models of multiple sizes, spanning from 77 to 958 million parameters. Furthermore, we propose a two-stage pretraining method, where the model is first trained with the image encoder frozen and then trained with all parameters being optimized, to achieve enhanced model performance. Our comprehensive experiments demonstrate that Chinese CLIP can achieve the state-of-the-art performance on MUGE, Flickr30K-CN, and COCO-CN in the setups of zero-shot learning and finetuning, and it is able to achieve competitive performance in zero-shot image classification based on the evaluation on the ELEVATER benchmark (Li et al., 2022). Our codes, pretrained models, and demos have been released.*
+url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+# Squirtle, Bulbasaur, Charmander, Pikachu in English
+texts = ["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"]
 
-The Chinese-CLIP model was contributed by [OFA-Sys](https://huggingface.co/OFA-Sys).
+inputs = processor(text=texts, images=image, return_tensors="pt", padding=True)
+outputs = model(**inputs)
+logits_per_image = outputs.logits_per_image
+probs = logits_per_image.softmax(dim=1)
 
-## Usage example
-
-The code snippet below shows how to compute image & text features and similarities:
-
-```python
->>> from PIL import Image
->>> import requests
->>> from transformers import ChineseCLIPProcessor, ChineseCLIPModel
-
->>> model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
->>> processor = ChineseCLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
-
->>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> # Squirtle, Bulbasaur, Charmander, Pikachu in English
->>> texts = ["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"]
-
->>> # compute image feature
->>> inputs = processor(images=image, return_tensors="pt")
->>> image_features = model.get_image_features(**inputs)
->>> image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)  # normalize
-
->>> # compute text features
->>> inputs = processor(text=texts, padding=True, return_tensors="pt")
->>> text_features = model.get_text_features(**inputs)
->>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)  # normalize
-
->>> # compute image-text similarity scores
->>> inputs = processor(text=texts, images=image, return_tensors="pt", padding=True)
->>> outputs = model(**inputs)
->>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
->>> probs = logits_per_image.softmax(dim=1)  # probs: [[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]]
+print("Text-image similarity probabilities:")
+for i, (text, prob) in enumerate(zip(texts, probs[0])):
+    print(f"'{text}' -> {prob.item():.4f} ({prob.item()*100:.1f}%)")
 ```
 
-Currently, following scales of pretrained Chinese-CLIP models are available on 🤗 Hub:
-
-- [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16)
-- [OFA-Sys/chinese-clip-vit-large-patch14](https://huggingface.co/OFA-Sys/chinese-clip-vit-large-patch14)
-- [OFA-Sys/chinese-clip-vit-large-patch14-336px](https://huggingface.co/OFA-Sys/chinese-clip-vit-large-patch14-336px)
-- [OFA-Sys/chinese-clip-vit-huge-patch14](https://huggingface.co/OFA-Sys/chinese-clip-vit-huge-patch14)
+</hfoption>
+</hfoptions>
 
 ## ChineseCLIPConfig
 
@@ -115,3 +91,4 @@ Currently, following scales of pretrained Chinese-CLIP models are available on �
 
 [[autodoc]] ChineseCLIPVisionModel
     - forward
+

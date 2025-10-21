@@ -13,23 +13,41 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-09-16 and added to Hugging Face Transformers on 2023-04-12.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2023-04-12 and contributed by [openbmb](https://huggingface.co/openbmb).*
 
 # CPMAnt
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[CPM-Ant](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live) is developed from CPM-Live, an open-source framework for training and serving large language models. It supports distributed training across multiple GPUs and nodes with model, data, and pipeline parallelism, enabling efficient scaling to billions of parameters. The framework provides features like dynamic micro-batching, mixed precision training, and checkpointing for fault tolerance. It also includes APIs for interactive inference, making it practical for both research and real-world deployment of large Transformer-based models.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-CPM-Ant is an open-source Chinese pre-trained language model (PLM) with 10B parameters. It is also the first milestone of the live training process of CPM-Live. The training process is cost-effective and environment-friendly. CPM-Ant also achieves promising results with delta tuning on the CUGE benchmark. Besides the full model, we also provide various compressed versions to meet the requirements of different hardware configurations. [See more](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live)
+```py
+import torch
+from transformers import pipeline
 
-This model was contributed by [OpenBMB](https://huggingface.co/openbmb). The original code can be found [here](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live).
+pipeline = pipeline(task="text-generation", model="openbmb/cpm-ant-10b", dtype="auto")
+pipeline("植物通过光合作用产生能量。")
+```
 
-## Resources
+</hfoption>
+<hfoption id="AutoModel">
 
-- A tutorial on [CPM-Live](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live).
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("openbmb/cpm-ant-10b", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("openbmb/cpm-ant-10b")
+
+inputs = tokenizer("植物通过光合作用产生能量。", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50, do_sample=True)
+generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(generated_text)
+```
+
+</hfoption>
+</hfoptions>
 
 ## CpmAntConfig
 
@@ -45,7 +63,7 @@ This model was contributed by [OpenBMB](https://huggingface.co/openbmb). The ori
 
 [[autodoc]] CpmAntModel
     - all
-
+    
 ## CpmAntForCausalLM
 
 [[autodoc]] CpmAntForCausalLM

@@ -15,26 +15,45 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-10-07 and added to Hugging Face Transformers on 2025-01-07.*
 
-# DiffLlama
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# DiffLlama
 
-The DiffLlama model was proposed in [Differential Transformer](https://huggingface.co/papers/2410.05258) by Kazuma Matsumoto and .
-This model is combine Llama model and Differential Transformer's Attention.
+[DiffLlama](https://huggingface.co/papers/2410.05258) integrates the Llama model with Differential Transformer's Attention mechanism. This differential attention calculates scores as the difference between two softmax attention maps, reducing noise and promoting sparse attention. Experiments demonstrate that DiffLlama outperforms traditional Transformer models in scaling, long-context modeling, key information retrieval, hallucination mitigation, in-context learning, and activation outlier reduction. It enhances accuracy and robustness in in-context learning and reduces distractions from irrelevant context, improving performance in question answering and text summarization.
 
-The abstract from the paper is the following:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-*Transformer tends to overallocate attention to irrelevant context. In this work, we introduce Diff Transformer, which amplifies attention to the relevant context while canceling noise. Specifically, the differential attention mechanism calculates attention scores as the difference between two separate softmax attention maps. The subtraction cancels noise, promoting the emergence of sparse attention patterns. Experimental results on language modeling show that Diff Transformer outperforms Transformer in various settings of scaling up model size and training tokens. More intriguingly, it offers notable advantages in practical applications, such as long-context modeling, key information retrieval, hallucination mitigation, in-context learning, and reduction of activation outliers. By being less distracted by irrelevant context, Diff Transformer can mitigate hallucination in question answering and text summarization. For in-context learning, Diff Transformer not only enhances accuracy but is also more robust to order permutation, which was considered as a chronic robustness issue. The results position Diff Transformer as a highly effective and promising architecture to advance large language models.*
+```py
+import torch
+from transformers import pipeline
 
-### Usage tips
+pipeline = pipeline(task="text-generation", model="kajuma/DiffLlama-0.3B-handcut", dtype="auto")
+pipeline("植物は光合成と呼ばれる過程を通じてエネルギーを作り出します。")
+```
 
-The hyperparameters of this model is the same as Llama model.
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("kajuma/DiffLlama-0.3B-handcut", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("kajuma/DiffLlama-0.3B-handcut")
+
+inputs = tokenizer("植物は光合成と呼ばれる過程を通じてエネルギーを作り出します。", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## DiffLlamaConfig
 
@@ -64,3 +83,4 @@ The hyperparameters of this model is the same as Llama model.
 
 [[autodoc]] DiffLlamaForTokenClassification
     - forward
+

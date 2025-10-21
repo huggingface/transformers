@@ -13,29 +13,19 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-07-29 and added to Hugging Face Transformers on 2025-08-14.*
 
-# SAM2
+*This model was released on 2024-07-29 and added to Hugging Face Transformers on 2025-08-14 and contributed by [SangbumChoi](https://github.com/SangbumChoi) and [yonigozlan](https://huggingface.co/yonigozlan).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
 </div>
 
-## Overview
+# SAM2
 
-SAM2 (Segment Anything Model 2) was proposed in [Segment Anything in Images and Videos](https://ai.meta.com/research/publications/sam-2-segment-anything-in-images-and-videos/) by Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer.
-
-The model can be used to predict segmentation masks of any object of interest given an input image or video, and input points or bounding boxes.
-
-![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam2_header.gif)
-
-The abstract from the paper is the following:
-
-*We present Segment Anything Model 2 (SAM 2), a foundation model towards solving promptable visual segmentation in images and videos. We build a data engine, which improves model and data via user interaction, to collect the largest video segmentation dataset to date. Our model is a simple transformer architecture with streaming memory for real-time video processing. SAM 2 trained on our data provides strong performance across a wide range of tasks. In video segmentation, we observe better accuracy, using 3x fewer interactions than prior approaches. In image segmentation, our model is more accurate and 6x faster than the Segment Anything Model (SAM). We believe that our data, model, and insights will serve as a significant milestone for video segmentation and related perception tasks. We are releasing a version of our model, the dataset and an interactive demo.*
+[Segment Anything Model 2](https://huggingface.co/papers/2304.02643) presents a foundation model for promptable visual segmentation in images and videos. It incorporates a data engine that enhances both the model and data through user interaction, resulting in the largest video segmentation dataset available. SAM 2 features a simple transformer architecture with streaming memory for real-time video processing. The model demonstrates superior performance across various tasks, achieving better accuracy in video segmentation with 3x fewer interactions and improved speed and accuracy in image segmentation compared to the original SAM. SAM 2 supports batch and video processing natively, offers enhanced segmentation quality and robustness, and exhibits superior zero-shot generalization with mixed prompts.
 
 Tips:
 
@@ -44,6 +34,14 @@ Tips:
 
 This model was contributed by [sangbumchoi](https://github.com/SangbumChoi) and [yonigozlan](https://huggingface.co/yonigozlan).
 The original code can be found [here](https://github.com/facebookresearch/sam2/tree/main).
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="image-segmentation", model="facebook/sam2.1-hiera-large", dtype="auto")
+pipeline("path/to/image.png")
+```
 
 ## Usage example
 
@@ -351,3 +349,4 @@ SAM2 can use masks from previous predictions as input to refine segmentation:
 
 [[autodoc]] Sam2Model
     - forward
+

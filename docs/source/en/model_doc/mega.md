@@ -13,46 +13,53 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-09-21 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2022-09-21 and added to Hugging Face Transformers on 2023-06-20 and contributed by [mnaylor](https://huggingface.co/mnaylor).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
+
 
 # MEGA
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Mega: Moving Average Equipped Gated Attention](https://huggingface.co/papers/2209.10655) introduces Mega, a single-head gated attention mechanism enhanced with an exponential moving average to incorporate position-aware local dependencies. This design addresses the Transformer's limitations in handling long sequences and computational inefficiency. Mega achieves competitive results on benchmarks like the Long Range Arena while using fewer parameters and offering linear time and space complexity through sequence chunking. Experiments demonstrate improvements over other sequence models in various tasks, including neural machine translation, auto-regressive language modeling, and image and speech classification.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-You can do so by running the following command: `pip install -U transformers==4.40.2`.
+```py
+import torch
+from transformers import pipeline
 
-</Tip>
+pipeline = pipeline(task="text-generation", model="mnaylor/mega-base-wikitext", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-## Overview
+</hfoption>
+<hfoption id="AutoModel">
 
-The MEGA model was proposed in [Mega: Moving Average Equipped Gated Attention](https://huggingface.co/papers/2209.10655) by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig, Jonathan May, and Luke Zettlemoyer.
-MEGA proposes a new approach to self-attention with each encoder layer having a multi-headed exponential moving average in addition to a single head of standard dot-product attention, giving the attention mechanism
-stronger positional biases. This allows MEGA to perform competitively to Transformers on standard benchmarks including LRA
-while also having significantly fewer parameters. MEGA's compute efficiency allows it to scale to very long sequences, making it an
-attractive option for long-document NLP tasks.
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-The abstract from the paper is the following:
+tokenizer = AutoTokenizer.from_pretrained("mnaylor/mega-base-wikitext")
+model = AutoModelForCausalLM.from_pretrained("mnaylor/mega-base-wikitext", dtype="auto")
 
- *The design choices in the Transformer attention mechanism, including weak inductive bias and quadratic computational complexity, have limited its application for modeling long sequences. In this paper, we introduce Mega, a simple, theoretically grounded, single-head gated attention mechanism equipped with (exponential) moving average to incorporate inductive bias of position-aware local dependencies into the position-agnostic attention mechanism. We further propose a variant of Mega that offers linear time and space complexity yet yields only minimal quality loss, by efficiently splitting the whole sequence into multiple chunks with fixed length. Extensive experiments on a wide range of sequence modeling benchmarks, including the Long Range Arena, neural machine translation, auto-regressive language modeling, and image and speech classification, show that Mega achieves significant improvements over other sequence models, including variants of Transformers and recent state space models.*
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+print(f"Next predicted token: {tokenizer.decode([outputs.logits[0, -1, :].argmax().item()])}")
+```
 
-This model was contributed by [mnaylor](https://huggingface.co/mnaylor).
-The original code can be found [here](https://github.com/facebookresearch/mega).
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- MEGA can perform quite well with relatively few parameters. See Appendix D in the MEGA paper for examples of architectural specs which perform well in various settings. If using MEGA as a decoder, be sure to set `bidirectional=False` to avoid errors with default bidirectional.
-- Mega-chunk is a variant of mega that reduces time and spaces complexity from quadratic to linear. Utilize chunking with MegaConfig.use_chunking and control chunk size with MegaConfig.chunk_size
-
-## Implementation Notes
-
-- The original implementation of MEGA had an inconsistent expectation of attention masks for padding and causal self-attention between the softmax attention and Laplace/squared ReLU method. This implementation addresses that inconsistency.
-- The original implementation did not include token type embeddings; this implementation adds support for these, with the option controlled by MegaConfig.add_token_type_embeddings
+- MEGA performs well with relatively few parameters. See Appendix D in the MEGA paper for examples of architectural specs that perform well in various settings. If using MEGA as a decoder, set `bidirectional=False` to avoid errors with default bidirectional.
+- Mega-chunk is a variant of MEGA that reduces time and space complexity from quadratic to linear. Use chunking with [`MegaConfig.use_chunking`] and control chunk size with [`MegaConfig.chunk_size`].
+- The original MEGA implementation had inconsistent expectations of attention masks for padding and causal self-attention between the softmax attention and Laplace/squared ReLU method. This implementation addresses that inconsistency.
+- The original implementation didn't include token type embeddings. This implementation adds support for these, controlled by [`MegaConfig.add_token_type_embeddings`].
 
 ## MegaConfig
 
@@ -92,3 +99,12 @@ The original code can be found [here](https://github.com/facebookresearch/mega).
 
 [[autodoc]] MegaForQuestionAnswering
     - forward
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="mnaylor/mega-base-wikitext", dtype="auto")
+pipeline("The future of artificial intelligence is")
+```
+

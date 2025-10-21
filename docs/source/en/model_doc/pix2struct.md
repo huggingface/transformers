@@ -13,36 +13,42 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-10-07 and added to Hugging Face Transformers on 2023-03-22.*
+*This model was released on 2022-10-07 and added to Hugging Face Transformers on 2023-03-22 and contributed by [ybelkada](https://huggingface.co/ybelkada).*
 
 # Pix2Struct
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Pix2Struct](https://huggingface.co/papers/2210.03347) is a pretrained image-to-text model designed for visual language understanding. It learns to parse masked screenshots of web pages into simplified HTML, leveraging the web's diverse visual elements and HTML structure for pretraining. This approach encompasses common pretraining signals like OCR, language modeling, and image captioning. Pix2Struct introduces a variable-resolution input representation and flexible integration of language and vision inputs, rendering language prompts directly onto images. The model achieves state-of-the-art results across six out of nine tasks in four domains: documents, illustrations, user interfaces, and natural images.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pix2StructForConditionalGeneration">
 
-The Pix2Struct model was proposed in [Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding](https://huggingface.co/papers/2210.03347) by Kenton Lee, Mandar Joshi, Iulia Turc, Hexiang Hu, Fangyu Liu, Julian Eisenschlos, Urvashi Khandelwal, Peter Shaw, Ming-Wei Chang, Kristina Toutanova.
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
-The abstract from the paper is the following:
+processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
+model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base", dtype="auto")
 
-> Visually-situated language is ubiquitous -- sources range from textbooks with diagrams to web pages with images and tables, to mobile apps with buttons and forms. Perhaps due to this diversity, previous work has typically relied on domain-specific recipes with limited sharing of the underlying data, model architectures, and objectives. We present Pix2Struct, a pretrained image-to-text model for purely visual language understanding, which can be finetuned on tasks containing visually-situated language. Pix2Struct is pretrained by learning to parse masked screenshots of web pages into simplified HTML. The web, with its richness of visual elements cleanly reflected in the HTML structure, provides a large source of pretraining data well suited to the diversity of downstream tasks. Intuitively, this objective subsumes common pretraining signals such as OCR, language modeling, image captioning. In addition to the novel pretraining strategy, we introduce a variable-resolution input representation and a more flexible integration of language and vision inputs, where language prompts such as questions are rendered directly on top of the input image. For the first time, we show that a single pretrained model can achieve state-of-the-art results in six out of nine tasks across four domains: documents, illustrations, user interfaces, and natural images.
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-Tips:
+inputs = processor(images=image, return_tensors="pt")
 
-Pix2Struct has been fine tuned on a variety of tasks and datasets, ranging from image captioning, visual question answering (VQA) over different inputs (books, charts, science diagrams), captioning UI components etc. The full list can be found in Table 1 of the paper.
-We therefore advise you to use these models for the tasks they have been fine tuned on. For instance, if you want to use Pix2Struct for UI captioning, you should use the model fine tuned on the UI dataset. If you want to use Pix2Struct for image captioning, you should use the model fine tuned on the natural images captioning dataset and so on.
+generated_ids = model.generate(**inputs, max_new_tokens=50)
+generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(generated_text)
+```
 
-If you want to use the model to perform conditional text captioning, make sure to use the processor with `add_special_tokens=False`.
+</hfoption>
+</hfoptions>
 
-This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
-The original code can be found [here](https://github.com/google-research/pix2struct).
+## Usage tips
 
-## Resources
-
-- [Fine-tuning Notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_pix2struct.ipynb)
-- [All models](https://huggingface.co/models?search=pix2struct)
+- Pix2Struct fine-tunes on various tasks and datasets. These include image captioning, visual question answering (VQA) with different inputs (books, charts, science diagrams), and UI component captioning. Find the complete list in Table 1 of the paper.
+- Use models for the specific tasks they were fine-tuned on. For UI captioning, use the model fine-tuned on the UI dataset. For image captioning, use the model fine-tuned on the natural images captioning dataset.
+- For conditional text captioning, set `add_special_tokens=False` in the processor.
 
 ## Pix2StructConfig
 
@@ -79,3 +85,4 @@ The original code can be found [here](https://github.com/google-research/pix2str
 
 [[autodoc]] Pix2StructForConditionalGeneration
     - forward
+

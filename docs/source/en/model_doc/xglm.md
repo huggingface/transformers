@@ -13,42 +13,40 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-12-20 and added to Hugging Face Transformers on 2022-01-28.*
+*This model was released on 2021-12-20 and added to Hugging Face Transformers on 2022-01-28 and contributed by [valhalla](https://huggingface.co/valhalla).*
 
 # XGLM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[XGLM](https://huggingface.co/papers/2112.10668) trains multilingual autoregressive language models on a balanced corpus across diverse languages, enhancing few- and zero-shot learning capabilities. The largest model, with 7.5 billion parameters, achieves state-of-the-art results in multilingual commonsense reasoning and natural language inference, outperforming GPT-3 of similar size. It also excels in the FLORES-101 machine translation benchmark, surpassing GPT-3 in 171 out of 182 translation directions and the supervised baseline in 45 directions. The model demonstrates cross-lingual in-context learning but has limitations in surface form robustness and adaptation to non-cloze tasks. Additionally, it shows similar limitations as GPT-3 in social value tasks like hate speech detection across five languages.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The XGLM model was proposed in [Few-shot Learning with Multilingual Language Models](https://huggingface.co/papers/2112.10668)
-by Xi Victoria Lin, Todor Mihaylov, Mikel Artetxe, Tianlu Wang, Shuohui Chen, Daniel Simig, Myle Ott, Naman Goyal,
-Shruti Bhosale, Jingfei Du, Ramakanth Pasunuru, Sam Shleifer, Punit Singh Koura, Vishrav Chaudhary, Brian O'Horo,
-Jeff Wang, Luke Zettlemoyer, Zornitsa Kozareva, Mona Diab, Veselin Stoyanov, Xian Li.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="text-generation", model="facebook/xglm-564M", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-*Large-scale autoregressive language models such as GPT-3 are few-shot learners that can perform a wide range of language
-tasks without fine-tuning. While these models are known to be able to jointly represent many different languages,
-their training data is dominated by English, potentially limiting their cross-lingual generalization.
-In this work, we train multilingual autoregressive language models on a balanced corpus covering a diverse set of languages,
-and study their few- and zero-shot learning capabilities in a wide range of tasks. Our largest model with 7.5 billion parameters
-sets new state of the art in few-shot learning in more than 20 representative languages, outperforming GPT-3 of comparable size
-in multilingual commonsense reasoning (with +7.4% absolute accuracy improvement in 0-shot settings and +9.4% in 4-shot settings)
-and natural language inference (+5.4% in each of 0-shot and 4-shot settings). On the FLORES-101 machine translation benchmark,
-our model outperforms GPT-3 on 171 out of 182 translation directions with 32 training examples, while surpassing the
-official supervised baseline in 45 directions. We present a detailed analysis of where the model succeeds and fails,
-showing in particular that it enables cross-lingual in-context learning on some tasks, while there is still room for improvement
-on surface form robustness and adaptation to tasks that do not have a natural cloze form. Finally, we evaluate our models
-in social value tasks such as hate speech detection in five languages and find it has limitations similar to comparable sized GPT-3 models.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [Suraj](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/xglm).
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-## Resources
+tokenizer = AutoTokenizer.from_pretrained("facebook/xglm-564M")
+model = AutoModelForCausalLM.from_pretrained("facebook/xglm-564M", dtype="auto",)
 
-- [Causal language modeling task guide](../tasks/language_modeling)
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## XGLMConfig
 
@@ -75,3 +73,4 @@ This model was contributed by [Suraj](https://huggingface.co/valhalla). The orig
 
 [[autodoc]] XGLMForCausalLM
     - forward
+

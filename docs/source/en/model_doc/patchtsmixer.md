@@ -13,54 +13,37 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-06-14 and added to Hugging Face Transformers on 2023-12-05.*
+*This model was released on 2023-06-14 and added to Hugging Face Transformers on 2023-12-05 and contributed by [ajati](https://huggingface.co/ajati) and [vijaye12](https://huggingface.co/vijaye12).*
 
 # PatchTSMixer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[PatchTSMixer](https://huggingface.co/papers/2306.09364) is a lightweight neural architecture for multivariate time series forecasting that replaces Transformers with multi-layer perceptrons (MLPs) applied to patched time series. It introduces online reconciliation heads to explicitly model hierarchical and channel correlations, along with a hybrid channel modeling approach and a simple gating mechanism to manage noisy interactions and improve generalization. The model achieves strong performance with minimal computational cost, outperforming both state-of-the-art MLP and Transformer models by 8–60%, and Patch-Transformer benchmarks by 1–2%, while reducing memory and runtime by 2–3×. Its modular design supports both supervised and masked self-supervised learning, positioning it as a flexible building block for time-series foundation models.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="PatchTSTForPrediction">
 
-The PatchTSMixer model was proposed in [TSMixer: Lightweight MLP-Mixer Model for Multivariate Time Series Forecasting](https://huggingface.co/papers/2306.09364) by Vijay Ekambaram, Arindam Jati, Nam Nguyen, Phanwadee Sinthong and Jayant Kalagnanam.
+```py
+import torch
+from huggingface_hub import hf_hub_download
+from transformers import PatchTSTConfig, PatchTSTForPrediction
 
-PatchTSMixer is a lightweight time-series modeling approach based on the MLP-Mixer architecture. In this HuggingFace implementation, we provide PatchTSMixer's capabilities to effortlessly facilitate lightweight mixing across patches, channels, and hidden features for effective multivariate time-series modeling. It also supports various attention mechanisms starting from simple gated attention to more complex self-attention blocks that can be customized accordingly. The model can be pretrained and subsequently used for various downstream tasks such as forecasting, classification and regression.
+file = hf_hub_download(
+    repo_id="hf-internal-testing/etth1-hourly-batch", filename="train-batch.pt", repo_type="dataset"
+)
+batch = torch.load(file)
 
-The abstract from the paper is the following:
+model = PatchTSTForPrediction.from_pretrained("ibm-granite/granite-timeseries-patchtsmixer", dtype="auto")
 
-*TSMixer is a lightweight neural architecture exclusively composed of multi-layer perceptron (MLP) modules designed for multivariate forecasting and representation learning on patched time series. Our model draws inspiration from the success of MLP-Mixer models in computer vision. We demonstrate the challenges involved in adapting Vision MLP-Mixer for time series and introduce empirically validated components to enhance accuracy. This includes a novel design paradigm of attaching online reconciliation heads to the MLP-Mixer backbone, for explicitly modeling the time-series properties such as hierarchy and channel-correlations. We also propose a Hybrid channel modeling approach to effectively handle noisy channel interactions and generalization across diverse datasets, a common challenge in existing patch channel-mixing methods. Additionally, a simple gated attention mechanism is introduced in the backbone to prioritize important features. By incorporating these lightweight components, we significantly enhance the learning capability of simple MLP structures, outperforming complex Transformer models with minimal computing usage. Moreover, TSMixer's modular design enables compatibility with both supervised and masked self-supervised learning methods, making it a promising building block for time-series Foundation Models. TSMixer outperforms state-of-the-art MLP and Transformer models in forecasting by a considerable margin of 8-60%. It also outperforms the latest strong benchmarks of Patch-Transformer models (by 1-2%) with a significant reduction in memory and runtime (2-3X).*
-
-This model was contributed by [ajati](https://huggingface.co/ajati), [vijaye12](https://huggingface.co/vijaye12),
-[gsinthong](https://huggingface.co/gsinthong), [namctin](https://huggingface.co/namctin),
-[wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif).
-
-## Usage example
-
-The code snippet below shows how to randomly initialize a PatchTSMixer model. The model is compatible with the [Trainer API](../trainer).
-
-```python
-
-from transformers import PatchTSMixerConfig, PatchTSMixerForPrediction
-from transformers import Trainer, TrainingArguments,
-
-
-config = PatchTSMixerConfig(context_length = 512, prediction_length = 96)
-model = PatchTSMixerForPrediction(config)
-trainer = Trainer(model=model, args=training_args, 
-            train_dataset=train_dataset,
-            eval_dataset=valid_dataset)
-trainer.train()
-results = trainer.evaluate(test_dataset)
+outputs = model(past_values=batch["past_values"])
+prediction_outputs = outputs.prediction_outputs
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-The model can also be used for time series classification and time series regression. See the respective [`PatchTSMixerForTimeSeriesClassification`] and [`PatchTSMixerForRegression`] classes.
-
-## Resources
-
-- A blog post explaining PatchTSMixer in depth can be found [here](https://huggingface.co/blog/patchtsmixer). The blog can also be opened in Google Colab.
+- Use the model for time series classification and regression. See [`PatchTSMixerForTimeSeriesClassification`] and [`PatchTSMixerForRegression`] classes.
 
 ## PatchTSMixerConfig
 
@@ -90,3 +73,4 @@ The model can also be used for time series classification and time series regres
 
 [[autodoc]] PatchTSMixerForRegression
     - forward
+

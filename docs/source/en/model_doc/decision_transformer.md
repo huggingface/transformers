@@ -13,34 +13,48 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-06-02 and added to Hugging Face Transformers on 2022-03-23.*
+*This model was released on 2021-06-02 and added to Hugging Face Transformers on 2022-03-23 and contributed by [edbeeching](https://huggingface.co/edbeeching).*
 
 # Decision Transformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Decision Transformer: Reinforcement Learning via Sequence Modeling](https://huggingface.co/papers/2106.01345) reframes reinforcement learning as a conditional sequence modeling problem, using a causally masked Transformer architecture instead of traditional value functions or policy gradients. It generates actions by autoregressively conditioning on past states, actions, and a desired return, allowing the model to produce future actions that achieve specified rewards. This approach leverages advances from language modeling, such as GPT and BERT, for scalability and simplicity. Despite its straightforward design, Decision Transformer matches or surpasses state-of-the-art model-free offline RL performance on benchmarks like Atari, OpenAI Gym, and Key-to-Door tasks.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="DecisionTransformerModel">
 
-The Decision Transformer model was proposed in [Decision Transformer: Reinforcement Learning via Sequence Modeling](https://huggingface.co/papers/2106.01345)  
-by Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter Abbeel, Aravind Srinivas, Igor Mordatch.
+```py
+import torch
+from transformers import DecisionTransformerModel
 
-The abstract from the paper is the following:
+model = DecisionTransformerModel.from_pretrained("edbeeching/decision-transformer-gym-hopper-medium", dtype="auto")
+model.eval()
 
-*We introduce a framework that abstracts Reinforcement Learning (RL) as a sequence modeling problem.
-This allows us to draw upon the simplicity and scalability of the Transformer architecture, and associated advances
- in language modeling such as GPT-x and BERT. In particular, we present Decision Transformer, an architecture that
- casts the problem of RL as conditional sequence modeling. Unlike prior approaches to RL that fit value functions or
- compute policy gradients, Decision Transformer simply outputs the optimal actions by leveraging a causally masked
- Transformer. By conditioning an autoregressive model on the desired return (reward), past states, and actions, our
- Decision Transformer model can generate future actions that achieve the desired return. Despite its simplicity,
- Decision Transformer matches or exceeds the performance of state-of-the-art model-free offline RL baselines on
- Atari, OpenAI Gym, and Key-to-Door tasks.*
+env = gym.make("Hopper-v3")
+state_dim = env.observation_space.shape[0]
+act_dim = env.action_space.shape[0]
 
-This version of the model is for tasks where the state is a vector.
+state = env.reset()
+states = torch.from_numpy(state).reshape(1, 1, state_dim).to(device=device, dtype=torch.float32)
+actions = torch.zeros((1, 1, act_dim), device=device, dtype=torch.float32)
+rewards = torch.zeros(1, 1, device=device, dtype=torch.float32)
+target_return = torch.tensor(TARGET_RETURN, dtype=torch.float32).reshape(1, 1)
+timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
+attention_mask = torch.zeros(1, 1, device=device, dtype=torch.float32)
 
-This model was contributed by [edbeeching](https://huggingface.co/edbeeching). The original code can be found [here](https://github.com/kzl/decision-transformer).
+with torch.no_grad():
+    state_preds, action_preds, return_preds = model(
+        states=states,
+        actions=actions,
+        rewards=rewards,
+        returns_to_go=target_return,
+        timesteps=timesteps,
+        attention_mask=attention_mask,
+        return_dict=False,
+    )
+```
+
+</hfoption>
+</hfoptions>
 
 ## DecisionTransformerConfig
 
@@ -55,3 +69,4 @@ This model was contributed by [edbeeching](https://huggingface.co/edbeeching). T
 
 [[autodoc]] DecisionTransformerModel
     - forward
+

@@ -13,52 +13,54 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-06-02 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2022-06-02 and added to Hugging Face Transformers on 2023-06-20 and contributed by [novice03](https://huggingface.co/novice03) and [Bearnardd](https://huggingface.co/Bearnardd).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # EfficientFormer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[EfficientFormer: Vision Transformers at MobileNet Speed](https://huggingface.co/papers/2206.01191) proposes a dimension-consistent pure transformer designed for mobile devices, addressing the speed limitations of traditional Vision Transformers (ViT). By revisiting and optimizing the architecture and operators used in ViT-based models, EfficientFormer achieves high performance with low latency. Experiments demonstrate that EfficientFormer-L1 matches MobileNetV2×1.4 in speed (1.6 ms inference latency on iPhone 12) while achieving 79.2% top-1 accuracy on ImageNet-1K. The largest model, EfficientFormer-L7, reaches 83.3% accuracy with 7.0 ms latency, proving that transformers can be effectively deployed on mobile devices for real-time applications.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-You can do so by running the following command: `pip install -U transformers==4.40.2`.
+```py
+import torch
+from transformers import pipeline
 
-</Tip>
+pipeline = pipeline(task="image-classification", model="snap-research/efficientformer-l1-300", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-## Overview
+</hfoption>
+<hfoption id="AutoModel">
 
-The EfficientFormer model was proposed in [EfficientFormer: Vision Transformers at MobileNet Speed](https://huggingface.co/papers/2206.01191)
-by Yanyu Li, Geng Yuan, Yang Wen, Eric Hu, Georgios Evangelidis, Sergey Tulyakov, Yanzhi Wang, Jian Ren.  EfficientFormer proposes a
-dimension-consistent pure transformer that can be run on mobile devices for dense prediction tasks like image classification, object
-detection and semantic segmentation.
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-The abstract from the paper is the following:
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-*Vision Transformers (ViT) have shown rapid progress in computer vision tasks, achieving promising results on various benchmarks.
-However, due to the massive number of parameters and model design, e.g., attention mechanism, ViT-based models are generally
-times slower than lightweight convolutional networks. Therefore, the deployment of ViT for real-time applications is particularly
-challenging, especially on resource-constrained hardware such as mobile devices. Recent efforts try to reduce the computation
-complexity of ViT through network architecture search or hybrid design with MobileNet block, yet the inference speed is still
-unsatisfactory. This leads to an important question: can transformers run as fast as MobileNet while obtaining high performance?
-To answer this, we first revisit the network architecture and operators used in ViT-based models and identify inefficient designs.
-Then we introduce a dimension-consistent pure transformer (without MobileNet blocks) as a design paradigm.
-Finally, we perform latency-driven slimming to get a series of final models dubbed EfficientFormer.
-Extensive experiments show the superiority of EfficientFormer in performance and speed on mobile devices.
-Our fastest model, EfficientFormer-L1, achieves 79.2% top-1 accuracy on ImageNet-1K with only 1.6 ms inference latency on
-iPhone 12 (compiled with CoreML), which { runs as fast as MobileNetV2×1.4 (1.6 ms, 74.7% top-1),} and our largest model,
-EfficientFormer-L7, obtains 83.3% accuracy with only 7.0 ms latency. Our work proves that properly designed transformers can
-reach extremely low latency on mobile devices while maintaining high performance.*
+image_processor = AutoImageProcessor.from_pretrained("snap-research/efficientformer-l1-300")
+model = AutoModelForImageClassification.from_pretrained("snap-research/efficientformer-l1-300", dtype="auto")
 
-This model was contributed by [novice03](https://huggingface.co/novice03) and [Bearnardd](https://huggingface.co/Bearnardd).
-The original code can be found [here](https://github.com/snap-research/EfficientFormer).
+inputs = image_processor(image, return_tensors="pt")
 
-## Documentation resources
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-- [Image classification task guide](../tasks/image_classification)
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
+
+</hfoption>
+</hfoptions>
 
 ## EfficientFormerConfig
 
@@ -83,3 +85,4 @@ The original code can be found [here](https://github.com/snap-research/Efficient
 
 [[autodoc]] EfficientFormerForImageClassificationWithTeacher
     - forward
+

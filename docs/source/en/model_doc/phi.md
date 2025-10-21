@@ -13,10 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-06-20 and added to Hugging Face Transformers on 2023-11-10.*
+*This model was released on 2023-06-20 and added to Hugging Face Transformers on 2023-11-10 and contributed by [susnato](https://huggingface.co/susnato).*
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -25,14 +25,7 @@ rendered properly in your Markdown viewer.
 
 # Phi
 
-[Phi](https://huggingface.co/papers/2306.11644) is a 1.3B parameter transformer model optimized for Python code generation. It focuses on "textbook-quality" training data of code examples, exercises and synthetic Python problems rather than scaling the model size or compute.
-
-You can find all the original Phi checkpoints under the [Phi-1](https://huggingface.co/collections/microsoft/phi-1-6626e29134744e94e222d572) collection.
-
-> [!TIP]
-> Click on the Phi models in the right sidebar for more examples of how to apply Phi to different language tasks.
-
-The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
+[Phi](https://huggingface.co/papers/2306.11644) is a 1.3 billion parameter Transformer-based language model for code, trained for 4 days on 8 A100 GPUs using 6 billion tokens of high-quality web data and 1 billion tokens of GPT-3.5–generated synthetic textbooks and exercises. Despite its relatively small size, it achieves strong performance, with 50.6% pass@1 on HumanEval and 55.5% on MBPP. Compared to phi-1-base (pre-finetuning) and phi-1-small (350M parameters), phi-1 shows notable emergent abilities after finetuning on coding exercises. This demonstrates that targeted data and finetuning can yield competitive coding performance even in smaller models.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,86 +34,32 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="microsoft/phi-1.5", device=0, dtype=torch.bfloat16)
-pipeline("pipeline('''def print_prime(n): """ Print all primes between 1 and n"""''')")
-
+pipeline = pipeline(task="text-generation", model="microsoft/phi-1.5", dtype="auto",)
+pipeline("def fibonacci(n):")
 ```
 
 </hfoption>
-
 <hfoption id="AutoModel">
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
-model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1.5")
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1.5", dtype="auto",)
 
-input_ids = tokenizer('''def print_prime(n):
-   """
-   Print all primes between 1 and n
-   """''', return_tensors="pt").to(model.device)
-
-output = model.generate(**input_ids, cache_implementation="static")
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers run --task text-classification --model microsoft/phi-1.5 --device 0
+inputs = tokenizer("def fibonacci(n):", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+## Usage tips
 
-The example below uses [bitsandbytes](https://huggingface.co/docs/transformers/en/quantization/bitsandbytes) to only quantize the weights to 4-bits.
-
-```py
-import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
-
-bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
-tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
-model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", dtype=torch.float16, device_map="auto", attn_implementation="sdpa", quantization_config=bnb_config)
-
-input_ids = tokenizer('''def print_prime(n):
-   """
-   Print all primes between 1 and n
-   """''', return_tensors="pt").to(model.device)
-
-output = model.generate(**input_ids, cache_implementation="static")
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-## Notes
-
-- If you're using Transformers < 4.37.0.dev, set `trust_remote_code=True` in [`~AutoModel.from_pretrained`]. Otherwise, make sure you update Transformers to the latest stable version.
-
-    ```py
-    import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM
-
-    tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
-    model = AutoModelForCausalLM.from_pretrained(
-        "microsoft/phi-1",
-        dtype=torch.float16,
-        device_map="auto",
-        trust_remote_code=True,
-        attn_implementation="sdpa")
-
-    input_ids = tokenizer('''def print_prime(n):
-       """
-       Print all primes between 1 and n
-       """''', return_tensors="pt").to(model.device)
-
-    output = model.generate(**input_ids, cache_implementation="static")
-    print(tokenizer.decode(output[0], skip_special_tokens=True))
-    ```
+- For Transformers < 4.37.0.dev, set `trust_remote_code=True` in [`~AutoModel.from_pretrained`].
+- Otherwise, update Transformers to the latest stable version.
 
 ## PhiConfig
 
@@ -146,3 +85,4 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] PhiForTokenClassification
     - forward
+

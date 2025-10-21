@@ -13,82 +13,60 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-05 and added to Hugging Face Transformers on 2022-11-21.*
+*This model was released on 2021-04-05 and added to Hugging Face Transformers on 2022-11-21 and contributed by [nielsr](https://huggingface.co/nielsr).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Audio Spectrogram Transformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Audio Spectrogram Transformer](https://huggingface.co/papers/2104.01778) applies a Vision Transformer to audio by converting audio into spectrograms, achieving state-of-the-art results in audio classification without using convolutional layers. It outperforms existing models on benchmarks like AudioSet, ESC-50, and Speech Commands V2, demonstrating the effectiveness of purely attention-based models in this domain.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Audio Spectrogram Transformer model was proposed in [AST: Audio Spectrogram Transformer](https://huggingface.co/papers/2104.01778) by Yuan Gong, Yu-An Chung, James Glass.
-The Audio Spectrogram Transformer applies a [Vision Transformer](vit) to audio, by turning audio into an image (spectrogram). The model obtains state-of-the-art results
-for audio classification.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="audio-classification",model="MIT/ast-finetuned-audioset-10-10-0.4593", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-*In the past decade, convolutional neural networks (CNNs) have been widely adopted as the main building block for end-to-end audio classification models, which aim to learn a direct mapping from audio spectrograms to corresponding labels. To better capture long-range global context, a recent trend is to add a self-attention mechanism on top of the CNN, forming a CNN-attention hybrid model. However, it is unclear whether the reliance on a CNN is necessary, and if neural networks purely based on attention are sufficient to obtain good performance in audio classification. In this paper, we answer the question by introducing the Audio Spectrogram Transformer (AST), the first convolution-free, purely attention-based model for audio classification. We evaluate AST on various audio classification benchmarks, where it achieves new state-of-the-art results of 0.485 mAP on AudioSet, 95.6% accuracy on ESC-50, and 98.1% accuracy on Speech Commands V2.*
+</hfoption>
+<hfoption id="AutoModel"
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/audio_spectogram_transformer_architecture.png"
-alt="drawing" width="600"/>
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
 
-<small> Audio Spectrogram Transformer architecture. Taken from the <a href="https://huggingface.co/papers/2104.01778">original paper</a>.</small>
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/YuanGongND/ast).
+feature_extractor = AutoFeatureExtractor.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593")
+model = AutoModelForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593")
+
+inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+predicted_class_ids = torch.argmax(logits, dim=-1).item()
+print(f"Predicted label: {model.config.id2label[predicted_class_ids]}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
-- When fine-tuning the Audio Spectrogram Transformer (AST) on your own dataset, it's recommended to take care of the input normalization (to make
-sure the input has mean of 0 and std of 0.5). [`ASTFeatureExtractor`] takes care of this. Note that it uses the AudioSet
-mean and std by default. You can check [`ast/src/get_norm_stats.py`](https://github.com/YuanGongND/ast/blob/master/src/get_norm_stats.py) to see how
-the authors compute the stats for a downstream dataset.
-- Note that the AST needs a low learning rate (the authors use a 10 times smaller learning rate compared to their CNN model proposed in the
-[PSLA paper](https://huggingface.co/papers/2102.01243)) and converges quickly, so please search for a suitable learning rate and learning rate scheduler for your task.
-
-### Using Scaled Dot Product Attention (SDPA)
-
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
-or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
-page for more information.
-
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
-`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
-
-```py
-from transformers import ASTForAudioClassification
-model = ASTForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593", attn_implementation="sdpa", dtype=torch.float16)
-...
-```
-
-For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
-
-On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `MIT/ast-finetuned-audioset-10-10-0.4593` model, we saw the following speedups during inference.
-
-|   Batch size |   Average inference time (ms), eager mode |   Average inference time (ms), sdpa model |   Speed up, Sdpa / Eager (x) |
-|--------------|-------------------------------------------|-------------------------------------------|------------------------------|
-|            1 |                                        27 |                                         6 |                      4.5 |
-|            2 |                                        12 |                                         6 |                      2   |
-|            4 |                                        21 |                                         8 |                      2.62 |
-|            8 |                                        40 |                                        14 |                      2.86 |
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with the Audio Spectrogram Transformer.
-
-<PipelineTag pipeline="audio-classification"/>
-
-- A notebook illustrating inference with AST for audio classification can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/AST).
-- [`ASTForAudioClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
-- See also: [Audio classification](../tasks/audio_classification).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+- When fine-tuning the Audio Spectrogram Transformer (AST) on your own dataset, normalize your input data to have a mean of 0 and standard deviation of 0.5. [`ASTFeatureExtractor`] handles this automatically. It uses AudioSet's mean and standard deviation by default. Check `ast/src/get_norm_stats.py` to see how the AST authors compute normalization statistics for downstream datasets.
+- AST requires a low learning rate and converges quickly. The original authors used a learning rate 10 times smaller than their CNN model from the [PSLA](https://huggingface.co/papers/2102.01243) paper. Experiment with different learning rates and schedulers to find what works best for your specific task.
 
 ## ASTConfig
 
@@ -108,3 +86,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ASTForAudioClassification
     - forward
+
