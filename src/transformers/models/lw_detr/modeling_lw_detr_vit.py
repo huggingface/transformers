@@ -75,7 +75,6 @@ class LwDetrViTSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
@@ -94,7 +93,6 @@ class LwDetrViTSelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -121,10 +119,9 @@ class LwDetrViTAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, head_mask, **kwargs)
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output)
         return output
 
@@ -170,7 +167,6 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, seq_len, channels = hidden_states.shape
@@ -180,16 +176,12 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
             hidden_states_norm = hidden_states_norm.reshape(
                 batch_size // self.num_windows, self.num_windows * seq_len, channels
             )
-            if head_mask is not None:
-                head_mask = head_mask.reshape(batch_size // self.num_windows, self.num_windows * seq_len)
 
-        attention_output = self.attention(hidden_states_norm, head_mask, **kwargs)
+        attention_output = self.attention(hidden_states_norm, **kwargs)
         attention_output = attention_output * self.gamma_1
 
         if not self.window:
             attention_output = attention_output.reshape(batch_size, seq_len, channels)
-            if head_mask is not None:
-                head_mask = head_mask.reshape(batch_size, seq_len)
 
         hidden_states = hidden_states + attention_output
 
@@ -212,13 +204,11 @@ class LwDetrViTEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         list_hidden_states = [hidden_states]
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            hidden_states = layer_module(hidden_states, layer_head_mask, **kwargs)
+            hidden_states = layer_module(hidden_states, **kwargs)
             list_hidden_states.append(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=tuple(list_hidden_states))
 
