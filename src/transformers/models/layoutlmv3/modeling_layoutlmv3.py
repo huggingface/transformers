@@ -421,10 +421,8 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
             attention_probs = self.self.dropout(attention_probs)
             attn_output = torch.matmul(attention_probs, value_layer)
         else:
-            # Convert 4D mask to format expected by SDPA
             attn_mask = None
             if attention_mask is not None:
-                # SDPA expects mask to be [batch, heads, seq_len, seq_len] with True for positions to attend to
                 attn_mask = attention_mask > 0
             
             attn_output = torch.nn.functional.scaled_dot_product_attention(
