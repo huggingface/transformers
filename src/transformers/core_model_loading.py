@@ -660,9 +660,9 @@ def convert_and_load_state_dict_in_model(
             # No pattern matched -> identity conversion keyed by the exact key (no '*', single "layer" = empty tuple)
             conversion = WeightConverter(original_key)
             entry = by_conversion_pattern.setdefault(
-                original_key, {"conversion": conversion, "tensors_per_layer": defaultdict(list)}
+                original_key, {"conversion": conversion, "tensors_per_layer": defaultdict(dict)}
             )
-            entry["tensors_per_layer"][()].append(tensor)
+            entry["tensors_per_layer"][original_key] = {original_key: tensor}
 
     missing_keys = set(meta_model_state_dict.keys())
     mismatch_keys = []
@@ -699,9 +699,9 @@ def convert_and_load_state_dict_in_model(
                 realized_value = {k: t[:] for t, k in zip(values, concrete_target_keys)}
 
             # MEGA dirty, to fix based on single source -> many targets, many_targets == single source, many source == single target
-            if len(values) == 1:
-                values = values[0]
-                if len(values) == 1:
+            if isinstance(values, list) and len(values) == 1:
+                values = values[:][0]
+                if isinstance(values, list) and len(values) == 1:
                     values = values[0]
 
             for op in conversion.operations:
@@ -741,7 +741,7 @@ def convert_and_load_state_dict_in_model(
                     module_path, _, param_name = k.rpartition(".")
                     # TODO if k not in model error properly
                     module_obj = model.get_submodule(module_path) if module_path else model
-                    param_value = v
+                    param_value = v[:]
                     if not isinstance(param_value, torch.nn.Parameter):
                         param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
                     ref = meta_model_state_dict.get(k, empty_tensor if k == target_key else None)

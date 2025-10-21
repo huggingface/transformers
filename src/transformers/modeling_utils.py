@@ -46,7 +46,7 @@ from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import _checkpoint_conversion_mapping as DEFAULT_WEIGHT_CONVERSION_MAPPING
-from .core_model_loading import WeightConversion, convert_and_load_state_dict_in_model
+from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -4387,7 +4387,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             commit_hash = getattr(config, "_commit_hash", commit_hash)
 
         download_kwargs_with_commit["commit_hash"] = commit_hash
-        profile_weight_conversion = kwargs.pop("profile_weight_conversion")
+        profile_weight_conversion = kwargs.pop("profile_weight_conversion", False)
 
         # Because some composite configs call super().__init__ before instantiating the sub-configs, we need this call
         # to correctly redispatch recursively if the kwarg is provided
@@ -4398,7 +4398,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config, quantization_config, dtype, device_map, weights_only, user_agent
         )
 
-        weight_conversions: Optional[list[WeightConversion]] = None
+        weight_conversions: Optional[list[WeightConverter]] = None
         model_type = getattr(config, "model_type", None)
         if model_type is not None:
             weight_conversions = DEFAULT_WEIGHT_CONVERSION_MAPPING.get(model_type)
@@ -4682,7 +4682,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
         key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
-        weight_mapping: Optional[Sequence[WeightConversion]] = None,
+        weight_mapping: Optional[Sequence[WeightConverter]] = None,
         profile_weight_conversion: bool = False,
     ):
         is_quantized = hf_quantizer is not None
@@ -4703,11 +4703,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Now we read all the files to get a pointer on each physical weights
         merged_state_dict = {}
         all_pointer = {}
-        for k, v in sharded_metadata["weight_map"]:
+        for k, v in sharded_metadata["weight_map"].items():
             if v not in all_pointer:
-                file_pointer = safe_open(v, framework="pt", device="meta")
+                file_pointer = safe_open(os.path.join(checkpoint_files[0].rsplit("/")[0],v), framework="pt", device="cpu")
                 all_pointer[v] = file_pointer
-            merged_state_dict[k] = all_pointer[v].get_slice(k, device="meta")  # don't meterialize yet
+            merged_state_dict[k] = all_pointer[v].get_slice(k)  # don't meterialize yet
             tp_plan = getattr(model, "_tp_plan", None)
 
         keep_in_dtype = None
@@ -4727,7 +4727,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             model._conversion_ops = _conversion_ops
 
-        for k in all_pointer:  # finally close all opened file pointeres
+        for k in all_pointer.values():  # finally close all opened file pointeres
             k.__exit__(None, None, None)
 
         new_state_dict = model.state_dict()
