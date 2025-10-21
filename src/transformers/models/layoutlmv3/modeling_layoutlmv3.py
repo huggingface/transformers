@@ -392,7 +392,6 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
             return super().forward(
                 hidden_states,
                 attention_mask,
-                head_mask,
                 output_attentions,
                 rel_pos,
                 rel_2d_pos,
@@ -406,11 +405,6 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
         query_layer = query_layer.view(batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size).transpose(1, 2)
         key_layer = key_layer.view(batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size).transpose(1, 2)
         value_layer = value_layer.view(batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size).transpose(1, 2)
-        if attention_mask is not None:
-            attention_mask = attention_mask.view(batch_size, 1, 1, seq_len).expand(
-                batch_size, self.self.num_attention_heads, seq_len, seq_len
-            )
-            attention_mask = (1.0 - attention_mask.to(dtype=query_layer.dtype)) * torch.finfo(query_layer.dtype).min
 
         if self.self.has_relative_attention_bias and rel_pos is not None:
             attention_scores = torch.matmul(query_layer / math.sqrt(self.self.attention_head_size), key_layer.transpose(-1, -2))
@@ -427,11 +421,17 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
             attention_probs = self.self.dropout(attention_probs)
             attn_output = torch.matmul(attention_probs, value_layer)
         else:
+            # Convert 4D mask to format expected by SDPA
+            attn_mask = None
+            if attention_mask is not None:
+                # SDPA expects mask to be [batch, heads, seq_len, seq_len] with True for positions to attend to
+                attn_mask = attention_mask > 0
+            
             attn_output = torch.nn.functional.scaled_dot_product_attention(
                 query_layer,
                 key_layer,
                 value_layer,
-                attn_mask=attention_mask,
+                attn_mask=attn_mask,
                 dropout_p=self.self.dropout.p if self.training else 0.0,
                 scale=1.0 / math.sqrt(self.self.attention_head_size),
             )
@@ -487,7 +487,7 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
                 "Flash Attention 2 doesn't support output_attentions, falling back to standard attention."
             )
             return super().forward(
-                hidden_states, attention_mask, head_mask, output_attentions, rel_pos, rel_2d_pos
+                hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos
             )
 
         batch_size, seq_length, _ = hidden_states.size()
@@ -501,7 +501,7 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
                 "Flash Attention 2 doesn't support relative position bias, falling back to standard attention."
             )
             return super().forward(
-                hidden_states, attention_mask, head_mask, output_attentions, rel_pos, rel_2d_pos
+                hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos
             )
 
         if attention_mask is not None:
