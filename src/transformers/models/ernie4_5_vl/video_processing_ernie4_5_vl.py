@@ -19,7 +19,6 @@ from typing import Optional, Union
 import numpy as np
 import requests
 import torch
-import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -35,6 +34,7 @@ from ...utils import (
     TensorType,
     add_start_docstrings,
     is_vision_available,
+    logging,
 )
 from ...utils.import_utils import requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
@@ -53,6 +53,9 @@ if is_vision_available():
     from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 
 
+logger = logging.get_logger(__name__)
+
+
 # TODO: how do we move this
 FONT_PATH = os.path.join(Path(__file__).parent.absolute(), "Roboto-Regular.ttf")
 if not os.path.exists(FONT_PATH):
@@ -60,23 +63,23 @@ if not os.path.exists(FONT_PATH):
     open(FONT_PATH, "wb").write(ttf.content)
 
 
-class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    min_frames: Optional[int]
-    max_frames: Optional[int]
+class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
 
 
 @add_start_docstrings(
     "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        min_pixels (`int`, *optional*, defaults to `299 * 28 * 28`):
             The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+        max_pixels (`int`, *optional*, defaults to `1196 * 28 * 28`):
             The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
             The spacial patch size of the vision encoder.
@@ -84,9 +87,9 @@ class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs):
             The temporal patch size of the vision encoder.
         merge_size (`int`, *optional*, defaults to 2):
             The merge size of the vision encoder to llm encoder.
-        min_frames (`int`, *optional*, defaults to 4):
+        min_frames (`int`, *optional*, defaults to 16):
             The minimum number of frames that can be sampled.
-        max_frames (`int`, *optional*, defaults to 768):
+        max_frames (`int`, *optional*, defaults to 180):
             The maximum number of frames that can be sampled.
     """,
 )
@@ -105,6 +108,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
+    fps = 2
     min_frames = 16
     max_frames = 180
     do_sample_frames = True
@@ -112,7 +116,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Ernie4_5_VLVideoProcessorInitKwargs]):
-        temporal_patch_size = kwargs.get("temporal_patch_size")
+        temporal_patch_size = kwargs.get("temporal_patch_size", 2)
         if temporal_patch_size is None or temporal_patch_size != 2:
             raise ValueError("`Ernie 4.5 VL` only supports a temporal patch size of 2")
 
@@ -132,6 +136,20 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
 
         super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
 
+    def _further_process_kwargs(
+        self,
+        size: Optional[SizeDict] = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+        return super()._further_process_kwargs(size=size, **kwargs)
+
     def sample_frames(
         self,
         metadata: VideoMetadata,
@@ -139,16 +157,9 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         max_frames: Optional[int] = None,
         **kwargs,
     ):
-        if getattr(metadata, "total_num_frames", None) is None:
-            raise ValueError(
-                "`Ernie 4.5 VL` needs the video metadata with the total number of frames. "
-                f"Found `total_num_frames={getattr(metadata, 'total_num_frames', None)}` instead."
-            )
-
-        total_num_frames = metadata.total_num_frames
-
         min_frames = min_frames if min_frames is not None else self.min_frames
         max_frames = max_frames if max_frames is not None else self.max_frames
+        total_num_frames = metadata.total_num_frames
 
         max_frames = min(max_frames, total_num_frames)
         num_frames = min(max(total_num_frames, min_frames), max_frames)
@@ -206,10 +217,13 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         processed_videos = []
         for video, metadata in zip(videos, video_metadata):
             # Check for attributes that are necessary to draw timestamps on frames
-            if metadata is None or (metadata.fps is None or metadata.frames_indices is None):
-                raise ValueError(
-                    "`Ernie 4.5 VL` needs the video metadata with its fps and frame indices. "
-                    f"Found `metadata={metadata}` instead."
+            if metadata is None:
+                raise ValueError("Need video metadata to process videos in Ernie 4.5 VL")
+            elif metadata.fps is None:
+                metadata.fps = self.fps
+                logger.warning_once(
+                    f"Could not infer the fps of a video, defaulting to {self.fps}. "
+                    "This likely leads to unexpected behavior, so make sure to properly load videos."
                 )
 
             # `make_batched_videos` always returns a 4D array per video
@@ -243,16 +257,16 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        videos: list[torch.Tensor],
+        do_convert_rgb: bool = True,
+        do_resize: bool = True,
+        size: Optional[SizeDict] = None,
+        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
+        do_rescale: bool = True,
+        rescale_factor: float = 1 / 255.0,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -333,36 +347,6 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
             tensor_type=return_tensors,
         )
-
-    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
-        """
-        A utility that returns number of video patches a given video size.
-
-        Args:
-            num_frames (`int`):
-                Number of frames in the input video.
-            height (`int`):
-                Height of the input video.
-            width (`int`):
-                Width of the input video.
-            videos_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the video processor.
-        Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
-        """
-        min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
-
-        factor = patch_size * merge_size
-        resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
-        )
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        grid_t = num_frames // temporal_patch_size
-        return grid_t * grid_h * grid_w
 
 
 __all__ = ["Ernie4_5_VLVideoProcessor"]

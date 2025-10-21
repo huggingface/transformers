@@ -1505,12 +1505,12 @@ class Ernie4_5_VLImageProcessorFast(Qwen2VLImageProcessorFast):
 
 
 class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Ernie4_5_VLImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        # TODO: Prolly dont need this anymore
         "videos_kwargs": {
             "do_sample_frames": True,
         },

@@ -27,11 +27,9 @@ from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
-from .image_processing_ernie4_5_vl import Ernie4_5_VLImageProcessorKwargs
 
 
 class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Ernie4_5_VLImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
