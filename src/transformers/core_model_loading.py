@@ -25,8 +25,8 @@ from collections import defaultdict
 from collections.abc import Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from typing import Any, Optional, Union
 from functools import partial
+from typing import Any, Optional, Union
 
 import torch
 from torch import Tensor
@@ -563,7 +563,9 @@ class WeightConverter:
     _operations: list[ConversionOps] = field(default_factory=list, repr=False)
     _compiled: tuple[tuple[str, re.Pattern], ...] = field(default_factory=tuple, compare=False, repr=False)
 
-    def __init__(self, source_keys, target_keys=None, operations=None, distributed_operation=None, quantization_operation=None ):
+    def __init__(
+        self, source_keys, target_keys=None, operations=None, distributed_operation=None, quantization_operation=None
+    ):
         self.source_keys = source_keys
         self.target_keys = target_keys
         self.operations = operations
@@ -624,7 +626,6 @@ def convert_and_load_state_dict_in_model(
     tp_plan_alt, tp_plan_by_group_name = build_glob_alt(list(tp_plan.keys()))
     dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(keep_in_dtype.keys()))
 
-
     # We organize tensors by the conversion pattern, then by layer (captured '*' tuple)
     # by_conversion_pattern[glob_pattern] = {
     #   "conversion": WeightConverter, -> usually a single conversion needed for all layers
@@ -640,7 +641,12 @@ def convert_and_load_state_dict_in_model(
             extractor = _compile_single_glob_for_extract(matched_pattern)
             converter_key = re.sub(extractor, matched_pattern, original_key)
             entry = by_conversion_pattern.setdefault(
-                "|".join(conversion.target_keys), {"conversion": conversion, "tensors_per_layer": defaultdict(dict), "matched_pattern":defaultdict(str) }
+                "|".join(conversion.target_keys),
+                {
+                    "conversion": conversion,
+                    "tensors_per_layer": defaultdict(dict),
+                    "matched_pattern": defaultdict(str),
+                },
             )
             sub_with_extractor = partial(re.sub, extractor, string=original_key)
             target_unique_key = "|".join(map(sub_with_extractor, conversion.target_keys))
@@ -669,7 +675,7 @@ def convert_and_load_state_dict_in_model(
         for layer_name, tensors_for_this_layer in tensors_per_layer.items():
             used_operations = []
             realized_value = {}
-            concrete_target_keys = layer_name.split('|')
+            concrete_target_keys = layer_name.split("|")
             # 1. Shard
             for target_key in concrete_target_keys:
                 empty_tensor = meta_model_state_dict.get(target_key)
@@ -685,11 +691,12 @@ def convert_and_load_state_dict_in_model(
                     rank = device_mesh.get_local_rank() if device_mesh is not None else 0
                     values = conversion.distributed_operation.convert(
                         tensors_for_this_layer.values(),
-                        context={"tp_world_size": None, "tp_rank": rank}, return_all=True
+                        context={"tp_world_size": None, "tp_rank": rank},
+                        return_all=True,
                     )
                 else:
                     values = list(tensors_for_this_layer.values())
-                realized_value = {k:t[:] for t,k in zip(values, concrete_target_keys)}
+                realized_value = {k: t[:] for t, k in zip(values, concrete_target_keys)}
 
             # MEGA dirty, to fix based on single source -> many targets, many_targets == single source, many source == single target
             if len(values) == 1:
@@ -702,9 +709,13 @@ def convert_and_load_state_dict_in_model(
                     values = op.convert(values)
                     used_operations.append(op)
                 except Exception as e:
-                    print(f"{e}\nFailed to apply {op.__class__.__name__} on tensors collected from {conversion.source_keys}. The checkpoints only contains: {tensors_for_this_layer}")
+                    print(
+                        f"{e}\nFailed to apply {op.__class__.__name__} on tensors collected from {conversion.source_keys}. The checkpoints only contains: {tensors_for_this_layer}"
+                    )
             values = [values] if not isinstance(values, list) else values
-            realized_value = {k:t for k,t in zip(concrete_target_keys, values)} # FIXME: make helpful errors here (ex: 2 target, single output tensor)
+            realized_value = {
+                k: t for k, t in zip(concrete_target_keys, values)
+            }  # FIXME: make helpful errors here (ex: 2 target, single output tensor)
 
             # at this point the format is final
             for k, v in realized_value.items():
