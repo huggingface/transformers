@@ -199,7 +199,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Create batch of images with different resolutions
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        
+
         slow = self.image_processing_class(**self.image_processor_dict)
         fast = self.fast_image_processing_class(**self.image_processor_dict)
 
@@ -208,7 +208,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Check shapes match (padding should make them equal)
         self.assertEqual(out_slow.shape, out_fast.shape)
-        
+
         # Check pixel values are close
         torch.testing.assert_close(out_slow, out_fast, atol=1e-1, rtol=1e-3)
         self.assertLessEqual(torch.mean(torch.abs(out_slow - out_fast)).item(), 5e-3)

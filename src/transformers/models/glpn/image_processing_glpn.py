@@ -39,22 +39,27 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging, requires_backends
 from ...processing_utils import ImagesKwargs
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging, requires_backends
+
 
 if is_torch_available():
     import torch
 
 
 logger = logging.get_logger(__name__)
+
+
 class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
     """
     size_divisor (`int`, *optional*, defaults to 32):
         When `do_resize` is `True`, images are resized so their height and width are rounded down to the closest
         multiple of `size_divisor`.
     """
+
     size_divisor: int
     resample: PILImageResampling
+
 
 @requires(backends=("vision",))
 class GLPNImageProcessor(BaseImageProcessor):
@@ -77,6 +82,7 @@ class GLPNImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
     valid_kwargs = GLPNImageProcessorKwargs
+
     def __init__(
         self,
         do_resize: bool = True,
@@ -236,14 +242,12 @@ class GLPNImageProcessor(BaseImageProcessor):
                 # Find max dimensions
                 max_height = max(img.shape[-2] for img in images)
                 max_width = max(img.shape[-1] for img in images)
-                
+
                 # Pad each image to max dimensions
                 padded_images = []
                 for img in images:
                     h, w = img.shape[-2:]
                     if h < max_height or w < max_width:
-                        pad_h = max_height - h
-                        pad_w = max_width - w
                         # Create padded array with zeros
                         padded = np.zeros((*img.shape[:-2], max_height, max_width), dtype=img.dtype)
                         padded[..., :h, :w] = img

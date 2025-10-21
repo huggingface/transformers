@@ -26,7 +26,6 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
-
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -114,7 +113,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         - normalize (off by default)
         """
         # avoid validation error: inject dummy size/resample for validate_preprocess_arguments
-        
+
         if resample is None and interpolation is None:
             resample = self.resample
 
@@ -139,7 +138,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
                 # Pad to max height and width in batch
                 max_height = max(img.shape[-2] for img in reordered)
                 max_width = max(img.shape[-1] for img in reordered)
-                
+
                 padded = []
                 for img in reordered:
                     h, w = img.shape[-2:]
@@ -151,7 +150,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
                         img = torch.nn.functional.pad(img, (0, pad_w, 0, pad_h))
                     padded.append(img)
                 reordered = padded
-            
+
             processed = torch.stack(reordered, dim=0)
             tensor_type = return_tensors
         else:
