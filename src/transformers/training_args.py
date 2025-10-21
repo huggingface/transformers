@@ -2735,7 +2735,7 @@ class TrainingArguments:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
                     fsdp_plugin_args["sharding_strategy"] = fsdp_option
                 elif fsdp_option == FSDPOption.OFFLOAD:
-                    fsdp_plugin_args["offload_params"] = True
+                    fsdp_plugin_args["cpu_offload"] = True
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
                     fsdp_plugin_args["auto_wrap_policy"] = FSDP_AUTO_WRAP_POLICY[0]
                     if self.fsdp_config["min_num_params"] > 0:
