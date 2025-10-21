@@ -107,11 +107,11 @@ class NanoChatConfig(PretrainedConfig):
         self,
         vocab_size: int = 50304,
         hidden_size: int = 768,
-        intermediate_size: int | None = None,  # TODO: default value
+        intermediate_size: int | None = 8192,
         num_hidden_layers: int = 12,
         num_attention_heads: int = 6,
         num_key_value_heads: int | None = None,
-        max_position_embeddings: int = 2048,  # TODO: check if this is ok (ckpt)
+        max_position_embeddings: int = 2048,
         hidden_act: str = "relu2",
         attention_dropout: float = 0.0,
         rms_norm_eps: float = 1e-6,
