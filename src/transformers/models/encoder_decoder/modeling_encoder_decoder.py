@@ -37,11 +37,16 @@ from .configuration_encoder_decoder import EncoderDecoderConfig
 logger = logging.get_logger(__name__)
 
 
-DEPRECATION_WARNING = (
+# Warning about deprecated practice of passing decoder_input_ids when labels are provided
+DEPRECATED_DECODER_INPUT_IDS_WARNING = (
+    "The decoder_input_ids are created based on the labels, no need to pass them yourself anymore."
+)
+
+# Warning about v4.12.0 loss computation change - always shown when training with labels
+V4_12_LOSS_COMPUTATION_WARNING = (
     "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss inside the"
     " encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if"
-    " fine-tuning a model trained with versions anterior to 4.12.0. The decoder_input_ids are now created based on the"
-    " labels, no need to pass them yourself anymore."
+    " fine-tuning a model trained with versions anterior to 4.12.0."
 )
 
 
@@ -451,6 +456,9 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
             )
             if decoder_attention_mask is None:
                 decoder_attention_mask = decoder_input_ids.new_tensor(decoder_input_ids != self.config.pad_token_id)
+        elif (labels is not None) and (decoder_input_ids is not None):
+            # User provided both labels and decoder_input_ids - this is the deprecated path
+            warnings.warn(DEPRECATED_DECODER_INPUT_IDS_WARNING, FutureWarning)
 
         # Decode
         decoder_outputs = self.decoder(
@@ -469,7 +477,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         # Compute loss independent from decoder (as some shift the logits inside them)
         loss = None
         if labels is not None:
-            warnings.warn(DEPRECATION_WARNING, FutureWarning)
+            # Always warn about v4.12.0 loss computation change
+            warnings.warn(V4_12_LOSS_COMPUTATION_WARNING, FutureWarning)
             logits = decoder_outputs.logits
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))

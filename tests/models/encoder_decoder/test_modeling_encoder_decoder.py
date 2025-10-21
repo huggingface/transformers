@@ -15,6 +15,7 @@
 
 import tempfile
 import unittest
+import warnings
 
 from transformers import is_torch_available, logging
 from transformers.testing_utils import (
@@ -365,6 +366,59 @@ class EncoderDecoderMixin:
             outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
         )
 
+    def check_encoder_decoder_model_warning(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        labels,
+        **kwargs,
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
+
+        # Test that only one warning is raised when only labels are provided
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            # Set decoder_start_token_id 0 because the tokenizer.cls_token_id can't be accessed from here
+            enc_dec_model.config.decoder_start_token_id = 0
+            enc_dec_model.config.pad_token_id = decoder_config.pad_token_id
+            enc_dec_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+                labels=labels,
+            )
+
+            self.assertEqual(len(w), 1)
+            self.assertIn(
+                "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss",
+                str(w[0].message),
+            )
+
+        # Test that two warnings are raised when both labels and decoder_input_ids are provided
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            enc_dec_model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+                labels=labels,
+            )
+
+            self.assertEqual(len(w), 2)
+            self.assertIn("The decoder_input_ids are created based on the labels", str(w[0].message))
+            self.assertIn(
+                "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss",
+                str(w[1].message),
+            )
+
     def _check_output_with_attentions(
         self, outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
     ):
@@ -621,6 +675,10 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model_labels(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_labels(**input_ids_dict)
+
+    def test_encoder_decoder_model_warning(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_warning(**input_ids_dict)
 
     def test_encoder_decoder_model_output_attentions(self):
         input_ids_dict = self.prepare_config_and_inputs()
