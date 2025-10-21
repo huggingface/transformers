@@ -49,8 +49,12 @@ class LwDetrHungarianMatcher(HungarianMatcher):
         pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
         class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
 
-        # Compute the L1 cost between boxes
+        # Compute the L1 cost between boxes, cdist only supports float32
+        dtype = out_bbox.dtype
+        out_bbox = out_bbox.to(torch.float32)
+        target_bbox = target_bbox.to(torch.float32)
         bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
+        bbox_cost = bbox_cost.to(dtype)
 
         # Compute the giou cost between boxes
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
@@ -100,10 +104,11 @@ class LwDetrImageLoss(nn.Module):
         gamma = 2
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
-
         iou_targets = torch.diag(
             box_iou(center_to_corners_format(src_boxes.detach()), center_to_corners_format(target_boxes))[0]
         )
+        # Convert to the same dtype as the source logits as box_iou upcasts to float32
+        iou_targets = iou_targets.to(source_logits.dtype)
         pos_ious = iou_targets.clone().detach()
         prob = source_logits.sigmoid()
         # init positive weights and negative weights
