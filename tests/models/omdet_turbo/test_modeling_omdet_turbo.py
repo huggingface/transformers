@@ -195,7 +195,7 @@ class OmDetTurboModelTester:
 class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OmDetTurboForObjectDetection,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
+
     pipeline_model_mapping = (
         {"zero-shot-object-detection": OmDetTurboForObjectDetection} if is_torch_available() else {}
     )
@@ -230,22 +230,6 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @unittest.skip(reason="OmDet-Turbo does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_output_hidden_states(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_simple(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_output_hidden_state(self):
         pass
 
     def test_resize_tokens_embeddings(self):

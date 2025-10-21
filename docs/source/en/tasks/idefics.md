@@ -110,6 +110,7 @@ on the fly while loading.
 Now that you have the model loaded in one of the suggested ways, let's move on to exploring tasks that you can use IDEFICS for.
 
 ## Image captioning
+
 Image captioning is the task of predicting a caption for a given image. A common application is to aid visually impaired
 people navigate through different situations, for instance, explore image content online.
 

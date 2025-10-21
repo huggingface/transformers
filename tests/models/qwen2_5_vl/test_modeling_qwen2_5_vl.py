@@ -86,6 +86,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
         tie_word_embeddings=True,
         is_training=True,
         vision_config=None,
+        rope_parameters=None,
         vision_start_token_id=3,
         image_token_id=4,
         video_token_id=5,
@@ -139,7 +140,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
             "rope_theta": rope_theta,
             "tie_word_embeddings": tie_word_embeddings,
             "vocab_size": vocab_size,
-            "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
+            "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
         }
 
     def get_config(self):
@@ -199,7 +200,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = Qwen2_5_VLVisionText2TextModelTester(self)

@@ -36,13 +36,13 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
     box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
     color: Optional[str]
-    num_image_tokens: Optional[int]
-    multi_page: Optional[bool]
+    num_image_tokens: int
+    multi_page: bool
 
 
 class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
