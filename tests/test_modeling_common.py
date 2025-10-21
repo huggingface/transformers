@@ -41,7 +41,6 @@ from transformers import (
     set_seed,
 )
 from transformers.integrations import HfDeepSpeedConfig
-from transformers.integrations.accelerate import init_empty_weights
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
@@ -3668,7 +3667,7 @@ class ModelTesterMixin:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             # If it does not raise here, the test passes
-            with init_empty_weights(include_buffers=True):
+            with torch.device("meta"):
                 _ = model_class(copy.deepcopy(config))
 
     @require_torch_accelerator
