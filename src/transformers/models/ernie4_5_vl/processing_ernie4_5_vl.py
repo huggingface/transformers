@@ -35,6 +35,7 @@ class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        # TODO: Prolly dont need this anymore
         "videos_kwargs": {
             "do_sample_frames": True,
         },
