@@ -378,7 +378,8 @@ class Serve:
             ),
         ] = None,
         quantization: Annotated[
-            Optional[str], typer.Option(help="Which quantization method to use. choices: 'bitsandbytes-4bit', 'bitsandbytes-8bit'")
+            Optional[str],
+            typer.Option(help="Which quantization method to use. choices: 'bitsandbytes-4bit', 'bitsandbytes-8bit'"),
         ] = None,
         host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
         port: Annotated[int, typer.Option(help="Port the server will listen to.")] = 8000,
