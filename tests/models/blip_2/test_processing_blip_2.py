@@ -37,6 +37,6 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class.from_pretrained("hf-internal-testing/tiny-random-ViTModel")
 
-    @classmethod
-    def prepare_processor_dict(cls):
+    @staticmethod
+    def prepare_processor_dict():
         return {"num_query_tokens": 1}

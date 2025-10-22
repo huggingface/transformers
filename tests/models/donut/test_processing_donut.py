@@ -13,29 +13,16 @@
 # limitations under the License.
 
 
-import tempfile
 import unittest
 
-from transformers import DonutImageProcessor, DonutProcessor, XLMRobertaTokenizerFast
+from transformers import DonutProcessor
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 class DonutProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    from_pretrained_id = "naver-clova-ix/donut-base"
+    model_id = "naver-clova-ix/donut-base"
     processor_class = DonutProcessor
-
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = DonutProcessor.from_pretrained(cls.from_pretrained_id)
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = DonutImageProcessor()
-        tokenizer = XLMRobertaTokenizerFast.from_pretrained(cls.from_pretrained_id)
-
-        processor = DonutProcessor(image_processor, tokenizer)
-
-        processor.save_pretrained(cls.tmpdirname)
 
     def test_token2json(self):
         expected_json = {
@@ -58,6 +45,7 @@ class DonutProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "<s_multiline>text\nwith\nnewlines</s_multiline>"
             "<s_empty></s_empty>"
         )
-        actual_json = self.processor.token2json(sequence)
+        processor = self.get_processor()
+        actual_json = processor.token2json(sequence)
 
         self.assertDictEqual(actual_json, expected_json)

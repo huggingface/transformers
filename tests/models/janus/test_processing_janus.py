@@ -14,45 +14,31 @@
 # limitations under the License.
 """Testing suite for the PyTorch Janus model."""
 
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import AutoProcessor, AutoTokenizer, JanusProcessor
+from transformers import JanusProcessor
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = JanusProcessor
+    model_id = "deepseek-community/Janus-Pro-1B"
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def _setup_from_pretrained(cls, model_id, **kwargs):
         special_image_tokens = {
             "image_token": "<image_placeholder>",
             "boi_token": "<begin_of_image>",
             "eoi_token": "<end_of_image>",
         }
-
-        processor = self.processor_class.from_pretrained(
-            "deepseek-community/Janus-Pro-1B",
-            extra_special_tokens=special_image_tokens,
-            **self.prepare_processor_dict(),
-        )
+        processor = super()._setup_from_pretrained(model_id, extra_special_tokens=special_image_tokens)
         # Set the processor to use the default system prompt to False as it's used based on input modality.
         # Hence set to False to avoid any issues in the test irrespective of inputs.
         processor.use_default_system_prompt = False
-        processor.save_pretrained(self.tmpdirname)
-
-    def get_tokenizer(self, **kwargs):
-        return AutoTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self):
-        return AutoProcessor.from_pretrained(self.tmpdirname)
+        return processor
 
     def test_chat_template_single(self):
         """

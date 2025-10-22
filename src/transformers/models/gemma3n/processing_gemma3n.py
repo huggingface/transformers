@@ -117,7 +117,9 @@ class Gemma3nProcessor(ProcessorMixin):
 
         if images is not None:
             images = self.image_processor.fetch_images(images)
+            print("images", images)
             batched_images = make_nested_list_of_images(images)
+            print("batched_images", batched_images)
             image_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
 
             # Create empty text to be replaced with placeholders
@@ -146,6 +148,14 @@ class Gemma3nProcessor(ProcessorMixin):
         text_inputs = {k: v.tolist() for k, v in text_inputs.items()}  # in case user requested list inputs
         text_inputs["token_type_ids"] = token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs, **audio_inputs}, tensor_type=return_tensors)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
+        image_processor_input_names = self.image_processor.model_input_names
+        audio_processor_input_names = self.feature_extractor.model_input_names
+        image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
+        return list(tokenizer_input_names + image_processor_input_names + audio_processor_input_names)
 
 
 __all__ = ["Gemma3nProcessor"]

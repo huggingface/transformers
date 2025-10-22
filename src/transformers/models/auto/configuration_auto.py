@@ -981,6 +981,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("gemma3n_vision", "gemma3n"),
         ("glm4v_text", "glm4v"),
         ("glm4v_moe_text", "glm4v_moe"),
+        ("grounding-dino", "grounding_dino"),
         ("idefics3_vision", "idefics3"),
         ("siglip_vision_model", "siglip"),
         ("siglip2_vision_model", "siglip2"),

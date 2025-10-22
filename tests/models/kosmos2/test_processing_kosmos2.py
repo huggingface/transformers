@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import os
-import shutil
-import tempfile
 import unittest
 from tempfile import TemporaryDirectory
 
@@ -38,10 +36,8 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import (
-        AutoProcessor,
         CLIPImageProcessor,
         Kosmos2Processor,
-        PreTrainedTokenizerFast,
         XLMRobertaTokenizer,
         XLMRobertaTokenizerFast,
     )
@@ -57,27 +53,20 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2Processor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = CLIPImageProcessor(do_center_crop=False)
-
+    def _setup_tokenizer(cls):
         # We have a SentencePiece fixture for testing
         slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)
         fast_tokenizer = XLMRobertaTokenizerFast(__slow_tokenizer=slow_tokenizer)
-
-        processor = Kosmos2Processor(image_processor, fast_tokenizer)
-        processor.save_pretrained(cls.tmpdirname)
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+        return fast_tokenizer
 
     @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(do_center_crop=False)
+
+    @unittest.skip("Kosmos2Processor adds special tokens to the text")
+    def test_tokenizer_defaults(self):
+        pass
 
     def test_image_processor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
@@ -87,85 +76,6 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             reloaded_image_processor = CLIPImageProcessor.from_pretrained(tmp_dir)
             assert image_processor.to_dict() == reloaded_image_processor.to_dict()
             assert image_processor.to_json_string() == reloaded_image_processor.to_json_string()
-
-    def test_save_load_pretrained_additional_features(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor = Kosmos2Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-            processor.save_pretrained(tmpdir)
-
-            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-            processor = Kosmos2Processor.from_pretrained(
-                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-            )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
-
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
-
-    def test_image_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        image_input = self.prepare_image_inputs()
-
-        input_image_processor = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
-
-        for key in input_image_processor:
-            self.assertAlmostEqual(input_image_processor[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_tokenizer(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "This is a test"
-
-        encoded_processor = processor(text=input_str, add_eos_token=True)
-
-        encoded_tok = tokenizer(input_str, return_token_type_ids=False)
-
-        for key in encoded_tok:
-            self.assertListEqual(encoded_tok[key], encoded_processor[key])
-
-    def test_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "This is a test"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(
-            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_embeds_position_mask"]
-        )
-
-        # test if it raises when no input is passed
-        with pytest.raises(ValueError):
-            processor()
-
-    def test_tokenizer_decode(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Kosmos2Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
-
-        decoded_processor = processor.batch_decode(predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
-
-        self.assertListEqual(decoded_tok, decoded_processor)
 
     @require_torch
     def test_full_processor(self):

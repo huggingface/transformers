@@ -47,6 +47,7 @@ from .image_processing_llava_next import LlavaNextImageProcessorKwargs
 class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     # To be checked against the slow image processor
     # None values left after checking can be removed
+    model_input_names = ["pixel_values", "image_sizes"]
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -253,9 +254,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches
             processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
-            processed_image_patches = (
-                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
-            )
+            processed_image_patches = torch.stack(processed_image_patches, dim=0)
             processed_images.append(processed_image_patches)
             image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
 
