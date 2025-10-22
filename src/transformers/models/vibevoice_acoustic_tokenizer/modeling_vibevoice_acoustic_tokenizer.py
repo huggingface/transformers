@@ -483,27 +483,16 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
 
         self.head = VibeVoiceAcousticTokenizerStreamingConv1d(in_ch, config.channels, kernel_size=config.kernel_size, bias=config.bias)
 
-    
-    def forward_features(self, x, past_conv_values=None, sample_indices=None):
-        for i in range(len(self.upsample_layers)):
-            # Apply upsampling layer
-            layer = self.upsample_layers[i]
-            if isinstance(layer, (VibeVoiceAcousticTokenizerStreamingConv1d, VibeVoiceAcousticTokenizerStreamingConvTranspose1d)):
-                x = layer(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=i)
-            else:
-                x = layer(x)
-
-            # Apply stage (VibeVoiceAcousticTokenizerConvNext1dLayer)
-            for block in self.stages[i]:
-                x = block(x)
-
-        return x
-
     def forward(self, x, past_conv_values=None, sample_indices=None):
-        x = self.forward_features(x, past_conv_values=past_conv_values, sample_indices=sample_indices)
-        layer_idx = len(self.upsample_layers) + len(self.upsample_layers)  # Unique layer index for head
-        x = self.head(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx)
+        for layer_idx, upsample_layer in enumerate(self.upsample_layers):
+            x = upsample_layer(
+                x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx
+            )
+            for block in self.stages[layer_idx]:
+                x = block(x)
+        x = self.head(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx + 1)
         return x
+
 
 @dataclass
 @auto_docstring
@@ -570,7 +559,7 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
         self.register_buffer('fix_std', torch.tensor(config.fix_std), persistent=False)
         self.sample_latent = config.sample_latent
 
-        # Create decoder config
+        # Create decoder config, TODO pass config directrly
         decoder_config = copy.deepcopy(config)
         decoder_config.dimension = config.hidden_size
         decoder_config.n_filters = config.n_filters
