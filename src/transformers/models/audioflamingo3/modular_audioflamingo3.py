@@ -29,15 +29,14 @@ from ...generation import GenerationMixin
 from ...masking_utils import eager_mask, padding_mask_function
 from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging, can_return_tuple
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto import AutoModelForCausalLM
-from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder
+from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
 from .configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3EncoderConfig
 
 
 logger = logging.get_logger(__name__)
-
 
 
 class AudioFlamingo3Attention(WhisperAttention):
@@ -96,7 +95,6 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
     config: AudioFlamingo3EncoderConfig
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
 
-
     @can_return_tuple
     def forward(
         self,
@@ -133,12 +131,16 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
 
         # Add positions, dropout
         inputs_embeds = inputs_embeds.permute(0, 2, 1)  # (B, S_in, C)
-        # TODO (ebezzam) can `self.embed_positions.weight` be used?` 
+        # TODO (ebezzam) can `self.embed_positions.weight` be used?`
         positions = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
         pos = self.embed_positions(positions).squeeze(0)
         if pos.shape[0] < inputs_embeds.shape[1]:
-            raise ValueError(f"embed_positions shorter than sequence length: {pos.shape[0]} < {inputs_embeds.shape[1]}")
-        hidden_states = nn.functional.dropout(inputs_embeds + pos[: inputs_embeds.shape[1]], p=self.dropout, training=self.training)
+            raise ValueError(
+                f"embed_positions shorter than sequence length: {pos.shape[0]} < {inputs_embeds.shape[1]}"
+            )
+        hidden_states = nn.functional.dropout(
+            inputs_embeds + pos[: inputs_embeds.shape[1]], p=self.dropout, training=self.training
+        )
 
         # Transformer stack
         hs_list = [] if output_hidden_states else None
@@ -174,18 +176,23 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
             hidden_states=tuple(hs_list) if hs_list is not None else None,
             attentions=tuple(attn_list) if attn_list is not None else None,
         )
-    
+
 
 class AudioFlamingo3MultiModalProjector(nn.Module):
     """
     Audio adaptor (a small MLP) that projects AudioFlamingo3Encoder (AF-Whisper)
     features to the LLM embedding space so they can replace `<sound>` tokens.
     """
+
     def __init__(self, config: AudioFlamingo3Config):
         super().__init__()
-        self.linear_1 = nn.Linear(config.audio_config.intermediate_size, config.text_config.hidden_size, bias=config.projector_bias)
+        self.linear_1 = nn.Linear(
+            config.audio_config.intermediate_size, config.text_config.hidden_size, bias=config.projector_bias
+        )
         self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=config.projector_bias)
+        self.linear_2 = nn.Linear(
+            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.projector_bias
+        )
 
     def forward(self, audio_features):
         hidden_states = self.linear_1(audio_features)
@@ -339,19 +346,19 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             time_dim = input_features.shape[-1]
             # Construct a (B, T_mel_max) boolean validity mask from measured mel lengths
             mask_1d = torch.arange(time_dim, device=input_features.device).unsqueeze(0) < Lmel.unsqueeze(1)
-            
-            # TODO (ebezzam) move `_build_square_attn_mask` here since only used once, 
+
+            # TODO (ebezzam) move `_build_square_attn_mask` here since only used once,
             # -- but can probably still be simplified
             # Convert (B, T_mel) frame-validity mask to Whisper's 4D square mask (B, 1, S, S) with -inf on pads
             audio_feat_lengths = ((mask_1d.sum(-1).to(torch.long) - 1) // 2) + 1
             batch_size = mask_1d.shape[0]
             # Sequence length after conv2 (stride=2, kernel=3, pad=1)
             seq_len = (time_dim - 1) // 2 + 1
-            
+
             # 2D padding mask on the downsampled timeline: True => keep, False => pad
             seq = torch.arange(seq_len, device=mask_1d.device).unsqueeze(0).expand(batch_size, seq_len)
             padding_mask = seq < audio_feat_lengths.unsqueeze(1)
-            
+
             # Build 4D float mask (B, 1, S, S) with 0 on valid, -inf on pads
             mask_fn = padding_mask_function(padding_mask)
             cache_position = torch.arange(seq_len, device=mask_1d.device)
