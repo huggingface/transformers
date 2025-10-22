@@ -36,6 +36,7 @@ from transformers.models.llama.modeling_llama import (
 )
 from transformers.models.mamba2.modeling_mamba2 import (
     MambaRMSNormGated,
+    apply_mask_to_padding_states,
     pad_tensor_by_size,
     reshape_into_chunks,
     segment_sum,
@@ -201,17 +202,6 @@ class BambaAttention(LlamaAttention):
 
 class BambaRMSNormGated(MambaRMSNormGated):
     pass
-
-
-def apply_mask_to_padding_states(hidden_states, attention_mask):
-    """
-    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
-    """
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
-        dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
-    return hidden_states
 
 
 # Adapted from transformers.models.mamba2.modeling_mamba2.Mamba2Mixer
