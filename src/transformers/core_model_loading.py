@@ -538,7 +538,7 @@ class Fp8Dequantize(QuantizationOp):
         return dequantized.reshape(quantized_fp32.shape)
 
 
-@dataclass
+@dataclass(slots=True)
 class WeightConverter:
     r"""
     A weight convert that acts on a pattern of source keys.
@@ -558,8 +558,8 @@ class WeightConverter:
     source_keys: Union[str, list[str]]
     target_keys: Optional[Union[str, list[str]]] = None
 
-    distributed_operation: Optional[ConversionOps] = None
-    quantization_operation: Optional[ConversionOps] = None
+    distributed_operation: Optional[dict[str,ConversionOps]] = None
+    quantization_operation: Optional[dict[str,ConversionOps]] = None
     _operations: list[ConversionOps] = field(default_factory=list, repr=False)
     _compiled: tuple[tuple[str, re.Pattern], ...] = field(default_factory=tuple, compare=False, repr=False)
 
@@ -609,6 +609,13 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, targe
         missing_keys.remove(k)
     setattr(module_obj, param_name, param_value)
 
+@dataclass
+class ConversionEntry:
+    weight_converter: WeightConverter
+    collected_tensors: dict = field(default_factory=lambda: defaultdict(dict))
+    matched_pattern: dict = field(default_factory=dict)
+    used_operations: dict = field(default_factory=lambda: defaultdict(list))
+
 def convert_and_load_state_dict_in_model(
     model,
     state_dict,
@@ -629,6 +636,10 @@ def convert_and_load_state_dict_in_model(
     keep_in_dtype = keep_in_dtype or {}  # {glob_pattern: dtype}
     weight_mapping = weight_mapping or {}  # {glob_pattern: WeightConverter}
     meta_model_state_dict = model.state_dict()
+    missing_keys = set(meta_model_state_dict.keys())
+    misc = {}
+    mismatch_keys = set()
+    unexpected_keys = set()
 
     _patterns = list(itertools.chain.from_iterable([k.source_keys for k in weight_mapping]))
     source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
@@ -636,104 +647,95 @@ def convert_and_load_state_dict_in_model(
     tp_plan_alt, tp_plan_by_group_name = build_glob_alt(list(tp_plan.keys()))
     dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(keep_in_dtype.keys()))
 
-    by_conversion_pattern: dict[str, dict] = {}
+    # 1. Create the conversion entries
+    by_conversion_pattern: dict[str, ConversionEntry] = {}
     for original_key, tensor in state_dict.items():
         matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
         if matched_pattern is not None:
-            conversion: WeightConverter = source_to_target[matched_pattern]
+            converter: WeightConverter = source_to_target[matched_pattern]
             extractor = _compile_single_glob_for_extract(matched_pattern)
-            pattern_str = "|".join(conversion.target_keys)
-            entry = by_conversion_pattern.setdefault(
-                pattern_str,
-                {
-                    "conversion": conversion,
-                    "tensors_per_layer": defaultdict(dict),
-                    "matched_pattern": defaultdict(str),
-                },
-            )
+            entry: ConversionEntry = by_conversion_pattern.setdefault("|".join(converter.target_keys), ConversionEntry(converter))
             sub_with_extractor = partial(re.sub, extractor, string=original_key)
-            target_unique_key = "|".join(map(sub_with_extractor, conversion.target_keys))
+            target_unique_key = "|".join(map(sub_with_extractor, converter.target_keys))
             converter_key = re.sub(extractor, matched_pattern, original_key)
-            tensors_for_target = entry["tensors_per_layer"].setdefault(target_unique_key, {})
-            tensors_for_target.setdefault(converter_key, []).append(tensor)
-            entry["matched_pattern"][converter_key] = matched_pattern
+            if target_unique_key in entry.collected_tensors:
+                entry.collected_tensors[target_unique_key].setdefault(converter_key, []).append(tensor)
+            else:
+                entry.collected_tensors[target_unique_key] = {converter_key: [tensor]}
+            entry.matched_pattern[converter_key] = matched_pattern
         else:
-            conversion = WeightConverter(original_key)
-            entry = by_conversion_pattern.setdefault(
-                original_key, {"conversion": conversion, "tensors_per_layer": defaultdict(dict)}
-            )
-            entry["tensors_per_layer"][original_key] = {original_key: tensor}
+            converter = WeightConverter(original_key)
+            converter_key = original_key
+            entry = by_conversion_pattern.setdefault(converter_key,ConversionEntry(converter))
+            entry.collected_tensors[converter_key] = {converter_key: tensor}
 
-    missing_keys = set(meta_model_state_dict.keys())
-    misc = {}
-    mismatch_keys = []
-    unexpected_keys = set()
+        for target_key in converter_key.split("|"):
+            if matched_tp_pattern:= match_glob(target_key, tp_plan_alt, tp_plan_by_group_name):
+                if getattr(converter, "distributed_operation", None) is None:
+                    converter.distributed_operation[target_key] = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
+            if getattr(converter, "quantization_operation", None) is None and quantizer.param_needs_quantization(target_key):
+                converter.quantization_operation[target_key] = Fp8Quantize()
 
+    # 2. Actually convert the ckpt
     for conversion_pattern, group in by_conversion_pattern.items():
-        conversion: WeightConverter = group["conversion"]
-        tensors_per_layer: dict[str, list[torch.Tensor]] = group["tensors_per_layer"]
-        for layer_name, tensors_for_this_layer in tensors_per_layer.items():
-            used_operations = [] # we need one list for each weight conversion
-            realized_value = {}
+        converter: WeightConverter = group.weight_converter
+        for layer_name, tensors_for_this_layer in group.collected_tensors.items():
             concrete_target_keys = layer_name.split("|")
-            # 1. Shard
+
             for target_key in concrete_target_keys:
                 empty_tensor = meta_model_state_dict.get(target_key)
                 if empty_tensor is None:
                     unexpected_keys.add(target_key)
                     continue
 
-                matched_tp_pattern = match_glob(target_key, tp_plan_alt, tp_plan_by_group_name)
-                if matched_tp_pattern is not None and device_mesh is not None:
-                    if getattr(conversion, "distributed_operation", None) is None:
-                        conversion.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
-                    rank = device_mesh.get_local_rank() if device_mesh is not None else 0
+                if op := converter.distributed_operation[target_key]:
                     try:
-                        values = conversion.distributed_operation(
-                            tensors_for_this_layer.values(),
-                            **{"tp_world_size": None, "tp_rank": rank},
-                        )
+                        values = op(tensors_for_this_layer.values())
+                        group.used_operations[target_key].append(converter.distributed_operation)
                     except Exception as e:
-                        misc[target_key] = f"Failed to apply {conversion.distributed_operation.__class__.__name__}: {e}"
+                        misc[target_key] = f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
+                        continue
                 else:
                     values = list(tensors_for_this_layer.values())
 
             if bool(set(concrete_target_keys) - unexpected_keys):
-                for op in conversion.operations:
+                for op in converter.operations:
                     try:
-                        values = op.convert(values) # TODO pass misc?
-                        used_operations.append(op)
+                        values = op.convert(values)
+                        group.used_operations[target_key].append(op)
                     except Exception as e:
-                        message = f"{e}\nError: {op.__class__.__name__} on tensors collected from {conversion.source_keys}. Ckpt contains: {tensors_for_this_layer}"
+                        message = f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {tensors_for_this_layer}"
                         misc[target_key] = message
+
                 values = [values] if not isinstance(values, list) else values
-                realized_value = {k: t for k, t in zip(concrete_target_keys, values)}
+                realized_value = {k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys}
 
-                for k, v in realized_value.items():
-                    if k not in unexpected_keys:
-                        if quantizer is not None and quantizer.param_needs_quantization(k):
-                            if getattr(conversion, "quantization_operation", None) is None:
-                                conversion.quantization_operation = Fp8Quantize()
-                            realized_value = conversion.quantization_operation(v)
+                if quantizer is not None:
+                    for k in realized_value.keys():
+                        if op := converter.quantization_operation[k]:
+                            try:
+                                realized_value.update(op(realized_value[k]))
+                                group.used_operations[target_key].append(op)
+                            except Exception as e:
+                                misc[target_key] += f"Failed to quantize with {op.__class__.__name__}: {e}"
+                                continue
 
-                for k, v in realized_value.items():
-                    if k not in unexpected_keys:
-                        output_value = v
-                        if k in device_map:
-                            op = To(device_map[target_key])
-                            output_value = op.convert(output_value)
-                            # used_operations.append(op) op for this target, not for all, fix this
+                for k, output_value in realized_value.items():
+                    if k in device_map:
+                        op = To(device_map[target_key])
+                        output_value = op.convert(output_value)
+                        group.used_operations[k].append(op)
 
-                        matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
-                        if matched_dtype_pattern is not None:
-                            op = Cast(keep_in_dtype[matched_dtype_pattern])
-                            output_value = op.convert(output_value)
-                            # used_operations.append(op) op for this target, not for all, fix this
-                        set_param_for_module(model, k, output_value, meta_model_state_dict, empty_tensor, target_key, mismatch_keys, missing_keys)
+                    matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
+                    if matched_dtype_pattern is not None:
+                        op = Cast(keep_in_dtype[matched_dtype_pattern])
+                        output_value = op.convert(output_value)
+                        group.used_operations[k].append(op)
+                    set_param_for_module(model, k, output_value, meta_model_state_dict, empty_tensor, target_key, mismatch_keys, missing_keys)
 
-    for op in used_operations:
-        op.clear_cache()
-    return used_operations, missing_keys, unexpected_keys, mismatch_keys, misc
+        for op in group.used_operations.values():
+            op.clear_cache()
+    return by_conversion_pattern, missing_keys, unexpected_keys, mismatch_keys, misc
 
 
 
