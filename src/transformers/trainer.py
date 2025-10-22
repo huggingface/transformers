@@ -4966,6 +4966,7 @@ class Trainer:
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
+        fsdp_plugin = None
         if self.args.fsdp_plugin_args is not None:
             from accelerate.utils import FullyShardedDataParallelPlugin
 
