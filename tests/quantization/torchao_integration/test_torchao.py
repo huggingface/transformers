@@ -48,10 +48,10 @@ if is_torchao_available():
     from torchao.quantization import (
         Float8Tensor,
         Float8WeightOnlyConfig,
-        Int8WeightOnlyConfig,
-        IntxWeightOnlyConfig,
         Int4WeightOnlyConfig,
         Int8DynamicActivationInt8WeightConfig,
+        Int8WeightOnlyConfig,
+        IntxWeightOnlyConfig,
         MappingType,
         ModuleFqnToConfig,
         PerAxis,
