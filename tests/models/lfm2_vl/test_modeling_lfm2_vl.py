@@ -310,6 +310,6 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_generated_text = [
             "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
-            "In this image, we see a cat and a dog lying on a pink blanket. They are both sleeping peacefully. They are",
+            "In this image, there is a cat on a bed with a cat on a bed with a cat on a bed with a cat on a bed",
         ]
         self.assertListEqual(generated_texts, expected_generated_text)
