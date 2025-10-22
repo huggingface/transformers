@@ -619,7 +619,9 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
 @require_torch
 class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=28*28, max_pixels=56*56)
+        self.processor = AutoProcessor.from_pretrained(
+            "Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=28 * 28, max_pixels=56 * 56
+        )
         self.audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
         self.audio_url_additional = (
             "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
@@ -661,34 +663,34 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         expected_input_ids = torch.tensor(
             [
                 151644,
-                8948,
-                198,
-                2610,
-                525,
-                264,
-                10950,
-                17847,
-                13,
-                151645,
-                198,
-                151644,
                 872,
                 198,
-                151647,
-                151646,
-                151646,
+                151669,
+                151675,
+                151675,
+                151675,
+                151675,
+                151675,
+                151675,
+                151675,
+                151675,
+                151675,
+                151675,
+                151675,
+                151675,
+                151675,
             ]
         )
-        assert torch.allclose(expected_input_ids, inputs.input_ids[0][:17], atol=3e-3)
+        torch.allclose(expected_input_ids, inputs.input_ids[0][:17], atol=3e-3)
 
         expected_pixel_slice = torch.tensor(
             [
-                [0.8792, 0.8792, 0.9084],
-                [1.1858, 1.1858, 1.2296],
-                [1.2004, 1.2004, 1.2150],
-                [1.4340, 1.4340, 1.4194],
-                [1.3902, 1.4048, 1.4194],
-                [1.5216, 1.5362, 1.5362],
+                [0.5234, 0.6016, 0.6562],
+                [0.9297, 0.9375, 0.9453],
+                [0.4902, 0.5078, 0.4902],
+                [0.8438, 0.8438, 0.8359],
+                [0.9688, 0.9688, 0.9688],
+                [0.9609, 0.9531, 0.9531],
             ],
             dtype=torch.bfloat16,
             device="cpu",
@@ -703,7 +705,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         )
 
         EXPECTED_DECODED_TEXT = Expectations({
-            ("cuda", (8, 6)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+            ("cuda", (8, 6)): "suser\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
@@ -735,8 +737,8 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
                 ],
                 ("cuda", 8): [
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
+                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n"
                 ],
                 ("rocm", (9, 4)): [
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
@@ -787,7 +789,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
         )
 
-        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a cough."
+        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a person coughing."
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),

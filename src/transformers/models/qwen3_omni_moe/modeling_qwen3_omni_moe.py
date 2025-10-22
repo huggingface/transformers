@@ -3991,11 +3991,11 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         thinker_result = self.thinker.generate(input_ids=input_ids, **thinker_kwargs)
 
         if not generate_audio:
-            return thinker_result, None
+            return thinker_result
 
         # 2. Prepare talker input
         thinker_embed = torch.cat([hidden_states[0] for hidden_states in thinker_result.hidden_states], dim=1).to(
-            self.talker.device
+            input_ids.device
         )  # [1 t d]
         thinker_hidden = torch.cat(
             [
@@ -4003,19 +4003,19 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                 for hidden_states in thinker_result.hidden_states
             ],
             dim=1,
-        ).to(self.talker.device)  # [1 t d]
+        ).to(input_ids.device)  # [1 t d]
         im_start_indexes = torch.cat(
             (
                 torch.nonzero(input_ids[0] == self.config.im_start_token_id).squeeze(),
                 torch.tensor([thinker_result.sequences.shape[-1]], device=input_ids.device, dtype=input_ids.dtype),
             ),
             dim=-1,
-        ).to(self.talker.device)  # Shape [n_starts + 1]; Take batch 0 since batched inference is not supported here.
+        )  # Shape [n_starts + 1]; Take batch 0 since batched inference is not supported here.
         multimodal_mask = (
             (thinker_result.sequences == self.config.thinker_config.audio_token_id) |
             (thinker_result.sequences == self.config.thinker_config.image_token_id) |
             (thinker_result.sequences == self.config.thinker_config.video_token_id)
-        ).to(self.talker.device)  # [1 t] # fmt: skip
+        ).to(input_ids.device)  # [1 t] # fmt: skip
 
         talker_special_tokens = torch.tensor(
             [[self.config.tts_bos_token_id, self.config.tts_eos_token_id, self.config.tts_pad_token_id]],
@@ -4024,7 +4024,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         )
         tts_bos_embed, tts_eos_embed, tts_pad_embed = (
             self.talker.text_projection(self.thinker.get_input_embeddings()(talker_special_tokens))
-            .to(self.talker.device)
+            .to(input_ids.device)
             .chunk(3, dim=1)
         )  # 3 * [1 1 d]
 
@@ -4063,8 +4063,8 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                 continue
             else:
                 raise AssertionError("Expect role id after <|im_start|> (assistant, user, system)")
-        talker_input_embed = torch.cat([embed.to(self.talker.device) for embed in talker_input_embeds], dim=1)
-        talker_input_id = torch.cat([embed.to(self.talker.device) for embed in talker_input_ids], dim=1)
+        talker_input_embed = torch.cat([embed.to(input_ids.device) for embed in talker_input_embeds], dim=1)
+        talker_input_id = torch.cat([embed.to(input_ids.device) for embed in talker_input_ids], dim=1)
         talker_result = self.talker.generate(
             inputs_embeds=talker_input_embed,
             trailing_text_hidden=trailing_text_hidden,
