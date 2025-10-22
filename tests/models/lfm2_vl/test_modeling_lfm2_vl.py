@@ -300,7 +300,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         # Create inputs
-        text = ["<image>In this image, we see", "<image>In this image, there is a cat on"]
+        text = ["<image>In this image, we see", "<image>In this image, we see"]
         images = [[self.image2], [self.image]]
         inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
         inputs.to(device=torch_device, dtype=torch.bfloat16)
