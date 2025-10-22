@@ -85,7 +85,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchFeature:
         """
-        This method uses [`InstructBlipVideoImageProcessor.__call__`] method to prepare image(s) or video(s) for the model, and
+        This method uses [`InstructBlipVideoVideoProcessor.__call__`] method to prepare image(s) or video(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
