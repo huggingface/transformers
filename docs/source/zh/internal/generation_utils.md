@@ -127,6 +127,12 @@ generation_output[:2]
 [[autodoc]] NoRepeatNGramLogitsProcessor
     - __call__
 
+[[autodoc]] PLessLogitsWarper
+    - __call__
+
+[[autodoc]] PLessNormLogitsWarper
+    - __call__
+
 [[autodoc]] PrefixConstrainedLogitsProcessor
     - __call__
 
