@@ -3823,7 +3823,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
     ):
         user_talker_part = torch.empty(
             (1, segment_end_index - im_start_index, self.config.talker_config.text_config.hidden_size),
-            device=self.talker.device,
+            device=thinker_hidden.device,
             dtype=self.talker.dtype,
         )
 
@@ -3832,10 +3832,10 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         # Multimodal data exists
         if user_mm_mask.any():
             user_thinker_hidden_mm = thinker_hidden[:, im_start_index:segment_end_index][user_mm_mask]
-            mm_hidden = self.talker.hidden_projection(user_thinker_hidden_mm).to(self.talker.device)
+            mm_hidden = self.talker.hidden_projection(user_thinker_hidden_mm).to(thinker_hidden.device)
             user_talker_part[user_mm_mask] = mm_hidden
         user_thinker_embed = thinker_embed[:, im_start_index:segment_end_index][~user_mm_mask]
-        user_text_hidden = self.talker.text_projection(user_thinker_embed).to(self.talker.device)
+        user_text_hidden = self.talker.text_projection(user_thinker_embed).to(thinker_hidden.device)
         user_talker_part[~user_mm_mask] = user_text_hidden
         return user_talker_part
 
@@ -3843,7 +3843,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         self, im_start_index, segment_end_index, speaker_id, thinker_embed, tts_pad_embed, tts_bos_embed, tts_eos_embed
     ):
         assistant_hidden = self.talker.text_projection(thinker_embed[:, im_start_index:segment_end_index]).to(
-            self.talker.device
+            tts_pad_embed.device
         )  # [1 t d]
         assistant_text_hidden = torch.cat(
             (
@@ -3865,17 +3865,17 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                     self.config.talker_config.codec_bos_id,
                 ]
             ],
-            device=self.talker.device,
+            device=tts_pad_embed.device,
             dtype=torch.long,
         )
         assistant_codec_hidden = torch.cat(
             (
                 torch.zeros(
                     (1, 3, self.config.talker_config.text_config.hidden_size),
-                    device=self.talker.device,
+                    device=tts_pad_embed.device,
                     dtype=self.talker.dtype,
                 ),
-                self.talker.get_input_embeddings()(codec_special_tokens).to(self.talker.device),
+                self.talker.get_input_embeddings()(codec_special_tokens).to(tts_pad_embed.device),
             ),
             dim=1,
         )

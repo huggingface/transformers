@@ -705,7 +705,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         )
 
         EXPECTED_DECODED_TEXT = Expectations({
-            ("cuda", (8, 6)): "suser\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n",
+            ("cuda", (8, 6)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
