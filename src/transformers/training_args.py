@@ -346,6 +346,13 @@ class TrainingArguments:
             Whether to enable Just-In-Time (JIT) checkpointing on SIGTERM signal. When enabled, training will
             checkpoint asynchronously upon receiving SIGTERM, allowing for graceful termination without losing
             progress. This is particularly useful for shared clusters with preemptible workloads (e.g., Kueue).
+            **Important**: You must configure your orchestrator's graceful shutdown period to allow sufficient time
+            for checkpoint completion. For Kubernetes, set `terminationGracePeriodSeconds` in your job definition
+            (method varies by cloud-native trainer: Kubeflow, Ray, etc.). Note: the default is only 30 seconds,
+            which is typically insufficient. For Slurm, use `--signal=USR1@<seconds>` in your sbatch script to send
+            SIGTERM with adequate time before the job time limit. Calculate the required grace period as: iteration
+            time + checkpoint saving time. For example, if an iteration takes 2 minutes and checkpoint saving takes
+            2 minutes, set at least 4 minutes (240 seconds) of grace time.
             Can be set via the ENABLE_JIT_CHECKPOINT environment variable.
         save_safetensors (`bool`, *optional*, defaults to `True`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
@@ -948,9 +955,14 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether to enable Just-In-Time (JIT) checkpointing on SIGTERM signal. "
-                "When enabled, training will checkpoint asynchronously upon receiving SIGTERM, "
+                "When enabled, training will checkpoint upon receiving SIGTERM, "
                 "allowing for graceful termination without losing progress. "
                 "This is particularly useful for shared clusters with preemptible workloads (Kueue). "
+                "IMPORTANT: You must configure your orchestrator's graceful shutdown period. "
+                "Kubernetes: set terminationGracePeriodSeconds (default 30s is insufficient!) in your job definition. "
+                "Slurm: use --signal=USR1@<seconds> in sbatch to send SIGTERM before time limit. "
+                "Calculate required grace period as: iteration time + checkpoint saving time. "
+                "Example: 2min iteration + 2min checkpoint = 240 seconds minimum. "
                 "Can be set via the ENABLE_JIT_CHECKPOINT environment variable."
             )
         },
