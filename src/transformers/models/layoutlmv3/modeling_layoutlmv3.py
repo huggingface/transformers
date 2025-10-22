@@ -24,6 +24,8 @@ import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+
+# SDPA and Flash Attention support
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -35,21 +37,17 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     auto_docstring,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
     torch_int,
 )
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
-# SDPA and Flash Attention support
-from ...modeling_attn_mask_utils import (
-    _prepare_4d_attention_mask_for_sdpa,
-    _prepare_4d_causal_attention_mask_for_sdpa,
-)
-from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+    from flash_attn.bert_padding import pad_input, unpad_input
 
 
 
@@ -397,7 +395,7 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
             )
 
         batch_size, seq_len, _ = hidden_states.size()
-        
+
         query_layer = self.self.query(hidden_states)
         key_layer = self.self.key(hidden_states)
         value_layer = self.self.value(hidden_states)
@@ -407,15 +405,15 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
 
         if self.self.has_relative_attention_bias and rel_pos is not None:
             attention_scores = torch.matmul(query_layer / math.sqrt(self.self.attention_head_size), key_layer.transpose(-1, -2))
-            
+
             if self.self.has_spatial_attention_bias and rel_2d_pos is not None:
                 attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(self.self.attention_head_size)
             else:
                 attention_scores += rel_pos / math.sqrt(self.self.attention_head_size)
-            
+
             if attention_mask is not None:
                 attention_scores = attention_scores + attention_mask
-            
+
             attention_probs = F.softmax(attention_scores, dim=-1)
             attention_probs = self.self.dropout(attention_probs)
             attn_output = torch.matmul(attention_probs, value_layer)
@@ -423,7 +421,7 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
             attn_mask = None
             if attention_mask is not None:
                 attn_mask = attention_mask >= 0
-            
+
             attn_output = torch.nn.functional.scaled_dot_product_attention(
                 query_layer,
                 key_layer,
@@ -452,18 +450,18 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
 
     def _upad_input(self, query_states, key_states, value_states, attention_mask, query_length):
         batch_size, seq_len, num_heads, head_dim = query_states.shape
-        
+
         query_states = query_states.view(-1, num_heads, head_dim)
         key_states = key_states.view(-1, num_heads, head_dim)
         value_states = value_states.view(-1, num_heads, head_dim)
-        
+
         query_states, indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(query_states, attention_mask)
         key_states = key_states[indices_q]
         value_states = value_states[indices_q]
-        
+
         return (
             query_states,
-            key_states, 
+            key_states,
             value_states,
             indices_q,
             (cu_seqlens_q, cu_seqlens_q),
@@ -487,7 +485,7 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
             )
 
         batch_size, seq_length, _ = hidden_states.size()
-        
+
         query_states = self._reshape(self.self.query(hidden_states), seq_length, batch_size)
         key_states = self._reshape(self.self.key(hidden_states), seq_length, batch_size)
         value_states = self._reshape(self.self.value(hidden_states), seq_length, batch_size)
