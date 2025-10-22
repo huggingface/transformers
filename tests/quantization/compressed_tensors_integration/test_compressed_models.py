@@ -85,7 +85,11 @@ class StackCompressedModelTest(unittest.TestCase):
                             )
                         else:
                             self.assertTrue(
-                                torch.allclose(submodule.weight, comp_decomp_obj.weight, atol=0.2),
+                                torch.allclose(
+                                    submodule.weight.to(torch_device),
+                                    comp_decomp_obj.weight.to(torch_device),
+                                    atol=0.2,
+                                ),
                                 f"Weight mismatch for module '{name}' in quantized-only or stacked model.",
                             )
 
