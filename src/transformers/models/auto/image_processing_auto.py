@@ -182,6 +182,7 @@ else:
             ("timm_wrapper", ("TimmWrapperImageProcessor", None)),
             ("tvlt", ("TvltImageProcessor", None)),
             ("tvp", ("TvpImageProcessor", "TvpImageProcessorFast")),
+            ("t5gemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
             ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
