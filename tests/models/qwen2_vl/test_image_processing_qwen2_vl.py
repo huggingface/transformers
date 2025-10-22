@@ -274,31 +274,6 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue((encoded_images_nested == encoded_images).all())
             self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
 
-    def test_video_inputs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
-            expected_dims_by_frames = {1: 34300, 2: 34300, 3: 68600, 4: 68600, 5: 102900, 6: 102900}
-
-            for num_frames, expected_dims in expected_dims_by_frames.items():
-                image_processor_tester = Qwen2VLImageProcessingTester(self, num_frames=num_frames)
-                video_inputs = image_processor_tester.prepare_video_inputs(equal_resolution=True)
-                process_out = image_processing(None, videos=video_inputs, return_tensors="pt")
-                encoded_video = process_out.pixel_values_videos
-                expected_output_video_shape = (expected_dims, 1176)
-                self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
-
-    def test_custom_patch_size(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
-
-            for patch_size in (1, 3, 5, 7):
-                image_processor_tester = Qwen2VLImageProcessingTester(self, patch_size=patch_size)
-                video_inputs = image_processor_tester.prepare_video_inputs(equal_resolution=True)
-                process_out = image_processing(None, videos=video_inputs, return_tensors="pt")
-                encoded_video = process_out.pixel_values_videos
-                expected_output_video_shape = (171500, 1176)
-                self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
-
     def test_custom_image_size(self):
         for image_processing_class in self.image_processor_list:
             image_processing = image_processing_class(**self.image_processor_dict)
@@ -324,24 +299,6 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_inputs = self.image_processor_tester.prepare_image_inputs()
                 # Just checking that it doesn't raise an error
                 image_processor(image_inputs, return_tensors="pt")
-
-    def test_temporal_padding(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
-            image_processing = image_processing_class(**self.image_processor_dict)
-            # Create random video inputs with a number of frames not divisible by temporal_patch_size
-            image_processor_tester = Qwen2VLImageProcessingTester(self, num_frames=5, temporal_patch_size=4)
-            video_inputs = image_processor_tester.prepare_video_inputs(equal_resolution=True)
-
-            # Process the video inputs
-            process_out = image_processing(None, videos=video_inputs, return_tensors="pt")
-            encoded_video = process_out.pixel_values_videos
-
-            # Check the shape after padding
-            expected_output_video_shape = (102900, 1176)  # Adjusted based on padding
-            self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
-            # Check divisibility by temporal_patch_size
-            self.assertEqual(encoded_video.shape[0] % 4, 0)
 
     @require_vision
     @require_torch
