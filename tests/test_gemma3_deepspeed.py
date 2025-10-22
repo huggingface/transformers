@@ -1,22 +1,22 @@
-import pytest
-import torch
-import json
-import tempfile
 import os
+import tempfile
+
+import torch
+
 from transformers import (
-    Gemma3ForConditionalGeneration,
     Gemma3Config,
+    Gemma3ForConditionalGeneration,
     Trainer,
     TrainingArguments,
 )
-from transformers.testing_utils import (
-    require_deepspeed,
-    require_torch_accelerator,
-    TestCasePlus,
-    mockenv_context,
-)
 from transformers.integrations.deepspeed import (
     unset_hf_deepspeed_config,
+)
+from transformers.testing_utils import (
+    TestCasePlus,
+    mockenv_context,
+    require_deepspeed,
+    require_torch_accelerator,
 )
 
 
@@ -155,7 +155,12 @@ class TestGemma3DeepSpeed(TestCasePlus):  # Inherit from TestCasePlus
                     report_to=[],
                 )
 
-                dummy_dataset = [{"input_ids": torch.randint(0, 1000, (64,)), "labels": torch.randint(0, 1000, (64,))}]
+                dummy_dataset = [
+                    {
+                        "input_ids": torch.randint(0, 1000, (64,)),
+                        "labels": torch.randint(0, 1000, (64,)),
+                    }
+                ]
 
                 trainer = Trainer(
                     model=model,
