@@ -86,6 +86,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
         tie_word_embeddings=True,
         is_training=True,
         vision_config=None,
+        rope_parameters=None,
         vision_start_token_id=3,
         image_token_id=4,
         video_token_id=5,
@@ -139,7 +140,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
             "rope_theta": rope_theta,
             "tie_word_embeddings": tie_word_embeddings,
             "vocab_size": vocab_size,
-            "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
+            "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
         }
 
     def get_config(self):
@@ -233,6 +234,17 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         base_config.patch_size = 8
         self.assertEqual(base_config.patch_size, 8)
         self.assertNotEqual(base_config.vision_config.patch_size, 8)
+
+        # Test for making sure config save and load preserves correct model type
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        self.assertEqual(config.model_type, "qwen2_5_vl")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+
+            loaded_config = Qwen2_5_VLConfig.from_pretrained(tmp_dir)
+            self.assertEqual(loaded_config.model_type, "qwen2_5_vl")
 
     def test_mismatching_num_image_tokens(self):
         """

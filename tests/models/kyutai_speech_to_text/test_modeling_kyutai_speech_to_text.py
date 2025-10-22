@@ -253,8 +253,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         else {}
     )
 
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
-
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
@@ -294,10 +292,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
-    def test_tie_model_weights(self):
         pass
 
     @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")

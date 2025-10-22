@@ -3,7 +3,6 @@ import os
 import re
 import subprocess
 from datetime import date
-from typing import Optional
 
 from huggingface_hub import paper_info
 
@@ -51,7 +50,7 @@ def get_modified_cards() -> list[str]:
     return model_names
 
 
-def get_paper_link(model_card: Optional[str], path: Optional[str]) -> str:
+def get_paper_link(model_card: str | None, path: str | None) -> str:
     """Get the first paper link from the model card content."""
 
     if model_card is not None and not model_card.endswith(".md"):
@@ -91,7 +90,7 @@ def get_paper_link(model_card: Optional[str], path: Optional[str]) -> str:
     return paper_ids[0]
 
 
-def get_first_commit_date(model_name: Optional[str]) -> str:
+def get_first_commit_date(model_name: str | None) -> str:
     """Get the first commit date of the model's init file or model.md. This date is considered as the date the model was added to HF transformers"""
 
     if model_name.endswith(".md"):

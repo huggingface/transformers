@@ -467,6 +467,7 @@ class SuperGluePreTrainedModel(PreTrainedModel):
     config: SuperGlueConfig
     base_model_prefix = "superglue"
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""

@@ -22,7 +22,7 @@ from typing import Optional, Union
 
 import torch
 
-from .utils.import_utils import is_torchdynamo_compiling
+from .utils.import_utils import is_torchdynamo_compiling, is_tracing
 
 
 @dataclass
@@ -267,7 +267,7 @@ class AttentionMaskConverter:
         _, query_length = inputs_embeds.shape[0], inputs_embeds.shape[1]
         key_value_length = query_length + past_key_values_length
 
-        is_tracing = torch.jit.is_tracing() or isinstance(inputs_embeds, torch.fx.Proxy) or is_torchdynamo_compiling()
+        is_tracing_ = is_tracing(inputs_embeds)
 
         ignore_causal_mask = False
 
@@ -283,7 +283,7 @@ class AttentionMaskConverter:
             # Besides, jit.trace can not handle the `q_len > 1` condition for `is_causal`
             # ("TypeError: scaled_dot_product_attention(): argument 'is_causal' must be bool, not Tensor").
             if (
-                (is_training or not is_tracing)
+                (is_training or not is_tracing_)
                 and (query_length == 1 or key_value_length == query_length)
                 and (sliding_window is None or key_value_length < sliding_window)
             ):
@@ -291,7 +291,7 @@ class AttentionMaskConverter:
         elif sliding_window is None or key_value_length < sliding_window:
             if len(attention_mask.shape) == 4:
                 return False
-            elif not is_tracing and torch.all(attention_mask == 1):
+            elif not is_tracing_ and torch.all(attention_mask == 1):
                 if query_length == 1 or key_value_length == query_length:
                     # For query_length == 1, causal attention and bi-directional attention are the same.
                     ignore_causal_mask = True
@@ -379,7 +379,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
     # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
     # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
-    is_tracing = torch.jit.is_tracing() or isinstance(inputs_embeds, torch.fx.Proxy) or is_torchdynamo_compiling()
+    is_tracing_ = is_tracing(inputs_embeds)
 
     ignore_causal_mask = AttentionMaskConverter._ignore_causal_mask_sdpa(
         attention_mask=attention_mask,
@@ -408,7 +408,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
         # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
         # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
         # Details: https://github.com/pytorch/pytorch/issues/110213
-        if not is_tracing and expanded_4d_mask.device.type == "cuda":
+        if not is_tracing_ and expanded_4d_mask.device.type == "cuda":
             expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
                 expanded_4d_mask, min_dtype=torch.finfo(inputs_embeds.dtype).min
             )
@@ -448,10 +448,8 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
     _, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
 
-    is_tracing = torch.jit.is_tracing() or isinstance(mask, torch.fx.Proxy) or is_torchdynamo_compiling()
-
     # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture data-dependent controlflows.
-    if not is_tracing and torch.all(mask == 1):
+    if not is_tracing(mask) and torch.all(mask == 1):
         return None
     else:
         return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)

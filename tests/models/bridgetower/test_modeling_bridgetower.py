@@ -308,7 +308,6 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     is_training = False
 
-    test_torchscript = False
     test_resize_embeddings = False
     has_attentions = False
 
