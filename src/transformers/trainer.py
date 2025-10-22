@@ -4966,10 +4966,15 @@ class Trainer:
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
+        if self.fsdp_plugin_args is not None:
+            from accelerate.utils import FullyShardedDataParallelPlugin
+
+            fsdp_plugin = FullyShardedDataParallelPlugin(**self.fsdp_plugin_args)
+
         args = {
             "mixed_precision": self.args.mixed_precision,
             "dataloader_config": dataloader_config,
-            "fsdp_plugin": self.args.fsdp_plugin,
+            "fsdp_plugin": fsdp_plugin,
             "deepspeed_plugin": self.args.deepspeed_plugin,
         }
 

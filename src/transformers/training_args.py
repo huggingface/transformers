@@ -1653,13 +1653,9 @@ class TrainingArguments:
         elif self.debug is None:
             self.debug = []
 
-        self.fsdp_plugin = None
-        fsdp_plugin_args = self._process_fsdp_args()
-        if fsdp_plugin_args is not None:
-            # Accelerate FSDP Plugin
-            from accelerate.utils import FullyShardedDataParallelPlugin
-
-            self.fsdp_plugin = FullyShardedDataParallelPlugin(**fsdp_plugin_args)
+        self.fsdp_plugin_args = None
+        # we can't save the plugin due to a pickle issue, so we do not initialize the plugin here
+        self.fsdp_plugin_args = self._process_fsdp_args()
 
         self.deepspeed_plugin = None
         if self.deepspeed:
