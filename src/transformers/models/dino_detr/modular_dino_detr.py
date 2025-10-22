@@ -2170,6 +2170,7 @@ class DinoDetrImageProcessor(DetrImageProcessor):
 
 
 __all__ = [
+    "DinoDetrImageProcessor",
     "DinoDetrForObjectDetection",
     "DinoDetrModel",
     "DinoDetrPreTrainedModel",
