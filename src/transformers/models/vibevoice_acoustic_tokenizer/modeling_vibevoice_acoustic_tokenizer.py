@@ -17,71 +17,6 @@ from .configuration_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokeniz
 
 logger = logging.get_logger(__name__)
 
-# Normalization modules
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-5, elementwise_affine=True, weight_shape=None):
-        super().__init__()
-        self.dim = dim
-        self.eps = eps
-        self.elementwise_affine = elementwise_affine
-        if self.elementwise_affine:
-            weight_shape = (dim,) if weight_shape is None else weight_shape
-            self.weight = nn.Parameter(torch.ones(weight_shape))
-        else:
-            self.register_parameter('weight', None)
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        output = self._norm(x.float()).type_as(x)
-        if self.weight is not None:
-            output = output * self.weight
-        return output
-
-    def extra_repr(self) -> str:
-        return f'dim={self.dim}, eps={self.eps}, elementwise_affine={self.elementwise_affine}'
-
-class ConvRMSNorm(RMSNorm):
-    def __init__(self, dim: int, eps: float = 1e-5, elementwise_affine=True, weight_shape=None):
-        super().__init__(dim, eps, elementwise_affine, weight_shape)
-
-    def forward(self, x):
-        x = x.transpose(1, 2)  # b ... t -> b t ...
-        output = self._norm(x.float()).type_as(x)
-        if self.weight is not None:
-            output = output * self.weight
-
-        output = output.transpose(1, 2)  # b t ... -> b ... t
-        return output
-
-
-def get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int,
-                                padding_total: int = 0) -> int:
-    """Calculate extra padding needed for convolution to have the same output length"""
-    length = x.shape[-1]
-    n_frames = (length - kernel_size + padding_total) / stride + 1
-    ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
-    return ideal_length - length
-
-
-def pad1d(x: torch.Tensor, paddings: tuple[int, int], mode: str = 'zero', value: float = 0.):
-    """Pad 1D input with handling for small inputs in reflect mode"""
-    length = x.shape[-1]
-    padding_left, padding_right = paddings
-    assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
-    if mode == 'reflect':
-        max_pad = max(padding_left, padding_right)
-        extra_pad = 0
-        if length <= max_pad:
-            extra_pad = max_pad - length + 1
-            x = F.pad(x, (0, extra_pad))
-        padded = F.pad(x, paddings, mode, value)
-        end = padded.shape[-1] - extra_pad
-        return padded[..., :end]
-    else:
-        return F.pad(x, paddings, mode, value)
-
 
 def unpad1d(x: torch.Tensor, paddings: tuple[int, int]):
     """Remove padding from x, handling properly zero padding. Only for 1d!"""
@@ -90,17 +25,6 @@ def unpad1d(x: torch.Tensor, paddings: tuple[int, int]):
     assert (padding_left + padding_right) <= x.shape[-1]
     end = x.shape[-1] - padding_right
     return x[..., padding_left: end]
-
-
-class NormConv1d(nn.Module):
-    """Wrapper around Conv1d and normalization applied to this conv"""
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        self.conv = nn.Conv1d(*args, **kwargs)
-
-    def forward(self, x):
-        x = self.conv(x)
-        return x
 
 
 class NormConvTranspose1d(nn.Module):
@@ -176,154 +100,6 @@ class VibeVoiceAcousticTokenizerCache:
     def is_empty(self) -> bool:
         """Check if cache is empty"""
         return len(self.cache) == 0
-    
-
-class SConv1d(nn.Module):
-    """Conv1d with built-in handling of asymmetric or causal padding and normalization."""
-    def __init__(self, in_channels: int, out_channels: int,
-                kernel_size: int, stride: int = 1, dilation: int = 1,
-                groups: int = 1, bias: bool = True, causal: bool = False,
-                pad_mode: str = 'reflect'):
-        super().__init__()
-        self.conv = NormConv1d(in_channels, out_channels, kernel_size, stride,
-                            dilation=dilation, groups=groups, bias=bias)
-        self.causal = causal
-        self.pad_mode = pad_mode
-
-        # Store configuration
-        self.kernel_size = kernel_size
-        self.dilation = dilation
-        self.stride = stride
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-
-        # For causal convolution, we need to maintain kernel_size - 1 samples as context
-        # need to check use which context_size is more suitable
-        # self.context_size = (kernel_size - 1) * dilation
-        self.context_size = (kernel_size - 1) * dilation - (stride - 1)
-
-        # For non-streaming mode, calculate padding
-        self.padding_total = (kernel_size - 1) * dilation - (stride - 1)
-
-        # Create a unique layer ID for cache management
-        self._layer_id = None
-
-    @property
-    def layer_id(self):
-        if self._layer_id is None:
-            self._layer_id = f"sconv1d_{id(self)}"
-        return self._layer_id
-
-    def forward(self, x: torch.Tensor,
-                past_conv_values: Optional[VibeVoiceAcousticTokenizerCache] = None,
-                sample_indices: Optional[torch.Tensor] = None,
-                layer_idx: Optional[int] = None,
-                use_cache: Optional[bool] = False) -> torch.Tensor:
-        """
-        Forward pass with optional streaming support via cache.
-        
-        Args:
-            x: Input tensor [batch_size, channels, time]
-            past_conv_values: VibeVoiceAcousticTokenizerCache object for maintaining states
-            sample_indices: Indices identifying each sample for cache management
-            layer_idx: Layer index for cache management
-            cache: Backward compatibility parameter (deprecated)
-            use_cache: Backward compatibility parameter (deprecated)
-            
-        Returns:
-            Output tensor
-        """
-        if layer_idx is None and use_cache:
-            # TODO (ebezzam) remove this weird hasing
-            layer_idx = hash(self.layer_id) % 10000
-
-        # Non-streaming mode
-        if past_conv_values is None:
-            return self._forward_non_streaming(x)
-
-        # Early return for no causal padding case  
-        if not self.causal or self.context_size <= 0:
-            return self.conv(x)
-
-        # Streaming mode
-        assert sample_indices is not None, "sample_indices must be provided for streaming mode"
-        assert len(sample_indices) == x.shape[0], "sample_indices must match batch size"
-        
-        # If layer_idx is not provided, use a hash of layer_id for backward compatibility
-        if layer_idx is None:
-            layer_idx = hash(self.layer_id) % 10000
-
-        return self._forward_streaming(x, past_conv_values, sample_indices, layer_idx)
-
-    def _forward_streaming(self, x: torch.Tensor,
-                          past_conv_values: VibeVoiceAcousticTokenizerCache,
-                          sample_indices: torch.Tensor,
-                          layer_idx: int) -> torch.Tensor:
-        """Streaming forward pass with cache operations kept separate from compiled code"""
-        B, C, T = x.shape
-
-        # Cache operations (not compiled)
-        cached_states = past_conv_values.get(layer_idx, sample_indices)
-
-        if cached_states is None:
-            # First chunk - initialize with zeros for context
-            if self.context_size > 0:
-                cached_states = torch.zeros(B, C, self.context_size, device=x.device, dtype=x.dtype)
-            else:
-                cached_states = torch.zeros(B, C, 0, device=x.device, dtype=x.dtype)
-
-        # Concatenate cached states with input
-        if cached_states.shape[2] > 0:
-            input_with_context = torch.cat([cached_states, x], dim=2)
-        else:
-            input_with_context = x
-        
-        # Apply convolution directly - no extra padding in streaming mode
-        # The conv layer will handle its own padding internally
-        output = self.conv(input_with_context)
-
-        # Update cache for next chunk
-        if self.context_size > 0:
-            # Calculate how many samples to keep
-            total_input_length = input_with_context.shape[2]
-
-            # Keep the last context_size samples
-            if total_input_length >= self.context_size:
-                new_cache_start = total_input_length - self.context_size
-                new_cache = input_with_context[:, :, new_cache_start:]
-            else:
-                # If we have less than context_size samples, keep everything
-                new_cache = input_with_context
-
-            past_conv_values.update(layer_idx, sample_indices, new_cache)
-
-        return output
-
-    def _forward_non_streaming(self, x: torch.Tensor) -> torch.Tensor:
-        """Standard forward pass without streaming"""
-        B, C, T = x.shape
-        kernel_size = self.kernel_size
-        stride = self.stride
-        dilation = self.dilation
-        padding_total = self.padding_total
-
-        # Compute extra padding for stride alignment
-        extra_padding = get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
-
-        if self.causal:
-            # Left padding for causal
-            if self.pad_mode == 'constant':
-                x = pad1d(x, (padding_total, extra_padding), mode=self.pad_mode, value=0)
-            else:
-                x = pad1d(x, (padding_total, extra_padding), mode=self.pad_mode)
-        else:
-            # Symmetric padding for non-causal
-            padding_right = padding_total // 2
-            padding_left = padding_total - padding_right
-            x = pad1d(x, (padding_left, padding_right + extra_padding), mode=self.pad_mode)
-
-        output = self.conv(x)
-        return output
 
 
 class SConvTranspose1d(nn.Module):
@@ -465,98 +241,6 @@ class SConvTranspose1d(nn.Module):
             y = unpad1d(y, (padding_left, padding_right))
 
         return y
-
-# FFN
-class FFN(nn.Module):
-    def __init__(
-        self,
-        embed_dim,
-        ffn_dim,
-        bias=False,
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.linear1 = nn.Linear(self.embed_dim, ffn_dim, bias=bias)
-        self.gelu = ACT2FN["gelu"]
-        self.linear2 = nn.Linear(ffn_dim, self.embed_dim, bias=bias)
-
-    def forward(self, x):
-        x = self.linear1(x)
-        x = self.gelu(x)
-        x = self.linear2(x)
-        return x
-
-
-class Convlayer(nn.Module):
-    def __init__(
-            self,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=1,
-            dilation=1,
-            groups=1,
-            bias=True,
-            pad_mode='zeros',
-            causal=True,
-        ):
-        super().__init__()
-        self.conv = SConv1d(in_channels, out_channels, kernel_size, stride=stride, dilation=dilation,
-                           groups=groups, bias=bias, pad_mode=pad_mode, causal=causal)
-
-    def forward(self, x):
-        return self.conv(x)
-
-class Block1D(nn.Module):
-    def __init__(self, dim, kernel_size=7, drop_path=0.,
-                layer_scale_init_value=1e-6, **kwargs):
-        super().__init__()
-
-        self.norm = ConvRMSNorm(dim, eps=kwargs.get('eps', 1e-6))
-        self.ffn_norm = ConvRMSNorm(dim, eps=kwargs.get('eps', 1e-6))
-
-
-        self.mixer = Convlayer(dim, dim, groups=dim,
-                            kernel_size=kernel_size,
-                            pad_mode=kwargs.get('pad_mode', 'constant'),
-                            causal=kwargs.get('causal', True),
-                            bias=kwargs.get('bias', True),
-                            )
-
-        self.ffn = FFN(
-            dim,
-            kwargs.get('ffn_expansion', 4) * dim,
-            bias=kwargs.get('bias', False),
-        )
-        self.drop_path = nn.Identity() if drop_path <= 0. else nn.modules.DropPath(drop_path)
-
-        if layer_scale_init_value > 0:
-            self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-            self.ffn_gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-        else:
-            self.gamma = None
-            self.ffn_gamma = None
-
-    def forward(self, x):
-        # mixer
-        residual = x
-        x = self.norm(x)
-        x = self.mixer(x)
-        if self.gamma is not None:
-            x = x * self.gamma.unsqueeze(-1)
-        x = residual + self.drop_path(x)
-
-        # ffn
-        residual = x
-        x = self.ffn_norm(x)
-        x = x.permute(0, 2, 1)
-        x = self.ffn(x)
-        x = x.permute(0, 2, 1)
-        if self.ffn_gamma is not None:
-            x = x * self.ffn_gamma.unsqueeze(-1)
-        x = residual + self.drop_path(x)
-
-        return x
 
 
 class VibeVoiceAcousticTokenizerRMSNorm(nn.Module):
@@ -837,28 +521,14 @@ class TokenizerDecoder(nn.Module):
             )
             self.upsample_layers.append(upsample_layer)
 
-        # configure transformer blocks
-        layer_type = partial(
-            Block1D,
-            eps=layernorm_eps,
-            causal=self.causal,
-            pad_mode=pad_mode,
-            bias=bias,
-            layer_scale_init_value=layer_scale_init_value,
-        )
-
+        # configure ConvNext1D blocks
         self.stages = nn.ModuleList()
-        dp_rates = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths))]
-        cur = 0
-
-        # Create stages in the same order as the original model
         for i in range(len(self.depths)):
             in_ch = config.n_filters * (2 ** (len(self.depths) - 1 - i))
-            stage = nn.Sequential(
-                *[layer_type(dim=in_ch, drop_path=dp_rates[cur + j]) for j in range(self.depths[i])]
+            stage = nn.ModuleList(
+                [VibeVoiceAcousticTokenizerConvNext1dLayer(config, hidden_size=in_ch) for _ in range(self.depths[i])]
             )
             self.stages.append(stage)
-            cur += self.depths[i]
 
         self.head = VibeVoiceAcousticTokenizerStreamingConv1d(in_ch, config.channels, kernel_size=last_kernel_size, bias=bias)
 
@@ -874,34 +544,14 @@ class TokenizerDecoder(nn.Module):
                 else:
                     x = layer(x)
 
-            # Apply stage (Block1D contains Convlayer which contains SConv1d)
+            # Apply stage (VibeVoiceAcousticTokenizerConvNext1dLayer)
             for block in self.stages[i]:
-                if hasattr(block, 'mixer') and hasattr(block.mixer, 'conv') and isinstance(block.mixer.conv, SConv1d):
-                    # Block1D forward with cache support
-                    residual = x
-                    x = block.norm(x)
-                    x = block.mixer.conv(x, past_conv_values=past_conv_values, sample_indices=sample_indices, use_cache=use_cache)
-                    if block.gamma is not None:
-                        x = x * block.gamma.unsqueeze(-1)
-                    x = residual + x
-
-                    # FFN part
-                    residual = x
-                    x = block.ffn_norm(x)
-                    x = x.permute(0, 2, 1)
-                    x = block.ffn(x)
-                    x = x.permute(0, 2, 1)
-                    if block.ffn_gamma is not None:
-                        x = x * block.ffn_gamma.unsqueeze(-1)
-                    x = residual + x
-                else:
-                    x = block(x)
+                x = block(x)
 
         return x
 
     def forward(self, x, past_conv_values=None, sample_indices=None, use_cache=False):
         x = self.forward_features(x, past_conv_values=past_conv_values, sample_indices=sample_indices, use_cache=use_cache)
-        # Use streaming conv interface for head layer
         layer_idx = len(self.depths) + len(self.upsample_layers)  # Unique layer index for head
         x = self.head(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx)
         return x
@@ -963,7 +613,7 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
     base_model_prefix = "vibevoice_acoustic_tokenizer"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _no_split_modules = ["VibeVoiceAcousticTokenizerEncoder", "TokenizerDecoder"]
+    _no_split_modules = ["VibeVoiceAcousticTokenizerEncoder", "VibeVoiceAcousticTokenizerDecoder"]
 
     def __init__(self, config):
         super().__init__(config)
