@@ -113,6 +113,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
     """
 
     # check if `end_commit` fails the test
+    # (we only need one failure to conclude the test is flaky on the previous run with `end_commit`)
     failed_before = is_bad_commit(target_test, end_commit)
     if failed_before:
         return (
@@ -130,6 +131,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
 
     # Now, we are (almost) sure `target_test` is not failing at `end_commit`
     # check if `start_commit` fail the test
+    # **IMPORTANT** we only need one pass to conclude the test is flaky on the current run with `start_commit`!
     failed_now = is_bad_commit(target_test, start_commit)
     if not failed_now:
         # failed on CI run, but not reproducible here --> don't report
