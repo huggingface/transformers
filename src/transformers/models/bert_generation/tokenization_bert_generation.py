@@ -85,7 +85,7 @@ class BertGenerationTokenizer(SentencePieceBackend):
         **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        
+
         # Call parent init (which will load sp_model)
         super().__init__(
             vocab_file=vocab_file,
@@ -97,7 +97,6 @@ class BertGenerationTokenizer(SentencePieceBackend):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
 
 
 __all__ = ["BertGenerationTokenizer"]

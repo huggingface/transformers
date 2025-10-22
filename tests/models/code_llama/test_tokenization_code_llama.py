@@ -13,42 +13,228 @@
 # limitations under the License.
 
 import os
-import pickle
-import shutil
 import tempfile
 import unittest
 
-from datasets import load_dataset
-
-from transformers import (
-    SPIECE_UNDERLINE,
-    AddedToken,
-    CodeLlamaTokenizer,
-    CodeLlamaTokenizerFast,
-)
-from transformers.convert_slow_tokenizer import convert_slow_tokenizer
+from transformers import CodeLlamaTokenizer
 from transformers.testing_utils import (
-    get_tests_dir,
     nested_simplify,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
     slow,
 )
+from transformers.tokenization_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
+expected_tokens = [
+    "▁This",
+    "▁is",
+    "▁a",
+    "▁test",
+    "<0x0A>",
+    "I",
+    "▁was",
+    "▁born",
+    "▁in",
+    "▁",
+    "9",
+    "2",
+    "0",
+    "0",
+    "0",
+    ",",
+    "▁and",
+    "▁this",
+    "▁is",
+    "▁f",
+    "als",
+    "é",
+    ".",
+    "<0x0A>",
+    "生",
+    "活",
+    "的",
+    "真",
+    "<0xE8>",
+    "<0xB0>",
+    "<0x9B>",
+    "是",
+    "<0x0A>",
+    "Hi",
+    "▁",
+    "▁Hello",
+    "<0x0A>",
+    "Hi",
+    "▁▁",
+    "▁Hello",
+    "<0x0A>",
+    "<0x0A>",
+    "▁",
+    "<0x0A>",
+    "▁▁",
+    "<0x0A>",
+    "▁Hello",
+    "<0x0A>",
+    "<",
+    "s",
+    ">",
+    "<0x0A>",
+    "hi",
+    "<",
+    "s",
+    ">",
+    "there",
+    "<0x0A>",
+    "The",
+    "▁following",
+    "▁string",
+    "▁should",
+    "▁be",
+    "▁properly",
+    "▁encoded",
+    ":",
+    "▁Hello",
+    ".",
+    "<0x0A>",
+    "But",
+    "▁",
+    "ird",
+    "▁and",
+    "▁",
+    "ป",
+    "ี",
+    "▁▁▁",
+    "ird",
+    "▁▁▁",
+    "ด",
+    "<0x0A>",
+    "H",
+    "ey",
+    "▁how",
+    "▁are",
+    "▁you",
+    "▁doing",
+]
+expected_token_ids = [
+    1,
+    910,
+    338,
+    263,
+    1243,
+    13,
+    29902,
+    471,
+    6345,
+    297,
+    29871,
+    29929,
+    29906,
+    29900,
+    29900,
+    29900,
+    29892,
+    322,
+    445,
+    338,
+    285,
+    1338,
+    29948,
+    29889,
+    13,
+    30486,
+    31704,
+    30210,
+    30848,
+    235,
+    179,
+    158,
+    30392,
+    13,
+    18567,
+    29871,
+    15043,
+    13,
+    18567,
+    259,
+    15043,
+    13,
+    13,
+    29871,
+    13,
+    259,
+    13,
+    15043,
+    13,
+    29966,
+    29879,
+    29958,
+    13,
+    2918,
+    29966,
+    29879,
+    29958,
+    12711,
+    13,
+    1576,
+    1494,
+    1347,
+    881,
+    367,
+    6284,
+    18511,
+    29901,
+    15043,
+    29889,
+    13,
+    6246,
+    29871,
+    1823,
+    322,
+    29871,
+    31010,
+    30691,
+    1678,
+    1823,
+    1678,
+    30718,
+    13,
+    29950,
+    1032,
+    920,
+    526,
+    366,
+    2599,
+]
+
+
+# Master input string of combined test cases
+input_string = """This is a test
+I was born in 92000, and this is falsé.
+生活的真谛是
+Hi  Hello
+Hi   Hello
+
+ 
+  
+ Hello
+<s>
+hi<s>there
+The following string should be properly encoded: Hello.
+But ird and ปี   ird   ด
+Hey how are you doing"""
 
 
 @require_sentencepiece
 @require_tokenizers
 class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "hf-internal-testing/llama-code-tokenizer"
+    # TokenizerTesterMixin configuration
+    from_pretrained_id = ["hf-internal-testing/llama-code-tokenizer"]
     tokenizer_class = CodeLlamaTokenizer
-    rust_tokenizer_class = CodeLlamaTokenizerFast
-    test_rust_tokenizer = False
+    rust_tokenizer_class = CodeLlamaTokenizer
+    test_rust_tokenizer = False  # We only have one tokenizer now
     test_sentencepiece = True
     from_pretrained_kwargs = {}
 
@@ -56,161 +242,58 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-        # We have a SentencePiece fixture for testing
-        tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.save_pretrained(cls.tmpdirname)
+        from_pretrained_id = "hf-internal-testing/llama-code-tokenizer"
 
-    def get_tokenizers(cls, **kwargs):
-        kwargs.update({"pad_token": "<PAD>"})
+        tok_auto = CodeLlamaTokenizer.from_pretrained(from_pretrained_id)
+        tok_auto.pad_token = tok_auto.eos_token
+        tok_auto.save_pretrained(cls.tmpdirname)
+
+        # Build backend for tokenizer from the fast tokenizer's SentencePiece model
+        vocab_file = getattr(tok_auto, "vocab_file", None)
+
+        extractor = SentencePieceExtractor(vocab_file)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tok_from_vocab = CodeLlamaTokenizer(vocab=vocab_ids, merges=merges)
+        tok_from_vocab.pad_token = tok_from_vocab.eos_token
+
+        cls.tokenizers = [tok_auto]
+
+    def get_tokenizers(self, **kwargs):
+        kwargs.setdefault("pad_token", "<PAD>")
         return super().get_tokenizers(**kwargs)
+
+    def test_integration_expected_tokens(self):
+        for tok in self.tokenizers:
+            self.assertEqual(tok.tokenize(input_string), expected_tokens)
+
+    def test_integration_expected_token_ids(self):
+        for tok in self.tokenizers:
+            self.assertEqual(tok.encode(input_string), expected_token_ids)
+
+    def test_save_and_reload(self):
+        for tok in self.tokenizers:
+            with self.subTest(f"{tok.__class__.__name__}"):
+                original_tokens = tok.tokenize(input_string)
+                original_ids = tok.encode(input_string)
+
+                # Save tokenizer to temporary directory
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    tok.save_pretrained(tmp_dir)
+
+                    # Reload tokenizer from saved directory
+                    reloaded_tok = tok.__class__.from_pretrained(tmp_dir)
+
+                    # Test that reloaded tokenizer produces same results
+                    reloaded_tokens = reloaded_tok.tokenize(input_string)
+                    reloaded_ids = reloaded_tok.encode(input_string)
+
+                    self.assertEqual(original_tokens, reloaded_tokens)
+                    self.assertEqual(original_ids, reloaded_ids)
 
     def test_no_infilling_init(self):
         tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, prefix_token=None, keep_accents=True)
         with self.assertRaises(ValueError):
             tokenizer.tokenize("This is <FILL_ME> prefix")
-
-    def test_full_tokenizer(self):
-        tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
-
-        tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
-
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens),
-            [285, 46, 10, 170, 382],
-        )
-
-        tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-        self.assertListEqual(
-            tokens,
-            [
-                SPIECE_UNDERLINE + "I",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
-                "or",
-                "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
-                "9",
-                "2",
-                "0",
-                "0",
-                "0",
-                ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
-                "al",
-                "s",
-                "é",
-                ".",
-            ],
-        )
-        ids = tokenizer.convert_tokens_to_ids(tokens)
-        self.assertListEqual(
-            ids,
-            [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4],
-        )
-
-        back_tokens = tokenizer.convert_ids_to_tokens(ids)
-        self.assertListEqual(
-            back_tokens,
-            [
-                SPIECE_UNDERLINE + "I",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
-                "or",
-                "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
-                "<unk>",
-                "2",
-                "0",
-                "0",
-                "0",
-                ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
-                "al",
-                "s",
-                "<unk>",
-                ".",
-            ],
-        )
-
-    def test_save_pretrained(self):
-        self.tokenizers_list = [
-            (self.rust_tokenizer_class, "hf-internal-testing/llama-code-tokenizer", {}),
-            (self.tokenizer_class, "hf-internal-testing/llama-code-tokenizer", {}),
-            (self.tokenizer_class, "codellama/CodeLlama-34b-Instruct-hf", {}),
-            (self.rust_tokenizer_class, "codellama/CodeLlama-34b-Instruct-hf", {}),
-        ]
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
-
-                tmpdirname2 = tempfile.mkdtemp()
-
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2)
-                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
-
-                # Checks it save with the same files + the tokenizer.json file for the fast one
-                self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
-                tokenizer_r_files = tuple(f for f in tokenizer_r_files if "tokenizer.json" not in f)
-                self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
-
-                # Checks everything loads correctly in the same way
-                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
-                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
-
-                # Check special tokens are set accordingly on Rust and Python
-                for key in tokenizer_pp.special_tokens_map:
-                    self.assertTrue(hasattr(tokenizer_rp, key))
-
-                shutil.rmtree(tmpdirname2)
-
-                # Save tokenizer rust, legacy_format=True
-                tmpdirname2 = tempfile.mkdtemp()
-
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=True)
-                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
-
-                # Checks it save with the same files
-                self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
-
-                # Checks everything loads correctly in the same way
-                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
-                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
-
-                # Check special tokens are set accordingly on Rust and Python
-                for key in tokenizer_pp.special_tokens_map:
-                    self.assertTrue(hasattr(tokenizer_rp, key))
-
-                shutil.rmtree(tmpdirname2)
-
-                # Save tokenizer rust, legacy_format=False
-                tmpdirname2 = tempfile.mkdtemp()
-
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=False)
-                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
-
-                # Checks it saved the tokenizer.json file
-                self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
-
-                # Checks everything loads correctly in the same way
-                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
-                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
-
-                # Check special tokens are set accordingly on Rust and Python
-                for key in tokenizer_pp.special_tokens_map:
-                    self.assertTrue(hasattr(tokenizer_rp, key))
-
-                shutil.rmtree(tmpdirname2)
 
     @require_torch
     def test_batch_tokenization(self):
@@ -281,32 +364,6 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(cr_output, r_output)
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
-
-    @slow
-    def test_tokenizer_integration(self):
-        expected_encoding = {'input_ids': [[1, 4103, 689, 414, 313, 24784, 368, 2998, 408, 282, 3637, 25350, 29899, 9067, 414, 322, 282, 3637, 25350, 29899, 1457, 3018, 1312, 29899, 2151, 29897, 8128, 2498, 29899, 15503, 4220, 6956, 1973, 313, 13635, 29911, 29892, 402, 7982, 29899, 29906, 29892, 1528, 13635, 29911, 29874, 29892, 1060, 26369, 29892, 6652, 309, 29933, 814, 29892, 1060, 29931, 6779, 11410, 363, 18385, 17088, 7634, 11235, 313, 25103, 29965, 29897, 322, 18385, 17088, 28203, 313, 25103, 29954, 29897, 411, 975, 29871, 29941, 29906, 29974, 758, 3018, 1312, 4733, 297, 29871, 29896, 29900, 29900, 29974, 10276, 322, 6483, 1006, 3372, 3097, 1546, 435, 1165, 29892, 10772, 29911, 25350, 322, 323, 6073, 17907, 29889], [1, 350, 20161, 338, 8688, 304, 758, 29899, 14968, 6483, 21000, 8684, 284, 22540, 515, 443, 29880, 24025, 1426, 491, 14002, 368, 4195, 292, 373, 1716, 2175, 322, 1492, 3030, 297, 599, 15359, 29889], [1, 450, 4996, 17354, 1701, 29916, 432, 17204, 975, 278, 17366, 11203, 29889]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
-
-        self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding,
-            model_name="hf-internal-testing/llama-code-tokenizer",
-            revision="6eb30c03ab6a9e2cdef4d523024909ec815ddb75",
-            padding=False,
-        )
-
-    def test_picklable(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = CodeLlamaTokenizer(f.name, keep_accents=True)
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
-
-    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
-    def test_pickle_subword_regularization_tokenizer(self):
-        pass
-
-    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
-    def test_subword_regularization_tokenizer(self):
-        pass
 
 
 @require_torch
@@ -623,30 +680,22 @@ end
 """,
         ]
         tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-Instruct-hf")
-        tokenizer_fast = CodeLlamaTokenizerFast.from_pretrained("codellama/CodeLlama-7b-Instruct-hf")
 
         formatted_prompt = tokenizer.tokenize(PROMPTS[0])
-        self.assertEqual(formatted_prompt, tokenizer_fast.tokenize(PROMPTS[0]))
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
         self.assertEqual(formatted_prompt, tokenizer.tokenize(prefix, suffix))
-        self.assertEqual(formatted_prompt, tokenizer_fast.tokenize(prefix, suffix))
 
         input_ids = tokenizer.encode(PROMPTS[0], add_special_tokens=False)
-        self.assertEqual(input_ids, tokenizer_fast.encode(PROMPTS[0], add_special_tokens=False))
 
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
         input_ids = tokenizer.encode(PROMPTS[0])
         self.assertEqual(input_ids, tokenizer.encode(prefix, suffix=suffix))
-        self.assertEqual(tokenizer.encode(prefix, suffix=suffix), tokenizer_fast.encode(prefix, suffix=suffix))
 
         # Adding suffix_first check for infilling tasks
         suffix_first_formatted_prompt = tokenizer.tokenize(PROMPTS[0], suffix_first=True)
-        self.assertEqual(suffix_first_formatted_prompt, tokenizer_fast.tokenize(PROMPTS[0], suffix_first=True))
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
         self.assertEqual(suffix_first_formatted_prompt, tokenizer.tokenize(prefix, suffix, suffix_first=True))
-        self.assertEqual(suffix_first_formatted_prompt, tokenizer_fast.tokenize(prefix, suffix, suffix_first=True))
 
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
         suffix_first_input_ids = tokenizer.encode(PROMPTS[0], suffix_first=True)
         self.assertEqual(suffix_first_input_ids, tokenizer.encode(prefix, suffix=suffix, suffix_first=True))
-        self.assertEqual(suffix_first_input_ids, tokenizer_fast.encode(prefix, suffix=suffix, suffix_first=True))

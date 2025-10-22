@@ -37,7 +37,6 @@ from transformers.utils.import_utils import is_mistral_common_available
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
     extract_commit_hash,
@@ -108,14 +107,14 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("clip", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("clipseg", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("clvp", "ClvpTokenizer"),
-        ("code_llama", "CodeLlamaTokenizerFast" if is_tokenizers_available() else None),
+        ("code_llama", "CodeLlamaTokenizer" if is_tokenizers_available() else None),
         ("codegen", "CodeGenTokenizer" if is_tokenizers_available() else None),
         ("cohere", "CohereTokenizer" if is_tokenizers_available() else None),
         ("cohere2", "CohereTokenizer" if is_tokenizers_available() else None),
         ("colpali", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("colqwen2", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("convbert", "ConvBertTokenizer" if is_tokenizers_available() else None),
-        ("cpm", "CpmTokenizerFast" if is_tokenizers_available() else None),
+        ("cpm", "CpmTokenizer" if is_tokenizers_available() else None),
         ("cpmant", "CpmAntTokenizer"),
         ("csm", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ("ctrl", "CTRLTokenizer"),
@@ -205,7 +204,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("llava_next_video", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("llava_onevision", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("longformer", "LongformerTokenizerFast" if is_tokenizers_available() else None),
-        ("longt5", "T5TokenizerFast" if is_tokenizers_available() else None),
+        ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
         ("lxmert", "BertTokenizer" if is_tokenizers_available() else None),
         ("m2m_100", "M2M100Tokenizer" if is_sentencepiece_available() else None),
@@ -219,8 +218,18 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("metaclip_2", "XLMRobertaTokenizerFast" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
         ("minimax", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("mistral", "MistralCommonTokenizer" if is_mistral_common_available() else ("LlamaTokenizerFast" if is_tokenizers_available() else None)),
-        ("mixtral", "MistralCommonTokenizer" if is_mistral_common_available() else ("LlamaTokenizerFast" if is_tokenizers_available() else None)),
+        (
+            "mistral",
+            "MistralCommonTokenizer"
+            if is_mistral_common_available()
+            else ("LlamaTokenizerFast" if is_tokenizers_available() else None),
+        ),
+        (
+            "mixtral",
+            "MistralCommonTokenizer"
+            if is_mistral_common_available()
+            else ("LlamaTokenizerFast" if is_tokenizers_available() else None),
+        ),
         ("mllama", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
@@ -232,8 +241,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("mpt", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("mra", "RobertaTokenizer"),
         ("mt5", "MT5TokenizerFast" if is_tokenizers_available() else None),
-        ("musicgen", "T5TokenizerFast" if is_tokenizers_available() else None),
-        ("musicgen_melody", "T5TokenizerFast" if is_tokenizers_available() else None),
+        ("musicgen", "T5Tokenizer" if is_tokenizers_available() else None),
+        ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
         ("mvp", "MvpTokenizerFast" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
         ("nemotron", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
@@ -257,12 +266,17 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("pegasus_x", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("perceiver", "PerceiverTokenizer"),
         ("persimmon", "LlamaTokenizerFast" if is_tokenizers_available() else None),
-        ("phi", "CodeGenTokenizerFast" if is_tokenizers_available() else None),
+        ("phi", "CodeGenTokenizer" if is_tokenizers_available() else None),
         ("phi3", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("phimoe", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("phobert", "PhobertTokenizer"),
-        ("pix2struct", "T5TokenizerFast" if is_tokenizers_available() else None),
-        ("pixtral", "MistralCommonTokenizer" if is_mistral_common_available() else ("PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("pix2struct", "T5Tokenizer" if is_tokenizers_available() else None),
+        (
+            "pixtral",
+            "MistralCommonTokenizer"
+            if is_mistral_common_available()
+            else ("PreTrainedTokenizerFast" if is_tokenizers_available() else None),
+        ),
         ("plbart", "PLBartTokenizer" if is_sentencepiece_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
@@ -302,21 +316,26 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("squeezebert", "BertTokenizer" if is_tokenizers_available() else None),
         ("stablelm", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("starcoder2", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("switch_transformers", "T5TokenizerFast" if is_tokenizers_available() else None),
-        ("t5", "T5TokenizerFast" if is_tokenizers_available() else None),
+        ("switch_transformers", "T5Tokenizer" if is_tokenizers_available() else None),
+        ("t5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("t5gemma", "GemmaTokenizerFast" if is_tokenizers_available() else None),
         ("tapas", "TapasTokenizer"),
         ("tapex", "TapexTokenizer"),
         ("transfo-xl", "TransfoXLTokenizer"),
         ("tvp", "BertTokenizer" if is_tokenizers_available() else None),
         ("udop", "UdopTokenizerFast" if is_tokenizers_available() else None),
-        ("umt5", "T5TokenizerFast" if is_tokenizers_available() else None),
+        ("umt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("video_llava", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("vilt", "BertTokenizer" if is_tokenizers_available() else None),
         ("vipllava", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("visual_bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("vits", "VitsTokenizer"),
-        ("voxtral", "MistralCommonTokenizer" if is_mistral_common_available() else ("LlamaTokenizerFast" if is_tokenizers_available() else None)),
+        (
+            "voxtral",
+            "MistralCommonTokenizer"
+            if is_mistral_common_available()
+            else ("LlamaTokenizerFast" if is_tokenizers_available() else None),
+        ),
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
@@ -346,6 +365,7 @@ def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     with open(vocab_file, "r", encoding="utf-8") as reader:
         return json.load(reader)
+
 
 def load_merges(merges_file):
     """Loads a merges file into a list."""
@@ -418,7 +438,9 @@ def _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
 
     # If it's a local directory, list all files and find any .model file
     if os.path.isdir(pretrained_model_name_or_path):
-        dir_path = os.path.join(pretrained_model_name_or_path, subfolder) if subfolder else pretrained_model_name_or_path
+        dir_path = (
+            os.path.join(pretrained_model_name_or_path, subfolder) if subfolder else pretrained_model_name_or_path
+        )
         if os.path.isdir(dir_path):
             for filename in os.listdir(dir_path):
                 if filename.endswith(".model"):
@@ -453,21 +475,21 @@ def _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
 def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs):
     """
     Load a tokenizer using only the tokenizers backend (no SentencePiece fallback).
-    
+
     This function attempts to load with the following priority:
     1. If tokenizer.json exists, load directly
     2. If any .model file (SPM) exists, try extracting vocab and merges
     3. If vocab.json and merges.txt exist, load with those
-    
+
     Args:
         tokenizer_class: The tokenizer class to instantiate
         pretrained_model_name_or_path: Path or model id
         inputs: Additional positional arguments for tokenizer init
         kwargs: Additional keyword arguments
-    
+
     Returns:
         An instantiated tokenizer object
-    
+
     Raises:
         ValueError: If tokenizer could not be loaded with tokenizers backend
     """
@@ -483,10 +505,10 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         )
     except Exception:
         tokenizer_json_exists = False
-    
+
     if tokenizer_json_exists:
         return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-    
+
     # Try extracting from SentencePiece model
     spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
     if spm_file is not None:
@@ -504,14 +526,12 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
             )
         except Exception:
             resolved_spm = None
-        
+
         if resolved_spm is not None:
             try:
                 from ...tokenization_sentencepiece import SentencePieceExtractor
 
-                fast_sig = inspect.signature(
-                    getattr(tokenizer_class, "__init__", tokenizer_class)
-                )
+                fast_sig = inspect.signature(getattr(tokenizer_class, "__init__", tokenizer_class))
                 if "vocab" in fast_sig.parameters and "merges" in fast_sig.parameters:
                     try:
                         vocab, merges = SentencePieceExtractor(resolved_spm).extract()
@@ -522,7 +542,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                         pass
             except Exception:
                 pass
-    
+
     # Try vocab.json + merges.txt
     try:
         vocab_file = cached_file(
@@ -558,8 +578,10 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
     if vocab_json_exists and merges_txt_exists:
         vocab = load_vocab(vocab_file)
         merges = load_merges(merges_file)
-        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs)
-    
+        return tokenizer_class.from_pretrained(
+            pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
+        )
+
     # If all methods failed, raise an error
     raise ValueError(
         f"Could not load tokenizer from {pretrained_model_name_or_path} using tokenizers backend. "
@@ -574,7 +596,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
     This function routes to the appropriate backend based on the 'backend' parameter:
     - "tokenizers" (default): Uses HuggingFace tokenizers library backend
     - "sentencepiece": Uses SentencePiece backend
-    
+
     For the tokenizers backend, attempts to load with the following priority:
     1. If tokenizer.json exists, load directly
     2. If any .model file (SPM) exists, try extracting vocab and merges
@@ -595,7 +617,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
     """
     # Extract the backend parameter - default to "tokenizers" to prioritize tokenizers backend
     backend = kwargs.pop("backend", "tokenizers")
-    
+
     # Validate backend parameter
     if backend not in ["sentencepiece", "tokenizers"]:
         logger.warning(
@@ -603,7 +625,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
             "Defaulting to 'tokenizers' backend."
         )
         backend = "tokenizers"
-    
+
     # Route to SentencePiece backend if requested
     if backend == "sentencepiece":
         if SentencePieceBackend is None:
@@ -611,33 +633,35 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 "SentencePiece backend was requested but sentencepiece is not installed. "
                 "Please install it with: pip install sentencepiece"
             )
-        logger.info(f"Loading tokenizer with SentencePiece backend")
+        logger.info("Loading tokenizer with SentencePiece backend")
         return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-    
+
     # Route to tokenizers backend (default)
     if backend == "tokenizers":
         if tokenizer_class is not None:
             # Check if tokenizer_class inherits from PreTrainedTokenizer (but not from TokenizersBackend/SentencePieceBackend)
             # These are edge cases with custom logic (e.g., BioGptTokenizer with Moses tokenization)
             from ...tokenization_utils import PreTrainedTokenizer
-            
+
             # Build list of backend classes to check against
             backend_classes = [TokenizersBackend] if TokenizersBackend else []
             if SentencePieceBackend:
                 backend_classes.append(SentencePieceBackend)
-            
-            if issubclass(tokenizer_class, PreTrainedTokenizer) and not any(issubclass(tokenizer_class, bc) for bc in backend_classes):
-                logger.info(f"Loading tokenizer with custom PreTrainedTokenizer backend (edge case)")
+
+            if issubclass(tokenizer_class, PreTrainedTokenizer) and not any(
+                issubclass(tokenizer_class, bc) for bc in backend_classes
+            ):
+                logger.info("Loading tokenizer with custom PreTrainedTokenizer backend (edge case)")
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            
+
             if TokenizersBackend is None:
                 raise ValueError(
                     "Tokenizers backend is the default but tokenizers library is not installed. "
                     "Please install it with: pip install tokenizers"
                 )
-            logger.info(f"Loading tokenizer with tokenizers backend")
+            logger.info("Loading tokenizer with tokenizers backend")
             return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
-        
+
         # If no tokenizer class but tokenizers backend requested, fall back to SentencePiece if available
         spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
         if spm_file is not None and SentencePieceBackend is not None:
@@ -646,12 +670,11 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 f"Falling back to SentencePieceBackend since {spm_file} file was found."
             )
             return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        
+
         raise ValueError(
             f"Could not load tokenizer from {pretrained_model_name_or_path}. "
             "No tokenizer class could be determined and no SentencePiece model found."
         )
-    
 
 
 def get_tokenizer_config(
@@ -855,10 +878,10 @@ class AutoTokenizer:
 
         >>> # Download vocabulary from huggingface.co and define model-specific arguments
         >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", add_prefix_space=True)
-        
+
         >>> # Explicitly use the tokenizers backend
         >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="tokenizers")
-        
+
         >>> # Explicitly use the sentencepiece backend
         >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="sentencepiece")
         ```"""
@@ -928,7 +951,11 @@ class AutoTokenizer:
             if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
                 tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
-        if config_tokenizer_class is not None and config_tokenizer_class != "PreTrainedTokenizerFast" and "Fast" in config_tokenizer_class:
+        if (
+            config_tokenizer_class is not None
+            and config_tokenizer_class != "PreTrainedTokenizerFast"
+            and "Fast" in config_tokenizer_class
+        ):
             config_tokenizer_class = config_tokenizer_class[:-4]
 
         has_remote_code = tokenizer_auto_map is not None
@@ -987,7 +1014,9 @@ class AutoTokenizer:
             tokenizer_class = TOKENIZER_MAPPING[type(config)]
 
             if tokenizer_class is not None:
-                return _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
+                return _try_load_tokenizer_with_fallbacks(
+                    tokenizer_class, pretrained_model_name_or_path, inputs, kwargs
+                )
             else:
                 raise ValueError(
                     "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
@@ -1000,7 +1029,9 @@ class AutoTokenizer:
         )
 
     @staticmethod
-    def register(config_class, tokenizer_class=None, slow_tokenizer_class=None, fast_tokenizer_class=None, exist_ok=False):
+    def register(
+        config_class, tokenizer_class=None, slow_tokenizer_class=None, fast_tokenizer_class=None, exist_ok=False
+    ):
         """
         Register a new tokenizer in this mapping.
 

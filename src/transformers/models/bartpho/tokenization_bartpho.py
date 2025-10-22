@@ -18,22 +18,19 @@ import os
 from shutil import copyfile
 from typing import Any, Optional
 
-import sentencepiece as spm
-
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_sentencepiece import SentencePieceBackend
+from ...tokenization_utils import AddedToken
 from ...utils import logging
 from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
-SPIECE_UNDERLINE = "▁"
-
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "monolingual_vocab_file": "dict.txt"}
 
 
 @requires(backends=("sentencepiece",))
-class BartphoTokenizer(PreTrainedTokenizer):
+class BartphoTokenizer(SentencePieceBackend):
     """
     Adapted from [`XLMRobertaTokenizer`]. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
@@ -105,6 +102,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    is_fast = False
 
     def __init__(
         self,
@@ -123,15 +121,9 @@ class BartphoTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
-        self.vocab_file = vocab_file
         self.monolingual_vocab_file = monolingual_vocab_file
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(str(vocab_file))
 
         # Load the reduced vocab
-
         # Keep order of special tokens for backward compatibility
         self.fairseq_tokens_to_ids = {}
         cnt = 0
@@ -148,7 +140,13 @@ class BartphoTokenizer(PreTrainedTokenizer):
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
+        # Prepare sp_model_kwargs for parent class
+        if sp_model_kwargs is not None:
+            kwargs["sp_model_kwargs"] = sp_model_kwargs
+
+        # Call parent init (which will load sp_model)
         super().__init__(
+            vocab_file=vocab_file,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -156,25 +154,8 @@ class BartphoTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        state["sp_model_proto"] = self.sp_model.serialized_model_proto()
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__ = d
-
-        # for backward compatibility
-        if not hasattr(self, "sp_model_kwargs"):
-            self.sp_model_kwargs = {}
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
@@ -257,31 +238,34 @@ class BartphoTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
+        """Override to return fairseq vocab size instead of sp_model vocab size"""
         return len(self.fairseq_ids_to_tokens)
 
     def get_vocab(self):
+        """Override to use fairseq vocabulary"""
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text: str) -> list[str]:
-        return self.sp_model.encode(text, out_type=str)
-
     def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
+        """Converts a token (str) in an id using the fairseq vocab."""
         if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
         else:
             return self.unk_token_id
 
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.fairseq_ids_to_tokens[index]
+    def _convert_token_to_id_with_added_voc(self, token):
+        """Override to use fairseq vocab instead of sp_model vocab."""
+        if token is None:
+            return None
 
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
+        if token in self._added_tokens_encoder:
+            return self._added_tokens_encoder[token]
+        return self._convert_token_to_id(token)
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the fairseq vocab."""
+        return self.fairseq_ids_to_tokens[index]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
