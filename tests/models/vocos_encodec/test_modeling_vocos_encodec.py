@@ -248,7 +248,7 @@ class VocosEncodecModelIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_inference(self):
-        hf_repo_id = "bezzam/vocos-encodec-24khz"
+        hf_repo_id = "hf-audio/vocos-encodec-24khz"
         model = VocosEncodecModel.from_pretrained(hf_repo_id).to(torch_device).eval()
         processor = VocosEncodecProcessor.from_pretrained(hf_repo_id)
 
@@ -291,7 +291,7 @@ class VocosEncodecModelIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_batch(self):
-        repo_id = "bezzam/vocos-encodec-24khz"
+        repo_id = "hf-audio/vocos-encodec-24khz"
         processor = VocosEncodecProcessor.from_pretrained(repo_id)
         model = VocosEncodecModel.from_pretrained(repo_id).to(torch_device).eval()
 

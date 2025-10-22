@@ -23,25 +23,12 @@ from transformers import (
     VocosEncodecConfig,
     VocosEncodecModel,
     VocosFeatureExtractor,
-    VocosProcessor,
+    VocosEncodecProcessor,
 )
-from transformers.models.encodec.convert_encodec_checkpoint_to_pytorch import recursively_load_weights
 
 
-def _rewrite_weight_norm(key):
-    key = key.replace("weight_g", "parametrizations.weight.original0")
-    key = key.replace("weight_v", "parametrizations.weight.original1")
-    return key
-
-
-def convert_old_keys_to_new_keys(original_state_dict: dict, model_name: str = "encodec_24khz") -> dict:
+def convert_old_keys_to_new_keys(original_state_dict: dict) -> dict:
     converted_checkpoint = {}
-    original_encodec = {}
-
-    #  convert it into hf format
-    hf_encodec = EncodecModel.from_pretrained("facebook/encodec_24khz").eval()
-    recursively_load_weights(original_encodec, hf_encodec, model_name)
-
     for old_key, value in original_state_dict.items():
         if old_key == "feature_extractor.codebook_weights":
             new_key = old_key.replace("feature_extractor.codebook_weights", "codebook_weights")
@@ -69,7 +56,7 @@ def convert_old_keys_to_new_keys(original_state_dict: dict, model_name: str = "e
                 new_key = new_key.replace("istft.window", "window")
             converted_checkpoint[new_key] = value
 
-    return converted_checkpoint, hf_encodec
+    return converted_checkpoint
 
 
 def safe_load(path: str) -> dict[str, torch.Tensor]:
@@ -102,7 +89,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub=No
 
     original_state_dict = safe_load(checkpoint_path)
 
-    new_state_dict, hf_encodec = convert_old_keys_to_new_keys(original_state_dict, model_name="encodec_24khz")
+    new_state_dict = convert_old_keys_to_new_keys(original_state_dict)
 
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False, assign=True)
     print("Checkpoint loaded successfully")
@@ -119,7 +106,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub=No
 
     feature_extractor = VocosFeatureExtractor()
 
-    processor = VocosProcessor(feature_extractor=feature_extractor, audio_tokenizer=hf_encodec)
+    processor = VocosEncodecProcessor(feature_extractor=feature_extractor, audio_tokenizer=hf_encodec)
 
     processor.save_pretrained(pytorch_dump_folder_path)
 

@@ -104,8 +104,10 @@ class VocosEncodecModel(VocosModel):
         )
         self.norm = VocosEncodecAdaptiveLayerNorm(config)
 
-        # TODO store original Encodec model?
-        # original: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L75
+        # TODO do we keep codebook weights? maybe if they were retrained
+        # can be used like this to compute input to `self.embed`:
+        # https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L98
+        self.register_buffer("codebook_weights", torch.zeros(config.num_quantizers, config.codebook_dim))
         self._bandwidth_to_id = {bandwidth: id for id, bandwidth in enumerate(config.bandwidths)}
 
     @can_return_tuple
@@ -125,7 +127,7 @@ class VocosEncodecModel(VocosModel):
             Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, to be provided if
             `input_features`is not None.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
-            Padding mask. Not used, but kept so feature extractor outputs can be passed directly.
+            Padding mask. Not used, but kept so processor outputs can be passed directly.
 
         Returns:
             `VocosOutput` or tuple `(audio,)`:

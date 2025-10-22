@@ -302,7 +302,7 @@ class VocosEncodecModel(VocosEncodecPreTrainedModel):
             Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, to be provided if
             `input_features`is not None.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
-            Padding mask. Not used, but kept so feature extractor outputs can be passed directly.
+            Padding mask. Not used, but kept so processor outputs can be passed directly.
 
         Returns:
             `VocosOutput` or tuple `(audio,)`:

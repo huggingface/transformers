@@ -118,7 +118,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         truncation: Optional[bool] = False,
         sampling_rate: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        # TODO remove `return_audio_only` 
+        # TODO remove `return_audio_only?
         return_audio_only: Optional[bool] = False,
         device: Optional[str] = None,
         **kwargs,
