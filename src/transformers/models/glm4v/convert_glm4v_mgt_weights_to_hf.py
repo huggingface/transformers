@@ -84,7 +84,26 @@ def merge_qkv(
     q = torch.cat(q, dim=0)
     k = torch.cat(k, dim=0)
     v = torch.cat(v, dim=0)
-
+    if not interleaved_qkv:
+        rotary_dim = attention_dim // 2
+        half_rot = rotary_dim // 2
+        perm_rot = torch.empty(rotary_dim, dtype=torch.long)
+        perm_rot[0::2] = torch.arange(0, half_rot)
+        perm_rot[1::2] = torch.arange(half_rot, rotary_dim)
+        if q.dim() == 2:
+            qh = q.view(num_attention_heads, attention_dim, -1)
+            kh = k.view(multi_query_group_num, attention_dim, -1)
+            qh[:, :rotary_dim, :] = qh[:, perm_rot, :]
+            kh[:, :rotary_dim, :] = kh[:, perm_rot, :]
+            q = qh.reshape(-1, q.size(-1))
+            k = kh.reshape(-1, k.size(-1))
+        else:
+            qh = q.view(num_attention_heads, attention_dim)
+            kh = k.view(multi_query_group_num, attention_dim)
+            qh[:, :rotary_dim] = qh[:, perm_rot]
+            kh[:, :rotary_dim] = kh[:, perm_rot]
+            q = qh.reshape(-1)
+            k = kh.reshape(-1)
     return q, k, v
 
 
@@ -413,7 +432,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
     print(f"Loading vLLM configuration file: {vllm_config_path}")
     with open(vllm_config_path, "r") as f:
         model_config = json.load(f)
-        print(model_config)
         text_config = model_config.get("text_config", {})
         vision_config = model_config.get("vision_config", {})
 
@@ -432,7 +450,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
 
     print("Merging tensor parallel weights...")
 
-    interleaved_qkv = True
+    interleaved_qkv = False
     num_attention_heads = num_heads
     multi_query_group_num = num_kv_heads
     attention_dim = head_dim
@@ -486,7 +504,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
                 num_attention_heads=num_attention_heads,
                 multi_query_group_num=multi_query_group_num,
                 attention_dim=attention_dim,
-                interleaved_qkv=False,
+                interleaved_qkv=interleaved_qkv,
             )
             complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.bias"] = q_bias.clone()
             complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.bias"] = k_bias.clone()
@@ -526,7 +544,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             num_attention_heads=vit_n_head,
             multi_query_group_num=vit_n_head,
             attention_dim=attention_dim,
-            interleaved_qkv=interleaved_qkv,
+            interleaved_qkv=True,
         )
         complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = torch.cat((q, k, v), dim=0)
 
@@ -616,8 +634,8 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "image_end_token_id": model_config.get("image_end_token_id", 151340),
         "video_start_token_id": model_config.get("video_start_token_id", 151341),
         "video_end_token_id": model_config.get("video_end_token_id", 151342),
-        "image_token_id": model_config.get("image_token_id", 151363),
-        "video_token_id": model_config.get("video_token_id", 151364),
+        "image_token_id": model_config.get("image_token_id", 151343),
+        "video_token_id": model_config.get("video_token_id", 151344),
     }
     txt_config = {
         "hidden_act": text_config.get("hidden_act", "silu"),
