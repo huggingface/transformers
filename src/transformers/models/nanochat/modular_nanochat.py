@@ -15,7 +15,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -25,12 +25,11 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils import TransformersKwargs, auto_docstring
 from ..clip.modeling_clip import CLIPMLP
+from ..gemma2.modeling_gemma2 import Gemma2ForCausalLM
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
-    LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
@@ -151,8 +150,6 @@ class NanoChatModel(LlamaModel):
         self.initial_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
 
-    @check_model_inputs()
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -214,22 +211,8 @@ class NanoChatModel(LlamaModel):
 
 
 @auto_docstring
-class NanoChatForCausalLM(LlamaForCausalLM):
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+class NanoChatForCausalLM(Gemma2ForCausalLM):
+    def forward(self, **super_kwargs) -> CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -254,37 +237,7 @@ class NanoChatForCausalLM(LlamaForCausalLM):
         >>> generated_tokens = outputs[0, inputs["input_ids"].shape[1] :]
         >>> output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         ```"""
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        # Soft-cap the logits. The main difference to LlamaForCausalLM
-        cap = self.config.logits_soft_cap
-        logits = cap * torch.tanh(logits / cap)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        super().forward(**super_kwargs)
 
 
 __all__ = [

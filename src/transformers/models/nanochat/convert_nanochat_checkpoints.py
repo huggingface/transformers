@@ -164,7 +164,13 @@ def write_model(input_dir, output_dir, safe_serialization=True):
     state_dict = {}
     rename_map = {}
 
-    def assign(old_key: str, new_key: str, old_state: dict[str, torch.Tensor], state_dict: dict[str, torch.Tensor], rename_map: dict[str, str]) -> None:
+    def assign(
+        old_key: str,
+        new_key: str,
+        old_state: dict[str, torch.Tensor],
+        state_dict: dict[str, torch.Tensor],
+        rename_map: dict[str, str],
+    ) -> None:
         tensor = old_state.get(old_key)
         if tensor is None:
             return
