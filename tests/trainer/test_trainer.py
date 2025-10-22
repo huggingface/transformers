@@ -143,7 +143,6 @@ if is_torch_available():
         GlueDataTrainingArguments,
         GPT2Config,
         GPT2LMHeadModel,
-        LineByLineTextDataset,
         LlamaConfig,
         LlamaForCausalLM,
         PreTrainedModel,
