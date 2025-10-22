@@ -27,7 +27,8 @@ from ...image_processing_utils_fast import (
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, auto_docstring, logging
-
+# TODO protect this import
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.get_logger(__name__)
 
@@ -154,11 +155,6 @@ class DeepSeekOCRImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
-        if size.height != size.width:
-            raise ValueError("DeepSeekOCRImageProcessorFast only supports square patch sizes.")
-        if base_size.height != base_size.width:
-            raise ValueError("DeepSeekOCRImageProcessorFast only supports square base sizes.")
-
         patch_image_size = size.height
         base_image_size = base_size.height
         downsample_ratio = 4
@@ -270,11 +266,6 @@ class DeepSeekOCRImageProcessorFast(BaseImageProcessorFast):
         Returns:
             PIL Image with bounding boxes drawn
         """
-        try:
-            from PIL import Image, ImageDraw, ImageFont
-        except ImportError:
-            raise ImportError("PIL is required for visualization. Install it with `pip install Pillow`")
-
         image_width, image_height = image.size
 
         img_draw = image.copy()

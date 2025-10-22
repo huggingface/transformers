@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class DeepseekOcrSAMVisionConfig(PreTrainedConfig):
+class DeepseekOcrSAMConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_sam_vision"
-    base_config_key = "sam_vision_config"
+    base_config_key = "sam_config"
 
     def __init__(
         self,
@@ -131,7 +131,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
     model_type = "deepseek_ocr"
     sub_configs = {
         "text_config": AutoConfig,
-        "sam_vision_config": DeepseekOcrSAMVisionConfig,
+        "sam_vision_config": DeepseekOcrSAMConfig,
         "clip_vision_config": DeepseekOcrCLIPVisionConfig,
         "projector_config": DeepseekOcrProjectorConfig,
     }
@@ -157,9 +157,9 @@ class DeepseekOcrConfig(PreTrainedConfig):
         self.image_token_index = image_token_index
 
         if sam_vision_config is None:
-            self.sam_vision_config = DeepseekOcrSAMVisionConfig()
+            self.sam_vision_config = DeepseekOcrSAMConfig()
         elif isinstance(sam_vision_config, dict):
-            self.sam_vision_config = DeepseekOcrSAMVisionConfig(**sam_vision_config)
+            self.sam_vision_config = DeepseekOcrSAMConfig(**sam_vision_config)
         else:
             self.sam_vision_config = sam_vision_config
 
