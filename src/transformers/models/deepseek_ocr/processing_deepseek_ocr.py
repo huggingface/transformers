@@ -20,7 +20,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import logging
-
+import torch
 
 logger = logging.get_logger(__name__)
 
@@ -119,8 +119,6 @@ class DeepSeekOCRProcessor(ProcessorMixin):
             batch_size = len(input_ids)
         else:
             batch_size = input_ids.size(0)
-
-        import torch
 
         image_attention_mask = torch.zeros_like(input_ids, dtype=torch.bool)
 
