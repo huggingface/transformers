@@ -73,7 +73,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers">
 
 ```bash
-echo -e "translate English to French: Life is beautiful." | transformers run --task text2text-generation --model google/byt5-small --device 0
+echo -e "translate English to French: Life is beautiful." | transformers run text2text-generation --model google/byt5-small --device 0
 ```
 
 </hfoption>

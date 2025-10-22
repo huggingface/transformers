@@ -69,7 +69,7 @@ sequence_output = outputs.last_hidden_state
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plant create energy through a process known as photosynthesis." | transformers run --task feature-extraction --model google/canine-c --device 0
+echo -e "Plant create energy through a process known as photosynthesis." | transformers run feature-extraction --model google/canine-c --device 0
 ```
 
 </hfoption>

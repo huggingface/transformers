@@ -80,7 +80,7 @@ print(f"The predicted token is: {predicted_token}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model facebook/bart-large --device 0
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run fill-mask --model facebook/bart-large --device 0
 ```
 
 </hfoption>
