@@ -5,7 +5,8 @@
 #                          modular_rf_detr_dinov2_with_registers.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import collections.abc
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -14,8 +15,8 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, torch_int
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
 from .configuration_rf_detr_dinov2_with_registers import RfDetrDinov2WithRegistersConfig
@@ -189,23 +190,22 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
     # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    # This is actually dropping out entire tokens to attend to, which might
-    # seem a bit unusual, but is taken from the original Transformer paper.
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
     if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -234,9 +234,7 @@ class RfDetrDinov2WithRegistersSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(
-        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -253,7 +251,7 @@ class RfDetrDinov2WithRegistersSelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
+            None,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -287,28 +285,9 @@ class RfDetrDinov2WithRegistersAttention(nn.Module):
         super().__init__()
         self.attention = RfDetrDinov2WithRegistersSelfAttention(config)
         self.output = RfDetrDinov2WithRegistersSelfOutput(config)
-        self.pruned_heads = set()
 
-    def prune_heads(self, heads: set[int]):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, head_mask)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -412,10 +391,8 @@ class RfDetrDinov2WithRegistersLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         remove_windows: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        assert head_mask is None, "head_mask is not supported for windowed attention"
         shortcut = hidden_states
         if remove_windows:
             # reshape x to remove windows
@@ -424,10 +401,7 @@ class RfDetrDinov2WithRegistersLayer(GradientCheckpointingLayer):
             hidden_states = hidden_states.view(B // num_windows_squared, num_windows_squared * HW, C)
 
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(
-            hidden_states_norm,
-            head_mask,
-        )
+        self_attention_output = self.attention(hidden_states_norm)
 
         if remove_windows:
             # reshape x to add windows back
@@ -482,6 +456,7 @@ class RfDetrDinov2WithRegistersPreTrainedModel(PreTrainedModel):
     config: RfDetrDinov2WithRegistersConfig
     base_model_prefix = "rf_detr_dinov2_with_registers"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["RfDetrDinov2WithRegistersLayer"]
     _supports_sdpa = True
@@ -548,12 +523,13 @@ class RfDetrDinov2WithRegistersBackbone(RfDetrDinov2WithRegistersPreTrainedModel
     def get_input_embeddings(self) -> RfDetrDinov2WithRegistersPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         """
         Returns:
