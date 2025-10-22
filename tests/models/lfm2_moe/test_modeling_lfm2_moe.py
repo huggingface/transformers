@@ -241,5 +241,4 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             generated_ids = model.generate(**batched_input_ids, max_new_tokens=15, do_sample=False)
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        print(f"{text}")
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
