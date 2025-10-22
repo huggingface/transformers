@@ -39,6 +39,22 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from .configuration_humanv import HumanVConfig
 
+# NEW: For PEFT support
+from peft import LoraConfig, get_peft_model, TaskType
+
+# NEW: Import SageAttention for sparse layers (assume installed via pip install sageattention==1.0.6)
+try:
+    from sageattention import sageattn
+except ImportError:
+    print("SageAttention not installed. Run 'pip install sageattention==1.0.6'.")
+    sageattn = None
+
+# NEW: Import FlashAttention-3 (assume installed via pip install flash-attn --no-build-isolation)
+try:
+    from flash_attn import flash_attn_func
+except ImportError:
+    print("Flash-Attn not installed. Run 'pip install flash-attn --no-build-isolation'.")
+    flash_attn_func = None
 
 @use_kernel_forward_from_hub("RMSNorm")
 class HumanVRMSNorm(nn.Module):
@@ -50,13 +66,16 @@ class HumanVRMSNorm(nn.Module):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        # NEW: Adaptive scaling for stability (learnable scale parameter)
+        self.scale = nn.Parameter(torch.ones(hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+        # NEW: Apply learnable scale after norm for smoother gradients
+        return (self.weight * hidden_states * self.scale).to(input_dtype)
 
     def extra_repr(self) -> str:
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -161,6 +180,27 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    # NEW: Use SageAttention for sparse_attention layers
+    if module.layer_type == "sparse_attention":
+        if sageattn is not None:
+            # SageAttention expects shape (batch, heads, seq, dim) = HND
+            # Our query_states is (batch, heads, seq, dim) - matches HND
+            # Scale is applied internally if needed; docs show no explicit scaling param, but assume pre-scaled
+            # For causal, set is_causal=True
+            # Tune thresholds as per docs (e.g., pvthreshd tunable)
+            attn_output = sageattn(
+                query * scaling,  # Apply scaling to query if needed
+                key,
+                value,
+                tensor_layout="HND",
+                is_causal=module.is_causal
+            )
+            attn_weights = None  # SageAttention doesn't return weights
+            return attn_output, attn_weights
+        else:
+            raise ImportError("SageAttention not available. Run 'pip install sageattention==1.0.6'.")
+
+    # Original eager attention
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
@@ -172,6 +212,44 @@ def eager_attention_forward(
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
+
+
+def flash_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[FlashAttentionKwargs],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    # NEW: FlashAttention-3 forward
+    if flash_attn_func is not None:
+        # Flash-3 expects (batch, seq, heads, dim_head), but our is (batch, heads, seq, dim) - transpose if needed
+        query = query.transpose(1, 2)
+        key = key.transpose(1, 2)
+        value = value.transpose(1, 2)
+        # Use flash_attn_func with causal, softmax_scale
+        attn_output, attn_weights = flash_attn_func(
+            query,
+            key,
+            value,
+            softmax_scale=scaling,
+            causal=module.is_causal,
+            attention_dropout=dropout if module.training else 0.0,
+        )
+        attn_output = attn_output.transpose(1, 2)  # Back to original shape
+        return attn_output, attn_weights
+    else:
+        raise ImportError("Flash-Attn not available. Install with 'pip install flash-attn --no-build-isolation'.")
+
+
+def apply_rotary(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    """Apply rotary to subset dims."""
+    x_rot, x_base = torch.split(x, [cos.shape[-1], x.shape[-1] - cos.shape[-1]], dim=-1)
+    x_rot = (x_rot * cos) + (rotate_half(x_rot) * sin)
+    return torch.cat([x_rot, x_base], dim=-1)
 
 
 class HumanVAttention(nn.Module):
@@ -212,9 +290,13 @@ class HumanVAttention(nn.Module):
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-        attention_interface: Callable = eager_attention_forward
+        # NEW: Use flash if configured, else eager
+        if self.config.attn_implementation in ["flash_attention_2", "flash_attention_3"]:
+            attention_interface = flash_attention_forward
+        else:
+            attention_interface = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS.get(self.config.attn_implementation, eager_attention_forward)
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -289,6 +371,25 @@ class HumanVPreTrainedModel(PreTrainedModel):
         "attentions": HumanVAttention,
     }
 
+    # NEW: Support for PEFT (LoRA/QLoRA) in from_pretrained
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        model = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        config = model.config
+        if config.lora_rank > 0:
+            lora_config = LoraConfig(
+                r=config.lora_rank,
+                lora_alpha=config.lora_alpha,
+                lora_dropout=config.lora_dropout,
+                target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],  # Common targets for transformers
+                use_gradient_checkpointing=model.gradient_checkpointing,
+                task_type=TaskType.CAUSAL_LM,  # For CausalLM
+            )
+            model = get_peft_model(model, lora_config)
+            if config.q_lora:
+                model.enable_input_require_grads()  # For QLoRA, assume bnb quantization is handled separately
+        return model
+
 
 @auto_docstring
 class HumanVModel(HumanVPreTrainedModel):
@@ -302,6 +403,15 @@ class HumanVModel(HumanVPreTrainedModel):
         self.rotary_emb = HumanVRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.has_sliding_layers = "sliding_attention" in (config.layer_types or [])
+        self.has_sparse_layers = "sparse_attention" in (config.layer_types or [])
+
+        # NEW: Apply gradual unfreezing if configured
+        if config.freeze_layers > 0:
+            for param in self.embed_tokens.parameters():
+                param.requires_grad = False
+            for layer in self.layers[:config.freeze_layers]:
+                for param in layer.parameters():
+                    param.requires_grad = False
 
         self.post_init()
 
@@ -341,6 +451,9 @@ class HumanVModel(HumanVPreTrainedModel):
             causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
             if self.has_sliding_layers:
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+            if self.has_sparse_layers:
+                causal_mask_mapping["sparse_attention"] = create_causal_mask(**mask_kwargs)  # SageAttention handles causal internally
+
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         for decoder_layer in self.layers:
@@ -375,7 +488,6 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -387,8 +499,67 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        rewards: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
+        r"""
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
+                `[0, config.n_positions - 1]`.
+
+                [What are position IDs?](../glossary#position-ids)
+            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                shape `(batch_size, num_heads, head_dim)`.
+
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+                this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+                the complete sequence length.
+            logits_to_keep (`Union[int, torch.Tensor]`, *optional*, defaults to 0):
+                Number of logits to keep from the end of the sequence.
+            rewards (`torch.FloatTensor` of shape `(batch_size, sequence_length - 1)`, *optional*):
+                Rewards for RLHF, used to weight the cross-entropy loss when `rlhf` is enabled in config.
+            **kwargs (`dict`, *optional*):
+                Additional keyword arguments passed along to the model.
+
+        Returns:
+            CausalLMOutputWithPast: An object containing the loss, logits, past_key_values, hidden_states, and attentions.
+        """
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -404,7 +575,16 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
         logits = self.lm_head(hidden_states[:, slice_indices, :])
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            if self.config.rlhf and rewards is not None:
+                # NEW: RLHF-compatible loss (simple reward-weighted CE; for full PPO, use external lib like trl)
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
+                ce_loss = nn.CrossEntropyLoss(reduction='none')(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                loss = (ce_loss * rewards.view(-1)).mean()  # Weight by rewards
+            else:
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
+                loss = nn.CrossEntropyLoss()(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,

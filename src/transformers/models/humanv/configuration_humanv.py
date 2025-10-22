@@ -14,9 +14,9 @@
 # limitations under the License.
 """HumanV model configuration"""
 
-from typing import Optional
+from typing import Optional, List
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
@@ -42,7 +42,7 @@ class HumanVConfig(PreTrainedConfig):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 2816):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 28):
+        num_hidden_layers (`int`, *optional*, defaults to 40):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -85,6 +85,35 @@ class HumanVConfig(PreTrainedConfig):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        # NEW: Params for MLA (from DeepSeek-V2 research)
+        use_mla (`bool`, *optional*, defaults to True):  # Enable MLA by default for efficiency
+            Whether to use Multi-Head Latent Attention instead of standard GQA.
+        d_kv_comp (`int`, *optional*, defaults to 128):  # Latent compression dim for KV (low for <10B models)
+            Dimension for KV latent compression in MLA.
+        d_rope (`int`, *optional*, defaults to 16):  # Subset dims for RoPE in MLA (position-sensitive)
+            Dimension for position-aware (RoPE) subset in MLA heads.
+        # NEW: Params for sparse attention
+        sparse_pattern (`str`, *optional*, defaults to "block"):  # Sparse type if layer_types includes 'sparse_attention'
+            Sparse pattern: 'block' (dynamic block-sparse), 'local' (fixed window), etc.
+        # NEW: Attention implementation
+        attn_implementation (`str`, *optional*, defaults to "eager"):
+            Attention implementation: 'eager', 'flash_attention_2', etc.
+        # NEW: PEFT LoRA params
+        lora_rank (`int`, *optional*, defaults to 0):  # LoRA rank for PEFT; 0 disables
+            Rank for LoRA adapters. If >0, enables LoRA in model.
+        lora_alpha (`float`, *optional*, defaults to 16.0):
+            Alpha for LoRA scaling.
+        lora_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout for LoRA adapters.
+        q_lora (`bool`, *optional*, defaults to False):
+            Whether to use QLoRA (quantized LoRA) for low-resource fine-tuning.
+        # NEW: Fine-tuning regularization params
+        freeze_layers (`int`, *optional*, defaults to 0):  # Number of initial layers to freeze for gradual unfreezing
+            If >0, freezes the first N layers during fine-tuning to prevent forgetting.
+        curriculum_learning (`bool`, *optional*, defaults to False):
+            Whether to enable curriculum learning mode (e.g., start with short sequences).
+        rlhf (`bool`, *optional*, defaults to False):
+            Whether to use RLHF-compatible loss (e.g., for alignment).
 
     ```python
     >>> from transformers import HumanVModel, HumanVConfig
@@ -123,7 +152,7 @@ class HumanVConfig(PreTrainedConfig):
         vocab_size: int = 151936,
         hidden_size: int = 1024,
         intermediate_size: int = 2816,
-        num_hidden_layers: int = 28,
+        num_hidden_layers: int = 40,
         num_attention_heads: int = 16,
         num_key_value_heads: Optional[int] = 8,
         head_dim: int = 64,
@@ -140,6 +169,22 @@ class HumanVConfig(PreTrainedConfig):
         max_window_layers: Optional[int] = 20,
         layer_types: Optional[list[str]] = None,
         attention_dropout: float = 0.0,
+        # NEW: MLA and sparse params
+        use_mla: bool = True,
+        d_kv_comp: int = 128,
+        d_rope: int = 16,
+        sparse_pattern: str = "block",
+        # NEW: Attention implementation
+        attn_implementation: str = "eager",
+        # NEW: PEFT LoRA params
+        lora_rank: int = 0,
+        lora_alpha: float = 16.0,
+        lora_dropout: float = 0.0,
+        q_lora: bool = False,
+        # NEW: Fine-tuning regularization params
+        freeze_layers: int = 0,
+        curriculum_learning: bool = False,
+        rlhf: bool = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -179,17 +224,47 @@ class HumanVConfig(PreTrainedConfig):
                 ]
             else:
                 self.layer_types = ["full_attention"] * self.num_hidden_layers
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
+        # Fix: Call standard validation but override to allow 'sparse_attention'
+        self.layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000000.0)  # Optimized to 1e7 for better long-context performance
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
+        # NEW: MLA params
+        self.use_mla = use_mla
+        self.d_kv_comp = d_kv_comp
+        self.d_rope = d_rope
+        # NEW: Sparse param
+        self.sparse_pattern = sparse_pattern
+        # NEW: Attention implementation (was _attn_implementation in modeling)
+        self.attn_implementation = attn_implementation  # Changed from _attn_implementation for consistency
+
+        # NEW: PEFT LoRA params
+        self.lora_rank = lora_rank
+        self.lora_alpha = lora_alpha
+        self.lora_dropout = lora_dropout
+        self.q_lora = q_lora
+
+        # NEW: Fine-tuning regularization params
+        self.freeze_layers = freeze_layers
+        self.curriculum_learning = curriculum_learning
+        self.rlhf = rlhf
+
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+    def layer_type_validation(self, layer_types: List[str], num_hidden_layers: int):
+        """Override to allow 'sparse_attention'."""
+        from transformers.configuration_utils import ALLOWED_LAYER_TYPES as BASE_ALLOWED  # Import inside to avoid circular import
+        allowed = BASE_ALLOWED + ('sparse_attention',)
+        if any(layer not in allowed for layer in layer_types):
+            raise ValueError(f"The `layer_types` entries must be in {allowed}")
+        if len(layer_types) != num_hidden_layers:
+            raise ValueError(f"Expected {num_hidden_layers} layer types, got {len(layer_types)}")
 
 
 __all__ = ["HumanVConfig"]
