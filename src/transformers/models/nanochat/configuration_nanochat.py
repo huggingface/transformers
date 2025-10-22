@@ -33,7 +33,7 @@ class NanoChatConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`NanoChatModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*):
+        intermediate_size (`int`, *optional*, defaults to 8192):
             Dimension of the MLP representations. If `None`, it will be computed based on the model architecture.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer decoder.
@@ -64,8 +64,8 @@ class NanoChatConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        logits_soft_cap (`float`, *optional*, defaults to 15.0):
-            Scaling factor when applying tanh softcapping on the logits. If `None`, no softcapping is applied.
+        final_logit_softcapping (`float`, *optional*, defaults to 15.0):
+            scaling factor when applying tanh softcapping on the logits.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, and value projection layers during self-attention.
         bos_token_id (`int`, *optional*, defaults to 0):
@@ -117,7 +117,7 @@ class NanoChatConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         rope_parameters: RopeParameters | dict[RopeParameters] | None = None,
         use_cache: bool = True,
-        logits_soft_cap: float | None = 15.0,
+        final_logit_softcapping: float | None = 15.0,
         attention_bias: bool = False,
         bos_token_id: int = 0,
         eos_token_id: int = 1,
@@ -142,7 +142,7 @@ class NanoChatConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.initializer_range = initializer_range
         self.use_cache = use_cache
-        self.logits_soft_cap = logits_soft_cap
+        self.final_logit_softcapping = final_logit_softcapping
         self.attention_bias = attention_bias
 
         # Validate the correctness of rotary position embeddings parameters

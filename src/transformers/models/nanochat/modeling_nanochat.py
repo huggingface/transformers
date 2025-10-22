@@ -496,6 +496,7 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         >>> generated_tokens = outputs[0, inputs["input_ids"].shape[1] :]
         >>> output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         ```"""
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -511,14 +512,14 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        # Soft-cap the logits. The main difference to LlamaForCausalLM
-        cap = self.config.logits_soft_cap
-        logits = cap * torch.tanh(logits / cap)
+        if self.config.final_logit_softcapping is not None:
+            logits = logits / self.config.final_logit_softcapping
+            logits = torch.tanh(logits)
+            logits = logits * self.config.final_logit_softcapping
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
