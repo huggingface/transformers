@@ -83,14 +83,14 @@ class NanoChatIntegrationTest(unittest.TestCase):
         self.assertFalse(torch.isinf(logits).any())
 
         # Check expected mean logits (with tolerance for numerical variation)
-        EXPECTED_MEAN = torch.tensor([[-6.6695, -7.8112]])
+        EXPECTED_MEAN = torch.tensor([[-6.6598, -7.8213]])
         torch.testing.assert_close(logits.mean(-1), EXPECTED_MEAN, rtol=1e-3, atol=0.02)
 
         # Check first 10 logits at position [0,0,:10]
         EXPECTED_SLICE = torch.tensor(
-            [-12.875, -13.125, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -12.625, -4.40625]
+            [-12.8750, -13.0625, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875,-13.1875, -12.6250,  -4.2188]
         )
-        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=0.2)
+        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=0.1)
 
     @slow
     def test_model_d20_generation(self):
@@ -157,12 +157,12 @@ class NanoChatIntegrationTest(unittest.TestCase):
         self.assertFalse(torch.isinf(logits).any())
 
         # Check expected mean logits (with tolerance for numerical variation)
-        EXPECTED_MEAN = torch.tensor([[-5.6836, -8.3400]])
+        EXPECTED_MEAN = torch.tensor([[-5.6796, -8.3100]])
         torch.testing.assert_close(logits.mean(-1), EXPECTED_MEAN, rtol=1e-3, atol=0.1)
 
         # Check first 10 logits at position [0,0,:10]
         EXPECTED_SLICE = torch.tensor(
-            [-12.4375, -13.1875, -12.875, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875, -12.0, -1.6172]
+            [-12.4375, -13.1875, -12.8750, -13.1875, -13.1875, -13.1875, -13.1875,-13.1875, -11.9375,  -1.6328]
         )
         torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=0.1)
 
