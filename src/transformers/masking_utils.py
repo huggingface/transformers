@@ -669,7 +669,7 @@ def flex_attention_mask(
         Q_LEN=q_length,
         KV_LEN=kv_length,
         device=cache_position.device,
-        _compile=_is_torch_greater_or_equal_than_2_6,
+        _compile=not _is_torch_greater_or_equal_than_2_6,
     )
     return block_mask
 

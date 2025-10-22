@@ -151,6 +151,10 @@ class Gemma2IntegrationTest(unittest.TestCase):
                     "Hello I am doing a project on the 1960s and I am trying to find out what the average",
                     "Hi today I'm going to be talking about the 10 most powerful characters in the Naruto series.",
                 ],
+                ("cuda", (9, 0)): [
+                    "Hello I am doing a project on the 1960s and I am trying to find out what the average",
+                    "Hi today I'm going to be talking about the 10 best anime of all time.\n\n1",
+                ],
             }
         )
         EXPECTED_BATCH_TEXT = EXPECTED_BATCH_TEXTS.get_expectation()
