@@ -53,10 +53,9 @@ logger = logging.get_logger(__name__)
 class LlavaOnevision1_5VisionConfig(Qwen2_5_VLVisionConfig):
     model_type = "llava_onevision1_5"
 
-    def __init__(self, layer_norm_eps=1e-05, attention_dropout=0.0, **super_kwargs):
+    def __init__(self, layer_norm_eps=1e-05, **super_kwargs):
         super().__init__(self, **super_kwargs)
         self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
 
 
 class LlavaOnevision1_5Config(Qwen2_5_VLConfig):
