@@ -736,7 +736,7 @@ class VibeVoiceAcousticTokenizerConvNext1dLayer(nn.Module):
         return x
 
 
-class TokenizerEncoder(nn.Module):
+class VibeVoiceAcousticTokenizerEncoder(nn.Module):
     """
     Encoder component for the VibeVoice tokenizer that converts audio to latent representations.
     
@@ -820,8 +820,8 @@ class TokenizerDecoder(nn.Module):
 
         # stem and upsampling layers
         stem = nn.Sequential(
-                SConv1d(config.hidden_size, config.n_filters * 2 ** (len(self.depths) - 1), kernel_size,
-                        causal=self.causal, pad_mode=pad_mode, bias=bias),
+                VibeVoiceAcousticTokenizerStreamingConv1d(config.hidden_size, config.n_filters * 2 ** (len(self.depths) - 1), kernel_size,
+                        bias=bias),
             )
 
         self.upsample_layers = nn.ModuleList()
@@ -860,14 +860,17 @@ class TokenizerDecoder(nn.Module):
             self.stages.append(stage)
             cur += self.depths[i]
 
-        self.head = SConv1d(in_ch, config.channels, kernel_size=last_kernel_size, causal=self.causal, pad_mode=pad_mode, bias=bias)
+        self.head = VibeVoiceAcousticTokenizerStreamingConv1d(in_ch, config.channels, kernel_size=last_kernel_size, bias=bias)
 
     def forward_features(self, x, past_conv_values=None, sample_indices=None, use_cache=False):
         for i in range(len(self.depths)):
             # Apply upsampling
             for layer in self.upsample_layers[i]:
-                if isinstance(layer, (SConv1d, SConvTranspose1d)):
-                    x = layer(x, past_conv_values=past_conv_values, sample_indices=sample_indices, use_cache=use_cache)
+                if isinstance(layer, (VibeVoiceAcousticTokenizerStreamingConv1d, SConvTranspose1d)):
+                    if isinstance(layer, VibeVoiceAcousticTokenizerStreamingConv1d):
+                        x = layer(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=i)
+                    else:
+                        x = layer(x, past_conv_values=past_conv_values, sample_indices=sample_indices, use_cache=use_cache)
                 else:
                     x = layer(x)
 
@@ -898,7 +901,9 @@ class TokenizerDecoder(nn.Module):
 
     def forward(self, x, past_conv_values=None, sample_indices=None, use_cache=False):
         x = self.forward_features(x, past_conv_values=past_conv_values, sample_indices=sample_indices, use_cache=use_cache)
-        x = self.head(x, past_conv_values=past_conv_values, sample_indices=sample_indices, use_cache=use_cache)
+        # Use streaming conv interface for head layer
+        layer_idx = len(self.depths) + len(self.upsample_layers)  # Unique layer index for head
+        x = self.head(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx)
         return x
 
 @dataclass
@@ -958,7 +963,7 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
     base_model_prefix = "vibevoice_acoustic_tokenizer"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _no_split_modules = ["TokenizerEncoder", "TokenizerDecoder"]
+    _no_split_modules = ["VibeVoiceAcousticTokenizerEncoder", "TokenizerDecoder"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -977,7 +982,7 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
         decoder_config.layer_scale_init_value = config.layer_scale_init_value
 
         # Initialize encoder and decoder
-        self.encoder = TokenizerEncoder(config)
+        self.encoder = VibeVoiceAcousticTokenizerEncoder(config)
         self.decoder = TokenizerDecoder(decoder_config)
 
         # Initialize weights

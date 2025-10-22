@@ -54,6 +54,17 @@ def update_state_dict_for_hf_model(state_dict):
             # Handle general conv.conv -> conv mapping (after mixer handling to avoid conflicts)
             elif ".conv.conv." in key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
+        
+        # Handle conv.conv -> conv mapping for acoustic tokenizer decoder layers
+        # This removes one level of .conv nesting for the updated TokenizerDecoder
+        if "acoustic_tokenizer.decoder" in key:
+            # Handle stem layer (upsample_layers.0) Sequential and conv.conv -> direct conv mapping
+            if "upsample_layers.0.0.conv.conv." in key:
+                new_key = new_key.replace("upsample_layers.0.0.conv.conv.", "upsample_layers.0.0.conv.")
+            # Handle head layer conv.conv -> conv mapping
+            elif "head.conv." in key:
+                new_key = new_key.replace("head.conv.", "head.")
+            # Note: SConvTranspose1d and Block1D layers are NOT updated, so we don't transform their keys
 
         updated_state_dict[new_key] = value
     
@@ -178,10 +189,10 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
         raise ValueError(f"missing keys found: {missing}")
-    # -- push to hub
-    if push_to_hub is not None:
-        print(f"------ Pushing to hub as {push_to_hub + '-SemanticTokenizer'} ------")
-        semantic_model.push_to_hub(push_to_hub + "-SemanticTokenizer")
+    # # -- push to hub, TODO disable for now
+    # if push_to_hub is not None:
+    #     print(f"------ Pushing to hub as {push_to_hub + '-SemanticTokenizer'} ------")
+    #     semantic_model.push_to_hub(push_to_hub + "-SemanticTokenizer")
 
     # 5) Create and save acoustic tokenizer
     print("\n=== Creating acoustic tokenizer ===")
