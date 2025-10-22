@@ -221,11 +221,30 @@ class Qwen3NextRMSNorm(Gemma3RMSNorm):
 
 class Qwen3NextAttention(Qwen3MoeAttention):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+        # Initialize nn.Module (skip Qwen3MoeAttention.__init__ to avoid loading rotary kernel)
+        nn.Module.__init__(self)
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim * 2, bias=config.attention_bias
         )
-        del self.sliding_window
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.q_norm = Qwen3NextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Qwen3NextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         # qwen3_next uses partial rotary embeddings, which the rotary kernel doesn't support yet
         # So we use the bamba apply_rotary_pos_emb function (imported at top) directly
