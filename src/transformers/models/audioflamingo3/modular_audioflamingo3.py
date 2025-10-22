@@ -97,37 +97,6 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
 
 
-    def _build_square_attn_mask(self, mask_1d: torch.Tensor, max_mel_seq_len: int) -> torch.Tensor:
-        """
-        Convert a (B, T_mel) frame-validity mask to Whisper's 4D square mask (B, 1, S, S)
-        with -inf on padded positions.
-
-        S is the sequence length after the conv front-end (conv1: stride=1, conv2: stride=2):
-        S = ceil(T_mel / 2) = (T_mel - 1) // 2 + 1. This equals T_mel // 2 for even T_mel used by the processor.
-        """
-        # Length after the stride-2 conv
-        audio_feat_lengths = ((mask_1d.sum(-1).to(torch.long) - 1) // 2) + 1
-        batch_size = mask_1d.shape[0]
-        # Sequence length after conv2 (stride=2, kernel=3, pad=1)
-        seq_len = (max_mel_seq_len - 1) // 2 + 1
-
-        # 2D padding mask on the downsampled timeline: True => keep, False => pad
-        seq = torch.arange(seq_len, device=mask_1d.device).unsqueeze(0).expand(batch_size, seq_len)
-        padding_mask = seq < audio_feat_lengths.unsqueeze(1)
-
-        # Build 4D float mask (B, 1, S, S) with 0 on valid, -inf on pads
-        mask_fn = padding_mask_function(padding_mask)
-        cache_position = torch.arange(seq_len, device=mask_1d.device)
-        attn_mask = eager_mask(
-            batch_size=batch_size,
-            cache_position=cache_position,
-            kv_length=seq_len,
-            mask_function=mask_fn,
-            dtype=self.conv1.weight.dtype,
-        )
-
-        return attn_mask
-
     @can_return_tuple
     def forward(
         self,
@@ -370,8 +339,30 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             time_dim = input_features.shape[-1]
             # Construct a (B, T_mel_max) boolean validity mask from measured mel lengths
             mask_1d = torch.arange(time_dim, device=input_features.device).unsqueeze(0) < Lmel.unsqueeze(1)
-            # TODO (ebezzam) since `_build_square_attn_mask` is only used here, let's explicitly write out
-            enc_mask = self.audio_tower._build_square_attn_mask(mask_1d, time_dim)
+            
+            # TODO (ebezzam) move `_build_square_attn_mask` here since only used once, 
+            # -- but can probably still be simplified
+            # Convert (B, T_mel) frame-validity mask to Whisper's 4D square mask (B, 1, S, S) with -inf on pads
+            audio_feat_lengths = ((mask_1d.sum(-1).to(torch.long) - 1) // 2) + 1
+            batch_size = mask_1d.shape[0]
+            # Sequence length after conv2 (stride=2, kernel=3, pad=1)
+            seq_len = (time_dim - 1) // 2 + 1
+            
+            # 2D padding mask on the downsampled timeline: True => keep, False => pad
+            seq = torch.arange(seq_len, device=mask_1d.device).unsqueeze(0).expand(batch_size, seq_len)
+            padding_mask = seq < audio_feat_lengths.unsqueeze(1)
+            
+            # Build 4D float mask (B, 1, S, S) with 0 on valid, -inf on pads
+            mask_fn = padding_mask_function(padding_mask)
+            cache_position = torch.arange(seq_len, device=mask_1d.device)
+            enc_mask = eager_mask(
+                batch_size=batch_size,
+                cache_position=cache_position,
+                kv_length=seq_len,
+                mask_function=mask_fn,
+                dtype=self.audio_tower.conv1.weight.dtype,
+            )
+            # TODO (ebezzam) end of `_build_square_attn_mask`
 
             # Encode audio -> project -> flatten valid frames
             enc_out = self.audio_tower(input_features, attention_mask=enc_mask)
