@@ -19,11 +19,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING
+from ...configuration_utils import PreTrainedConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class LlavaOnevision1_5VisionConfig(PretrainedConfig):
+class LlavaOnevision1_5VisionConfig(PreTrainedConfig):
     model_type = "llava_onevision1_5"
     base_config_key = "vision_config"
 
@@ -67,7 +67,7 @@ class LlavaOnevision1_5VisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class LlavaOnevision1_5Config(PretrainedConfig):
+class LlavaOnevision1_5Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaOnevision1_5Model`]. It is used to instantiate a
     LlavaOnevision1_5Model model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -105,7 +105,7 @@ class LlavaOnevision1_5Config(PretrainedConfig):
     ```"""
 
     model_type = "llava_onevision1_5"
-    sub_configs = {"vision_config": LlavaOnevision1_5VisionConfig, "text_config": CONFIG_MAPPING["qwen3"]}
+    sub_configs = {"vision_config": LlavaOnevision1_5VisionConfig, "text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -122,6 +122,11 @@ class LlavaOnevision1_5Config(PretrainedConfig):
         # that are in text config to the BaseClass defaults. The Base
         # config has many text related defaults and not all defaults are same as for `LlavaOnevision1_5TextConfig`
         super().__init__(**kwargs)
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "qwen3")
+            self.sub_configs["text_config"] = CONFIG_MAPPING[text_config["model_type"]]
+        elif text_config is None:
+            self.sub_configs["text_config"] = CONFIG_MAPPING["qwen3"]
 
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
