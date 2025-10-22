@@ -528,6 +528,7 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         super().__init__(config)
         self.visual = LlavaOnevision1_5VisionPretrainedModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
+        self.rope_deltas = None
         # Initialize weights and apply final processing
         self.post_init()
 
