@@ -1025,7 +1025,11 @@ class ModernBertModel(ModernBertPreTrainedModel):
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
         position_embeddings = {}
         for layer_type in self.config.layer_types:
-            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+            position_embeddings[layer_type] = self.rotary_emb(
+                x=hidden_states,
+                position_ids=(indices.unsqueeze(0) if position_ids is None else position_ids),
+                layer_type=layer_type,
+            )
 
         for encoder_layer in self.layers:
             if output_hidden_states:
