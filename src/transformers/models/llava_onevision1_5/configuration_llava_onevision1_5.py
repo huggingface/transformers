@@ -159,6 +159,8 @@ class LlavaOnevision1_5Config(PreTrainedConfig):
 
     def __getattribute__(self, key):
         if "text_config" in super().__getattribute__("__dict__") and key not in [
+            "_name_or_path",
+            "model_type",
             "dtype",
             "_attn_implementation_internal",
         ]:
