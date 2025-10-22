@@ -1152,7 +1152,7 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
 
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
-                self = getattr(self, self.base_model_prefix)
+                self = getattr(self, self.base_model_prefix)  # noqa: PLW0642
             tied_weights = self._tie_encoder_decoder_weights(
                 self.encoder, self.decoder, self.base_model_prefix, "encoder"
             )

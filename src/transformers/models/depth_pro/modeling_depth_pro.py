@@ -103,7 +103,7 @@ def reshape_features(hidden_states: torch.Tensor) -> torch.Tensor:
 
 def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch.Tensor:
     """Merges smaller patches into image-like feature map."""
-    n_patches, hidden_size, out_size, out_size = patches.shape
+    n_patches, hidden_size, out_size, _ = patches.shape
     n_patches_per_batch = n_patches // batch_size
     sqrt_n_patches_per_batch = torch_int(n_patches_per_batch**0.5)
     new_out_size = sqrt_n_patches_per_batch * out_size
