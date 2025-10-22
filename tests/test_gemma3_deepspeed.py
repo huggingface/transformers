@@ -19,6 +19,7 @@ from transformers.integrations.deepspeed import (
     unset_hf_deepspeed_config,
 )
 
+
 # Use consistent naming and structure like existing tests
 @require_deepspeed
 @require_torch_accelerator  # Add this decorator
@@ -121,7 +122,7 @@ class TestGemma3DeepSpeed(TestCasePlus):  # Inherit from TestCasePlus
 
                 # Assertions following existing pattern
                 self.assertIsNotNone(trainer)
-                self.assertTrue(hasattr(trainer.model, 'config'))
+                self.assertTrue(hasattr(trainer.model, "config"))
                 self.assertEqual(trainer.model.config.vocab_size, 1000)
 
     def test_gemma3_basic_config_creation(self):
