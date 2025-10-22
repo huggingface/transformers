@@ -600,6 +600,7 @@ class PLessLogitsWarper(LogitsProcessor):
     [`TopPLogitsWarper`] and [`TopKLogitsWarper`].
 
     Args:
+        p_less (`bool`): Must be `True` to use p-less sampling.
         filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
 
@@ -671,6 +672,7 @@ class PLessNormLogitsWarper(LogitsProcessor):
     [`TopPLogitsWarper`] and [`TopKLogitsWarper`].
 
     Args:
+        p_less_norm (`bool`): Must be `True` to use p-less-norm sampling.
         filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
 
