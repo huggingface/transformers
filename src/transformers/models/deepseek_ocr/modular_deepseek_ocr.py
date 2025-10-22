@@ -1,4 +1,4 @@
-# Copyright 2025 DeepSeek-AI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Deepseek-AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,14 +28,14 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..llava.modeling_llava import LlavaForConditionalGeneration
-from ..clip.modeling_clip import CLIPVisionModel
+from ..clip.modeling_clip import CLIPEncoder, CLIPVisionModel, CLIPVisionEmbeddings, CLIPVisionTransformer
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2PreTrainedModel
 from ..sam.modeling_sam import SamVisionEncoder
-from .configuration_deepseek_ocr import DeepSeekOCRConfig
+from .configuration_deepseek_ocr import DeepseekOcrConfig
 logger = logging.get_logger(__name__)
 
 
-class DeepSeekOCRSAMVisionConfig(PreTrainedConfig):
+class DeepseekOcrSAMVisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_sam_vision"
     base_config_key = "sam_vision_config"
 
@@ -84,7 +84,7 @@ class DeepSeekOCRSAMVisionConfig(PreTrainedConfig):
         self.out_channels = output_channels
 
 
-class DeepSeekOCRCLIPVisionConfig(PreTrainedConfig):
+class DeepseekOcrCLIPVisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_clip_vision"
     base_config_key = "clip_vision_config"
 
@@ -121,7 +121,7 @@ class DeepSeekOCRCLIPVisionConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
 
 
-class DeepSeekOCRProjectorConfig(PreTrainedConfig):
+class DeepseekOcrProjectorConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_projector"
     base_config_key = "projector_config"
 
@@ -140,13 +140,13 @@ class DeepSeekOCRProjectorConfig(PreTrainedConfig):
         self.depth = depth
 
 
-class DeepSeekOCRConfig(PreTrainedConfig):
+class DeepseekOcrConfig(PreTrainedConfig):
     model_type = "deepseek_ocr"
     sub_configs = {
         "text_config": AutoConfig,
-        "sam_vision_config": DeepSeekOCRSAMVisionConfig,
-        "clip_vision_config": DeepSeekOCRCLIPVisionConfig,
-        "projector_config": DeepSeekOCRProjectorConfig,
+        "sam_vision_config": DeepseekOcrSAMVisionConfig,
+        "clip_vision_config": DeepseekOcrCLIPVisionConfig,
+        "projector_config": DeepseekOcrProjectorConfig,
     }
 
     def __init__(
@@ -170,23 +170,23 @@ class DeepSeekOCRConfig(PreTrainedConfig):
         self.image_token_index = image_token_index
 
         if sam_vision_config is None:
-            self.sam_vision_config = DeepSeekOCRSAMVisionConfig()
+            self.sam_vision_config = DeepseekOcrSAMVisionConfig()
         elif isinstance(sam_vision_config, dict):
-            self.sam_vision_config = DeepSeekOCRSAMVisionConfig(**sam_vision_config)
+            self.sam_vision_config = DeepseekOcrSAMVisionConfig(**sam_vision_config)
         else:
             self.sam_vision_config = sam_vision_config
 
         if clip_vision_config is None:
-            self.clip_vision_config = DeepSeekOCRCLIPVisionConfig()
+            self.clip_vision_config = DeepseekOcrCLIPVisionConfig()
         elif isinstance(clip_vision_config, dict):
-            self.clip_vision_config = DeepSeekOCRCLIPVisionConfig(**clip_vision_config)
+            self.clip_vision_config = DeepseekOcrCLIPVisionConfig(**clip_vision_config)
         else:
             self.clip_vision_config = clip_vision_config
 
         if projector_config is None:
-            self.projector_config = DeepSeekOCRProjectorConfig()
+            self.projector_config = DeepseekOcrProjectorConfig()
         elif isinstance(projector_config, dict):
-            self.projector_config = DeepSeekOCRProjectorConfig(**projector_config)
+            self.projector_config = DeepseekOcrProjectorConfig(**projector_config)
         else:
             self.projector_config = projector_config
 
@@ -217,7 +217,7 @@ class DeepSeekOCRConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class DeepSeekOCRProjector(nn.Module):
+class DeepseekOcrProjector(nn.Module):
     """
     Projector that maps concatenated SAM + CLIP features to language model space.
     """
@@ -244,9 +244,9 @@ class DeepSeekOCRProjector(nn.Module):
         return self.layers(x)
 
 
-class DeepSeekOCRSAMVisionModel(SamVisionEncoder):
+class DeepseekOcrSAMVisionEncoder(SamVisionEncoder):
     """
-    SAM ViT-B vision encoder with additional neck layers for DeepSeek OCR.
+    SAM ViT-B vision encoder with additional neck layers for Deepseek OCR.
     Wraps the SAM vision encoder and adds downsampling convolutions.
     """
 
@@ -254,7 +254,8 @@ class DeepSeekOCRSAMVisionModel(SamVisionEncoder):
         super().__init__()
         out_channels = config.out_channels
         downsample_channels = config.downsample_channels
-
+        
+        # TODO move hardcoded values to config
         self.net_2 = nn.Conv2d(out_channels, downsample_channels[0], kernel_size=3, stride=2, padding=1, bias=False)
         self.net_3 = nn.Conv2d(
             downsample_channels[0], downsample_channels[1], kernel_size=3, stride=2, padding=1, bias=False
@@ -264,36 +265,67 @@ class DeepSeekOCRSAMVisionModel(SamVisionEncoder):
         encoder_output = self.encoder(pixel_values)
         hidden_states = encoder_output.last_hidden_state
 
-        x2 = self.net_2(hidden_states)
-        x3 = self.net_3(x2)
+        hidden_states = self.net_2(hidden_states)
+        hidden_states = self.net_3(hidden_states)
 
-        return x3
+        return hidden_states
 
 
-class DeepSeekOCRCLIPVisionModel(CLIPVisionModel):
+class DeepseekOcrVisionEmbeddings(CLIPVisionEmbeddings):
+    def forward(self, pixel_values, patch_embeds, interpolate_pos_encoding=False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+
+        #if patch_embeds is not None:
+        #    patch_embeds = patch_embeds
+        #else:
+        patch_embeds = self.patch_embedding(pixel_values) # Deepseek OCR CLIP embedder always uses SAM features
+        
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
+
+class DeepseekOcrCLIPEncoder(CLIPEncoder):
     pass
 
+class DeepseekOcrCLIPVisionTransformer(CLIPVisionTransformer):
+    def __init__(self, config):
+        super().__init__()
+        self.embeddings = DeepseekOcrVisionEmbeddings(config)
+        self.encoder = DeepseekOcrCLIPEncoder(config)
 
-class DeepSeekOCRPreTrainedModel(DeepseekV2PreTrainedModel):
-    config_class = DeepSeekOCRConfig
+
+class DeepseekOcrVisionModel(CLIPVisionModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.post_init()
+        self.vision_model = DeepseekOcrCLIPVisionTransformer(config)
+
+
+class DeepseekOcrPreTrainedModel(PreTrainedModel):
+    config_class = DeepseekOcrConfig
     base_model_prefix = "model"
 
 
-class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
+class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
     """
-    DeepSeek OCR model with dual vision encoders (SAM + CLIP) and a projector.
+    Deepseek OCR model with dual vision encoders (SAM + CLIP) and a projector.
     """
 
-    def __init__(self, config: DeepSeekOCRConfig):
+    def __init__(self, config: DeepseekOcrConfig):
         super().__init__(config)
         self.config = config
 
         self.language_model = AutoModel.from_config(config.deepseek_config)
 
-        self.sam_model = DeepSeekOCRSAMVisionModel(config.sam_vision_config)
+        self.sam_model = DeepseekOcrSAMVisionEncoder(config.sam_vision_config)
         self.clip_model = AutoModel.from_config(config.clip_vision_config)
 
-        self.projector = DeepSeekOCRProjector(config.projector_config)
+        self.projector = DeepseekOcrProjector(config.projector_config)
 
         embed_std = 1 / math.sqrt(config.hidden_size)
         self.image_newline = nn.Parameter(torch.randn(config.hidden_size) * embed_std)
@@ -353,14 +385,7 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
 
         return torch.cat(all_image_features, dim=0)
 
-    def _encode_images(self, pixel_values, image_spatial_crop):
-        """
-        Encode images with dual encoders (SAM + CLIP).
-
-        Args:
-            pixel_values: (batch, 2, max_crops, 3, H, W) - [patches, global_view]
-            image_spatial_crop: (batch, 2) - [width_crop_num, height_crop_num]
-        """
+    def get_image_features(self, pixel_values, image_spatial_crop):
         batch_size = pixel_values.size(0)
         patches = pixel_values[:, 0]
         global_view = pixel_values[:, 1]
@@ -413,7 +438,7 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
 
         if pixel_values is not None and torch.sum(pixel_values[0, 1]).item() != 0:
             
-            vision_features = self._encode_images(pixel_values, image_spatial_crop)
+            vision_features = self.get_image_features(pixel_values, image_spatial_crop)
 
             inputs_embeds = inputs_embeds.masked_scatter(
                 image_attention_mask.unsqueeze(-1).to(inputs_embeds.device), vision_features.to(inputs_embeds.dtype)
@@ -436,12 +461,12 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
     The Deepseek-OCR model which consists of two vision backbones and a deepseek language model.
     """
 )
-class DeepSeekOCRForConditionalGeneratin(LlavaForConditionalGeneration):
+class DeepseekOcrForConditionalGeneratin(LlavaForConditionalGeneration):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = DeepSeekOCRModel(config)
+        self.model = DeepseekOcrModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -470,12 +495,12 @@ class DeepSeekOCRForConditionalGeneratin(LlavaForConditionalGeneration):
 
         outputs = self.model(
             input_ids=input_ids,
+            pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            image_attention_mask=image_attention_mask,
+            image_attention_mask=image_attention_mask, # TODO this is just the special image mask
             image_spatial_crop=image_spatial_crop,
         )
 
@@ -551,10 +576,10 @@ class DeepSeekOCRForConditionalGeneratin(LlavaForConditionalGeneration):
 
 
 __all__ = [
-    "DeepSeekOCRModel",
-    "DeepSeekOCRForCausalLM",
-    "DeepSeekOCRPreTrainedModel",
-    "DeepSeekOCRProjector",
-    "DeepSeekOCRSAMVisionModel",
-    "DeepSeekOCRCLIPVisionModel",
+    "DeepseekOcrModel",
+    "DeepseekOcrForCausalLM",
+    "DeepseekOcrPreTrainedModel",
+    "DeepseekOcrProjector",
+    "DeepseekOcrSAMVisionEncoder",
+    "DeepseekOcrCLIPVisionModel",
 ]

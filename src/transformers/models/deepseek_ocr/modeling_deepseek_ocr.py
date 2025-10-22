@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deepseek_ocr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 DeepSeek-AI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Deepseek-AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@
 
 import collections
 import math
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -32,7 +31,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -47,8 +45,9 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_deepseek_ocr import (
-    DeepSeekOCRConfig,
     DeepseekOcrConfig,
+    DeepseekOcrSAMConfig,
+    DeepseekOcrSAMVisionConfig,
     DeepseekOcrTextConfig,
     DeepseekOcrVisionConfig,
 )
@@ -57,7 +56,7 @@ from .configuration_deepseek_ocr import (
 logger = logging.get_logger(__name__)
 
 
-class DeepSeekOCRProjector(nn.Module):
+class DeepseekOcrProjector(nn.Module):
     """
     Projector that maps concatenated SAM + CLIP features to language model space.
     """
@@ -87,11 +86,11 @@ class DeepSeekOCRProjector(nn.Module):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for deepseek_ocr vision model's outputs that also contains image embeddings obtained by applying the projection
+    Base class for deepseek_ocr_s_a_m vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
     """
 )
-class DeepseekOcrVisionEncoderOutput(ModelOutput):
+class DeepseekOcrSAMVisionEncoderOutput(ModelOutput):
     r"""
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
@@ -103,7 +102,7 @@ class DeepseekOcrVisionEncoderOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
-class DeepseekOcrPatchEmbeddings(nn.Module):
+class DeepseekOcrSAMPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -138,7 +137,7 @@ class DeepseekOcrPatchEmbeddings(nn.Module):
         return embeddings
 
 
-class DeepseekOcrMLPBlock(nn.Module):
+class DeepseekOcrSAMMLPBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
@@ -152,7 +151,7 @@ class DeepseekOcrMLPBlock(nn.Module):
         return hidden_states
 
 
-class DeepseekOcrLayerNorm(nn.LayerNorm):
+class DeepseekOcrSAMLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -178,7 +177,7 @@ class DeepseekOcrLayerNorm(nn.LayerNorm):
         return features
 
 
-class DeepseekOcrVisionAttention(nn.Module):
+class DeepseekOcrSAMVisionAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
     def __init__(self, config, window_size):
@@ -311,7 +310,7 @@ class DeepseekOcrVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class DeepseekOcrVisionSdpaAttention(DeepseekOcrVisionAttention):
+class DeepseekOcrSAMVisionSdpaAttention(DeepseekOcrSAMVisionAttention):
     """
     Multi-head Attention block with relative position embeddings.
     Using SDPA instead of the default attention.
@@ -323,7 +322,7 @@ class DeepseekOcrVisionSdpaAttention(DeepseekOcrVisionAttention):
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         if output_attentions:
             logger.warning_once(
-                "`DeepseekOcrVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "`DeepseekOcrSAMVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
                 "`output_attentions=True`. Falling back to the manual attention implementation, but "
                 "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
                 'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
@@ -369,19 +368,19 @@ class DeepseekOcrVisionSdpaAttention(DeepseekOcrVisionAttention):
         return attn_output, None
 
 
-DEEPSEEK_OCR_VISION_ATTENTION_CLASSES = {
-    "eager": DeepseekOcrVisionAttention,
-    "sdpa": DeepseekOcrVisionSdpaAttention,
+DEEPSEEK_OCR_S_A_M_VISION_ATTENTION_CLASSES = {
+    "eager": DeepseekOcrSAMVisionAttention,
+    "sdpa": DeepseekOcrSAMVisionSdpaAttention,
 }
 
 
-class DeepseekOcrVisionLayer(GradientCheckpointingLayer):
+class DeepseekOcrSAMVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attn = DEEPSEEK_OCR_VISION_ATTENTION_CLASSES[config._attn_implementation](config, window_size)
+        self.attn = DEEPSEEK_OCR_S_A_M_VISION_ATTENTION_CLASSES[config._attn_implementation](config, window_size)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = DeepseekOcrMLPBlock(config)
+        self.mlp = DeepseekOcrSAMMLPBlock(config)
         self.window_size = window_size
 
     def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
@@ -459,15 +458,15 @@ class DeepseekOcrVisionLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class DeepseekOcrVisionNeck(nn.Module):
-    def __init__(self, config: DeepseekOcrVisionConfig):
+class DeepseekOcrSAMVisionNeck(nn.Module):
+    def __init__(self, config: DeepseekOcrSAMVisionConfig):
         super().__init__()
         self.config = config
 
         self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
-        self.layer_norm1 = DeepseekOcrLayerNorm(config.output_channels, data_format="channels_first")
+        self.layer_norm1 = DeepseekOcrSAMLayerNorm(config.output_channels, data_format="channels_first")
         self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
-        self.layer_norm2 = DeepseekOcrLayerNorm(config.output_channels, data_format="channels_first")
+        self.layer_norm2 = DeepseekOcrSAMLayerNorm(config.output_channels, data_format="channels_first")
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.permute(0, 3, 1, 2)
@@ -479,94 +478,40 @@ class DeepseekOcrVisionNeck(nn.Module):
         return hidden_states
 
 
-class DeepseekOcrVisionEncoder(DeepseekOcrPreTrainedModel):
-    _can_record_outputs = {"hidden_states": DeepseekOcrVisionLayer, "attentions": DeepseekOcrVisionAttention}
-
-    def __init__(self, config: DeepseekOcrVisionConfig):
-        super().__init__(config)
-        self.config = config
-        self.image_size = config.image_size
-        self.patch_embed = DeepseekOcrPatchEmbeddings(config)
-
-        self.pos_embed = None
-        if config.use_abs_pos:
-            # Initialize absolute positional embedding with pretrain image size.
-            self.pos_embed = nn.Parameter(
-                torch.zeros(
-                    1,
-                    config.image_size // config.patch_size,
-                    config.image_size // config.patch_size,
-                    config.hidden_size,
-                )
-            )
-
-        self.layers = nn.ModuleList()
-        for i in range(config.num_hidden_layers):
-            layer = DeepseekOcrVisionLayer(
-                config,
-                window_size=config.window_size if i not in config.global_attn_indexes else 0,
-            )
-            self.layers.append(layer)
-
-        self.neck = DeepseekOcrVisionNeck(config)
-
-        self.gradient_checkpointing = False
-
-    def get_input_embeddings(self):
-        return self.patch_embed
-
-    @check_model_inputs(tie_last_hidden_states=False)
-    def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> DeepseekOcrVisionEncoderOutput:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.patch_embed(pixel_values)
-        if self.pos_embed is not None:
-            hidden_states = hidden_states + self.pos_embed
-        for layer_module in self.layers:
-            hidden_states = layer_module(hidden_states)
-        hidden_states = self.neck(hidden_states)
-        return DeepseekOcrVisionEncoderOutput(
-            last_hidden_state=hidden_states,
-        )
-
-
 @auto_docstring
-class DeepseekOcrPreTrainedModel(PreTrainedModel):
-    config: DeepseekOcrConfig
-    base_model_prefix = "deepseek_ocr"
+class DeepseekOcrSAMPreTrainedModel(PreTrainedModel):
+    config: DeepseekOcrSAMConfig
+    base_model_prefix = "deepseek_ocr_s_a_m"
     main_input_name = "pixel_values"
     input_modalities = "image"
-    _no_split_modules = ["DeepseekOcrVisionAttention"]
+    _no_split_modules = ["DeepseekOcrSAMVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
-        if isinstance(module, DeepseekOcrVisionAttention):
+        if isinstance(module, DeepseekOcrSAMVisionAttention):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
                 module.rel_pos_w.data.zero_()
-        elif isinstance(module, DeepseekOcrVisionEncoder):
+        elif isinstance(module, DeepseekOcrSAMVisionEncoder):
             if self.config.use_abs_pos:
                 module.pos_embed.data.zero_()
 
 
-class DeepSeekOCRSAMVisionModel(DeepseekOcrPreTrainedModel):
+class DeepseekOcrSAMVisionEncoder(DeepseekOcrSAMPreTrainedModel):
     """
-    SAM ViT-B vision encoder with additional neck layers for DeepSeek OCR.
+    SAM ViT-B vision encoder with additional neck layers for Deepseek OCR.
     Wraps the SAM vision encoder and adds downsampling convolutions.
     """
 
-    _can_record_outputs = {"hidden_states": DeepseekOcrVisionLayer, "attentions": DeepseekOcrVisionAttention}
+    _can_record_outputs = {"hidden_states": DeepseekOcrSAMVisionLayer, "attentions": DeepseekOcrSAMVisionAttention}
 
     def __init__(self, config):
         super().__init__(config)
         self.config = config
         self.image_size = config.image_size
-        self.patch_embed = DeepseekOcrPatchEmbeddings(config)
+        self.patch_embed = DeepseekOcrSAMPatchEmbeddings(config)
 
         self.pos_embed = None
         if config.use_abs_pos:
@@ -582,18 +527,19 @@ class DeepSeekOCRSAMVisionModel(DeepseekOcrPreTrainedModel):
 
         self.layers = nn.ModuleList()
         for i in range(config.num_hidden_layers):
-            layer = DeepseekOcrVisionLayer(
+            layer = DeepseekOcrSAMVisionLayer(
                 config,
                 window_size=config.window_size if i not in config.global_attn_indexes else 0,
             )
             self.layers.append(layer)
 
-        self.neck = DeepseekOcrVisionNeck(config)
+        self.neck = DeepseekOcrSAMVisionNeck(config)
 
         self.gradient_checkpointing = False
         out_channels = config.out_channels
         downsample_channels = config.downsample_channels
 
+        # TODO move hardcoded values to config
         self.net_2 = nn.Conv2d(out_channels, downsample_channels[0], kernel_size=3, stride=2, padding=1, bias=False)
         self.net_3 = nn.Conv2d(
             downsample_channels[0], downsample_channels[1], kernel_size=3, stride=2, padding=1, bias=False
@@ -603,14 +549,14 @@ class DeepSeekOCRSAMVisionModel(DeepseekOcrPreTrainedModel):
         return self.patch_embed
 
     @check_model_inputs(tie_last_hidden_states=False)
-    def forward(self, pixel_values) -> DeepseekOcrVisionEncoderOutput:
+    def forward(self, pixel_values) -> DeepseekOcrSAMVisionEncoderOutput:
         encoder_output = self.encoder(pixel_values)
         hidden_states = encoder_output.last_hidden_state
 
-        x2 = self.net_2(hidden_states)
-        x3 = self.net_3(x2)
+        hidden_states = self.net_2(hidden_states)
+        hidden_states = self.net_3(hidden_states)
 
-        return x3
+        return hidden_states
 
 
 class DeepseekOcrVisionEmbeddings(nn.Module):
@@ -677,16 +623,15 @@ class DeepseekOcrVisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+    def forward(self, pixel_values, patch_embeds, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
-            )
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
+        # if patch_embeds is not None:
+        #    patch_embeds = patch_embeds
+        # else:
+        patch_embeds = self.patch_embedding(pixel_values)  # Deepseek OCR CLIP embedder always uses SAM features
+
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         if interpolate_pos_encoding:
@@ -840,13 +785,13 @@ class DeepseekOcrEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class DeepseekOcrEncoder(nn.Module):
+class DeepseekOcrCLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`DeepseekOcrEncoderLayer`].
+    [`DeepseekOcrCLIPEncoderLayer`].
 
     Args:
-        config: DeepseekOcrConfig
+        config: DeepseekOcrCLIPConfig
     """
 
     def __init__(self, config: DeepseekOcrConfig):
@@ -897,15 +842,14 @@ class DeepseekOcrEncoder(nn.Module):
         )
 
 
-class DeepseekOcrVisionTransformer(nn.Module):
-    def __init__(self, config: DeepseekOcrVisionConfig):
+class DeepseekOcrCLIPVisionTransformer(nn.Module):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-
         self.embeddings = DeepseekOcrVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = DeepseekOcrEncoder(config)
+        self.encoder = DeepseekOcrCLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @auto_docstring
@@ -938,18 +882,18 @@ class DeepseekOcrVisionTransformer(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The vision model from DEEP_SEEK_O_C_R_C_L_I_P without any head or projection on top.
+    The vision model from DEEPSEEK_OCR without any head or projection on top.
     """
 )
-class DeepSeekOCRCLIPVisionModel(DeepseekOcrPreTrainedModel):
+class DeepseekOcrVisionModel(DeepseekOcrPreTrainedModel):
     config: DeepseekOcrVisionConfig
     main_input_name = "pixel_values"
     input_modalities = "image"
-    _no_split_modules = ["DeepSeekOCRCLIPEncoderLayer"]
+    _no_split_modules = ["DeepseekOcrEncoderLayer"]
 
-    def __init__(self, config: DeepseekOcrVisionConfig):
+    def __init__(self, config):
         super().__init__(config)
-        self.vision_model = DeepseekOcrVisionTransformer(config)
+        self.vision_model = DeepseekOcrCLIPVisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -971,10 +915,10 @@ class DeepSeekOCRCLIPVisionModel(DeepseekOcrPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, DeepSeekOCRCLIPVisionModel
+        >>> from transformers import AutoProcessor, DeepseekOcrVisionModel
 
-        >>> model = DeepSeekOCRCLIPVisionModel.from_pretrained("openai/deep_seek_o_c_r_c_l_i_p-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/deep_seek_o_c_r_c_l_i_p-vit-base-patch32")
+        >>> model = DeepseekOcrVisionModel.from_pretrained("openai/deepseek_ocr-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/deepseek_ocr-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -993,355 +937,26 @@ class DeepSeekOCRCLIPVisionModel(DeepseekOcrPreTrainedModel):
         )
 
 
-class DeepSeekOCRMLP(nn.Module):
-    def __init__(self, config: DeepSeekOCRConfig, hidden_size=None, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-class DeepSeekOCRExperts(nn.ModuleList):
-    """
-    ModuleList of experts.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.num_experts = config.n_routed_experts
-        for _ in range(config.n_routed_experts):
-            self.append(DeepSeekOCRMLP(config, intermediate_size=config.moe_intermediate_size))
-
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
-        Returns:
-            (batch_size * sequence_length, hidden_dim)
-        """
-        final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        return final_hidden_states
-
-
-class DeepSeekOCRMoe(nn.Module):
-    def __init__(self, config: DeepSeekOCRConfig):
-        super().__init__()
-        self.config = config
-        self.experts = DeepSeekOCRExperts(config)
-        self.gate = nn.Linear(config.hidden_size, config.n_routed_experts, bias=False)
-        if config.n_shared_experts is not None:
-            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-            self.shared_experts = DeepSeekOCRMLP(config=config, intermediate_size=intermediate_size)
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.topk_method = config.topk_method
-        self.num_group = config.n_group
-        self.top_k = config.num_experts_per_tok
-        self.topk_group = config.topk_group
-
-    def route_tokens_to_experts(self, router_logits):
-        batch_size, seq_len, hidden_dim = router_logits.shape
-        router_logits = router_logits.view(-1, hidden_dim)
-        router_logits = router_logits.softmax(dim=-1, dtype=torch.float32)
-        if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=False)
-        elif self.topk_method == "group_limited_greedy":
-            group_scores = router_logits.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values
-            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-            group_mask = torch.zeros_like(group_scores)
-            group_mask.scatter_(1, group_idx, 1)
-            score_mask = (
-                group_mask.unsqueeze(-1)
-                .expand(batch_size * seq_len, self.num_group, self.num_experts // self.num_group)
-                .reshape(batch_size * seq_len, -1)
-            )
-            tmp_scores = router_logits.masked_fill(~score_mask.bool(), 0.0)
-            topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
-
-        topk_weight = topk_weight * self.routed_scaling_factor
-        return topk_idx, topk_weight
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        router_logits = nn.functional.linear(hidden_states.type(torch.float32), self.gate.weight.type(torch.float32))
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class DeepSeekOCRRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        DeepSeekOCRRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-
-    # Broadcast to [1, 1, seq_len, dim // 2]
-    freqs_cis = freqs_cis.unsqueeze(1).to(xq_.device)
-
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3).type_as(xq)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3).type_as(xk)
-    return xq_out, xk_out
-
-
-class DeepSeekOCRAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config: DeepSeekOCRConfig, layer_idx: Optional[int] = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = config.head_dim
-        self.max_position_embeddings = config.max_position_embeddings
-
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-
-        self.is_causal = True
-
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = DeepSeekOCRRMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-
-        self.kv_a_proj_with_mqa = nn.Linear(
-            self.hidden_size,
-            config.kv_lora_rank + config.qk_rope_head_dim,
-            bias=config.attention_bias,
-        )
-        self.kv_a_layernorm = DeepSeekOCRRMSNorm(config.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            config.kv_lora_rank,
-            self.num_heads * (self.qk_head_dim - self.qk_rope_head_dim + self.v_head_dim),
-            bias=False,
-        )
-
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            self.hidden_size,
-            bias=config.attention_bias,
-        )
-
-        self.scaling = self.qk_head_dim ** (-0.5)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-        batch_size, seq_length = hidden_states.shape[:-1]
-        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-
-        if self.q_lora_rank is None:
-            q = self.q_proj(hidden_states)
-        else:
-            q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q = q.view(query_shape).transpose(1, 2)
-        q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-
-        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_nope = self.kv_b_proj(self.kv_a_layernorm(k_nope)).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-        q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
-
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        query_states = torch.cat((q_nope, q_pe), dim=-1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
-
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class DeepSeekOCRDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: DeepSeekOCRConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = DeepSeekOCRAttention(config=config, layer_idx=layer_idx)
-        self.mlp = DeepSeekOCRMoe(config) if layer_idx >= config.first_k_dense_replace else DeepSeekOCRMLP(config)
-
-        self.input_layernorm = DeepSeekOCRRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = DeepSeekOCRRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
-
-
-@auto_docstring
-class DeepSeekOCRPreTrainedModel(PreTrainedModel):
-    config: DeepSeekOCRConfig
+class DeepseekOcrPreTrainedModel(PreTrainedModel):
+    config_class = DeepseekOcrConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["DeepSeekOCRDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = False
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": DeepSeekOCRDecoderLayer,
-        "attentions": DeepSeekOCRAttention,
-    }
-    config_class = DeepSeekOCRConfig
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, DeepSeekOCRMoe):
-            module.gate.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
-class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
+class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
     """
-    DeepSeek OCR model with dual vision encoders (SAM + CLIP) and a projector.
+    Deepseek OCR model with dual vision encoders (SAM + CLIP) and a projector.
     """
 
-    def __init__(self, config: DeepSeekOCRConfig):
+    def __init__(self, config: DeepseekOcrConfig):
         super().__init__(config)
         self.config = config
 
         self.language_model = AutoModel.from_config(config.deepseek_config)
 
-        self.sam_model = DeepSeekOCRSAMVisionModel(config.sam_vision_config)
+        self.sam_model = DeepseekOcrSAMVisionEncoder(config.sam_vision_config)
         self.clip_model = AutoModel.from_config(config.clip_vision_config)
 
-        self.projector = DeepSeekOCRProjector(config.projector_config)
+        self.projector = DeepseekOcrProjector(config.projector_config)
 
         embed_std = 1 / math.sqrt(config.hidden_size)
         self.image_newline = nn.Parameter(torch.randn(config.hidden_size) * embed_std)
@@ -1401,14 +1016,7 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
 
         return torch.cat(all_image_features, dim=0)
 
-    def _encode_images(self, pixel_values, image_spatial_crop):
-        """
-        Encode images with dual encoders (SAM + CLIP).
-
-        Args:
-            pixel_values: (batch, 2, max_crops, 3, H, W) - [patches, global_view]
-            image_spatial_crop: (batch, 2) - [width_crop_num, height_crop_num]
-        """
+    def get_image_features(self, pixel_values, image_spatial_crop):
         batch_size = pixel_values.size(0)
         patches = pixel_values[:, 0]
         global_view = pixel_values[:, 1]
@@ -1460,7 +1068,7 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None and torch.sum(pixel_values[0, 1]).item() != 0:
-            vision_features = self._encode_images(pixel_values, image_spatial_crop)
+            vision_features = self.get_image_features(pixel_values, image_spatial_crop)
 
             inputs_embeds = inputs_embeds.masked_scatter(
                 image_attention_mask.unsqueeze(-1).to(inputs_embeds.device), vision_features.to(inputs_embeds.dtype)
@@ -1484,7 +1092,7 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
     The Deepseek-OCR model which consists of two vision backbones and a deepseek language model.
     """
 )
-class DeepSeekOCRForConditionalGeneratin(DeepseekOcrPreTrainedModel, GenerationMixin):
+class DeepseekOcrForConditionalGeneratin(DeepseekOcrPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_tower": "model.vision_tower",
@@ -1495,7 +1103,7 @@ class DeepSeekOCRForConditionalGeneratin(DeepseekOcrPreTrainedModel, GenerationM
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = DeepSeekOCRModel(config)
+        self.model = DeepseekOcrModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.vocab_size = config.vocab_size
         self.post_init()
@@ -1673,10 +1281,10 @@ class DeepSeekOCRForConditionalGeneratin(DeepseekOcrPreTrainedModel, GenerationM
 
 
 __all__ = [
-    "DeepSeekOCRModel",
-    "DeepSeekOCRForCausalLM",
-    "DeepSeekOCRPreTrainedModel",
-    "DeepSeekOCRProjector",
-    "DeepSeekOCRSAMVisionModel",
-    "DeepSeekOCRCLIPVisionModel",
+    "DeepseekOcrModel",
+    "DeepseekOcrForCausalLM",
+    "DeepseekOcrPreTrainedModel",
+    "DeepseekOcrProjector",
+    "DeepseekOcrSAMVisionEncoder",
+    "DeepseekOcrCLIPVisionModel",
 ]

@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deepseek_ocr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 DeepSeek-AI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Deepseek-AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class DeepSeekOCRSAMVisionConfig(PreTrainedConfig):
+class DeepseekOcrSAMVisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_sam_vision"
     base_config_key = "sam_vision_config"
 
@@ -71,7 +71,7 @@ class DeepSeekOCRSAMVisionConfig(PreTrainedConfig):
         self.out_channels = output_channels
 
 
-class DeepSeekOCRCLIPVisionConfig(PreTrainedConfig):
+class DeepseekOcrCLIPVisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_clip_vision"
     base_config_key = "clip_vision_config"
 
@@ -108,7 +108,7 @@ class DeepSeekOCRCLIPVisionConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
 
 
-class DeepSeekOCRProjectorConfig(PreTrainedConfig):
+class DeepseekOcrProjectorConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_projector"
     base_config_key = "projector_config"
 
@@ -127,13 +127,13 @@ class DeepSeekOCRProjectorConfig(PreTrainedConfig):
         self.depth = depth
 
 
-class DeepSeekOCRConfig(PreTrainedConfig):
+class DeepseekOcrConfig(PreTrainedConfig):
     model_type = "deepseek_ocr"
     sub_configs = {
         "text_config": AutoConfig,
-        "sam_vision_config": DeepSeekOCRSAMVisionConfig,
-        "clip_vision_config": DeepSeekOCRCLIPVisionConfig,
-        "projector_config": DeepSeekOCRProjectorConfig,
+        "sam_vision_config": DeepseekOcrSAMVisionConfig,
+        "clip_vision_config": DeepseekOcrCLIPVisionConfig,
+        "projector_config": DeepseekOcrProjectorConfig,
     }
 
     def __init__(
@@ -157,23 +157,23 @@ class DeepSeekOCRConfig(PreTrainedConfig):
         self.image_token_index = image_token_index
 
         if sam_vision_config is None:
-            self.sam_vision_config = DeepSeekOCRSAMVisionConfig()
+            self.sam_vision_config = DeepseekOcrSAMVisionConfig()
         elif isinstance(sam_vision_config, dict):
-            self.sam_vision_config = DeepSeekOCRSAMVisionConfig(**sam_vision_config)
+            self.sam_vision_config = DeepseekOcrSAMVisionConfig(**sam_vision_config)
         else:
             self.sam_vision_config = sam_vision_config
 
         if clip_vision_config is None:
-            self.clip_vision_config = DeepSeekOCRCLIPVisionConfig()
+            self.clip_vision_config = DeepseekOcrCLIPVisionConfig()
         elif isinstance(clip_vision_config, dict):
-            self.clip_vision_config = DeepSeekOCRCLIPVisionConfig(**clip_vision_config)
+            self.clip_vision_config = DeepseekOcrCLIPVisionConfig(**clip_vision_config)
         else:
             self.clip_vision_config = clip_vision_config
 
         if projector_config is None:
-            self.projector_config = DeepSeekOCRProjectorConfig()
+            self.projector_config = DeepseekOcrProjectorConfig()
         elif isinstance(projector_config, dict):
-            self.projector_config = DeepSeekOCRProjectorConfig(**projector_config)
+            self.projector_config = DeepseekOcrProjectorConfig(**projector_config)
         else:
             self.projector_config = projector_config
 
