@@ -63,6 +63,11 @@ if is_tokenizers_available():
 else:
     TokenizersBackend = None
 
+if is_sentencepiece_available():
+    from ...tokenization_sentencepiece import SentencePieceBackend
+else:
+    SentencePieceBackend = None
+
 logger = logging.get_logger(__name__)
 
 # V5: Simplified mapping - single tokenizer class per model type (always prefer tokenizers-based)
@@ -445,82 +450,50 @@ def _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
     return None
 
 
-def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs):
+def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs):
     """
-    Try to load a tokenizer using various fallback strategies.
-
-    This function attempts to load a tokenizer with the following priority:
+    Load a tokenizer using only the tokenizers backend (no SentencePiece fallback).
+    
+    This function attempts to load with the following priority:
     1. If tokenizer.json exists, load directly
     2. If any .model file (SPM) exists, try extracting vocab and merges
     3. If vocab.json and merges.txt exist, load with those
-    4. Fallback to SentencePieceBackend if any .model file exists but no class found
-
+    
     Args:
-        tokenizer_class: The tokenizer class to instantiate (can be None)
+        tokenizer_class: The tokenizer class to instantiate
         pretrained_model_name_or_path: Path or model id
         inputs: Additional positional arguments for tokenizer init
         kwargs: Additional keyword arguments
-
+    
     Returns:
         An instantiated tokenizer object
-
+    
     Raises:
-        ValueError: If no tokenizer could be loaded
+        ValueError: If tokenizer could not be loaded with tokenizers backend
     """
-    if tokenizer_class is not None:
-        # If tokenizer.json exists, load the tokenizers-backend
+    # Try tokenizer.json first
+    try:
+        tokenizer_json_exists = has_file(
+            pretrained_model_name_or_path,
+            "tokenizer.json",
+            revision=kwargs.get("revision"),
+            token=kwargs.get("token"),
+            cache_dir=kwargs.get("cache_dir"),
+            local_files_only=kwargs.get("local_files_only", False),
+        )
+    except Exception:
+        tokenizer_json_exists = False
+    
+    if tokenizer_json_exists:
+        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+    
+    # Try extracting from SentencePiece model
+    spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
+    if spm_file is not None:
         try:
-            tokenizer_json_exists = has_file(
+            resolved_spm = cached_file(
                 pretrained_model_name_or_path,
-                "tokenizer.json",
-                revision=kwargs.get("revision"),
-                token=kwargs.get("token"),
-                cache_dir=kwargs.get("cache_dir"),
-                local_files_only=kwargs.get("local_files_only", False),
-            )
-        except Exception:
-            tokenizer_json_exists = False
-        if tokenizer_json_exists:
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
-        # If only SPM exists, try to get vocab and merges and init to load a tokenizers-backend
-        spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
-        if spm_file is not None:
-            try:
-                resolved_spm = cached_file(
-                    pretrained_model_name_or_path,
-                    spm_file,
-                    cache_dir=kwargs.get("cache_dir"),
-                    force_download=kwargs.get("force_download", False),
-                    proxies=kwargs.get("proxies"),
-                    token=kwargs.get("token"),
-                    revision=kwargs.get("revision"),
-                    local_files_only=kwargs.get("local_files_only", False),
-                    subfolder=kwargs.get("subfolder", ""),
-                )
-            except Exception:
-                resolved_spm = None
-            if resolved_spm is not None:
-                try:
-                    from ...tokenization_sentencepiece import SentencePieceExtractor
-
-                    fast_sig = inspect.signature(
-                        getattr(tokenizer_class, "__init__", tokenizer_class)
-                    )
-                    if "vocab" in fast_sig.parameters and "merges" in fast_sig.parameters:
-                        try:
-                            vocab, merges = SentencePieceExtractor(resolved_spm).extract()
-                            return tokenizer_class.from_pretrained(
-                                pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
-                            )
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-        try:
-            vocab_file = cached_file(
-                pretrained_model_name_or_path,
-                "vocab.json",
+                spm_file,
                 cache_dir=kwargs.get("cache_dir"),
                 force_download=kwargs.get("force_download", False),
                 proxies=kwargs.get("proxies"),
@@ -529,46 +502,156 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 local_files_only=kwargs.get("local_files_only", False),
                 subfolder=kwargs.get("subfolder", ""),
             )
-            vocab_json_exists = True
         except Exception:
-            vocab_json_exists = False
+            resolved_spm = None
+        
+        if resolved_spm is not None:
+            try:
+                from ...tokenization_sentencepiece import SentencePieceExtractor
 
-        try:
-            merges_file = cached_file(
-                pretrained_model_name_or_path,
-                "merges.txt",
-                cache_dir=kwargs.get("cache_dir"),
-                force_download=kwargs.get("force_download", False),
-                proxies=kwargs.get("proxies"),
-                token=kwargs.get("token"),
-                revision=kwargs.get("revision"),
-                local_files_only=kwargs.get("local_files_only", False),
+                fast_sig = inspect.signature(
+                    getattr(tokenizer_class, "__init__", tokenizer_class)
+                )
+                if "vocab" in fast_sig.parameters and "merges" in fast_sig.parameters:
+                    try:
+                        vocab, merges = SentencePieceExtractor(resolved_spm).extract()
+                        return tokenizer_class.from_pretrained(
+                            pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+    
+    # Try vocab.json + merges.txt
+    try:
+        vocab_file = cached_file(
+            pretrained_model_name_or_path,
+            "vocab.json",
+            cache_dir=kwargs.get("cache_dir"),
+            force_download=kwargs.get("force_download", False),
+            proxies=kwargs.get("proxies"),
+            token=kwargs.get("token"),
+            revision=kwargs.get("revision"),
+            local_files_only=kwargs.get("local_files_only", False),
+            subfolder=kwargs.get("subfolder", ""),
+        )
+        vocab_json_exists = True
+    except Exception:
+        vocab_json_exists = False
+
+    try:
+        merges_file = cached_file(
+            pretrained_model_name_or_path,
+            "merges.txt",
+            cache_dir=kwargs.get("cache_dir"),
+            force_download=kwargs.get("force_download", False),
+            proxies=kwargs.get("proxies"),
+            token=kwargs.get("token"),
+            revision=kwargs.get("revision"),
+            local_files_only=kwargs.get("local_files_only", False),
+        )
+        merges_txt_exists = True
+    except Exception:
+        merges_txt_exists = False
+
+    if vocab_json_exists and merges_txt_exists:
+        vocab = load_vocab(vocab_file)
+        merges = load_merges(merges_file)
+        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs)
+    
+    # If all methods failed, raise an error
+    raise ValueError(
+        f"Could not load tokenizer from {pretrained_model_name_or_path} using tokenizers backend. "
+        "No tokenizer.json, vocab.json+merges.txt, or compatible SentencePiece model found."
+    )
+
+
+def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs):
+    """
+    Try to load a tokenizer with backend selection.
+
+    This function routes to the appropriate backend based on the 'backend' parameter:
+    - "tokenizers" (default): Uses HuggingFace tokenizers library backend
+    - "sentencepiece": Uses SentencePiece backend
+    
+    For the tokenizers backend, attempts to load with the following priority:
+    1. If tokenizer.json exists, load directly
+    2. If any .model file (SPM) exists, try extracting vocab and merges
+    3. If vocab.json and merges.txt exist, load with those
+    4. Fallback to SentencePieceBackend if available
+
+    Args:
+        tokenizer_class: The tokenizer class to instantiate (can be None)
+        pretrained_model_name_or_path: Path or model id
+        inputs: Additional positional arguments for tokenizer init
+        kwargs: Additional keyword arguments (may include 'backend' parameter, defaults to "tokenizers")
+
+    Returns:
+        An instantiated tokenizer object
+
+    Raises:
+        ValueError: If no tokenizer could be loaded
+    """
+    # Extract the backend parameter - default to "tokenizers" to prioritize tokenizers backend
+    backend = kwargs.pop("backend", "tokenizers")
+    
+    # Validate backend parameter
+    if backend not in ["sentencepiece", "tokenizers"]:
+        logger.warning(
+            f"Invalid backend '{backend}' specified. Valid options are 'tokenizers' or 'sentencepiece'. "
+            "Defaulting to 'tokenizers' backend."
+        )
+        backend = "tokenizers"
+    
+    # Route to SentencePiece backend if requested
+    if backend == "sentencepiece":
+        if SentencePieceBackend is None:
+            raise ValueError(
+                "SentencePiece backend was requested but sentencepiece is not installed. "
+                "Please install it with: pip install sentencepiece"
             )
-            merges_txt_exists = True
-
-        except Exception:
-            merges_txt_exists = False
-
-        if vocab_json_exists and merges_txt_exists:
-            vocab = load_vocab(vocab_file)
-            merges = load_merges(merges_file)
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs)
-
-    # If we failed with a tokenizers-backend, we load from another backend (below only SPM but will add others)
-    if tokenizer_class is None:
+        logger.info(f"Loading tokenizer with SentencePiece backend")
+        return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+    
+    # Route to tokenizers backend (default)
+    if backend == "tokenizers":
+        if tokenizer_class is not None:
+            # Check if tokenizer_class inherits from PreTrainedTokenizer (but not from TokenizersBackend/SentencePieceBackend)
+            # These are edge cases with custom logic (e.g., BioGptTokenizer with Moses tokenization)
+            from ...tokenization_utils import PreTrainedTokenizer
+            
+            # Build list of backend classes to check against
+            backend_classes = [TokenizersBackend] if TokenizersBackend else []
+            if SentencePieceBackend:
+                backend_classes.append(SentencePieceBackend)
+            
+            if issubclass(tokenizer_class, PreTrainedTokenizer) and not any(issubclass(tokenizer_class, bc) for bc in backend_classes):
+                logger.info(f"Loading tokenizer with custom PreTrainedTokenizer backend (edge case)")
+                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            
+            if TokenizersBackend is None:
+                raise ValueError(
+                    "Tokenizers backend is the default but tokenizers library is not installed. "
+                    "Please install it with: pip install tokenizers"
+                )
+            logger.info(f"Loading tokenizer with tokenizers backend")
+            return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
+        
+        # If no tokenizer class but tokenizers backend requested, fall back to SentencePiece if available
         spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
-        if spm_file is not None:
+        if spm_file is not None and SentencePieceBackend is not None:
             logger.info(
-                f"Falling back to SentencePieceBackend since {spm_file} file was found "
-                "but no config or tokenizer class could be determined."
+                f"Tokenizers backend was requested but no tokenizer class found. "
+                f"Falling back to SentencePieceBackend since {spm_file} file was found."
             )
             return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
+        
         raise ValueError(
             f"Could not load tokenizer from {pretrained_model_name_or_path}. "
-            "No tokenizer configuration or model config could be found."
+            "No tokenizer class could be determined and no SentencePiece model found."
         )
-    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+    
 
 
 def get_tokenizer_config(
@@ -743,6 +826,10 @@ class AutoTokenizer:
                 facebook/rag-token-base), specify it here.
             tokenizer_type (`str`, *optional*):
                 Tokenizer type to be loaded.
+            backend (`str`, *optional*, defaults to `"tokenizers"`):
+                Backend to use for tokenization. Valid options are:
+                - `"tokenizers"`: Use the HuggingFace tokenizers library backend (default)
+                - `"sentencepiece"`: Use the SentencePiece backend
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
@@ -768,6 +855,12 @@ class AutoTokenizer:
 
         >>> # Download vocabulary from huggingface.co and define model-specific arguments
         >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", add_prefix_space=True)
+        
+        >>> # Explicitly use the tokenizers backend
+        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="tokenizers")
+        
+        >>> # Explicitly use the sentencepiece backend
+        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="sentencepiece")
         ```"""
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:

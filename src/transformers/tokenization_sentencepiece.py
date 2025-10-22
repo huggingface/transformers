@@ -310,6 +310,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         # 1. Extract sentencepiece-specific parameters
         self.vocab_file = kwargs.get("vocab_file", None)
         self.legacy = kwargs.get("legacy", True)
+        self.sp_model_kwargs = kwargs.pop("sp_model_kwargs", {})
         from_slow = kwargs.pop("from_slow", False)
 
         self.tokens_trie = Trie()
@@ -325,16 +326,23 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
 
         # 5. Load the SentencePiece model
-        tokenizer = spm.SentencePieceProcessor()
+        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         tokenizer.Load(self.vocab_file)
         self.sp_model = tokenizer
+        
+        # 6. Initialize total_vocab_size based on sp_model size
+        self.total_vocab_size = self.sp_model.get_piece_size()
 
-        # 6. If some of the special tokens are not part of the vocab, we add them, at the end.
+        # 7. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
+        # Note: _add_tokens will automatically skip tokens that are already in the base vocab
         self._add_tokens(
             [token for token in self.all_special_tokens if token not in self._added_tokens_encoder],
             special_tokens=True,
         )
+
+        # 8. Ensure the trie is populated with added tokens (important when loading from pretrained)
+        self._update_trie()
 
         self._decode_use_source_tokenizer = False
 
@@ -348,18 +356,29 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         """
         Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
         optimisation in `self._added_tokens_encoder` for the slow tokenizers.
+        
+        Only returns tokens that are NOT in the base SentencePiece vocabulary.
         """
-        return {k.content: v for v, k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
+        # Use the filtered added_tokens_decoder property to ensure consistency
+        return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[0])}
 
     @property
     def added_tokens_decoder(self) -> dict[int, AddedToken]:
         """
         Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
+        
+        Only returns tokens that are NOT in the base SentencePiece vocabulary (i.e., index >= vocab_size).
 
         Returns:
-            `dict[str, int]`: The added tokens.
+            `dict[int, AddedToken]`: The added tokens.
         """
-        return dict(sorted(self._added_tokens_decoder.items(), key=lambda item: item[0]))
+        # Filter out tokens with indices in the base vocab range
+        # Base vocab tokens have indices 0 to vocab_size-1
+        return {
+            token_id: added_token
+            for token_id, added_token in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])
+            if token_id >= self.vocab_size
+        }
 
     @added_tokens_decoder.setter
     def added_tokens_decoder(self, value: dict[int, Union[AddedToken, str]]) -> dict[int, AddedToken]:
@@ -461,35 +480,44 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 token.content = token.content.lower()
 
             # Check if in base vocab via SentencePiece directly
-            in_base_vocab = False
-            base_unk_id = self._convert_token_to_id(str(self.unk_token)) if getattr(self, "unk_token", None) is not None else None
-            if base_unk_id is not None:
-                tok_id = self._convert_token_to_id(token.content)
-                in_base_vocab = tok_id is not None and tok_id != base_unk_id
+            # We need to check if the token is actually in the vocab, not just if it maps to something
+            # piece_to_id returns unk_id for unknown tokens, so we need to verify
+            tok_id = self.sp_model.piece_to_id(token.content)
+            # Check if the token actually exists in the vocab by verifying round-trip
+            in_base_vocab = tok_id < self.sp_model.get_piece_size() and self.sp_model.IdToPiece(tok_id) == token.content
 
             if in_base_vocab:
-                token_index = tok_id
+                # Token is already in base vocab, don't add it to added_tokens_decoder
+                # Just skip it - it will be handled by the base vocab lookups
+                continue
             else:
+                # Token is not in base vocab, add it as a new token
                 token_index = next_index
                 next_index += 1
                 num_added += 1
-
-            if token.special and str(token) not in self.all_special_tokens:
-                self._special_tokens_map["additional_special_tokens"].append(token)
-            # the setter automatically updates the reverse map
-            self._added_tokens_decoder[token_index] = token
-            self._added_tokens_encoder[token.content] = token_index
-            if self.verbose:
-                logger.info(f"Adding {token} to the vocabulary")
+                
+                if token.special and str(token) not in self.all_special_tokens:
+                    self._special_tokens_map["additional_special_tokens"].append(token)
+                # the setter automatically updates the reverse map
+                self._added_tokens_decoder[token_index] = token
+                self._added_tokens_encoder[token.content] = token_index
+                if self.verbose:
+                    logger.info(f"Adding {token} to the vocabulary")
 
         self._update_trie()
         self._update_total_vocab_size()
         return num_added
 
     def _update_trie(self, unique_no_split_tokens: Optional[list[str]] = None):
+        # Add all added tokens
         for token in self._added_tokens_decoder.values():
             if token.content not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token.content)
+        # Also add all special tokens (even if they're in base vocab) so they get split during tokenization
+        for token in self.all_special_tokens:
+            if token not in self.tokens_trie._tokens:
+                self.tokens_trie.add(token)
+        # Add any additional no-split tokens
         for token in unique_no_split_tokens or []:
             if token not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token)
@@ -555,14 +583,15 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
             no_split_token = []
             tokens = [text]
         else:
-            no_split_token = self._added_tokens_encoder.keys()  # don't split on any of the added tokens
+            # Don't split on any tokens that are in the trie (includes both added tokens and special tokens)
+            no_split_token = self.tokens_trie._tokens
             # "This is something<special_token_1>  else"
             tokens = self.tokens_trie.split(text)
 
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
             if token in no_split_token:
-                tok_extended = self._added_tokens_decoder.get(self._added_tokens_encoder[token], None)
+                tok_extended = self._added_tokens_decoder.get(self._added_tokens_encoder.get(token), None)
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
                 if isinstance(tok_extended, AddedToken):
@@ -579,6 +608,9 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                     elif tok_extended.single_word and right and right[0] != " ":
                         tokens[i + 1] = token + tokens[i + 1]
                         tokens[i] = ""
+                elif tok_extended is None:
+                    # Token is in base vocab (e.g., special token), just keep it as-is
+                    pass
                 else:
                     raise ValueError(
                         f"{tok_extended} cannot be tokenized because it was not properly added"
@@ -681,11 +713,53 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
-        # Detect batched inputs (list of sequences) when not explicitly word-split
+        
+        # Detect if text is a list of tuples (batched pairs)
+        is_batched_pairs = (
+            isinstance(text, (list, tuple))
+            and len(text) > 0
+            and isinstance(text[0], (tuple, list))
+            and len(text[0]) == 2
+            and isinstance(text[0][0], str)
+            and isinstance(text[0][1], str)
+        )
+        
+        if is_batched_pairs:
+            # Unpack the tuples into separate lists
+            texts = [pair[0] for pair in text]
+            text_pairs = [pair[1] for pair in text]
+            # Recursively call with unpacked lists
+            return self._encode_plus(
+                texts,
+                text_pair=text_pairs,
+                add_special_tokens=add_special_tokens,
+                padding_strategy=padding_strategy,
+                truncation_strategy=truncation_strategy,
+                max_length=max_length,
+                stride=stride,
+                is_split_into_words=is_split_into_words,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
+        
+        # Detect batched inputs (list of sequences)
         is_batched = (
             isinstance(text, (list, tuple))
-            and not is_split_into_words
-            and (len(text) == 0 or isinstance(text[0], (str, list, tuple, int)))
+            and (
+                # Regular batch (not pretokenized)
+                (not is_split_into_words and (len(text) == 0 or isinstance(text[0], (str, list, tuple, int))))
+                # Batched pretokenized inputs (is_split_into_words and each item is a list)
+                or (is_split_into_words and len(text) > 0 and isinstance(text[0], (list, tuple)))
+            )
         )
 
         if is_batched:
@@ -700,6 +774,17 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
 
             batch_outputs = {}
             for current_text, current_pair in zip(text, pairs):
+                # Handle case where current_text is a tuple/list of (text, text_pair) for pretokenized pairs
+                if (
+                    is_split_into_words
+                    and isinstance(current_text, (tuple, list))
+                    and len(current_text) == 2
+                    and isinstance(current_text[0], (list, tuple))
+                    and isinstance(current_text[1], (list, tuple))
+                ):
+                    # Unpack the pair
+                    current_text, current_pair = current_text[0], current_text[1]
+                
                 ids = get_input_ids(current_text)
                 pair_ids = get_input_ids(current_pair) if current_pair is not None else None
                 outputs = self.prepare_for_model(
@@ -875,9 +960,9 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         """
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return None
+            return 
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"]
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
