@@ -882,10 +882,6 @@ class PushToHubMixin:
         ```
         """
         ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
-        save_jinja_files = deprecated_kwargs.pop(
-            "save_jinja_files", None
-        )  # TODO: This is only used for testing and should be removed once save_jinja_files becomes the default
-
         repo_path_or_name = deprecated_kwargs.pop("repo_path_or_name", None)
         if repo_path_or_name is not None:
             # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
@@ -931,15 +927,11 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            if save_jinja_files:
-                self.save_pretrained(
-                    work_dir,
-                    max_shard_size=max_shard_size,
-                    safe_serialization=safe_serialization,
-                    save_jinja_files=True,
-                )
-            else:
-                self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
+            self.save_pretrained(
+                work_dir,
+                max_shard_size=max_shard_size,
+                safe_serialization=safe_serialization,
+            )
 
             # Update model card if needed:
             model_card.save(os.path.join(work_dir, "README.md"))

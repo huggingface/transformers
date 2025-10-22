@@ -15,6 +15,7 @@
 
 import inspect
 import json
+import os
 import random
 import sys
 import tempfile
@@ -942,17 +943,15 @@ class ProcessorTesterMixin:
         if "chat_template" not in {*signature.parameters.keys()}:
             self.skipTest("Processor doesn't accept chat templates at input")
 
-        existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
         processor.chat_template = "test template"
         with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.save_pretrained(tmpdirname, save_jinja_files=False)
-            self.assertTrue(Path(tmpdirname, "chat_template.json").is_file())
-            self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
+            processor.save_pretrained(tmpdirname)
+            with open(Path(tmpdirname, "chat_template.json"), "w") as fp:
+                json.dump({"chat_template": processor.chat_template}, fp)
+            os.remove(Path(tmpdirname, "chat_template.jinja"))
+
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-            # When we don't use single-file chat template saving, processor and tokenizer chat templates
-            # should remain separate
-            self.assertEqual(getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname)
@@ -976,12 +975,6 @@ class ProcessorTesterMixin:
             # When we save as single files, tokenizers and processors share a chat template, which means
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
-
-        with self.assertRaises(ValueError):
-            # Saving multiple templates in the legacy format is not permitted
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                processor.chat_template = {"default": "a", "secondary": "b"}
-                processor.save_pretrained(tmpdirname, save_jinja_files=False)
 
     @require_torch
     def _test_apply_chat_template(
