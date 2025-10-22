@@ -161,7 +161,7 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
             self.assertEqual(image_processor.do_pad, True)
 
             image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
+                self.image_processor_dict, size={"shortest_edge": 42, "longest_edge": 84}, pad_and_return_pixel_mask=False
             )
             self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
             self.assertEqual(image_processor.do_pad, False)
@@ -605,3 +605,21 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         )
         inputs = image_processor(images=[image_5], return_tensors="pt")
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 50, 50]))
+
+    def test_deprecated_max_size(self):
+        # Should not crash, but log a warning
+        from transformers.utils import logging
+        from transformers.testing_utils import CaptureLogger, LoggingLevel
+        
+        logger = logging.get_logger("transformers.models.conditional_detr.image_processing_conditional_detr")
+        logger.warning_once.cache_clear()
+        
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                processor = ConditionalDetrImageProcessor(max_size=512)
+        
+        self.assertIsInstance(processor, ConditionalDetrImageProcessor)
+        self.assertIn("max_size", cl.out)
+        self.assertIn("deprecated", cl.out)
+        self.assertIn("v4.26", cl.out)
+        self.assertIn("size['longest_edge']", cl.out)
