@@ -883,6 +883,8 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
                 position_ids = position_ids + delta.to(position_ids.device)
 
+        position_ids = position_ids[0] if len(position_ids.shape) == 3 else position_ids
+
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
