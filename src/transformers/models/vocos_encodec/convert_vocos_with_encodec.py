@@ -22,8 +22,8 @@ from transformers import (
     EncodecModel,
     VocosEncodecConfig,
     VocosEncodecModel,
-    VocosFeatureExtractor,
     VocosEncodecProcessor,
+    VocosFeatureExtractor,
 )
 
 

@@ -29,6 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 
 if is_torch_available():
     import torch
+
     from transformers import VocosEncodecModel, VocosEncodecProcessor, VocosModel
 
 
