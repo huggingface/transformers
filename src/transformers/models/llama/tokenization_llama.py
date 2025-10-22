@@ -194,13 +194,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if self.vocab_file is None:
-            raise ValueError(
-                "vocab_file path is not set. This usually happens when model files fail to download. "
-                "For Voxtral/Mistral models, install `mistral-common`: `pip install mistral-common`. "
-                "For other models, verify the model checkpoint exists on Hugging Face Hub and you have internet."
-            )
-
         if self.legacy or from_slow:  # no dependency on protobuf
             tokenizer.Load(self.vocab_file)
             return tokenizer
