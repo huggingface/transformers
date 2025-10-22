@@ -44,6 +44,37 @@ def dict_access_multi(a_dict, keys):
     return dict_access_multi(a_dict[keys[0]], keys[1:])
 
 
+def _build_neox_to_llama_perm(rotary_dim: int) -> torch.Tensor:
+    half = rotary_dim // 2
+    perm = torch.empty(rotary_dim, dtype=torch.long)
+    perm[0::2] = torch.arange(0, half)
+    perm[1::2] = torch.arange(half, rotary_dim)
+    return perm
+
+def _apply_rope_permute(q_or_k: torch.Tensor, blocks: int, head_dim: int, rotary_dim: int, neox_to_llama: bool = True):
+    if rotary_dim == 0:
+        return q_or_k
+
+    if neox_to_llama:
+        perm = _build_neox_to_llama_perm(rotary_dim).to(q_or_k.device)
+    else:
+        perm = torch.empty(rotary_dim, dtype=torch.long, device=q_or_k.device)
+        half = rotary_dim // 2
+        perm[0::2] = torch.arange(0, half, device=q_or_k.device)
+        perm[1::2] = torch.arange(half, rotary_dim, device=q_or_k.device)
+        inv = torch.empty_like(perm)
+        inv[perm] = torch.arange(rotary_dim, device=q_or_k.device)
+        perm = inv
+
+    if q_or_k.dim() == 2:
+        h = q_or_k.view(blocks, head_dim, -1)
+        h[:, :rotary_dim, ...] = h[:, perm, ...]
+        return h.reshape(q_or_k.shape)
+    else:
+        h = q_or_k.view(blocks, head_dim)
+        h[:, :rotary_dim] = h[:, perm]
+        return h.reshape(q_or_k.shape)
+
 def merge_qkv(
     sd_list,
     original_tp,
@@ -51,23 +82,27 @@ def merge_qkv(
     multi_query_group_num,
     attention_dim,
     interleaved_qkv,
+    convert_neox_to_llama: bool = True,
 ):
+    rotary_dim = attention_dim  // 2
     group_size = (num_attention_heads // multi_query_group_num + 2) * attention_dim
-    q, k, v = [], [], []
+    q_chunks, k_chunks, v_chunks = [], [], []
+
     for sd in sd_list:
         if interleaved_qkv:
             shape = sd.shape
-            q_, k_, v_ = sd.view((multi_query_group_num // original_tp, group_size) + (shape[1:])).split(
+            x = sd.view((multi_query_group_num // original_tp, group_size) + shape[1:])
+            q_, k_, v_ = x.split(
                 [
-                    (num_attention_heads // multi_query_group_num * attention_dim),
+                    (num_attention_heads // multi_query_group_num) * attention_dim,
                     attention_dim,
                     attention_dim,
                 ],
                 dim=1,
             )
-            q_ = q_.reshape((-1,) + (shape[1:]))
-            k_ = k_.reshape((-1,) + (shape[1:]))
-            v_ = v_.reshape((-1,) + (shape[1:]))
+            q_chunks.append(q_.reshape((-1,) + shape[1:]).clone())
+            k_chunks.append(k_.reshape((-1,) + shape[1:]).clone())
+            v_chunks.append(v_.reshape((-1,) + shape[1:]).clone())
         else:
             q_, k_, v_ = sd.split(
                 [
@@ -77,35 +112,17 @@ def merge_qkv(
                 ],
                 dim=0,
             )
+            q_chunks.append(q_.clone()); k_chunks.append(k_.clone()); v_chunks.append(v_.clone())
 
-        q.append(q_.clone())
-        k.append(k_.clone())
-        v.append(v_.clone())
-    q = torch.cat(q, dim=0)
-    k = torch.cat(k, dim=0)
-    v = torch.cat(v, dim=0)
-    if not interleaved_qkv:
-        rotary_dim = attention_dim // 2
-        half_rot = rotary_dim // 2
-        perm_rot = torch.empty(rotary_dim, dtype=torch.long)
-        perm_rot[0::2] = torch.arange(0, half_rot)
-        perm_rot[1::2] = torch.arange(half_rot, rotary_dim)
-        if q.dim() == 2:
-            qh = q.view(num_attention_heads, attention_dim, -1)
-            kh = k.view(multi_query_group_num, attention_dim, -1)
-            qh[:, :rotary_dim, :] = qh[:, perm_rot, :]
-            kh[:, :rotary_dim, :] = kh[:, perm_rot, :]
-            q = qh.reshape(-1, q.size(-1))
-            k = kh.reshape(-1, k.size(-1))
-        else:
-            qh = q.view(num_attention_heads, attention_dim)
-            kh = k.view(multi_query_group_num, attention_dim)
-            qh[:, :rotary_dim] = qh[:, perm_rot]
-            kh[:, :rotary_dim] = kh[:, perm_rot]
-            q = qh.reshape(-1)
-            k = kh.reshape(-1)
+    q = torch.cat(q_chunks, dim=0)
+    k = torch.cat(k_chunks, dim=0)
+    v = torch.cat(v_chunks, dim=0)
+
+    if convert_neox_to_llama and rotary_dim > 0:
+        q = _apply_rope_permute(q, num_attention_heads, attention_dim, rotary_dim, neox_to_llama=True)
+        k = _apply_rope_permute(k, multi_query_group_num, attention_dim, rotary_dim, neox_to_llama=True)
+
     return q, k, v
-
 
 def merge_glu(sd_list):
     return torch.cat(
@@ -150,7 +167,7 @@ def merge_tensors(
     return merge_fn(sd_list)
 
 
-def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=46, vision_num_layers=24):
+def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=40, vision_num_layers=24):
     os.makedirs(output_path, exist_ok=True)
 
     layered_dict = {}
@@ -450,7 +467,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
 
     print("Merging tensor parallel weights...")
 
-    interleaved_qkv = False
+    interleaved_qkv = True
     num_attention_heads = num_heads
     multi_query_group_num = num_kv_heads
     attention_dim = head_dim
@@ -544,7 +561,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             num_attention_heads=vit_n_head,
             multi_query_group_num=vit_n_head,
             attention_dim=attention_dim,
-            interleaved_qkv=True,
+            interleaved_qkv=True
         )
         complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = torch.cat((q, k, v), dim=0)
 
