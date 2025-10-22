@@ -79,8 +79,8 @@ class VibeVoiceEncoderFeedForward(nn.Module):
         self.activation = ACT2FN[config.hidden_act]
         self.linear2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size, bias=config.bias)
 
-    def forward(self, x):
-        return self.linear2(self.activation(self.linear1(x)))
+    def forward(self, hidden_states):
+        return self.linear2(self.activation(self.linear1(hidden_states)))
 
 
 # TODO (ebezzam) move to `src/transformers/cache_utils.py` and make similar to `DynamicCache`?
@@ -101,11 +101,11 @@ class VibeVoiceSemanticTokenizerCache:
         # Collect states for all requested samples
         states = []
         sample_indices_list = sample_indices.tolist()
-        for idx in sample_indices_list:
-            key = (layer_idx, idx)
-            if key not in self.cache:
+        for sample_idx in sample_indices_list:
+            cache_key = (layer_idx, sample_idx)
+            if cache_key not in self.cache:
                 return None  # If any sample is missing, return None
-            states.append(self.cache[key])
+            states.append(self.cache[cache_key])
 
         # Check if all states have the same shape for direct stacking
         first_shape = states[0].shape
@@ -123,8 +123,8 @@ class VibeVoiceSemanticTokenizerCache:
     def update(self, layer_idx: int, sample_indices: torch.Tensor, states: torch.Tensor):
         """Set cached states for given layer and sample indices"""
         sample_indices_list = sample_indices.tolist()
-        for i, idx in enumerate(sample_indices_list):
-            self.cache[(layer_idx, idx)] = states[i].detach()
+        for batch_idx, sample_idx in enumerate(sample_indices_list):
+            self.cache[(layer_idx, sample_idx)] = states[batch_idx].detach()
 
     def set_to_zero(self, sample_indices: torch.Tensor):
         """Reset cached states for given sample indices"""
@@ -133,9 +133,9 @@ class VibeVoiceSemanticTokenizerCache:
 
         sample_indices_set = set(sample_indices.tolist())
         # Remove keys (instead of zeroing them in original) for cleaner memory management
-        keys_to_remove = [key for key in self.cache.keys() if key[1] in sample_indices_set]
-        for key in keys_to_remove:
-            del self.cache[key]
+        keys_to_remove = [cache_key for cache_key in self.cache.keys() if cache_key[1] in sample_indices_set]
+        for cache_key in keys_to_remove:
+            del self.cache[cache_key]
 
     def clear(self):
         """Clear all cached states"""
@@ -169,7 +169,7 @@ class VibeVoiceSemanticTokenizerStreamingConv1d(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
+        hidden_states: torch.Tensor,
         past_conv_values: Optional[VibeVoiceSemanticTokenizerCache] = None,
         sample_indices: Optional[torch.Tensor] = None,
         layer_idx: Optional[int] = None,
@@ -180,7 +180,7 @@ class VibeVoiceSemanticTokenizerStreamingConv1d(nn.Module):
         Original code: https://github.com/vibevoice-community/VibeVoice/blob/63a21e2b45e908be63765bf312a9ecfb3a588315/vibevoice/modular/modular_vibevoice_tokenizer.py#L327
 
         Args:
-            x: Input tensor [batch_size, channels, time]
+            hidden_states: Input tensor [batch_size, channels, time]
             past_conv_values: `VibeVoiceSemanticTokenizerCache` object for maintaining convolution states
             sample_indices: Indices identifying each sample for cache management
             layer_idx: Layer index for cache management
@@ -190,9 +190,9 @@ class VibeVoiceSemanticTokenizerStreamingConv1d(nn.Module):
         """
         # Early return for no causal padding case
         if self.causal_padding <= 0:
-            return self.conv(x)
+            return self.conv(hidden_states)
 
-        batch_size, channels, _ = x.shape
+        batch_size, channels, _ = hidden_states.shape
 
         # Validate cache parameters
         if past_conv_values is not None:
@@ -210,10 +210,10 @@ class VibeVoiceSemanticTokenizerStreamingConv1d(nn.Module):
 
         # Initialize with zeros if no cache exists
         if cached_states is None:
-            cached_states = torch.zeros(batch_size, channels, self.causal_padding, device=x.device, dtype=x.dtype)
+            cached_states = torch.zeros(batch_size, channels, self.causal_padding, device=hidden_states.device, dtype=hidden_states.dtype)
 
         # Concatenate context with input
-        input_with_context = torch.cat([cached_states, x], dim=2)
+        input_with_context = torch.cat([cached_states, hidden_states], dim=2)
 
         # Update cache with the last causal_padding samples from the input
         if past_conv_values is not None:
@@ -267,30 +267,30 @@ class VibeVoiceSemanticTokenizerConvNext1dLayer(nn.Module):
         # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L266
         self.causal_padding = (config.kernel_size - 1) * dilation - (stride - 1)
 
-    def forward(self, x):
-        residual = x
-        x = self.norm(x.transpose(1, 2)).transpose(1, 2)
+    def forward(self, hidden_states):
+        residual = hidden_states
+        hidden_states = self.norm(hidden_states.transpose(1, 2)).transpose(1, 2)
         # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L382
-        x = F.pad(x, (self.causal_padding, 0))
-        x = self.mixer(x)
+        hidden_states = F.pad(hidden_states, (self.causal_padding, 0))
+        hidden_states = self.mixer(hidden_states)
         if self.gamma is not None:
-            x = x * self.gamma.unsqueeze(-1)
+            hidden_states = hidden_states * self.gamma.unsqueeze(-1)
         # (ebezzam) original code (https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653)
         # as mentioned above, drop_path is not used and the VibeVoice authors don't use the `forward` method but a custom
-        # call which does `residual + x` directly (see link below), which is same as using identity
+        # call which does `residual + hidden_states` directly (see link below), which is same as using identity
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L768
-        x = residual + self.drop_path(x)
+        hidden_states = residual + self.drop_path(hidden_states)
 
         # ffn
-        residual = x
-        x = self.ffn_norm(x.transpose(1, 2))  # [B, T, C]
-        x = self.ffn(x)  # FFN expects [B, T, C]
-        x = x.transpose(1, 2)  # Back to [B, C, T]
+        residual = hidden_states
+        hidden_states = self.ffn_norm(hidden_states.transpose(1, 2))  # [B, T, C]
+        hidden_states = self.ffn(hidden_states)  # FFN expects [B, T, C]
+        hidden_states = hidden_states.transpose(1, 2)  # Back to [B, C, T]
         if self.ffn_gamma is not None:
-            x = x * self.ffn_gamma.unsqueeze(-1)
+            hidden_states = hidden_states * self.ffn_gamma.unsqueeze(-1)
         # (ebezzam) see comment above
-        x = residual + self.drop_path(x)
-        return x
+        hidden_states = residual + self.drop_path(hidden_states)
+        return hidden_states
 
 
 class VibeVoiceSemanticTokenizerEncoder(nn.Module):
@@ -322,41 +322,41 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
                 bias=config.bias,
             )
         )
-        for i in range(len(config.downsampling_ratios)):
+        for stage_idx in range(len(config.downsampling_ratios)):
             downsample_layer = VibeVoiceSemanticTokenizerStreamingConv1d(
-                in_channels=config.n_filters * (2**i),
-                out_channels=config.n_filters * (2 ** (i + 1)),
-                kernel_size=config.downsampling_ratios[i] * 2,
-                stride=config.downsampling_ratios[i],
+                in_channels=config.n_filters * (2**stage_idx),
+                out_channels=config.n_filters * (2 ** (stage_idx + 1)),
+                kernel_size=config.downsampling_ratios[stage_idx] * 2,
+                stride=config.downsampling_ratios[stage_idx],
                 bias=config.bias,
             )
             self.downsample_layers.append(downsample_layer)
 
         # configure ConvNext1D blocks
         self.stages = nn.ModuleList()
-        for i in range(len(config.depths)):
-            in_ch = config.n_filters * (2**i)
+        for stage_idx in range(len(config.depths)):
+            input_channels = config.n_filters * (2**stage_idx)
             stage = nn.ModuleList(
-                [VibeVoiceSemanticTokenizerConvNext1dLayer(config, hidden_size=in_ch) for _ in range(config.depths[i])]
+                [VibeVoiceSemanticTokenizerConvNext1dLayer(config, hidden_size=input_channels) for _ in range(config.depths[stage_idx])]
             )
             self.stages.append(stage)
 
         self.head = VibeVoiceSemanticTokenizerStreamingConv1d(
-            in_channels=in_ch,
+            in_channels=input_channels,
             out_channels=config.hidden_size,
             kernel_size=config.kernel_size,
             bias=config.bias,
         )
 
-    def forward(self, x, past_conv_values=None, sample_indices=None):
+    def forward(self, hidden_states, past_conv_values=None, sample_indices=None):
         for layer_idx, downsample_layer in enumerate(self.downsample_layers):
-            x = downsample_layer(
-                x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx
+            hidden_states = downsample_layer(
+                hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx
             )
             for block in self.stages[layer_idx]:
-                x = block(x)
-        x = self.head(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx + 1)
-        return x.permute(0, 2, 1)
+                hidden_states = block(hidden_states)
+        hidden_states = self.head(hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx + 1)
+        return hidden_states.permute(0, 2, 1)
 
 
 @auto_docstring
