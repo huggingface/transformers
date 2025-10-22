@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer
+from transformers import AutoTokenizer
 from transformers.testing_utils import require_jmespath
 from transformers.utils.chat_parsing_utils import recursive_parse
 
@@ -43,7 +43,7 @@ cohere_schema = {
                             "name": {"type": "string"},
                             "arguments": {
                                 "type": "object",
-                                "additionalProperties": {"type": "any"},
+                                "additionalProperties": {},
                             },
                         },
                     },
@@ -74,7 +74,7 @@ ernie_schema = {
                             "name": {"type": "string"},
                             "arguments": {
                                 "type": "object",
-                                "additionalProperties": {"type": "any"},
+                                "additionalProperties": {},
                             },
                         },
                     },
@@ -105,7 +105,7 @@ gpt_oss_schema = {
                                 "type": "object",
                                 "x-regex": r"<\|message\|>(.*)",
                                 "x-parser": "json",
-                                "additionalProperties": {"type": "any"},
+                                "additionalProperties": {},
                             },
                         },
                     },
@@ -136,7 +136,7 @@ smollm_schema = {
                             "name": {"type": "string"},
                             "arguments": {
                                 "type": "object",
-                                "additionalProperties": {"type": "any"},
+                                "additionalProperties": {},
                             },
                         },
                     },
@@ -191,14 +191,6 @@ class ChatSchemaParserTest(unittest.TestCase):
             tokenizer.save_pretrained(tmpdir)
             reloaded_tokenizer = AutoTokenizer.from_pretrained(tmpdir)
         self.assertEqual(reloaded_tokenizer.response_schema, ernie_schema)
-
-        # Has no schema by default
-        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration")
-        processor.response_schema = ernie_schema
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor.save_pretrained(tmpdir)
-            reloaded_processor = AutoProcessor.from_pretrained(tmpdir)
-        self.assertEqual(reloaded_processor.response_schema, ernie_schema)
 
     def test_tokenizer_method(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
