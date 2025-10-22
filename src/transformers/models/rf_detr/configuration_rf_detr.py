@@ -75,11 +75,6 @@ class RfDetrConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        two_stage (`bool`, *optional*, defaults to `True`):
-            Whether to apply a two-stage detection approach, where region proposals are generated first
-            and then refined by the decoder.
         group_detr (`int`, *optional*, defaults to 13):
             Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
         init_std (`float`, *optional*, defaults to 0.02):
@@ -87,8 +82,6 @@ class RfDetrConfig(PretrainedConfig):
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
-        bbox_reparam (`bool`, *optional*, defaults to `True`):
-            Whether to use bounding box reparameterization for better training stability.
         class_cost (`float`, *optional*, defaults to 2):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
@@ -159,12 +152,9 @@ class RfDetrConfig(PretrainedConfig):
         attention_bias=True,
         attention_dropout=0.0,
         activation_dropout=0.0,
-        position_embedding_type="sine",
-        two_stage=True,
         group_detr: int = 13,
         init_std=0.02,
         disable_custom_kernels=True,
-        bbox_reparam=True,
         # loss
         class_cost=2,
         bbox_cost=5,
@@ -178,7 +168,6 @@ class RfDetrConfig(PretrainedConfig):
         auxiliary_loss=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.layer_norm_eps = layer_norm_eps
 
         # backbone
@@ -250,10 +239,7 @@ class RfDetrConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         # model
-        self.position_embedding_type = position_embedding_type
-        self.two_stage = two_stage
         self.init_std = init_std
-        self.bbox_reparam = bbox_reparam
         self.group_detr = group_detr
         # Loss
         self.auxiliary_loss = auxiliary_loss
@@ -268,6 +254,7 @@ class RfDetrConfig(PretrainedConfig):
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
+        super().__init__(**kwargs)
 
     @property
     def hidden_size(self) -> int:

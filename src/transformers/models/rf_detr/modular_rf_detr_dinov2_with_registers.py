@@ -180,10 +180,8 @@ class RfDetrDinov2WithRegistersLayer(Dinov2WithRegistersLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         remove_windows: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        assert head_mask is None, "head_mask is not supported for windowed attention"
         shortcut = hidden_states
         if remove_windows:
             # reshape x to remove windows
@@ -192,10 +190,7 @@ class RfDetrDinov2WithRegistersLayer(Dinov2WithRegistersLayer):
             hidden_states = hidden_states.view(B // num_windows_squared, num_windows_squared * HW, C)
 
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(
-            hidden_states_norm,
-            head_mask,
-        )
+        self_attention_output = self.attention(hidden_states_norm)
 
         if remove_windows:
             # reshape x to add windows back
@@ -278,6 +273,7 @@ class RfDetrDinov2WithRegistersBackbone(Dinov2WithRegistersBackbone):
         self,
         pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         """
         Returns:

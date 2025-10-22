@@ -19,11 +19,10 @@ import unittest
 from functools import cached_property
 
 import numpy as np
-import torch
 
 from transformers import (
     CONFIG_NAME,
-    LwDetrImageProcessor,
+    DeformableDetrImageProcessor,
     RfDetrConfig,
     RfDetrDinov2WithRegistersConfig,
     is_torch_available,
@@ -52,7 +51,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-CHECKPOINT = "stevenbucaille/rf-detr-medium"
+CHECKPOINT = "stevenbucaille/rf-detr-base"
 
 
 def prepare_img():
@@ -568,7 +567,7 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class RfDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LwDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return DeformableDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     @slow
     def test_inference_object_detection_head(self):
@@ -587,7 +586,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [-6.59967, -4.09316, -5.85801, -4.15695, -5.08010],
+                (None, None): [-7.60410, -4.65943, -10.03144, -5.63881, -9.88291],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -598,7 +597,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.87006, 0.64707, 0.25973, 0.23519, 0.13283],
+                (None, None): [0.25465, 0.54864, 0.48583, 0.86991, 0.16926],
             }
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
