@@ -33,6 +33,13 @@ class EncoderDecoderConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        decoder_start_token_id (`int`, *optional*):
+            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
+        tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
+            Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
+            and decoder model to have the exact same parameter names.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
@@ -74,7 +81,13 @@ class EncoderDecoderConfig(PreTrainedConfig):
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     has_no_defaults_at_init = True
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        pad_token_id=None,
+        decoder_start_token_id=None,
+        tie_encoder_decoder=False,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
@@ -89,6 +102,9 @@ class EncoderDecoderConfig(PreTrainedConfig):
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
         self.is_encoder_decoder = True
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_encoder_decoder = tie_encoder_decoder
 
     @classmethod
     def from_encoder_decoder_configs(

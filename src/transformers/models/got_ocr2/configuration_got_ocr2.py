@@ -138,8 +138,6 @@ class GotOcr2Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
-        pad_token_id (`int`, *optional*, defaults to -1):
-            Padding token id.
 
     ```python
     >>> from transformers import GotOcr2ForConditionalGeneration, GotOcr2Config
@@ -166,12 +164,10 @@ class GotOcr2Config(PreTrainedConfig):
         text_config: Optional[dict] = None,
         image_token_index: Optional[int] = 151859,
         image_seq_length: Optional[int] = 576,
-        pad_token_id: Optional[int] = -1,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.image_seq_length = image_seq_length
-        self.pad_token_id = pad_token_id
 
         if vision_config is None:
             self.vision_config = GotOcr2VisionConfig()

@@ -190,6 +190,10 @@ class DbrxConfig(PreTrainedConfig):
         initializer_range: Optional[float] = 0.02,
         output_router_logits: Optional[bool] = False,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        tie_word_embeddings: Optional[bool] = False,
         **kwargs: Any,
     ):
         if attn_config is None:
@@ -217,9 +221,13 @@ class DbrxConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
-        tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
+
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)

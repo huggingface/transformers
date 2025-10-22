@@ -160,7 +160,7 @@ class LlavaNextVideoConfig(PreTrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["LlavaNextVideoConfig"]

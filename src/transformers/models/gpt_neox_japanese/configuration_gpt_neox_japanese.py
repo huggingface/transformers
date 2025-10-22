@@ -103,9 +103,19 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_dropout: Optional[float] = 0.1,
         hidden_dropout: Optional[float] = 0.0,
+        is_decoder: Optional[bool] = False,
+        add_cross_attention: Optional[bool] = False,
+        pad_token_id: Optional[int] = None,
+        tie_word_embeddings: Optional[bool] = True,
         **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

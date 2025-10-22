@@ -122,6 +122,12 @@ class DogeConfig(PreTrainedConfig):
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import DogeConfig, DogeModel
@@ -190,6 +196,9 @@ class DogeConfig(PreTrainedConfig):
         norm_topk_prob: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -217,6 +226,10 @@ class DogeConfig(PreTrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
@@ -230,10 +243,7 @@ class DogeConfig(PreTrainedConfig):
         if num_key_value_heads is None:
             self.num_key_value_heads = num_attention_heads
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class DogeRMSNorm(LlamaRMSNorm):

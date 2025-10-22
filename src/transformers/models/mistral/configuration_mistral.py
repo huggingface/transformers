@@ -166,6 +166,10 @@ class MistralConfig(PreTrainedConfig):
                 "Detected Mistral model with layer_types. Consider using AutoModel or Ministral classes instead to enable alternating attention compatibility."
             )
 
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
@@ -175,13 +179,7 @@ class MistralConfig(PreTrainedConfig):
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["MistralConfig"]

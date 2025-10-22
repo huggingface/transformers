@@ -135,8 +135,15 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
                                                                     \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.0001):
             The aux loss factor for the loss.
+
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
 
@@ -195,10 +202,17 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         topk_group: Optional[int] = 1,
         first_k_dense_replace: Optional[int] = 1,
         norm_topk_prob: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
         router_aux_loss_coef: Optional[float] = 0.0001,
         **kwargs,
     ):
-        PreTrainedConfig.__init__(self, tie_word_embeddings=tie_word_embeddings, **kwargs)
+        PreTrainedConfig.__init__(self, **kwargs)
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

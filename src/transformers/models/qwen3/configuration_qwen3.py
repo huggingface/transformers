@@ -86,6 +86,12 @@ class Qwen3Config(PreTrainedConfig):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3Model, Qwen3Config
@@ -141,6 +147,9 @@ class Qwen3Config(PreTrainedConfig):
         max_window_layers: Optional[int] = 28,
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -179,15 +188,16 @@ class Qwen3Config(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen3Config"]

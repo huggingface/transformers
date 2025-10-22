@@ -231,6 +231,30 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.config_tester = ConfigTester(self, has_text_modality=False, config_class=DiaConfig)
         self.skip_non_greedy_generate()
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # DIA should not have a `None` eos token id because it uses certain LogitsProcessors
+        # so we overwrite preparation
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # We don't want a few model inputs in our model input dictionary for generation tests
+        input_keys_to_ignore = [
+            # we don't want encoder-decoder models to start from filled decoder ids
+            "decoder_input_ids",
+            "decoder_attention_mask",
+            # we'll set cache use in each test differently
+            "use_cache",
+            # Ignore labels if it is in the input dict
+            "labels",
+            # model-specific exceptions should overload/overwrite this function
+        ]
+        filtered_inputs_dict = {
+            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
+            for k, v in inputs_dict.items()
+            if k not in input_keys_to_ignore
+        }
+
+        return config, filtered_inputs_dict
+
     def skip_non_greedy_generate(self):
         skippable_tests = [
             "test_sample_generate_dict_output",  # return sequences > 1
