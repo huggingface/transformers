@@ -90,7 +90,7 @@ class NanoChatIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor(
             [-12.8750, -13.0625, -13.1875, -13.1875, -13.1875, -13.1875, -13.1875,-13.1875, -12.6250,  -4.2188]
         )
-        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=0.1)
+        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=1e-2)
 
     @slow
     def test_model_d20_generation(self):
@@ -164,7 +164,7 @@ class NanoChatIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor(
             [-12.4375, -13.1875, -12.8750, -13.1875, -13.1875, -13.1875, -13.1875,-13.1875, -11.9375,  -1.6328]
         )
-        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=0.1)
+        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-3, atol=1e-2)
 
     @slow
     def test_model_d32_generation(self):
