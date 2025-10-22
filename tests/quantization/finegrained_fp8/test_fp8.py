@@ -65,8 +65,9 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 @require_read_token
 @require_torch_accelerator
 @unittest.skipIf(
-        get_device_properties()[0] == "cuda" and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
-        "Skipping FP8QuantizerTest because it is not supported on GPU with capability < 9.0",
+    get_device_properties()[0] == "cuda"
+    and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
+    "Skipping FP8QuantizerTest because it is not supported on GPU with capability < 9.0",
 )
 class FP8QuantizerTest(unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
@@ -256,7 +257,8 @@ class FP8QuantizerTest(unittest.TestCase):
 
 @require_torch_accelerator
 @unittest.skipIf(
-    get_device_properties()[0] == "cuda" and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
+    get_device_properties()[0] == "cuda"
+    and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
     "Skipping FP8LinearTest because it is not supported on GPU with capability < 8.9",
 )
 class FP8LinearTest(unittest.TestCase):
