@@ -427,6 +427,23 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
+The TextGenerationPipeline supports optional safety checking through the `safety_config` parameter. See the [Safe Generation example](https://github.com/huggingface/transformers/tree/main/examples/safe_generation) for implementing custom safety checkers.
+
+**Example**:
+```python
+from transformers import pipeline
+from transformers.generation.safety import SafetyConfig
+from examples.safe_generation.checkers import BasicToxicityChecker
+
+# Create safety checker
+checker = BasicToxicityChecker(threshold=0.7)
+config = SafetyConfig.from_checker(checker)
+
+# Use with text generation pipeline
+pipe = pipeline("text-generation", model="gpt2")
+result = pipe("Hello", safety_config=config, max_new_tokens=50)
+```
+
 ### Text2TextGenerationPipeline
 
 [[autodoc]] Text2TextGenerationPipeline
