@@ -212,7 +212,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("mamba2", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("marian", "MarianTokenizer" if is_sentencepiece_available() else None),
         ("mbart", "MBartTokenizer" if is_tokenizers_available() else None),
-        ("mbart50", "MBart50TokenizerFast" if is_tokenizers_available() else None),
+        ("mbart50", "MBart50Tokenizer" if is_tokenizers_available() else None),
         ("mega", "RobertaTokenizer"),
         ("megatron-bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("metaclip_2", "XLMRobertaTokenizerFast" if is_tokenizers_available() else None),
@@ -534,9 +534,9 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                 fast_sig = inspect.signature(getattr(tokenizer_class, "__init__", tokenizer_class))
                 if "vocab" in fast_sig.parameters and "merges" in fast_sig.parameters:
                     try:
-                        vocab, merges = SentencePieceExtractor(resolved_spm).extract()
+                        vocab_ids, vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
                         return tokenizer_class.from_pretrained(
-                            pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
+                            pretrained_model_name_or_path, *inputs, vocab=vocab_scores, merges=merges, **kwargs
                         )
                     except Exception:
                         pass
