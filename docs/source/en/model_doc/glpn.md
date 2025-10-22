@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-01-19 and added to Hugging Face Transformers on 2022-03-22.*
+*This model was released on 2022-01-19 and added to Hugging Face Transformers on 2025-08-26.*
 
 # GLPN
 
@@ -59,6 +59,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## GLPNImageProcessor
 
 [[autodoc]] GLPNImageProcessor
+    - preprocess
+
+## GLPNImageProcessorFast
+
+[[autodoc]] GLPNImageProcessorFast
     - preprocess
 
 ## GLPNModel
