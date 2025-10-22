@@ -51,7 +51,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import OwlViTProcessor
+    from transformers import OwlViTImageProcessor, OwlViTProcessor
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTester with OwlViT->Owlv2
@@ -615,7 +615,9 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
+        print("processor:", processor)
 
         image = prepare_img()
         inputs = processor(
