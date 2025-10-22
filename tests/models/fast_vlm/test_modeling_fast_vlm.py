@@ -128,7 +128,6 @@ class FastVlmVisionText2TextModelTester:
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
-            image_seq_length=self.num_image_tokens,
         )
 
     def prepare_config_and_inputs(self):
@@ -184,7 +183,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
 
     def setUp(self):
         self.model_tester = FastVlmVisionText2TextModelTester(self)
-        common_properties = ["image_token_id", "image_seq_length"]
+        common_properties = ["image_token_id"]
         self.config_tester = ConfigTester(
             self, config_class=FastVlmConfig, has_text_modality=False, common_properties=common_properties
         )

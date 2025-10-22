@@ -49,8 +49,6 @@ class FastVlmConfig(PreTrainedConfig):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features. Only -1 supported.
-        image_seq_length (`int`, *optional*, defaults to 256):
-            Sequence length of one image embedding.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
 
@@ -83,13 +81,11 @@ class FastVlmConfig(PreTrainedConfig):
         projector_hidden_act="gelu",
         vision_feature_select_strategy="full",
         vision_feature_layer=-1,
-        image_seq_length=256,
         multimodal_projector_bias=True,
         **kwargs,
     ):
         self.image_token_id = image_token_id
         self.projector_hidden_act = projector_hidden_act
-        self.image_seq_length = image_seq_length
 
         if vision_feature_select_strategy != "full":
             raise ValueError(
