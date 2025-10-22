@@ -458,22 +458,18 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
         trim_right_ratio = getattr(config, "trim_right_ratio", 1.0)
 
         # stem and upsampling layers
-        stem = nn.Sequential(
-                VibeVoiceAcousticTokenizerStreamingConv1d(config.hidden_size, config.n_filters * 2 ** (len(config.depths) - 1), config.kernel_size,
-                        bias=config.bias),
-            )
-
         self.upsample_layers = nn.ModuleList()
-        self.upsample_layers.append(stem)
+        self.upsample_layers.append(
+            VibeVoiceAcousticTokenizerStreamingConv1d(config.hidden_size, config.n_filters * 2 ** (len(config.depths) - 1), config.kernel_size,
+                    bias=config.bias)
+        )
         for i in range(len(config.ratios)):
             in_ch = config.n_filters * (2 ** (len(config.depths) - 1 - i))
             out_ch = config.n_filters * (2 ** (len(config.depths) - 1 - i - 1))
-            upsample_layer = nn.Sequential(
-                VibeVoiceAcousticTokenizerStreamingConvTranspose1d(in_ch, out_ch,
-                                kernel_size=config.ratios[i] * 2, stride=config.ratios[i],
-                                bias=config.bias,
-                                causal=self.causal, trim_right_ratio=trim_right_ratio),
-            )
+            upsample_layer = VibeVoiceAcousticTokenizerStreamingConvTranspose1d(in_ch, out_ch,
+                            kernel_size=config.ratios[i] * 2, stride=config.ratios[i],
+                            bias=config.bias,
+                            causal=self.causal, trim_right_ratio=trim_right_ratio)
             self.upsample_layers.append(upsample_layer)
 
         # configure ConvNext1D blocks
@@ -490,12 +486,12 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
     
     def forward_features(self, x, past_conv_values=None, sample_indices=None):
         for i in range(len(self.upsample_layers)):
-            # Apply upsampling
-            for layer in self.upsample_layers[i]:
-                if isinstance(layer, (VibeVoiceAcousticTokenizerStreamingConv1d, VibeVoiceAcousticTokenizerStreamingConvTranspose1d)):
-                    x = layer(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=i)
-                else:
-                    x = layer(x)
+            # Apply upsampling layer
+            layer = self.upsample_layers[i]
+            if isinstance(layer, (VibeVoiceAcousticTokenizerStreamingConv1d, VibeVoiceAcousticTokenizerStreamingConvTranspose1d)):
+                x = layer(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=i)
+            else:
+                x = layer(x)
 
             # Apply stage (VibeVoiceAcousticTokenizerConvNext1dLayer)
             for block in self.stages[i]:

@@ -58,9 +58,12 @@ def update_state_dict_for_hf_model(state_dict):
         # Handle conv.conv -> conv mapping for acoustic tokenizer decoder layers
         # This removes one level of .conv nesting for the updated TokenizerDecoder
         if "acoustic_tokenizer.decoder" in key:
-            # Handle stem layer (upsample_layers.0) Sequential and conv.conv -> direct conv mapping
+            # Handle stem layer (upsample_layers.0) conv.conv -> conv mapping
             if "upsample_layers.0.0.conv.conv." in key:
-                new_key = new_key.replace("upsample_layers.0.0.conv.conv.", "upsample_layers.0.0.conv.")
+                new_key = new_key.replace("upsample_layers.0.0.conv.conv.", "upsample_layers.0.conv.")
+            # Handle transpose conv layers: convtr.convtr.* -> convtr.*
+            elif "0.convtr.convtr." in key:
+                new_key = new_key.replace("0.convtr.convtr.", "convtr.")
             # Handle head layer conv.conv -> conv mapping
             elif "head.conv." in key:
                 new_key = new_key.replace("head.conv.", "head.")
@@ -68,9 +71,6 @@ def update_state_dict_for_hf_model(state_dict):
             # Original Block1D had: mixer.conv.conv.conv.* -> VibeVoiceAcousticTokenizerConvNext1dLayer has: mixer.*
             elif "stages." in key and "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
-            # Handle SConvTranspose1d nested convtr structure: convtr.convtr.* -> convtr.*
-            elif "convtr.convtr." in key:
-                new_key = new_key.replace("convtr.convtr.", "convtr.")
 
         updated_state_dict[new_key] = value
     
