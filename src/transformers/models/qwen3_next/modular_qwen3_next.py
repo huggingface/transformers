@@ -34,7 +34,7 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_linear_attention_available,
 )
-from ..bamba.modeling_bamba import apply_mask_to_padding_states
+from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..llama.modeling_llama import (
@@ -226,6 +226,10 @@ class Qwen3NextAttention(Qwen3MoeAttention):
             config.hidden_size, config.num_attention_heads * self.head_dim * 2, bias=config.attention_bias
         )
         del self.sliding_window
+
+        # qwen3_next uses partial rotary embeddings, which the rotary kernel doesn't support yet
+        # So we use the bamba apply_rotary_pos_emb function (imported at top) directly
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
