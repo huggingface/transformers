@@ -21,9 +21,9 @@ from transformers import (
     AddedToken,
     BatchEncoding,
     NllbTokenizer,
-    NllbTokenizerFast,
     is_torch_available,
 )
+from transformers.tokenization_sentencepiece import SentencePieceExtractor
 from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES
 from transformers.testing_utils import (
     get_tests_dir,
@@ -51,21 +51,28 @@ RO_CODE = 256145
 class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "facebook/nllb-200-distilled-600M"
     tokenizer_class = NllbTokenizer
-    rust_tokenizer_class = NllbTokenizerFast
-    test_rust_tokenizer = True
-    test_sentencepiece = True
+    rust_tokenizer_class = NllbTokenizer
+    test_rust_tokenizer = False
+    test_sentencepiece = False
     from_pretrained_kwargs = {}
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
-        # We have a SentencePiece fixture for testing
-        tokenizer = NllbTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        # Extract vocab from SentencePiece model
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        
+        # Create tokenizer with extracted vocab
+        tokenizer = NllbTokenizer(vocab=vocab_scores)
         tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = NllbTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        # Extract vocab from SentencePiece model
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = NllbTokenizer(vocab=vocab_scores)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])

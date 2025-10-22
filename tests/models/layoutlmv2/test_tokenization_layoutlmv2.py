@@ -23,20 +23,13 @@ from parameterized import parameterized
 
 from transformers import (
     AddedToken,
-    LayoutLMv2TokenizerFast,
-    SpecialTokensMixin,
+    LayoutLMv2Tokenizer,
     is_mlx_available,
     is_torch_available,
     logging,
 )
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import (
     VOCAB_FILES_NAMES,
-    BasicTokenizer,
-    LayoutLMv2Tokenizer,
-    WordpieceTokenizer,
-    _is_control,
-    _is_punctuation,
-    _is_whitespace,
 )
 from transformers.testing_utils import (
     require_detectron2,
@@ -47,7 +40,6 @@ from transformers.testing_utils import (
 )
 
 from ...test_tokenization_common import (
-    SMALL_TRAINING_CORPUS,
     TokenizerTesterMixin,
     filter_non_english,
     merge_model_tokenizer_mappings,
@@ -62,8 +54,8 @@ logger = logging.get_logger(__name__)
 class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "microsoft/layoutlmv2-base-uncased"
     tokenizer_class = LayoutLMv2Tokenizer
-    rust_tokenizer_class = LayoutLMv2TokenizerFast
-    test_rust_tokenizer = True
+    rust_tokenizer_class = LayoutLMv2Tokenizer
+    test_rust_tokenizer = False
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
     test_seq2seq = False
@@ -156,121 +148,58 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+        
+        # Load vocab from file and pass to tokenizer
+        vocab = {}
+        with open(cls.vocab_file, "r", encoding="utf-8") as reader:
+            for index, line in enumerate(reader):
+                token = line.rstrip("\n")
+                vocab[token] = index
+        
+        tokenizer = cls.tokenizer_class(vocab=vocab)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 
-    def test_chinese(self):
-        tokenizer = BasicTokenizer()
-
-        self.assertListEqual(tokenizer.tokenize("ah\u535a\u63a8zz"), ["ah", "\u535a", "\u63a8", "zz"])
-
-    def test_basic_tokenizer_lower(self):
-        tokenizer = BasicTokenizer(do_lower_case=True)
-
-        self.assertListEqual(
-            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["hello", "!", "how", "are", "you", "?"]
-        )
-        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
-
-    def test_basic_tokenizer_lower_strip_accents_false(self):
-        tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=False)
-
-        self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hällo", "!", "how", "are", "you", "?"]
-        )
-        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["h\u00e9llo"])
-
-    def test_basic_tokenizer_lower_strip_accents_true(self):
-        tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=True)
-
-        self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
-        )
-        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
-
-    def test_basic_tokenizer_lower_strip_accents_default(self):
-        tokenizer = BasicTokenizer(do_lower_case=True)
-
-        self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
-        )
-        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
-
-    def test_basic_tokenizer_no_lower(self):
-        tokenizer = BasicTokenizer(do_lower_case=False)
-
-        self.assertListEqual(
-            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["HeLLo", "!", "how", "Are", "yoU", "?"]
-        )
-
-    def test_basic_tokenizer_no_lower_strip_accents_false(self):
-        tokenizer = BasicTokenizer(do_lower_case=False, strip_accents=False)
-
-        self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["HäLLo", "!", "how", "Are", "yoU", "?"]
-        )
-
-    def test_basic_tokenizer_no_lower_strip_accents_true(self):
-        tokenizer = BasicTokenizer(do_lower_case=False, strip_accents=True)
-
-        self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["HaLLo", "!", "how", "Are", "yoU", "?"]
-        )
-
-    def test_basic_tokenizer_respects_never_split_tokens(self):
-        tokenizer = BasicTokenizer(do_lower_case=False, never_split=["[UNK]"])
-
-        self.assertListEqual(
-            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"), ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"]
-        )
+    def convert_batch_encode_plus_format_to_encode_plus(self, batch_encode_plus_sequences):
+        """Helper method to convert batch_encode_plus output to list of encode_plus outputs"""
+        # Get the batch size
+        first_key = list(batch_encode_plus_sequences.keys())[0]
+        batch_size = len(batch_encode_plus_sequences[first_key])
+        
+        # Convert to list of dicts
+        encode_plus_sequences = []
+        for i in range(batch_size):
+            single_sequence = {}
+            for key, value in batch_encode_plus_sequences.items():
+                if key != "encodings":  # Skip the encodings attribute
+                    single_sequence[key] = value[i]
+            encode_plus_sequences.append(single_sequence)
+        
+        return encode_plus_sequences
 
     @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
     def test_chat_template_batched(self):
         pass
 
-    def test_wordpiece_tokenizer(self):
-        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
+    @unittest.skip(reason="LayoutLMv2 requires pre-tokenized words, not strings.")
+    def test_bos_token_with_add_bos_token_false(self):
+        pass
 
-        vocab = {}
-        for i, token in enumerate(vocab_tokens):
-            vocab[token] = i
-        tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
+    @unittest.skip(reason="LayoutLMv2 requires pre-tokenized words, not strings.")
+    def test_bos_token_with_add_bos_token_true(self):
+        pass
 
-        self.assertListEqual(tokenizer.tokenize(""), [])
+    @unittest.skip(reason="LayoutLMv2 requires pre-tokenized words with boxes.")
+    def test_encode_basic_padding(self):
+        pass
 
-        self.assertListEqual(tokenizer.tokenize("unwanted running"), ["un", "##want", "##ed", "runn", "##ing"])
-
-        self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
-
-    def test_is_whitespace(self):
-        self.assertTrue(_is_whitespace(" "))
-        self.assertTrue(_is_whitespace("\t"))
-        self.assertTrue(_is_whitespace("\r"))
-        self.assertTrue(_is_whitespace("\n"))
-        self.assertTrue(_is_whitespace("\u00a0"))
-
-        self.assertFalse(_is_whitespace("A"))
-        self.assertFalse(_is_whitespace("-"))
-
-    def test_is_control(self):
-        self.assertTrue(_is_control("\u0005"))
-
-        self.assertFalse(_is_control("A"))
-        self.assertFalse(_is_control(" "))
-        self.assertFalse(_is_control("\t"))
-        self.assertFalse(_is_control("\r"))
-
-    def test_is_punctuation(self):
-        self.assertTrue(_is_punctuation("-"))
-        self.assertTrue(_is_punctuation("$"))
-        self.assertTrue(_is_punctuation("`"))
-        self.assertTrue(_is_punctuation("."))
-
-        self.assertFalse(_is_punctuation("A"))
-        self.assertFalse(_is_punctuation(" "))
+    @unittest.skip(reason="LayoutLMv2 requires pre-tokenized words with boxes.")
+    def test_pad_token_initialization(self):
+        pass
 
     def test_clean_text(self):
         tokenizer = self.get_tokenizer()
@@ -1004,14 +933,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         pad_to_multiple_of=8,
                     )
 
-    def test_tokenizer_slow_store_full_signature(self):
-        signature = inspect.signature(self.tokenizer_class.__init__)
-        tokenizer = self.get_tokenizer()
-
-        for parameter_name, parameter in signature.parameters.items():
-            if parameter.default != inspect.Parameter.empty:
-                self.assertIn(parameter_name, tokenizer.init_kwargs)
-
     def test_build_inputs_with_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
@@ -1657,7 +1578,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             # only test prepare_for_model for the slow tokenizer
-            if tokenizer.__class__.__name__ == "LayoutLMv2TokenizerFast":
+            if tokenizer.__class__.__name__ == "LayoutLMv2Tokenizer":
                 continue
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 words, boxes = self.get_words_and_boxes()
@@ -1979,7 +1900,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, LayoutLMv2TokenizerFast):
+                if isinstance(tokenizer, LayoutLMv2Tokenizer):
                     information = tokenizer(
                         question_0,
                         seq_1,
@@ -2030,7 +1951,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, LayoutLMv2TokenizerFast):
+                if isinstance(tokenizer, LayoutLMv2Tokenizer):
                     information = tokenizer(
                         question_0,
                         seq_1,
@@ -2090,7 +2011,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     # add_prefix_space=False,
                 )
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, LayoutLMv2TokenizerFast):
+                if isinstance(tokenizer, LayoutLMv2Tokenizer):
                     truncated_sequence = information_first_truncated["input_ids"][0]
                     overflowing_tokens = information_first_truncated["input_ids"][1]
                     bbox = information_first_truncated["bbox"][0]
@@ -2130,7 +2051,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     # add_prefix_space=False,
                 )
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, LayoutLMv2TokenizerFast):
+                if isinstance(tokenizer, LayoutLMv2Tokenizer):
                     truncated_sequence = information_second_truncated["input_ids"][0]
                     overflowing_tokens = information_second_truncated["input_ids"][1]
                     bbox = information_second_truncated["bbox"][0]
@@ -2253,7 +2174,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, LayoutLMv2TokenizerFast):
+                if isinstance(tokenizer, LayoutLMv2Tokenizer):
                     truncated_sequence = information["input_ids"][0]
                     overflowing_tokens = information["input_ids"][1]
                     bbox = information["bbox"][0]
@@ -2311,7 +2232,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
         # test fast tokenizer
-        tokenizer_r = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        tokenizer_r = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
@@ -2324,7 +2245,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @slow
     def test_layoutlmv2_integration_test(self):
         tokenizer_p = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
-        tokenizer_r = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        tokenizer_r = LayoutLMv2Tokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
         # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),

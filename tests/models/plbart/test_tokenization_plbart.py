@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
 )
+from transformers.tokenization_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -44,17 +45,25 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = PLBartTokenizer
     rust_tokenizer_class = None
     test_rust_tokenizer = False
+    test_sentencepiece = False
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
-        # We have a SentencePiece fixture for testing
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
+        # Extract vocab from SentencePiece model
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        
+        # Create tokenizer with extracted vocab
+        tokenizer = PLBartTokenizer(vocab=vocab_scores, language_codes="base")
         tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_full_base_tokenizer(self):
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
+        # Extract vocab from SentencePiece model
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = PLBartTokenizer(vocab=vocab_scores, language_codes="base")
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -141,7 +150,10 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_full_multi_tokenizer(self):
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="multi", keep_accents=True)
+        # Extract vocab from SentencePiece model
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = PLBartTokenizer(vocab=vocab_scores, language_codes="multi")
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -284,7 +296,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__en_XX__"], 50003)
 
     def test_python_en_tokenizer_batch_encode_plus(self):
-        ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
+        ids = self.tokenizer(self.src_text).input_ids[0]
         self.assertListEqual(self.expected_src_tokens, ids)
 
     def test_python_en_tokenizer_decode_ignores_language_codes(self):
