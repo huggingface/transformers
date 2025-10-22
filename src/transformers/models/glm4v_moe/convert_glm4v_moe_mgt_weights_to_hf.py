@@ -674,6 +674,8 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
     hf_config = {
         "architectures": ["Glm4vMoeForConditionalGeneration"],
         "model_type": "glm4v_moe",
+    }
+    txt_config = {
         "attention_bias": model_config.get("add_qkv_bias", True),
         "attention_dropout": 0.0,
         "pad_token_id": model_config.get("pad_token_id", 151329),
@@ -684,8 +686,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "video_end_token_id": model_config.get("video_end_token_id", 151342),
         "image_token_id": model_config.get("image_token_id", 151363),
         "video_token_id": model_config.get("video_token_id", 151364),
-    }
-    txt_config = {
         "hidden_act": text_config.get("hidden_act", "silu"),
         "hidden_size": text_config.get("hidden_size", 4096),
         "initializer_range": 0.02,
