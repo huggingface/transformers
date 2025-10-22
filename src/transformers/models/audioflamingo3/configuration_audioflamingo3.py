@@ -16,8 +16,6 @@
 
 """AudioFlamingo3 model configuration"""
 
-from typing import Any, Optional, Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -68,10 +66,6 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
             Scale embeddings by dividing by sqrt(d_model).
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        avg_pool_kernel_size (`int`, *optional*, defaults to 2):
-            Kernel size for the average pooling layer applied after the transformer encoder.
-        avg_pool_stride (`int`, *optional*, defaults to 2):
-            Stride for the average pooling layer applied after the transformer encoder.
 
     Example:
 
@@ -90,43 +84,47 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
 
     model_type = "audioflamingo3_encoder"
 
+    attribute_map = {
+        "d_model": "hidden_size",
+        "encoder_layers": "num_hidden_layers",
+        "encoder_attention_heads": "num_attention_heads",
+        "encoder_ffn_dim": "intermediate_size",
+        "encoder_layerdrop": "layerdrop",
+    }
+
     def __init__(
         self,
-        num_mel_bins: int = 128,
-        encoder_layers: int = 32,
-        encoder_attention_heads: int = 20,
-        encoder_ffn_dim: int = 5120,
-        encoder_layerdrop: float = 0.0,
-        activation_function: str = "gelu",
-        d_model: int = 1280,
-        dropout: float = 0.0,
-        attention_dropout: float = 0.0,
-        activation_dropout: float = 0.0,
-        init_std: float = 0.02,
-        scale_embedding: bool = False,
-        max_source_positions: int = 1500,
-        avg_pool_kernel_size: int = 2,
-        avg_pool_stride: int = 2,
+        num_mel_bins=128,
+        num_hidden_layers=32,
+        num_attention_heads=20,
+        intermediate_size=5120,
+        layerdrop=0.0,
+        activation_function="gelu",
+        hidden_size=1280,
+        dropout=0.0,
+        attention_dropout=0.0,
+        activation_dropout=0.0,
+        init_std=0.02,
+        scale_embedding=False,
+        max_source_positions=1500,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.num_mel_bins = num_mel_bins
-        self.d_model = d_model
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.activation_function = activation_function
         self.init_std = init_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.num_hidden_layers = encoder_layers
+        self.layerdrop = layerdrop
+        self.num_hidden_layers = num_hidden_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
-        self.avg_pool_kernel_size = avg_pool_kernel_size
-        self.avg_pool_stride = avg_pool_stride
 
 
 class AudioFlamingo3Config(PretrainedConfig):
@@ -177,9 +175,11 @@ class AudioFlamingo3Config(PretrainedConfig):
 
     def __init__(
         self,
-        audio_config: Optional[Union[AudioFlamingo3EncoderConfig, dict[str, Any]]] = None,
-        text_config: Optional[Union[AutoConfig, dict[str, Any]]] = None,
-        audio_token_id: int = 151669,
+        audio_config=None,
+        text_config=None,
+        audio_token_id=151669,
+        projector_hidden_act="gelu",
+        projector_bias=True,
         **kwargs,
     ):
         self.audio_token_id = audio_token_id
@@ -199,6 +199,8 @@ class AudioFlamingo3Config(PretrainedConfig):
             text_config = CONFIG_MAPPING["qwen2"]()
 
         self.text_config = text_config
+        self.projector_hidden_act = projector_hidden_act
+        self.projector_bias = projector_bias
 
         super().__init__(**kwargs)
 

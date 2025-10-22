@@ -175,6 +175,7 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path):
     config = AudioFlamingo3Config(text_config=text_config)
     model = AudioFlamingo3ForConditionalGeneration(config)
     # Load weights into the instantiated model so we can push via `push_to_hub` later.
+    # TODO (ebezzam) handle new state dict keys for `AudioFlamingo3MultiModalProjector`
     load_res = model.load_state_dict(state, strict=True)
     # Enforce a clean load
     if getattr(load_res, "missing_keys", None) and load_res.missing_keys:
