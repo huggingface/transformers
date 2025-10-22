@@ -20,6 +20,7 @@ from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -212,13 +213,25 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_1a8b_batched_chat_generation(self):
         prompts = ["Who are you?", "Complete the text: Lorem ipsum dolor ", "The Meji Restoration in Japan ended"]
-        EXPECTED_TEXT_COMPLETIONS = [
-            "Who are you?, a language model designed to assist with information and tasks?  \nI am",
-            "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
-            "The Meji Restoration in Japan ended or the Meiji Restoration (1868–1912) marked a pivotal",
-        ]
+        # fmt: off
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("cuda", None): ["Who are you?, a language model designed to assist with information and tasks?  \nI am",
+                                 "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
+                                 "The Meji Restoration in Japan ended or the Meiji Restoration (1868–1912) marked a pivotal",
+                                ],
+                ("xpu", None): ['Who are you? (AI) designed to assist?  \nI am an AI assistant developed to',
+                                'Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor',
+                                'The Meji Restoration in Japan ended**  \n* **Key Event:** The overthrow of the Tokugawa'
+                               ],
+            }
+        )
+        # fmt: on
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         set_seed(1789)
         tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-8B-A1B", use_fast=False)
         model = self.get_model()
@@ -228,4 +241,5 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             generated_ids = model.generate(**batched_input_ids, max_new_tokens=15, do_sample=False)
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETIONS, text)
+        print(f"{text}")
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
