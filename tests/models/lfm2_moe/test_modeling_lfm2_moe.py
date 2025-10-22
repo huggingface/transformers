@@ -220,9 +220,9 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
     def test_model_1a8b_batched_chat_generation(self):
         prompts = ["Who are you?", "Complete the text: Lorem ipsum dolor ", "The Meji Restoration in Japan ended"]
         EXPECTED_TEXT_COMPLETIONS = [
-            "Who are you? (AI) designed to assist?  \nI am an AI language model developed",
+            "Who are you? a language model designed to assist with information and tasks?  \nI am",
             "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
-            "The Meji Restoration in Japan ended, which occurred in 1868, marked the:  \nA) Establish",
+            "The Meji Restoration in Japan ended or the Meiji Restoration (1868–1912) marked a pivotal",
         ]
         set_seed(1789)
         tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-8B-A1B", use_fast=False)

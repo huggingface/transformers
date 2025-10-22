@@ -666,7 +666,8 @@ class Lfm2Model(Lfm2PreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        mamba_attention = self._update_linear_attn_mask(attention_mask, cache_position)
+        # Skip masking for decoding stage. We check shape here to be compile-friendly
+        mamba_attention = attention_mask if inputs_embeds.shape[1] != 1 else None
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -690,18 +691,6 @@ class Lfm2Model(Lfm2PreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_linear_attn_mask(self, attention_mask, cache_position):
-        """
-        NOTE: Left-padding is used for linear attention mask.
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        linear_attn_mask = attention_mask
-        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
-            linear_attn_mask = None
-        return linear_attn_mask
 
 
 @auto_docstring
