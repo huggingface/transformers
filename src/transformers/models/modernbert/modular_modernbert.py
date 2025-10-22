@@ -1014,6 +1014,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     inputs_embeds, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
                         inputs=inputs_embeds, attention_mask=attention_mask
                     )
+            if position_ids is None:
+                position_ids = indices.unsqueeze(0)
         else:
             if position_ids is None:
                 position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
@@ -1025,11 +1027,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
         position_embeddings = {}
         for layer_type in self.config.layer_types:
-            position_embeddings[layer_type] = self.rotary_emb(
-                x=hidden_states,
-                position_ids=(indices.unsqueeze(0) if position_ids is None else position_ids),
-                layer_type=layer_type,
-            )
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for encoder_layer in self.layers:
             if output_hidden_states:
