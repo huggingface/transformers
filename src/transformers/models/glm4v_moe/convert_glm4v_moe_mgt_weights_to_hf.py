@@ -57,10 +57,6 @@ def merge_qkv(
     for sd in sd_list:
         if interleaved_qkv:
             shape = sd.shape
-            print(f"zjldbg input {shape} {(multi_query_group_num // original_tp, group_size) + (shape[1:])}")
-            print(
-                f"zjldbg xxx {shape} {(num_attention_heads // multi_query_group_num * attention_dim, attention_dim) + (shape[1:])}"
-            )
             q_, k_, v_ = sd.view((multi_query_group_num // original_tp, group_size) + (shape[1:])).split(
                 [
                     (num_attention_heads // multi_query_group_num * attention_dim),
@@ -702,8 +698,8 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "image_end_token_id": model_config.get("image_end_token_id", 151340),
         "video_start_token_id": model_config.get("video_start_token_id", 151341),
         "video_end_token_id": model_config.get("video_end_token_id", 151342),
-        "image_token_id": model_config.get("image_token_id", 151343),
-        "video_token_id": model_config.get("video_token_id", 151344),
+        "image_token_id": model_config.get("image_token_id", 151363),
+        "video_token_id": model_config.get("video_token_id", 151364),
     }
     txt_config = {
         "hidden_act": text_config.get("hidden_act", "silu"),
@@ -728,6 +724,14 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "n_shared_experts": text_config.get("n_shared_experts", 1),
         "norm_topk_prob": text_config.get("norm_topk_prob", True),
         "num_experts_per_tok": text_config.get("num_experts_per_tok", 8),
+        "rope_scaling": {
+            "type": "default",
+            "mrope_section": [
+                8,
+                12,
+                12
+            ]
+        }
     }
     hf_config["text_config"] = txt_config
 
@@ -749,9 +753,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             "temporal_patch_size": model_config["vision_config"].get("t_patch", 2),
         }
         hf_config["vision_config"] = vision_config
-
-    if "rope_scaling" in model_config:
-        hf_config["rope_scaling"] = model_config["rope_scaling"]
 
     config_path = os.path.join(output_path, "config.json")
     with open(config_path, "w") as f:
