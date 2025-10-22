@@ -208,6 +208,8 @@ _re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
 
 def get_last_checkpoint(folder):
     content = os.listdir(folder)
+    if "last-checkpoint" in content and os.path.isdir(os.path.join(folder, "last-checkpoint")):
+        return os.path.join(folder, "last-checkpoint")
     checkpoints = [
         path
         for path in content
