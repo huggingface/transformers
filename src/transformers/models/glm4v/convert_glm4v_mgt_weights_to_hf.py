@@ -112,7 +112,9 @@ def merge_qkv(
                 ],
                 dim=0,
             )
-            q_chunks.append(q_.clone()); k_chunks.append(k_.clone()); v_chunks.append(v_.clone())
+            q_chunks.append(q_.clone())
+            k_chunks.append(k_.clone())
+            v_chunks.append(v_.clone())
 
     q = torch.cat(q_chunks, dim=0)
     k = torch.cat(k_chunks, dim=0)
