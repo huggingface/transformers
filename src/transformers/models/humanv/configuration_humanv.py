@@ -55,7 +55,7 @@ class HumanVConfig(PreTrainedConfig):
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `8`.
         head_dim (`int`, *optional*, defaults to 64):
             The attention head dimension.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"relu2"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32768):
             The maximum sequence length that this model might ever be used with.
@@ -108,7 +108,7 @@ class HumanVConfig(PreTrainedConfig):
         q_lora (`bool`, *optional*, defaults to False):
             Whether to use QLoRA (quantized LoRA) for low-resource fine-tuning.
         # NEW: Fine-tuning regularization params
-        freeze_layers (`int`, *optional*, defaults to 0):  # Number of initial layers to freeze for gradual unfreezing
+        freeze_layers (`int`, *optional*, defaults to 0):
             If >0, freezes the first N layers during fine-tuning to prevent forgetting.
         curriculum_learning (`bool`, *optional*, defaults to False):
             Whether to enable curriculum learning mode (e.g., start with short sequences).
@@ -156,7 +156,7 @@ class HumanVConfig(PreTrainedConfig):
         num_attention_heads: int = 16,
         num_key_value_heads: Optional[int] = 8,
         head_dim: int = 64,
-        hidden_act: str = "silu",
+        hidden_act: str = "relu2",  # Updated default to relu2 for better sparsity/efficiency
         max_position_embeddings: int = 32768,
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-6,
