@@ -485,6 +485,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
+    # NOTE: attention mask is a 2D boolean tensor
     if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
@@ -732,15 +733,18 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        # Skip masking for decoding stage. We check shape here to be compile-friendly
+        linear_attention = attention_mask if inputs_embeds.shape[1] != 1 else None
 
         hidden_states = inputs_embeds
         position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            layer_mask = causal_mask if decoder_layer.is_attention_layer else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=layer_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
