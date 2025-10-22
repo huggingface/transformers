@@ -159,6 +159,8 @@ class JITCheckpointTest(unittest.TestCase):
 
     def test_execute_jit_checkpoint(self):
         """Test the checkpoint execution logic with sentinel file."""
+        from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+
         trainer = self.get_trainer()
         manager = CheckpointManager(trainer)
 
@@ -178,12 +180,15 @@ class JITCheckpointTest(unittest.TestCase):
         # Verify checkpoint flag was reset
         self.assertFalse(manager.checkpoint_requested)
 
-        # Verify sentinel file was removed
-        sentinel_file = os.path.join(self.test_dir, "checkpoint-is-incomplete.txt")
+        # Verify sentinel file was removed (should be in checkpoint-42 folder)
+        checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-42"
+        sentinel_file = os.path.join(self.test_dir, checkpoint_folder, "checkpoint-is-incomplete.txt")
         self.assertFalse(os.path.exists(sentinel_file))
 
     def test_execute_jit_checkpoint_sentinel_file_cleanup(self):
         """Test that sentinel file is cleaned up after successful checkpoint."""
+        from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+
         trainer = self.get_trainer()
         manager = CheckpointManager(trainer)
 
@@ -191,7 +196,8 @@ class JITCheckpointTest(unittest.TestCase):
         trainer._save_checkpoint = Mock()
         trainer.state.global_step = 42
 
-        sentinel_file = os.path.join(self.test_dir, "checkpoint-is-incomplete.txt")
+        checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-42"
+        sentinel_file = os.path.join(self.test_dir, checkpoint_folder, "checkpoint-is-incomplete.txt")
 
         # Execute checkpoint
         manager.execute_jit_checkpoint()
