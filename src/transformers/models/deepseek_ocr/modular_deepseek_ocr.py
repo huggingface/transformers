@@ -398,6 +398,7 @@ class DeepseekOcrCLIPVisionModel(CLIPVisionModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
+        patch_embeds: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -617,52 +618,6 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
             image_hidden_states=outputs.image_hidden_states,
         )
 
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        image_spatial_crop=None,
-        **kwargs,
-    ):
-        past_length = 0
-        if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                past_length = past_key_values.seen_tokens
-            else:
-                past_length = past_key_values[0][0].shape[2]
-
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-
-        position_ids = kwargs.get("position_ids")
-        if attention_mask is not None and position_ids is None:
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
-                "image_spatial_crop": image_spatial_crop,
-            }
-        )
-        return model_inputs
 
 
 __all__ = [
