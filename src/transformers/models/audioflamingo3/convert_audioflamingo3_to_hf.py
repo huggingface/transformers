@@ -176,7 +176,6 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path):
     model = AudioFlamingo3ForConditionalGeneration(config)
 
     # Update state dict to new key names if necessary
-    # TODO (ebezzam) double-check
     projector_key_mapping = {
         "multi_modal_projector.layers.0.weight": "multi_modal_projector.linear_1.weight",
         "multi_modal_projector.layers.0.bias": "multi_modal_projector.linear_1.bias",

@@ -441,7 +441,7 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
     def __init__(self, config: AudioFlamingo3Config):
         super().__init__()
         self.linear_1 = nn.Linear(
-            config.audio_config.intermediate_size, config.text_config.hidden_size, bias=config.projector_bias
+            config.audio_config.hidden_size, config.text_config.hidden_size, bias=config.projector_bias
         )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(
@@ -615,10 +615,10 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
             # Build 4D float mask (B, 1, S, S) with 0 on valid, -inf on pads
             mask_fn = padding_mask_function(padding_mask)
-            cache_position = torch.arange(seq_len, device=mask_1d.device)
+            enc_cache_position = torch.arange(seq_len, device=mask_1d.device)
             enc_mask = eager_mask(
                 batch_size=batch_size,
-                cache_position=cache_position,
+                cache_position=enc_cache_position,
                 kv_length=seq_len,
                 mask_function=mask_fn,
                 dtype=self.audio_tower.conv1.weight.dtype,
