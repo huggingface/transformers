@@ -648,7 +648,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
         processor.image_processor.size = {"height": 1024, "width": 1024}
 
         image = prepare_img()
@@ -711,7 +712,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
 
         # Deactivate interpolate_pos_encoding on same model, and use default image size.
         # Verify the dynamic change caused by the activation/deactivation of interpolate_pos_encoding of variables: self.sqrt_num_patches, self.box_bias from (OwlViTForObjectDetection).
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
         inputs = processor(
@@ -786,8 +788,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_object_detection(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
-
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
         text_labels = [["a photo of a cat", "a photo of a dog"]]
@@ -836,8 +838,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_one_shot_object_detection(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
-
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
         query_image = prepare_img()
@@ -867,7 +869,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
         query_image = prepare_img()
