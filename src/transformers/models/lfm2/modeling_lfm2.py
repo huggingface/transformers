@@ -422,6 +422,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
+    # NOTE: attention mask is a 2D boolean tensor
     if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
@@ -665,15 +666,17 @@ class Lfm2Model(Lfm2PreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        mamba_attention = self._update_linear_attn_mask(attention_mask, cache_position)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            layer_mask = causal_mask if decoder_layer.is_attention_layer else mamba_attention
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=layer_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -687,6 +690,18 @@ class Lfm2Model(Lfm2PreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
+    def _update_linear_attn_mask(self, attention_mask, cache_position):
+        """
+        NOTE: Left-padding is used for linear attention mask.
+        No need for zeroing states when
+            1. Cached forward
+            2. Attending to all inputs
+        """
+        linear_attn_mask = attention_mask
+        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+            linear_attn_mask = None
+        return linear_attn_mask
 
 
 @auto_docstring
