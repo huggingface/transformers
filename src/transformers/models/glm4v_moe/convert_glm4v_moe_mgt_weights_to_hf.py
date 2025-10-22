@@ -457,7 +457,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
     print("Merging tensor parallel weights...")
 
     interleaved_qkv = True
-    multi_query_attention = True
     num_attention_heads = llm_num_heads
     multi_query_group_num = num_kv_heads
     attention_dim = head_dim
