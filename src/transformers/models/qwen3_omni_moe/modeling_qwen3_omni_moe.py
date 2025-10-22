@@ -1463,7 +1463,6 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         )  # thus post q_norm does not need reshape
         self.sliding_window = None
 
-        # Load and cache the rotary kernel once during initialization to improve performance
         from ...integrations.hub_kernels import lazy_load_kernel
 
         rotary_kernel = lazy_load_kernel("rotary_emb")
@@ -2322,7 +2321,6 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
         )  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
-        # Load and cache the rotary kernel once during initialization to improve performance
         from ...integrations.hub_kernels import lazy_load_kernel
 
         rotary_kernel = lazy_load_kernel("rotary_emb")
@@ -3402,7 +3400,6 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         self.k_norm = nn.Identity()
         self.sliding_window = config.sliding_window
 
-        # Load and cache the rotary kernel once during initialization to improve performance
         from ...integrations.hub_kernels import lazy_load_kernel
 
         rotary_kernel = lazy_load_kernel("rotary_emb")

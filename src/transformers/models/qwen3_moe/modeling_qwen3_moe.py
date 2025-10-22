@@ -148,7 +148,6 @@ class Qwen3MoeAttention(nn.Module):
         self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = getattr(config, "sliding_window", None)
 
-        # Load and cache the rotary kernel once during initialization to improve performance
         from ...integrations.hub_kernels import lazy_load_kernel
 
         rotary_kernel = lazy_load_kernel("rotary_emb")
