@@ -11,9 +11,6 @@ from ...utils import logging
 from .audio_streamer import AsyncAudioStreamer, AudioStreamer
 from .modeling_vibevoice import VibeVoiceModel, VibeVoicePreTrainedModel
 
-# TODO import from this folder?
-from ..vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerStreamingCache
-
 
 logger = logging.get_logger(__name__)
 
@@ -347,7 +344,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             None, None, tokenizer, return_processors=False, **negative_kwargs
         )
 
-        acoustic_cache = VibeVoiceAcousticTokenizerStreamingCache()
+        acoustic_cache = None
         semantic_cache = None
 
         batch_size = input_ids.shape[0]
@@ -489,7 +486,8 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             diffusion_end_indices = (next_tokens == generation_config.speech_end_id).nonzero(as_tuple=False).squeeze(1)
             if diffusion_end_indices.numel() > 0:
                 # Clear tokenizer caches for samples that reached speech end
-                acoustic_cache.set_to_zero(diffusion_end_indices)
+                if acoustic_cache is not None:
+                    acoustic_cache.set_to_zero(diffusion_end_indices)
                 if semantic_cache is not None:
                     semantic_cache.set_to_zero(diffusion_end_indices)
 
@@ -584,12 +582,14 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
 
                 # Decode acoustic latent to audio using acoustic streaming cache
                 scaled_latent = speech_latent / self.model.speech_scaling_factor.to(speech_latent.device) - self.model.speech_bias_factor.to(speech_latent.device)
-                audio_chunk = self.model.acoustic_tokenizer.decode(
+                audio_output = self.model.acoustic_tokenizer.decode(
                     scaled_latent.to(self.model.acoustic_tokenizer.device),
-                    cache=acoustic_cache,  # Use acoustic-specific cache
+                    past_conv_values=acoustic_cache,  # Use acoustic-specific cache
                     sample_indices=diffusion_indices.to(self.model.acoustic_tokenizer.device),
                     use_cache=True
                 )
+                audio_chunk = audio_output.audio
+                acoustic_cache = audio_output.past_conv_values
 
                 # Store audio chunks for each sample
                 for i, sample_idx in enumerate(diffusion_indices):
