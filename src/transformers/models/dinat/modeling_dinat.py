@@ -559,6 +559,7 @@ class DinatPreTrainedModel(PreTrainedModel):
     config: DinatConfig
     base_model_prefix = "dinat"
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def _init_weights(self, module):
         """Initialize the weights"""

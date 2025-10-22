@@ -409,10 +409,6 @@ class BigBirdModelTester:
 
 @require_torch
 class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    # torchscript should be possible, but takes prohibitively long to test.
-    # Also torchscript is not an important feature to have in the beginning.
-    test_torchscript = False
-
     all_model_classes = (
         (
             BigBirdModel,
