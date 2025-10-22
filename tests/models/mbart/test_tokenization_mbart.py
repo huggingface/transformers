@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
+from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, is_torch_available
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
 )
+from transformers.tokenization_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -37,26 +38,32 @@ if is_torch_available():
 EN_CODE = 250004
 RO_CODE = 250020
 
-
 @require_sentencepiece
 @require_tokenizers
 class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "facebook/mbart-large-en-ro"
     tokenizer_class = MBartTokenizer
-    rust_tokenizer_class = MBartTokenizerFast
-    test_rust_tokenizer = True
-    test_sentencepiece = True
+    rust_tokenizer_class = MBartTokenizer
+    test_rust_tokenizer = False
+    test_sentencepiece = False
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
-        # We have a SentencePiece fixture for testing
-        tokenizer = MBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        # Extract vocab from SentencePiece model
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        
+        # Create tokenizer with extracted vocab
+        tokenizer = MBartTokenizer(vocab=vocab_scores)
         tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = MBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        # Extract vocab from SentencePiece model
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = MBartTokenizer(vocab=vocab_scores)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -133,14 +140,13 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # overwrite from test_tokenization_common to speed up test
     def test_save_pretrained(self):
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest(reason="test_slow_tokenizer is set to False")
+        # Skip since we only have one tokenizer implementation now
+        self.skipTest(reason="Only one tokenizer implementation (TokenizersBackend)")
 
-        self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-mbart", {})
+        self.tokenizers_list[0] = (self.tokenizer_class, "hf-internal-testing/tiny-random-mbart", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_r = self.get_tokenizer(pretrained_name, **kwargs)
                 tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 tmpdirname2 = tempfile.mkdtemp()
@@ -239,7 +245,7 @@ class MBartEnroIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ro_RO"], 250020)
 
     def test_enro_tokenizer_batch_encode_plus(self):
-        ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
+        ids = self.tokenizer(self.src_text).input_ids[0]
         self.assertListEqual(self.expected_src_tokens, ids)
 
     def test_enro_tokenizer_decode_ignores_language_codes(self):

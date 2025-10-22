@@ -84,6 +84,7 @@ class T5Tokenizer(TokenizersBackend):
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
+        # Handle extra_ids and additional_special_tokens
         if additional_special_tokens is not None:
             extra_tokens = [x for x in additional_special_tokens if "<extra_id_" in str(x)]
             if len(extra_tokens) < 1:
@@ -140,13 +141,19 @@ class T5Tokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=["$A", "</s>"],
-            pair=["$A", "</s>", "$B", "</s>"],
-            special_tokens=[
-                ("</s>", self.eos_token_id),
-            ],
-        )
+    #     # Set up post-processor after parent initialization
+    #     self._setup_post_processor()
+
+    # def _setup_post_processor(self):
+    #     """Set up the post-processor for T5 tokenization."""
+    #     eos_token_id = self.eos_token_id if self.eos_token_id is not None else 1
+    #     self._tokenizer.post_processor = processors.TemplateProcessing(
+    #         single=["$A", "</s>"],
+    #         pair=["$A", "</s>", "$B", "</s>"],
+    #         special_tokens=[
+    #             ("</s>", eos_token_id),
+    #         ],
+    #     )
 
     def get_sentinel_tokens(self):
         """Get the list of sentinel tokens (extra_id tokens) from additional_special_tokens."""
