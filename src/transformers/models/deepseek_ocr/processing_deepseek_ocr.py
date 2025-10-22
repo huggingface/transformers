@@ -15,12 +15,14 @@
 import re
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import logging
-import torch
+
 
 logger = logging.get_logger(__name__)
 

@@ -116,7 +116,7 @@ def main():
         "--original_checkpoint_path",
         type=str,
         required=True,
-        help="Path to the original checkpoint file (.pt, .pth, or .safetensors)",
+        help="Path to the original checkpoint file (.safetensors)",
     )
     parser.add_argument(
         "--output_path",
@@ -145,12 +145,7 @@ def main():
     config_path = checkpoint_path.parent / "config.json"
 
     print(f"Loading original checkpoint from {checkpoint_path}")
-    if checkpoint_path.suffix == ".safetensors":
-        original_state_dict = load_file(checkpoint_path)
-    else:
-        original_state_dict = torch.load(checkpoint_path, map_location="cpu")
-        if "model" in original_state_dict:
-            original_state_dict = original_state_dict["model"]
+    original_state_dict = load_file(checkpoint_path)
 
     if config_path.exists():
         print(f"Loading config from {config_path}")

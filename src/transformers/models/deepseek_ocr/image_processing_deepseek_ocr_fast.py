@@ -17,6 +17,9 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+
+# TODO protect this import
+from PIL import Image, ImageDraw, ImageFont
 from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import (
@@ -27,8 +30,7 @@ from ...image_processing_utils_fast import (
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, auto_docstring, logging
-# TODO protect this import
-from PIL import Image, ImageDraw, ImageFont
+
 
 logger = logging.get_logger(__name__)
 

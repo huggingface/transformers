@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -21,67 +20,27 @@ from torch import nn
 
 from transformers.models.llava_next.modeling_llava_next import LlavaNextModel
 
-from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..llava.modeling_llava import LlavaForConditionalGeneration
-from ..llava_next.modeling_llava_next import LlavaNextForConditionalGeneration, LlavaNextModel, image_size_to_num_patches
-from ..clip.modeling_clip import CLIPEncoder, CLIPVisionModel, CLIPVisionEmbeddings, CLIPVisionTransformer
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2PreTrainedModel
-from ..sam.modeling_sam import SamVisionEncoder
-from .configuration_deepseek_ocr import DeepseekOcrConfig
-import collections
-import math
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Optional, Union
-
-import torch
-import torch.nn.functional as F
-from torch import nn
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache
-from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
-    ModelOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
-from ...utils.generic import check_model_inputs
-from ..auto import AutoModel
-
-import math
-from dataclasses import dataclass
-from typing import Optional, Union
-
-import numpy as np
-import torch
-from torch import nn
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache
-from ...generation import GenerationMixin
-from ...image_processing_utils import select_best_resolution
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..auto import AutoModel
-from ..llava_next.configuration_llava_next import LlavaNextConfig
-
+from ...utils.generic import check_model_inputs
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..clip.modeling_clip import CLIPEncoder, CLIPVisionEmbeddings, CLIPVisionModel, CLIPVisionTransformer
+from ..llava_next.modeling_llava_next import (
+    LlavaNextForConditionalGeneration,
+    LlavaNextModel,
+    image_size_to_num_patches,
+)
+from ..sam.modeling_sam import SamVisionEncoder
+from .configuration_deepseek_ocr import DeepseekOcrConfig
 
 
 logger = logging.get_logger(__name__)
@@ -306,7 +265,7 @@ class DeepseekOcrSAMVisionEncoder(SamVisionEncoder):
         super().__init__()
         out_channels = config.out_channels
         downsample_channels = config.downsample_channels
-        
+
         # TODO move hardcoded values to config
         self.net_2 = nn.Conv2d(out_channels, downsample_channels[0], kernel_size=3, stride=2, padding=1, bias=False)
         self.net_3 = nn.Conv2d(
@@ -327,11 +286,11 @@ class DeepseekOcrVisionEmbeddings(CLIPVisionEmbeddings):
     def forward(self, pixel_values, patch_embeds, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
 
-        #if patch_embeds is not None:
+        # if patch_embeds is not None:
         #    patch_embeds = patch_embeds
-        #else:
-        patch_embeds = self.patch_embedding(pixel_values) # Deepseek OCR CLIP embedder always uses SAM features
-        
+        # else:
+        patch_embeds = self.patch_embedding(pixel_values)  # Deepseek OCR CLIP embedder always uses SAM features
+
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
@@ -341,8 +300,10 @@ class DeepseekOcrVisionEmbeddings(CLIPVisionEmbeddings):
             embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
+
 class DeepseekOcrCLIPEncoder(CLIPEncoder):
     pass
+
 
 class DeepseekOcrCLIPVisionTransformer(CLIPVisionTransformer):
     def __init__(self, config):
@@ -354,7 +315,7 @@ class DeepseekOcrCLIPVisionTransformer(CLIPVisionTransformer):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        patch_embeds: Optional[torch.FloatTensor] = None, # from SAM
+        patch_embeds: Optional[torch.FloatTensor] = None,  # from SAM
         interpolate_pos_encoding: Optional[bool] = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -382,6 +343,7 @@ class DeepseekOcrCLIPVisionTransformer(CLIPVisionTransformer):
 class DeepseekOcrPreTrainedModel(PreTrainedModel):
     config_class = DeepseekOcrConfig
     base_model_prefix = "model"
+
 
 class DeepseekOcrCLIPVisionModel(CLIPVisionModel):
     def __init__(self, config):
@@ -430,6 +392,7 @@ class DeepseekOcrCLIPVisionModel(CLIPVisionModel):
             **kwargs,
         )
 
+
 class DeepseekOcrModel(LlavaNextModel):
     """
     Deepseek OCR model with dual vision encoders (SAM + CLIP) and a projector.
@@ -448,32 +411,30 @@ class DeepseekOcrModel(LlavaNextModel):
 
         embed_std = 1 / math.sqrt(config.hidden_size)
         self.image_newline = nn.Parameter(torch.randn(config.hidden_size) * embed_std)
-        self.view_seperator = nn.Parameter(torch.randn(config.hidden_size) * embed_std) # TODO the typo is in the checkpoint
+        self.view_seperator = nn.Parameter(
+            torch.randn(config.hidden_size) * embed_std
+        )  # TODO the typo is in the checkpoint
 
         self.post_init()
 
     def get_placeholder_mask(self, input_ids, inputs_embeds, image_token_id):
         if input_ids is None:
-            tok_embed = self.get_input_embeddings()(
-                torch.tensor(image_token_id, device=inputs_embeds.device)
-            )
+            tok_embed = self.get_input_embeddings()(torch.tensor(image_token_id, device=inputs_embeds.device))
             mask = (inputs_embeds == tok_embed).all(dim=-1)
         else:
-            mask = (input_ids == self.config.image_token_id)
+            mask = input_ids == self.config.image_token_id
         return mask.unsqueeze(-1).expand_as(inputs_embeds)
-
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,     # (B, num_patches, 3, H, W) or (sum_patches, 3, H, W)
-        image_sizes: torch.Tensor,           # (num_images, 2) actual (H, W)
+        pixel_values: torch.FloatTensor,  # (B, num_patches, 3, H, W) or (sum_patches, 3, H, W)
+        image_sizes: torch.Tensor,  # (num_images, 2) actual (H, W)
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
     ):
         patch = self.config.vision_config.patch_size
         image_num_patches = [
-            image_size_to_num_patches(imsize, self.config.image_grid_pinpoints, patch)
-            for imsize in image_sizes
+            image_size_to_num_patches(imsize, self.config.image_grid_pinpoints, patch) for imsize in image_sizes
         ]
 
         if pixel_values.dim() == 5:
@@ -485,9 +446,11 @@ class DeepseekOcrModel(LlavaNextModel):
         sam_features = self.sam_model(pixel_values)
         sam_seq = sam_features.flatten(2).permute(0, 2, 1)
 
-        clip_out  = self.clip_model(pixel_values, sam_features)
+        clip_out = self.clip_model(pixel_values, sam_features)
 
-        vision_feature_layer_index = (vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer)
+        vision_feature_layer_index = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
 
         if isinstance(vision_feature_layer_index, int):
             clip_seq = clip_out.hidden_states[vision_feature_layer_index]
@@ -495,15 +458,18 @@ class DeepseekOcrModel(LlavaNextModel):
             pool = [clip_out.hidden_states[i] for i in vision_feature_layer_index]
             clip_seq = torch.cat(pool, dim=-1)
 
-        vision_feature_select_strategy = (vision_feature_select_strategy if vision_feature_select_strategy is not None
-                else self.config.vision_feature_select_strategy)
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
         if vision_feature_select_strategy == "default":
             clip_seq = clip_seq[:, 1:]
         elif vision_feature_select_strategy != "full":
             raise ValueError(f"Unexpected vision_feature_select_strategy={vision_feature_select_strategy}")
 
         fused = torch.cat([clip_seq, sam_seq], dim=-1)
-        proj  = self.multi_modal_projector(fused)
+        proj = self.multi_modal_projector(fused)
 
         proj_list = torch.split(proj, image_num_patches, dim=0)
 
@@ -516,7 +482,6 @@ class DeepseekOcrModel(LlavaNextModel):
 
         new_image_features = [torch.cat([pf, self.view_seperator[None].to(pf)], dim=0) for pf in new_image_features]
         return torch.cat(new_image_features, dim=0)
-
 
     def forward(
         self,
@@ -534,13 +499,10 @@ class DeepseekOcrModel(LlavaNextModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None and torch.sum(pixel_values[0, 1]).item() != 0:
-            
             vision_features = self.get_image_features(pixel_values, image_spatial_crop)
 
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, vision_features)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                special_image_mask, vision_features.to(inputs_embeds.dtype)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, vision_features.to(inputs_embeds.dtype))
 
         return self.language_model(
             input_ids=None,
@@ -551,6 +513,7 @@ class DeepseekOcrModel(LlavaNextModel):
             return_dict=return_dict,
             **kwargs,
         )
+
 
 @auto_docstring(
     custom_intro="""
@@ -584,7 +547,6 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -602,7 +564,6 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-
         loss = None
         if labels is not None:
             loss = self.loss_function(
@@ -617,7 +578,6 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
 
 
 __all__ = [
