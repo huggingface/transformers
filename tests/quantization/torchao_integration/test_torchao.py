@@ -50,6 +50,7 @@ if is_torchao_available():
         Float8WeightOnlyConfig,
         Int8WeightOnlyConfig,
         IntxWeightOnlyConfig,
+        Int4WeightOnlyConfig,
         MappingType,
         ModuleFqnToConfig,
         PerAxis,
@@ -181,7 +182,8 @@ class TorchAoTest(unittest.TestCase):
         """
         Testing the dtype of model will be modified to be bfloat16 for int4 weight only quantization
         """
-        quant_config = TorchAoConfig("int4_weight_only", **self.quant_scheme_kwargs)
+        config = Int4WeightOnlyConfig(**self.quant_scheme_kwargs)
+        quant_config = TorchAoConfig(config)
 
         # Note: we quantize the bfloat16 model on the fly to int4
         quantized_model = AutoModelForCausalLM.from_pretrained(
