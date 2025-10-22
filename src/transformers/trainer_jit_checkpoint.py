@@ -4,6 +4,7 @@ import threading
 from typing import Optional
 
 from .trainer_callback import TrainerCallback
+from .trainer_utils import PREFIX_CHECKPOINT_DIR
 from .utils import logging
 
 
@@ -38,15 +39,21 @@ class CheckpointManager:
             self.checkpoint_requested = False
 
             logger.info("Starting JIT checkpointing...")
-            original_step = self.trainer.state.global_step
-            logger.info(f"Saving JIT checkpoint at step {original_step}")
+            current_step = self.trainer.state.global_step
+            logger.info(f"Saving JIT checkpoint at step {current_step}")
+
+            output_dir = self.trainer._get_output_dir(trial=None)
+            checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{current_step}"
+            checkpoint_path = os.path.join(output_dir, checkpoint_folder)
+
+            # Create checkpoint directory
+            os.makedirs(checkpoint_path, exist_ok=True)
 
             # Create a sentinel file to indicate checkpointing is in progress
-            output_dir = self.trainer.args.output_dir
-            sentinel_file = os.path.join(output_dir, "checkpoint-is-incomplete.txt")
+            sentinel_file = os.path.join(output_dir, checkpoint_folder, "checkpoint-is-incomplete.txt")
             with open(sentinel_file, "w") as f:
-                f.write(f"Checkpoint started at step {original_step} and in progress...")
-            logger.info(f"Created checkpoint progress marker: {sentinel_file}")
+                f.write(f"Checkpoint started at step {current_step} and in progress...")
+            logger.info(f"Created checkpoint progress sentinel marker file: {sentinel_file}")
 
             # Invoke the trainer's checkpoint method directly
             self.trainer._save_checkpoint(self.trainer.model, trial=None)
