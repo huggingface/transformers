@@ -68,7 +68,9 @@ def update_state_dict_for_hf_model(state_dict):
             # Original Block1D had: mixer.conv.conv.conv.* -> VibeVoiceAcousticTokenizerConvNext1dLayer has: mixer.*
             elif "stages." in key and "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
-            # Note: SConvTranspose1d layers are NOT updated, so we don't transform their keys
+            # Handle SConvTranspose1d nested convtr structure: convtr.convtr.* -> convtr.*
+            elif "convtr.convtr." in key:
+                new_key = new_key.replace("convtr.convtr.", "convtr.")
 
         updated_state_dict[new_key] = value
     

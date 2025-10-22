@@ -26,17 +26,6 @@ def unpad1d(x: torch.Tensor, paddings: tuple[int, int]):
     return x[..., padding_left: end]
 
 
-class NormConvTranspose1d(nn.Module):
-    """Wrapper around ConvTranspose1d and normalization applied to this conv"""
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        self.convtr = nn.ConvTranspose1d(*args, **kwargs)
-
-    def forward(self, x):
-        x = self.convtr(x)
-        return x
-
-
 # TODO (ebezzam) move to `src/transformers/cache_utils.py` and make similar to `DynamicCache`?
 class VibeVoiceAcousticTokenizerCache:
     """
@@ -101,14 +90,20 @@ class VibeVoiceAcousticTokenizerCache:
         return len(self.cache) == 0
 
 
-class SConvTranspose1d(nn.Module):
-    """ConvTranspose1d with built-in handling of asymmetric or causal padding and normalization."""
-    def __init__(self, in_channels: int, out_channels: int,
-                kernel_size: int, stride: int = 1, causal: bool = False,
-                trim_right_ratio: float = 1.,
-                bias: bool = True):
+class VibeVoiceAcousticTokenizerStreamingConvTranspose1d(nn.Module):
+    """ConvTranspose1d with built-in handling of streaming and causal padding."""
+    def __init__(
+        self, 
+        in_channels: int, 
+        out_channels: int,
+        kernel_size: int, 
+        stride: int = 1, 
+        causal: bool = False,
+        trim_right_ratio: float = 1.,
+        bias: bool = True
+    ):
         super().__init__()
-        self.convtr = NormConvTranspose1d(in_channels, out_channels, kernel_size, stride, bias=bias)
+        self.convtr = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, bias=bias)
         self.causal = causal
         self.trim_right_ratio = trim_right_ratio
         assert self.causal or self.trim_right_ratio == 1., \
@@ -128,59 +123,50 @@ class SConvTranspose1d(nn.Module):
         # Transposed conv needs to see multiple input samples to produce correct output
         self.context_size = kernel_size - 1
 
-        # Create a unique layer ID for cache management
-        self._layer_id = None
-
-    @property
-    def layer_id(self):
-        if self._layer_id is None:
-            self._layer_id = f"sconvtr1d_{id(self)}"
-        return self._layer_id
-
-    def forward(self, x: torch.Tensor,
-                past_conv_values: Optional[VibeVoiceAcousticTokenizerCache] = None,
-                sample_indices: Optional[torch.Tensor] = None,
-                layer_idx: Optional[int] = None,
-                use_cache: bool = False
+    def forward(self, 
+        x: torch.Tensor,
+        past_conv_values: Optional[VibeVoiceAcousticTokenizerCache] = None,
+        sample_indices: Optional[torch.Tensor] = None,
+        layer_idx: Optional[int] = None,
     ) -> torch.Tensor:
         """
         Forward pass with optional streaming support via cache.
         """
-        if layer_idx is None and use_cache:
-            # TODO (ebezzam) remove weird hashing
-            layer_idx = hash(self.layer_id) % 10000
 
-        B, C, T = x.shape
+        batch_size, channels, time_dim = x.shape
+
+        # Validate cache parameters
+        if past_conv_values is not None:
+            if layer_idx is None:
+                raise ValueError("layer_idx must be provided when past_conv_values is used.")
+            if sample_indices is None:
+                raise ValueError("sample_indices must be provided when past_conv_values is used.")
+            if len(sample_indices) != batch_size:
+                raise ValueError("sample_indices length must match batch size")
 
         # Non-streaming mode
         if past_conv_values is None:
-            return self._forward_non_streaming(x)
+            # Apply transposed convolution
+            y = self.convtr(x)
 
-        # Streaming mode
-        assert sample_indices is not None, "sample_indices must be provided for streaming mode"
-        assert len(sample_indices) == B, "sample_indices must match batch size"
+            # Calculate and remove padding
+            if self.causal:
+                padding_right = math.ceil(self.padding_total * self.trim_right_ratio)
+                padding_left = self.padding_total - padding_right
+            else:
+                padding_right = self.padding_total // 2
+                padding_left = self.padding_total - padding_right
+
+            if padding_left + padding_right > 0:
+                y = unpad1d(y, (padding_left, padding_right))
+            return y
         
-        # If layer_idx is not provided, use the layer_id for backward compatibility
-        if layer_idx is None:
-            # For backward compatibility, we need to convert to the old interface
-            # This should not happen in the updated code, but we handle it gracefully
-            layer_idx = hash(self.layer_id) % 10000  # Use a hash of layer_id as layer_idx
-
-        return self._forward_streaming(x, past_conv_values, sample_indices, layer_idx)
-
-    def _forward_streaming(self, x: torch.Tensor,
-                          past_conv_values: VibeVoiceAcousticTokenizerCache,
-                          sample_indices: torch.Tensor,
-                          layer_idx: int) -> torch.Tensor:
-        """Streaming forward pass with cache operations kept separate from compiled code"""
-        B, C, T = x.shape
-
         # Cache operations (not compiled)
         cached_input = past_conv_values.get(layer_idx, sample_indices)
 
         if cached_input is None:
             # First chunk - no history yet
-            cached_input = torch.zeros(B, C, 0, device=x.device, dtype=x.dtype)
+            cached_input = torch.zeros(batch_size, channels, 0, device=x.device, dtype=x.dtype)
 
         # Concatenate cached input with new input
         full_input = torch.cat([cached_input, x], dim=2)
@@ -205,7 +191,7 @@ class SConvTranspose1d(nn.Module):
             output = full_output
         else:
             # Subsequent chunks - return only the new output
-            expected_new_output = T * self.stride
+            expected_new_output = time_dim * self.stride
 
             # Take the last expected_new_output samples
             if full_output.shape[2] >= expected_new_output:
@@ -220,26 +206,7 @@ class SConvTranspose1d(nn.Module):
             new_cache = full_input
 
         past_conv_values.update(layer_idx, sample_indices, new_cache)
-
         return output
-
-    def _forward_non_streaming(self, x: torch.Tensor) -> torch.Tensor:
-        """Standard forward pass without streaming"""
-        # Apply transposed convolution
-        y = self.convtr(x)
-
-        # Calculate and remove padding
-        if self.causal:
-            padding_right = math.ceil(self.padding_total * self.trim_right_ratio)
-            padding_left = self.padding_total - padding_right
-        else:
-            padding_right = self.padding_total // 2
-            padding_left = self.padding_total - padding_right
-
-        if padding_left + padding_right > 0:
-            y = unpad1d(y, (padding_left, padding_right))
-
-        return y
 
 
 class VibeVoiceAcousticTokenizerRMSNorm(nn.Module):
@@ -502,7 +469,7 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
             in_ch = config.n_filters * (2 ** (len(config.depths) - 1 - i))
             out_ch = config.n_filters * (2 ** (len(config.depths) - 1 - i - 1))
             upsample_layer = nn.Sequential(
-                SConvTranspose1d(in_ch, out_ch,
+                VibeVoiceAcousticTokenizerStreamingConvTranspose1d(in_ch, out_ch,
                                 kernel_size=config.ratios[i] * 2, stride=config.ratios[i],
                                 bias=config.bias,
                                 causal=self.causal, trim_right_ratio=trim_right_ratio),
@@ -520,15 +487,13 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
 
         self.head = VibeVoiceAcousticTokenizerStreamingConv1d(in_ch, config.channels, kernel_size=config.kernel_size, bias=config.bias)
 
-    def forward_features(self, x, past_conv_values=None, sample_indices=None, use_cache=False):
+    
+    def forward_features(self, x, past_conv_values=None, sample_indices=None):
         for i in range(len(self.upsample_layers)):
             # Apply upsampling
             for layer in self.upsample_layers[i]:
-                if isinstance(layer, (VibeVoiceAcousticTokenizerStreamingConv1d, SConvTranspose1d)):
-                    if isinstance(layer, VibeVoiceAcousticTokenizerStreamingConv1d):
-                        x = layer(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=i)
-                    else:
-                        x = layer(x, past_conv_values=past_conv_values, sample_indices=sample_indices, use_cache=use_cache)
+                if isinstance(layer, (VibeVoiceAcousticTokenizerStreamingConv1d, VibeVoiceAcousticTokenizerStreamingConvTranspose1d)):
+                    x = layer(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=i)
                 else:
                     x = layer(x)
 
@@ -538,8 +503,8 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
 
         return x
 
-    def forward(self, x, past_conv_values=None, sample_indices=None, use_cache=False):
-        x = self.forward_features(x, past_conv_values=past_conv_values, sample_indices=sample_indices, use_cache=use_cache)
+    def forward(self, x, past_conv_values=None, sample_indices=None):
+        x = self.forward_features(x, past_conv_values=past_conv_values, sample_indices=sample_indices)
         layer_idx = len(self.upsample_layers) + len(self.upsample_layers)  # Unique layer index for head
         x = self.head(x, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx)
         return x
@@ -684,7 +649,7 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
             past_conv_values = VibeVoiceAcousticTokenizerCache()
 
         latents = latents.permute(0, 2, 1)
-        audio = self.decoder(latents, past_conv_values=past_conv_values, sample_indices=sample_indices, use_cache=use_cache)
+        audio = self.decoder(latents, past_conv_values=past_conv_values, sample_indices=sample_indices)
         return VibeVoiceAcousticDecoderOutput(audio=audio, past_conv_values=past_conv_values)
 
     def forward(self, audio, past_conv_values=None, sample_indices=None, use_cache=False):
