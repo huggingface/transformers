@@ -50,8 +50,6 @@ if is_flash_attn_2_available():
     from flash_attn.bert_padding import pad_input, unpad_input
 
 
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -366,26 +364,21 @@ class LayoutLMv3Attention(nn.Module):
         return outputs
 
 
-
-
-
 class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
     """
     LayoutLMv3 attention using PyTorch's scaled_dot_product_attention.
     """
 
     def forward(
-            self,
-            hidden_states,
-            attention_mask=None,
-            output_attentions=False,
-            rel_pos=None,
-            rel_2d_pos=None,
+        self,
+        hidden_states,
+        attention_mask=None,
+        output_attentions=False,
+        rel_pos=None,
+        rel_2d_pos=None,
     ):
         if output_attentions:
-            logger.warning_once(
-                "SDPA doesn't support output_attentions, falling back to standard attention."
-            )
+            logger.warning_once("SDPA doesn't support output_attentions, falling back to standard attention.")
             return super().forward(
                 hidden_states,
                 attention_mask,
@@ -399,12 +392,20 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
         query_layer = self.self.query(hidden_states)
         key_layer = self.self.key(hidden_states)
         value_layer = self.self.value(hidden_states)
-        query_layer = query_layer.view(batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size).transpose(1, 2)
-        key_layer = key_layer.view(batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size).transpose(1, 2)
-        value_layer = value_layer.view(batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size).transpose(1, 2)
+        query_layer = query_layer.view(
+            batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size
+        ).transpose(1, 2)
+        key_layer = key_layer.view(
+            batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size
+        ).transpose(1, 2)
+        value_layer = value_layer.view(
+            batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size
+        ).transpose(1, 2)
 
         if self.self.has_relative_attention_bias and rel_pos is not None:
-            attention_scores = torch.matmul(query_layer / math.sqrt(self.self.attention_head_size), key_layer.transpose(-1, -2))
+            attention_scores = torch.matmul(
+                query_layer / math.sqrt(self.self.attention_head_size), key_layer.transpose(-1, -2)
+            )
 
             if self.self.has_spatial_attention_bias and rel_2d_pos is not None:
                 attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(self.self.attention_head_size)
@@ -465,24 +466,22 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
             value_states,
             indices_q,
             (cu_seqlens_q, cu_seqlens_q),
-            (max_seqlen_q, max_seqlen_q)
+            (max_seqlen_q, max_seqlen_q),
         )
 
     def forward(
-            self,
-            hidden_states,
-            attention_mask=None,
-            output_attentions=False,
-            rel_pos=None,
-            rel_2d_pos=None,
+        self,
+        hidden_states,
+        attention_mask=None,
+        output_attentions=False,
+        rel_pos=None,
+        rel_2d_pos=None,
     ):
         if output_attentions:
             logger.warning_once(
                 "Flash Attention 2 doesn't support output_attentions, falling back to standard attention."
             )
-            return super().forward(
-                hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos
-            )
+            return super().forward(hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos)
 
         batch_size, seq_length, _ = hidden_states.size()
 
@@ -494,9 +493,7 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
             logger.warning_once(
                 "Flash Attention 2 doesn't support relative position bias, falling back to standard attention."
             )
-            return super().forward(
-                hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos
-            )
+            return super().forward(hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos)
 
         if attention_mask is not None:
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
@@ -532,7 +529,6 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
         attn_output = attn_output.reshape(batch_size, seq_length, -1)
         attn_output = self.output(attn_output, hidden_states)
         return (attn_output,)
-
 
 
 # Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Layer with LayoutLMv2->LayoutLMv3
