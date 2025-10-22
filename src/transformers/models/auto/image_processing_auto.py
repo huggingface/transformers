@@ -195,6 +195,7 @@ else:
             ("timm_wrapper", ("TimmWrapperImageProcessor", None)),
             ("trocr", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("tvp", ("TvpImageProcessor", "TvpImageProcessorFast")),
+            ("t5gemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
             ("video_llama_3", ("VideoLlama3ImageProcessor", "VideoLlama3ImageProcessorFast")),
