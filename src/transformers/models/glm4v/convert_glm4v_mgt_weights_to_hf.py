@@ -113,21 +113,6 @@ def split_glu(sd, cnt, idx):
         dim=0,
     )
 
-
-def merge_qkv_vit(sd_list, source=None):
-    q, k, v = [], [], []
-    for sd in sd_list:
-        q_, k_, v_ = sd.chunk(dim=0, chunks=3)
-        q.append(q_.clone().contiguous())
-        k.append(k_.clone().contiguous())
-        v.append(v_.clone().contiguous())
-    q = torch.cat(q, dim=0)
-    k = torch.cat(k, dim=0)
-    v = torch.cat(v, dim=0)
-    combined = torch.cat([q, k, v], dim=0)
-    return combined
-
-
 def merge_tensors(
     tp_sd,
     keys,
@@ -501,7 +486,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
                 num_attention_heads=num_attention_heads,
                 multi_query_group_num=multi_query_group_num,
                 attention_dim=attention_dim,
-                interleaved_qkv=interleaved_qkv,
+                interleaved_qkv=False,
             )
             complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.bias"] = q_bias.clone()
             complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.bias"] = k_bias.clone()

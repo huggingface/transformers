@@ -113,21 +113,6 @@ def split_glu(sd, cnt, idx):
         dim=0,
     )
 
-
-def merge_qkv_vit(sd_list, source=None):
-    q, k, v = [], [], []
-    for sd in sd_list:
-        q_, k_, v_ = sd.chunk(dim=0, chunks=3)
-        q.append(q_.clone().contiguous())
-        k.append(k_.clone().contiguous())
-        v.append(v_.clone().contiguous())
-    q = torch.cat(q, dim=0)
-    k = torch.cat(k, dim=0)
-    v = torch.cat(v, dim=0)
-    combined = torch.cat([q, k, v], dim=0)
-    return combined
-
-
 def find_expert_weight(input_dict, layer_num, fc1=True):
     if fc1:
         pattern = re.compile(rf"^decoder\.layers\.{layer_num}\.mlp\.experts\.linear_fc1\.weight(\d+)$")
