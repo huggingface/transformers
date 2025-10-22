@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import signal
 import tempfile
 import unittest
@@ -22,8 +23,6 @@ from transformers.testing_utils import require_torch
 
 
 if is_torch_available():
-    import torch
-
     from transformers.trainer_jit_checkpoint import CheckpointManager, JITCheckpointCallback
 
     from .test_trainer import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
@@ -70,18 +69,10 @@ class JITCheckpointTest(unittest.TestCase):
         self.assertEqual(manager.trainer, trainer)
         self.assertEqual(manager.kill_wait, 3)
         self.assertFalse(manager.checkpoint_requested)
-        self.assertIsNone(manager.checkpoint_thread)
 
         # Test with custom parameters
         manager_custom = CheckpointManager(trainer, kill_wait=5)
         self.assertEqual(manager_custom.kill_wait, 5)
-
-        # Test CUDA stream creation if available
-        if torch.cuda.is_available():
-            self.assertIsNotNone(manager.checkpoint_stream)
-            self.assertIsInstance(manager.checkpoint_stream, torch.cuda.Stream)
-        else:
-            self.assertIsNone(manager.checkpoint_stream)
 
     def test_signal_handler_setup(self):
         """Test signal handler setup and restoration."""
@@ -107,35 +98,31 @@ class JITCheckpointTest(unittest.TestCase):
             signal.signal(signal.SIGTERM, original_handler)
 
     @patch("threading.Timer")
-    @patch("threading.Thread")
-    def test_sigterm_handler_flow(self, mock_thread, mock_timer):
+    def test_sigterm_handler_flow(self, mock_timer):
         """Test SIGTERM handler execution flow."""
         trainer = self.get_trainer()
         manager = CheckpointManager(trainer, kill_wait=2)
 
-        # Mock timer and thread to prevent actual threading
+        # Mock timer to prevent actual threading
         mock_timer_instance = Mock()
         mock_timer.return_value = mock_timer_instance
-        mock_thread_instance = Mock()
-        mock_thread.return_value = mock_thread_instance
 
         # Test first SIGTERM call
         self.assertFalse(manager.checkpoint_requested)
         manager._sigterm_handler(signal.SIGTERM, None)
 
-        # Verify checkpoint was requested
-        self.assertTrue(manager.checkpoint_requested)
+        # Verify checkpoint was NOT immediately requested (timer is used)
+        self.assertFalse(manager.checkpoint_requested)
 
-        # Verify timer was created with kill_wait period
-        mock_timer.assert_called_once_with(2, manager._start_checkpoint_thread)
+        # Verify timer was created with kill_wait period and correct callback
+        mock_timer.assert_called_once_with(2, manager._toggle_checkpoint_flag)
         mock_timer_instance.start.assert_called_once()
 
-        # Manually trigger the timer callback to test thread creation
-        manager._start_checkpoint_thread()
+        # Manually trigger the timer callback to test flag setting
+        manager._toggle_checkpoint_flag()
 
-        # Verify thread was created and started
-        mock_thread.assert_called_once_with(target=manager._immediate_async_checkpoint, daemon=True)
-        mock_thread_instance.start.assert_called_once()
+        # Verify checkpoint is now requested
+        self.assertTrue(manager.checkpoint_requested)
 
         # Test second SIGTERM call (should be ignored)
         mock_timer.reset_mock()
@@ -143,6 +130,20 @@ class JITCheckpointTest(unittest.TestCase):
 
         # Verify no additional timer was created
         mock_timer.assert_not_called()
+
+    def test_toggle_checkpoint_flag(self):
+        """Test the toggle checkpoint flag method."""
+        trainer = self.get_trainer()
+        manager = CheckpointManager(trainer)
+
+        # Initially should not be requested
+        self.assertFalse(manager.checkpoint_requested)
+
+        # Toggle flag
+        manager._toggle_checkpoint_flag()
+
+        # Should now be requested
+        self.assertTrue(manager.checkpoint_requested)
 
     def test_should_checkpoint_now(self):
         """Test checkpoint condition checking."""
@@ -156,16 +157,8 @@ class JITCheckpointTest(unittest.TestCase):
         manager.checkpoint_requested = True
         self.assertTrue(manager.should_checkpoint_now())
 
-    @patch("torch.cuda.is_available", return_value=False)
-    def test_checkpoint_manager_without_cuda(self, mock_cuda_available):
-        """Test CheckpointManager behavior when CUDA is not available."""
-        trainer = self.get_trainer()
-        manager = CheckpointManager(trainer)
-
-        self.assertIsNone(manager.checkpoint_stream)
-
     def test_execute_jit_checkpoint(self):
-        """Test the checkpoint execution logic."""
+        """Test the checkpoint execution logic with sentinel file."""
         trainer = self.get_trainer()
         manager = CheckpointManager(trainer)
 
@@ -173,17 +166,38 @@ class JITCheckpointTest(unittest.TestCase):
         trainer._save_checkpoint = Mock()
         trainer.state.global_step = 42
 
-        # Mock CUDA stream for assertion
-        if torch.cuda.is_available():
-            with patch("torch.cuda.current_stream", return_value=manager.checkpoint_stream):
-                manager._execute_jit_checkpoint()
-        else:
-            # Skip CUDA stream assertion when CUDA not available
-            with patch.object(manager, "checkpoint_stream", None):
-                manager._execute_jit_checkpoint()
+        # Set checkpoint requested flag
+        manager.checkpoint_requested = True
+
+        # Execute checkpoint
+        manager.execute_jit_checkpoint()
 
         # Verify checkpoint was called
         trainer._save_checkpoint.assert_called_once_with(trainer.model, trial=None)
+
+        # Verify checkpoint flag was reset
+        self.assertFalse(manager.checkpoint_requested)
+
+        # Verify sentinel file was removed
+        sentinel_file = os.path.join(self.test_dir, "checkpoint-is-incomplete.txt")
+        self.assertFalse(os.path.exists(sentinel_file))
+
+    def test_execute_jit_checkpoint_sentinel_file_cleanup(self):
+        """Test that sentinel file is cleaned up after successful checkpoint."""
+        trainer = self.get_trainer()
+        manager = CheckpointManager(trainer)
+
+        # Mock trainer's save checkpoint method
+        trainer._save_checkpoint = Mock()
+        trainer.state.global_step = 42
+
+        sentinel_file = os.path.join(self.test_dir, "checkpoint-is-incomplete.txt")
+
+        # Execute checkpoint
+        manager.execute_jit_checkpoint()
+
+        # Verify sentinel file doesn't exist after successful checkpoint
+        self.assertFalse(os.path.exists(sentinel_file))
 
     def test_execute_jit_checkpoint_with_exception(self):
         """Test checkpoint execution with exception handling."""
@@ -196,47 +210,12 @@ class JITCheckpointTest(unittest.TestCase):
 
         # Test that exception is re-raised
         with self.assertRaises(Exception) as context:
-            if torch.cuda.is_available():
-                with patch("torch.cuda.current_stream", return_value=manager.checkpoint_stream):
-                    manager._execute_jit_checkpoint()
-            else:
-                with patch.object(manager, "checkpoint_stream", None):
-                    manager._execute_jit_checkpoint()
+            manager.execute_jit_checkpoint()
 
         self.assertEqual(str(context.exception), "Checkpoint failed")
 
-    @patch("torch.cuda.is_available", return_value=True)
-    @patch("torch.cuda.set_device")
-    @patch("torch.cuda.current_stream")
-    @patch("torch.cuda.Stream")
-    def test_immediate_async_checkpoint_cuda_streams(
-        self, mock_stream_class, mock_current_stream, mock_set_device, mock_cuda_available
-    ):
-        """Test async checkpoint with CUDA streams."""
-        trainer = self.get_trainer()
-        manager = CheckpointManager(trainer)
-
-        # Setup mocks
-        mock_checkpoint_stream = Mock()
-        mock_current_stream_instance = Mock()
-        mock_stream_class.return_value = mock_checkpoint_stream
-        mock_current_stream.return_value = mock_current_stream_instance
-        manager.checkpoint_stream = mock_checkpoint_stream
-
-        # Mock the context manager behavior
-        mock_cuda_stream_context = Mock()
-
-        with patch("torch.cuda.stream", return_value=mock_cuda_stream_context):
-            with patch.object(manager, "_execute_jit_checkpoint") as mock_execute:
-                mock_cuda_stream_context.__enter__ = Mock()
-                mock_cuda_stream_context.__exit__ = Mock()
-
-                manager._immediate_async_checkpoint()
-
-                # Verify stream operations
-                mock_current_stream_instance.wait_stream.assert_called_once_with(mock_checkpoint_stream)
-                mock_checkpoint_stream.synchronize.assert_called_once()
-                mock_execute.assert_called_once()
+        # Verify checkpoint flag was still reset to avoid multiple attempts
+        self.assertFalse(manager.checkpoint_requested)
 
     def test_jit_checkpoint_callback_initialization(self):
         """Test JITCheckpointCallback initialization."""
@@ -278,15 +257,43 @@ class JITCheckpointTest(unittest.TestCase):
         control = Mock()
         control.should_training_stop = False
 
-        # Test when checkpoint not requested
-        callback.jit_manager.checkpoint_requested = False
-        callback.on_pre_optimizer_step(trainer.args, trainer.state, control)
-        self.assertFalse(control.should_training_stop)
+        # Mock execute method
+        with patch.object(callback.jit_manager, "execute_jit_checkpoint") as mock_execute:
+            # Test when checkpoint not requested
+            callback.jit_manager.checkpoint_requested = False
+            callback.on_pre_optimizer_step(trainer.args, trainer.state, control)
+            self.assertFalse(control.should_training_stop)
+            mock_execute.assert_not_called()
 
-        # Test when checkpoint requested
-        callback.jit_manager.checkpoint_requested = True
-        callback.on_pre_optimizer_step(trainer.args, trainer.state, control)
-        self.assertTrue(control.should_training_stop)
+            # Test when checkpoint requested
+            callback.jit_manager.checkpoint_requested = True
+            callback.on_pre_optimizer_step(trainer.args, trainer.state, control)
+            self.assertTrue(control.should_training_stop)
+            mock_execute.assert_called_once()
+
+    def test_jit_checkpoint_callback_on_step_begin(self):
+        """Test callback behavior at step begin."""
+        trainer = self.get_trainer()
+        callback = JITCheckpointCallback()
+        callback.set_trainer(trainer)
+
+        # Mock control object
+        control = Mock()
+        control.should_training_stop = False
+
+        # Mock execute method
+        with patch.object(callback.jit_manager, "execute_jit_checkpoint") as mock_execute:
+            # Test when checkpoint not requested
+            callback.jit_manager.checkpoint_requested = False
+            callback.on_step_begin(trainer.args, trainer.state, control)
+            self.assertFalse(control.should_training_stop)
+            mock_execute.assert_not_called()
+
+            # Test when checkpoint requested
+            callback.jit_manager.checkpoint_requested = True
+            callback.on_step_begin(trainer.args, trainer.state, control)
+            self.assertTrue(control.should_training_stop)
+            mock_execute.assert_called_once()
 
     def test_jit_checkpoint_callback_on_step_end(self):
         """Test callback behavior at step end."""
@@ -297,27 +304,49 @@ class JITCheckpointTest(unittest.TestCase):
         # Mock control object
         control = Mock()
         control.should_training_stop = False
+        control.should_save = True
+
+        # Mock execute method
+        with patch.object(callback.jit_manager, "execute_jit_checkpoint") as mock_execute:
+            # Test when checkpoint not requested
+            callback.jit_manager.checkpoint_requested = False
+            callback.on_step_end(trainer.args, trainer.state, control)
+            self.assertFalse(control.should_training_stop)
+            mock_execute.assert_not_called()
+
+            # Reset control
+            control.should_save = True
+
+            # Test when checkpoint requested
+            callback.jit_manager.checkpoint_requested = True
+            callback.on_step_end(trainer.args, trainer.state, control)
+            self.assertTrue(control.should_training_stop)
+            self.assertFalse(control.should_save)
+            mock_execute.assert_called_once()
+
+    def test_jit_checkpoint_callback_on_epoch_end(self):
+        """Test callback behavior at epoch end."""
+        trainer = self.get_trainer()
+        callback = JITCheckpointCallback()
+        callback.set_trainer(trainer)
+
+        # Mock control object
+        control = Mock()
+        control.should_save = True
 
         # Test when checkpoint not requested
         callback.jit_manager.checkpoint_requested = False
-        callback.on_step_end(trainer.args, trainer.state, control)
-        self.assertFalse(control.should_training_stop)
+        callback.on_epoch_end(trainer.args, trainer.state, control)
+        # should_save should remain unchanged when checkpoint not requested
+        self.assertTrue(control.should_save)
+
+        # Reset control
+        control.should_save = True
 
         # Test when checkpoint requested
         callback.jit_manager.checkpoint_requested = True
-        callback.on_step_end(trainer.args, trainer.state, control)
-        self.assertTrue(control.should_training_stop)
-
-    def test_jit_checkpoint_callback_without_manager(self):
-        """Test callback behavior when manager is not set."""
-        callback = JITCheckpointCallback()
-        control = Mock()
-        control.should_training_stop = False
-
-        # Should not raise exception and not modify control
-        callback.on_pre_optimizer_step(None, None, control)
-        callback.on_step_end(None, None, control)
-        self.assertFalse(control.should_training_stop)
+        callback.on_epoch_end(trainer.args, trainer.state, control)
+        self.assertFalse(control.should_save)
 
     @patch("threading.Timer")
     def test_kill_wait_period(self, mock_timer):
@@ -330,8 +359,8 @@ class JITCheckpointTest(unittest.TestCase):
 
         manager._sigterm_handler(signal.SIGTERM, None)
 
-        # Verify Timer was created with the correct kill_wait period
-        mock_timer.assert_called_once_with(5, manager._start_checkpoint_thread)
+        # Verify Timer was created with the correct kill_wait period and callback
+        mock_timer.assert_called_once_with(5, manager._toggle_checkpoint_flag)
         mock_timer_instance.start.assert_called_once()
 
     def test_integration_with_trainer(self):
