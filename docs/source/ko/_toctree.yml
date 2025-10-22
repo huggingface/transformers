@@ -212,8 +212,6 @@
     title: ONNX로 내보내기
   - local: executorch
     title: ExecuTorch
-  - local: torchscript
-    title: TorchScript로 내보내기
   title: 배포환경에 내보내기
 - isExpanded: false
   sections:
@@ -1059,7 +1057,7 @@
         title: FLAVA
       - local: model_doc/gemma3
         title: Gemma3
-      - local: in_translation
+      - local: model_doc/gemma3n
         title: Gemma3n
       - local: in_translation
         title: GIT

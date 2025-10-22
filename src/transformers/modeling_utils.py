@@ -120,8 +120,7 @@ from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
-    is_torch_fx_proxy,
-    is_torchdynamo_compiling,
+    is_tracing,
 )
 from .utils.quantization_config import QuantizationMethod
 
@@ -2706,14 +2705,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         If set in the config, tie the weights between the input embeddings and the output embeddings,
         and the encoder and decoder.
-
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
-        weights instead.
         """
         if getattr(self.config.get_text_config(decoder=True), "tie_word_embeddings", True):
             output_embeddings = self.get_output_embeddings()
             if output_embeddings is not None:
-                self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+                self._tie_embedding_weights(output_embeddings, self.get_input_embeddings())
 
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
@@ -2829,12 +2825,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
         return tied_weights
 
-    def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
-        """Tie or clone module weights depending of whether we are using TorchScript or not"""
-        if self.config.torchscript:
-            output_embeddings.weight = nn.Parameter(input_embeddings.weight.clone())
-        else:
-            output_embeddings.weight = input_embeddings.weight
+    def _tie_embedding_weights(self, output_embeddings, input_embeddings):
+        """Tie weights, and add hooks and flags if using TP."""
+        output_embeddings.weight = input_embeddings.weight
 
         # Passing hooks over to the embeddings if needed
         # (currently limited to tensor parallel hooks and flags only)
@@ -2850,10 +2843,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if getattr(output_embeddings, "bias", None) is not None:
             output_embeddings.bias.data = nn.functional.pad(
                 output_embeddings.bias.data,
-                (
-                    0,
-                    output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0],
-                ),
+                (0, output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0]),
                 "constant",
                 0,
             )
@@ -3518,19 +3508,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
         ignore_metadata_errors = kwargs.pop("ignore_metadata_errors", False)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         if token is not None:
             kwargs["token"] = token
@@ -4967,7 +4945,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
 
         # Skip the check during tracing.
-        if is_torch_fx_proxy(input_ids) or torch.jit.is_tracing() or is_torchdynamo_compiling():
+        if is_tracing(input_ids):
             return
 
         if (attention_mask is not None) or (self.config.pad_token_id is None):
@@ -5435,9 +5413,7 @@ class PreTrainedAudioTokenizerBase(PreTrainedModel):
         """
         Encode raw audio retrieved from a respective `FeatureExtractor` into discrete audio codebooks (with x channels)
         """
-        pass
 
     @abstractmethod
     def decode(self, audio_codes: torch.Tensor, *args, **kwargs):
         """Decode from discrete audio codebooks back to raw audio"""
-        pass
