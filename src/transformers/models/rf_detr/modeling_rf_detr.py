@@ -7,8 +7,9 @@
 import copy
 import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F  # noqa: F401
@@ -29,7 +30,6 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_rf_detr import RfDetrConfig
 
@@ -105,7 +105,7 @@ class RfDetrRepVggBlock(nn.Module):
         return y
 
 
-class RfDetrCSPRepLayer(nn.Module):
+class RfDetrC2FLayer(nn.Module):
     # Inspired by RTDetrCSPRepLayer
     def __init__(self, config: RfDetrConfig, in_channels: int, out_channels: int):
         super().__init__()
@@ -163,7 +163,7 @@ class RfDetrScaleProjector(nn.Module):
         self.sampling_layers = nn.ModuleList(sampling_layers)
 
         projector_input_dim = int(sum(intermediate_dim // max(1, scale) for intermediate_dim in intermediate_dims))
-        self.projector_layer = RfDetrCSPRepLayer(config, projector_input_dim, output_dim)
+        self.projector_layer = RfDetrC2FLayer(config, projector_input_dim, output_dim)
         self.layer_norm = RfDetrLayerNorm(output_dim, data_format="channels_first")
 
     def forward(self, hidden_states_tuple: tuple[torch.Tensor]) -> torch.Tensor:
@@ -226,7 +226,7 @@ class RfDetrAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -241,29 +241,31 @@ class RfDetrAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        batch_size, seq_len, embed_dim = hidden_states.shape
+        batch_size, seq_len, _ = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         hidden_states_original = hidden_states
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
 
         if self.training:
+            # at training, we use group detr technique to add more supervision by using multiple weight-sharing decoders at once for faster convergence
+            # at inference, we only use one decoder
             hidden_states_original = torch.cat(
                 hidden_states_original.split(seq_len // self.config.group_detr, dim=1), dim=0
             )
             hidden_states = torch.cat(hidden_states.split(seq_len // self.config.group_detr, dim=1), dim=0)
 
-        query_states = self.q_proj(hidden_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
-        value_states = self.v_proj(hidden_states_original).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states_original).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -286,9 +288,6 @@ class RfDetrAttention(nn.Module):
             attn_output = torch.cat(torch.split(attn_output, batch_size, dim=0), dim=1)
 
         return attn_output, attn_weights
-
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[torch.Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
 
 
 @use_kernel_forward_from_hub("MultiScaleDeformableAttention")
@@ -456,17 +455,36 @@ class RfDetrMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
+class RfDetrMLP(nn.Module):
+    def __init__(self, config: RfDetrConfig):
+        super().__init__()
+        # feedforward neural networks
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.decoder_activation_function]
+        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
 class RfDetrDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: RfDetrConfig, layer_idx: int):
-        GradientCheckpointingLayer.__init__(self)
-        self.embed_dim = config.d_model
+        nn.Module.__init__(self)
 
         # self-attention
         self.self_attn = RfDetrAttention(config, layer_idx=layer_idx)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.activation_dropout = config.activation_dropout
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(config.d_model)
 
         # cross-attention
         self.cross_attn = RfDetrMultiscaleDeformableAttention(
@@ -474,12 +492,11 @@ class RfDetrDecoderLayer(GradientCheckpointingLayer):
             num_heads=config.decoder_cross_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.cross_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.cross_attn_layer_norm = nn.LayerNorm(config.d_model)
 
-        # feedforward neural networks
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        # mlp
+        self.mlp = RfDetrMLP(config)
+        self.layer_norm = nn.LayerNorm(config.d_model)
 
     def forward(
         self,
@@ -517,40 +534,10 @@ class RfDetrDecoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states + cross_attention_output
         hidden_states = self.cross_attn_layer_norm(hidden_states)
 
-        # FFN
-        residual = hidden_states
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
 
         return hidden_states
-
-
-class RfDetrLearnedPositionEmbedding(nn.Module):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
-
-    def __init__(self, embedding_dim=256):
-        super().__init__()
-        self.row_embeddings = nn.Embedding(50, embedding_dim)
-        self.column_embeddings = nn.Embedding(50, embedding_dim)
-
-    def forward(self, pixel_values, pixel_mask=None):
-        height, width = pixel_values.shape[-2:]
-        width_values = torch.arange(width, device=pixel_values.device)
-        height_values = torch.arange(height, device=pixel_values.device)
-        x_emb = self.column_embeddings(width_values)
-        y_emb = self.row_embeddings(height_values)
-        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
-        pos = pos.permute(2, 0, 1)
-        pos = pos.unsqueeze(0)
-        pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
-        return pos
 
 
 class RfDetrPreTrainedModel(PreTrainedModel):
@@ -573,10 +560,7 @@ class RfDetrPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.init_std
 
-        if isinstance(module, RfDetrLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
-        elif isinstance(module, RfDetrMultiscaleDeformableAttention):
+        if isinstance(module, RfDetrMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
@@ -608,9 +592,6 @@ class RfDetrPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
         if hasattr(module, "refpoint_embed") and module.refpoint_embed is not None:
@@ -618,7 +599,7 @@ class RfDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "class_embed") and module.class_embed is not None:
             prior_prob = 0.01
             bias_value = -math.log((1 - prior_prob) / prior_prob)
-            self.class_embed.bias.data = torch.ones(self.config.num_labels) * bias_value
+            nn.init.constant_(module.class_embed.bias.data, bias_value)
         if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
             nn.init.constant_(module.bbox_embed.layers[-1].weight.data, 0)
             nn.init.constant_(module.bbox_embed.layers[-1].bias.data, 0)
@@ -843,27 +824,6 @@ class RfDetrConvEncoder(nn.Module):
         return out
 
 
-class RfDetrConvModel(nn.Module):
-    """
-    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
-    """
-
-    def __init__(self, conv_encoder, position_embedding):
-        super().__init__()
-        self.conv_encoder = conv_encoder
-        self.position_embedding = position_embedding
-
-    def forward(self, pixel_values, pixel_mask):
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        out = self.conv_encoder(pixel_values, pixel_mask)
-        pos = []
-        for feature_map, mask in out:
-            # position encoding
-            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
-
-        return out, pos
-
-
 # function to generate sine positional embedding for 4d coordinates
 def gen_sine_position_embeddings(pos_tensor, hidden_size=256):
     """
@@ -949,7 +909,7 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
 
         # batch_size, num_queries, d_model
         query_pos = self.ref_point_head(query_sine_embed)
-        return obj_center, reference_points_inputs, query_pos, query_sine_embed
+        return reference_points_inputs, query_pos
 
     def forward(
         self,
@@ -969,13 +929,7 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
-        if self.config.bbox_reparam:
-            get_reference_points_input = reference_points
-        else:
-            get_reference_points_input = reference_points.sigmoid()
-        obj_center, reference_points_inputs, query_pos, query_sine_embed = self.get_reference(
-            get_reference_points_input, valid_ratios
-        )
+        reference_points_inputs, query_pos = self.get_reference(reference_points, valid_ratios)
 
         for idx, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
@@ -1002,63 +956,10 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
         )
 
 
-class RfDetrSinePositionEmbedding(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
-    need paper, generalized to work on images.
-    """
-
-    def __init__(self, embedding_dim=64, temperature=10000, normalize=False, scale=None):
-        super().__init__()
-        self.embedding_dim = embedding_dim
-        self.temperature = temperature
-        self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
-
-    def forward(self, pixel_values, pixel_mask):
-        if pixel_mask is None:
-            raise ValueError("No pixel mask provided")
-        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
-        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
-        if self.normalize:
-            y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
-
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
-
-
-def build_position_encoding(config):
-    n_steps = config.d_model // 2
-    if config.position_embedding_type == "sine":
-        # TODO find a better way of exposing other arguments
-        position_embedding = RfDetrSinePositionEmbedding(n_steps, normalize=True)
-    elif config.position_embedding_type == "learned":
-        position_embedding = RfDetrLearnedPositionEmbedding(n_steps)
-    else:
-        raise ValueError(f"Not supported {config.position_embedding_type}")
-
-    return position_embedding
-
-
-def refine_bboxes(reference_points, deltas, bbox_reparam):
-    if bbox_reparam:
-        new_reference_points_cxcy = deltas[..., :2] * reference_points[..., 2:] + reference_points[..., :2]
-        new_reference_points_wh = deltas[..., 2:].exp() * reference_points[..., 2:]
-        new_reference_points = torch.cat((new_reference_points_cxcy, new_reference_points_wh), -1)
-    else:
-        new_reference_points = deltas + reference_points
+def refine_bboxes(reference_points, deltas):
+    new_reference_points_cxcy = deltas[..., :2] * reference_points[..., 2:] + reference_points[..., :2]
+    new_reference_points_wh = deltas[..., 2:].exp() * reference_points[..., 2:]
+    new_reference_points = torch.cat((new_reference_points_cxcy, new_reference_points_wh), -1)
     return new_reference_points
 
 
@@ -1073,32 +974,25 @@ class RfDetrModel(RfDetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = RfDetrConvEncoder(config)
-        position_embeddings = build_position_encoding(config)
-        self.backbone = RfDetrConvModel(backbone, position_embeddings)
+        self.backbone = RfDetrConvEncoder(config)
 
         self.group_detr = config.group_detr
         self.num_queries = config.num_queries
         hidden_dim = config.d_model
-        query_dim = 4
-        self.reference_point_embed = nn.Embedding(self.num_queries * self.group_detr, query_dim)
+        self.reference_point_embed = nn.Embedding(self.num_queries * self.group_detr, 4)
         self.query_feat = nn.Embedding(self.num_queries * self.group_detr, hidden_dim)
 
         self.decoder = RfDetrDecoder(config)
 
-        if config.two_stage:
-            self.enc_output = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(self.group_detr)])
-            self.enc_output_norm = nn.ModuleList([nn.LayerNorm(hidden_dim) for _ in range(self.group_detr)])
-            # Should normally be None and then instantiated in the ForObjectDetection class
-            self.enc_out_bbox_embed = nn.ModuleList(
-                [
-                    RfDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
-                    for _ in range(self.group_detr)
-                ]
-            )
-            self.enc_out_class_embed = nn.ModuleList(
-                [nn.Linear(config.d_model, config.num_labels) for _ in range(self.group_detr)]
-            )
+        self.enc_output = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(self.group_detr)])
+        self.enc_output_norm = nn.ModuleList([nn.LayerNorm(hidden_dim) for _ in range(self.group_detr)])
+        # Should normally be None and then instantiated in the ForObjectDetection class
+        self.enc_out_bbox_embed = nn.ModuleList(
+            [RfDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3) for _ in range(self.group_detr)]
+        )
+        self.enc_out_class_embed = nn.ModuleList(
+            [nn.Linear(config.d_model, config.num_labels) for _ in range(self.group_detr)]
+        )
 
         self.post_init()
 
@@ -1200,12 +1094,11 @@ class RfDetrModel(RfDetrPreTrainedModel):
         object_query = object_query.masked_fill(~output_proposals_valid, float(0))
         return object_query, output_proposals
 
+    @check_model_inputs()
     @auto_docstring
-    @check_model_inputs
-    @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.FloatTensor = None,
         pixel_mask: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> RfDetrModelOutput:
@@ -1240,7 +1133,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
         # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # which is a list of tuples
-        features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
+        features = self.backbone(pixel_values, pixel_mask)
 
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         sources = []
@@ -1263,13 +1156,12 @@ class RfDetrModel(RfDetrPreTrainedModel):
         source_flatten = []
         mask_flatten = []
         spatial_shapes_list = []
-        for level, (source, mask, pos_embed) in enumerate(zip(sources, masks, position_embeddings_list)):
+        for source, mask in zip(sources, masks):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
             spatial_shapes_list.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)
             source_flatten.append(source)
             mask_flatten.append(mask)
         source_flatten = torch.cat(source_flatten, 1)
@@ -1281,52 +1173,47 @@ class RfDetrModel(RfDetrPreTrainedModel):
         target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
         reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
 
-        enc_outputs_class = None
-        enc_outputs_coord_logits = None
-        if self.config.two_stage:
-            object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
-                source_flatten, ~mask_flatten, spatial_shapes_list
+        object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
+            source_flatten, ~mask_flatten, spatial_shapes_list
+        )
+
+        group_detr = self.group_detr if self.training else 1
+        topk = self.num_queries
+        topk_coords_logits = []
+        topk_coords_logits_undetach = []
+        object_query_undetach = []
+
+        for group_id in range(group_detr):
+            group_object_query = self.enc_output[group_id](object_query_embedding)
+            group_object_query = self.enc_output_norm[group_id](group_object_query)
+
+            group_enc_outputs_class = self.enc_out_class_embed[group_id](group_object_query)
+            group_delta_bbox = self.enc_out_bbox_embed[group_id](group_object_query)
+            group_enc_outputs_coord = refine_bboxes(output_proposals, group_delta_bbox)
+
+            group_topk_proposals = torch.topk(group_enc_outputs_class.max(-1)[0], topk, dim=1)[1]
+            group_topk_coords_logits_undetach = torch.gather(
+                group_enc_outputs_coord,
+                1,
+                group_topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
+            )
+            group_topk_coords_logits = group_topk_coords_logits_undetach.detach()
+            group_object_query_undetach = torch.gather(
+                group_object_query, 1, group_topk_proposals.unsqueeze(-1).repeat(1, 1, self.config.d_model)
             )
 
-            group_detr = self.group_detr if self.training else 1
-            topk = self.num_queries
-            topk_coords_logits = []
-            topk_coords_logits_undetach = []
-            object_query_undetach = []
+            topk_coords_logits.append(group_topk_coords_logits)
+            topk_coords_logits_undetach.append(group_topk_coords_logits_undetach)
+            object_query_undetach.append(group_object_query_undetach)
 
-            for group_id in range(group_detr):
-                group_object_query = self.enc_output[group_id](object_query_embedding)
-                group_object_query = self.enc_output_norm[group_id](group_object_query)
+        topk_coords_logits = torch.cat(topk_coords_logits, 1)
+        topk_coords_logits_undetach = torch.cat(topk_coords_logits_undetach, 1)
+        object_query_undetach = torch.cat(object_query_undetach, 1)
 
-                group_enc_outputs_class = self.enc_out_class_embed[group_id](group_object_query)
-                group_delta_bbox = self.enc_out_bbox_embed[group_id](group_object_query)
-                group_enc_outputs_coord = refine_bboxes(output_proposals, group_delta_bbox, self.config.bbox_reparam)
+        enc_outputs_class = object_query_undetach
+        enc_outputs_coord_logits = topk_coords_logits
 
-                group_topk_proposals = torch.topk(group_enc_outputs_class.max(-1)[0], topk, dim=1)[1]
-                group_topk_coords_logits_undetach = torch.gather(
-                    group_enc_outputs_coord,
-                    1,
-                    group_topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
-                )
-                group_topk_coords_logits = group_topk_coords_logits_undetach.detach()
-                group_object_query_undetach = torch.gather(
-                    group_object_query, 1, group_topk_proposals.unsqueeze(-1).repeat(1, 1, self.config.d_model)
-                )
-
-                topk_coords_logits.append(group_topk_coords_logits)
-                topk_coords_logits_undetach.append(group_topk_coords_logits_undetach)
-                object_query_undetach.append(group_object_query_undetach)
-
-            topk_coords_logits = torch.cat(topk_coords_logits, 1)
-            topk_coords_logits_undetach = torch.cat(topk_coords_logits_undetach, 1)
-            object_query_undetach = torch.cat(object_query_undetach, 1)
-
-            if not self.config.bbox_reparam:
-                topk_coords_logits = topk_coords_logits.sigmoid()
-            enc_outputs_class = object_query_undetach
-            enc_outputs_coord_logits = topk_coords_logits
-
-            reference_points = refine_bboxes(topk_coords_logits_undetach, reference_points, self.config.bbox_reparam)
+        reference_points = refine_bboxes(topk_coords_logits_undetach, reference_points)
 
         init_reference_points = reference_points
         decoder_outputs = self.decoder(
@@ -1426,18 +1313,17 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
         self.bbox_embed = RfDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
 
-        if config.two_stage:
-            self.model.enc_out_bbox_embed = _get_clones(self.bbox_embed, config.group_detr)
-            self.model.enc_out_class_embed = _get_clones(self.class_embed, config.group_detr)
+        self.model.enc_out_bbox_embed = _get_clones(self.bbox_embed, config.group_detr)
+        self.model.enc_out_class_embed = _get_clones(self.class_embed, config.group_detr)
 
         self.post_init()
 
+    @check_model_inputs()
     @can_return_tuple
     @auto_docstring
-    @check_model_inputs
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.FloatTensor = None,
         pixel_mask: Optional[torch.LongTensor] = None,
         labels: Optional[list[dict]] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1500,25 +1386,20 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         enc_outputs_boxes_logits = outputs.enc_outputs_coord_logits
 
         outputs_coord_delta = self.bbox_embed(hidden_states)
-        outputs_coord = refine_bboxes(reference_points, outputs_coord_delta, self.config.bbox_reparam)
-        if not self.config.bbox_reparam:
-            outputs_coord = outputs_coord.sigmoid()
+        outputs_coord = refine_bboxes(reference_points, outputs_coord_delta)
 
         outputs_class = self.class_embed(hidden_states)
 
         logits = outputs_class[-1]
         pred_boxes = outputs_coord[-1]
 
-        if self.config.two_stage:
-            enc_outputs_class_logits_list = enc_outputs_class_logits.split(self.config.num_queries, dim=1)
-            pred_class = []
-            group_detr = self.config.group_detr if self.training else 1
-            for group_index in range(group_detr):
-                group_pred_class = self.model.enc_out_class_embed[group_index](
-                    enc_outputs_class_logits_list[group_index]
-                )
-                pred_class.append(group_pred_class)
-            enc_outputs_class_logits = torch.cat(pred_class, dim=1)
+        enc_outputs_class_logits_list = enc_outputs_class_logits.split(self.config.num_queries, dim=1)
+        pred_class = []
+        group_detr = self.config.group_detr if self.training else 1
+        for group_index in range(group_detr):
+            group_pred_class = self.model.enc_out_class_embed[group_index](enc_outputs_class_logits_list[group_index])
+            pred_class.append(group_pred_class)
+        enc_outputs_class_logits = torch.cat(pred_class, dim=1)
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:

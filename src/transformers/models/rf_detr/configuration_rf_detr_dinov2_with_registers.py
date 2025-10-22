@@ -4,11 +4,11 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_rf_detr_dinov2_with_registers.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
-class RfDetrDinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
+class RfDetrDinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RfDetrDinov2WithRegistersModel`]. It is used to instantiate an
     RfDetrDinov2WithRegisters model according to the specified arguments, defining the model architecture. Instantiating a configuration
