@@ -34,7 +34,6 @@ if is_torch_available():
     import torch
 
 
-# TODO: check with updated video processor later
 @require_vision
 @require_torch
 @require_torchvision
@@ -288,9 +287,10 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             num_frames=num_frames,
+            min_frames=3,  # default is 16
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2160)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 720)
 
         # Load with `fps` arg
         fps = 1
@@ -304,9 +304,8 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2160)
 
-        # TODO: not used yet
         # Load with `fps` and `num_frames` args, should raise an error
-        """with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError):
             out_dict_with_video = processor.apply_chat_template(
                 messages,
                 add_generation_prompt=True,
@@ -314,7 +313,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_dict=True,
                 fps=fps,
                 num_frames=num_frames,
-            )"""
+            )
 
         # Load without any arg should load the whole video
         out_dict_with_video = processor.apply_chat_template(

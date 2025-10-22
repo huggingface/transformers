@@ -13,12 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+from functools import partial
 from pathlib import Path
 from typing import Optional, Union
 
 import numpy as np
 import requests
 import torch
+from huggingface_hub.dataclasses import validate_typed_dict
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -28,6 +30,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
+    validate_kwargs,
 )
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
@@ -155,14 +158,38 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         metadata: VideoMetadata,
         min_frames: Optional[int] = None,
         max_frames: Optional[int] = None,
+        num_frames: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         **kwargs,
     ):
+        if fps is not None and num_frames is not None:
+            raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
+
+        num_frames = num_frames if num_frames is not None else self.num_frames
         min_frames = min_frames if min_frames is not None else self.min_frames
         max_frames = max_frames if max_frames is not None else self.max_frames
         total_num_frames = metadata.total_num_frames
 
-        max_frames = min(max_frames, total_num_frames)
-        num_frames = min(max(total_num_frames, min_frames), max_frames)
+        if num_frames is not None:
+            if num_frames < min_frames or num_frames > max_frames:
+                raise ValueError(
+                    f"`num_frames` must be {min_frames} <= x <= {max_frames}. "
+                    f"Got {num_frames} instead."
+                )
+        else:
+            if fps is not None and (metadata is None or metadata.fps is None):
+                raise ValueError(
+                    "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
+                    "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
+                )
+            num_frames = total_num_frames / metadata.fps * fps if fps is not None else total_num_frames
+            num_frames = min(max(num_frames, min_frames), max_frames, total_num_frames)
+
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"Video can't be sampled. The inferred `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
+                "Decrease `num_frames` or `fps` for sampling."
+            )
 
         indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
         # test = np.linspace(start=0, stop=total_num_frames, num=num_frames + 1).astype(int)[:-1]
@@ -182,9 +209,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         return f"time: {int(hours):02d}:{int(mins):02d}:{time_stamp_in_seconds:05.02f}"
 
     def _render_image_with_timestamp(self, image: torch.Tensor, timestamp: str):
-        """
-        TODO: I have not found a function in torchvision to do this
-        """
+        """Draws a black timestamp with a white border on the corner of the frame"""
         image = to_pil_image(image)
 
         font_size = int(min(*image.size) * 0.1)
@@ -347,6 +372,58 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
             tensor_type=return_tensors,
         )
+
+    @add_start_docstrings(
+        BASE_VIDEO_PROCESSOR_DOCSTRING,
+    )
+    def preprocess(
+        self,
+        videos: VideoInput,
+        **kwargs: Unpack[VideosKwargs],
+    ) -> BatchFeature:
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
+        )
+
+        # Perform type validation on received kwargs
+        validate_typed_dict(self.valid_kwargs, kwargs)
+
+        # Set default kwargs from self. This ensures that if a kwarg is not provided
+        # by the user, it gets its default value from the instance, or is set to None.
+        for kwarg_name in self.valid_kwargs.__annotations__:
+            if "fps" in kwarg_name:  # we ignore fps from self
+                kwargs.setdefault(kwarg_name, None)
+                continue
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+
+        input_data_format = kwargs.pop("input_data_format")
+        do_sample_frames = kwargs.pop("do_sample_frames")
+        device = kwargs.pop("device")
+        video_metadata = kwargs.pop("video_metadata")
+
+        sample_indices_fn = partial(self.sample_frames, **kwargs) if do_sample_frames else None
+        videos, video_metadata = self._decode_and_sample_videos(
+            videos,
+            video_metadata=video_metadata,
+            do_sample_frames=do_sample_frames,
+            sample_indices_fn=sample_indices_fn,
+        )
+        videos = self._prepare_input_videos(
+            videos=videos, input_data_format=input_data_format, device=device, video_metadata=video_metadata
+        )
+
+        kwargs = self._further_process_kwargs(**kwargs)
+        self._validate_preprocess_kwargs(**kwargs)
+
+        # Pop kwargs that are not needed in _preprocess
+        kwargs.pop("data_format")
+        return_metadata = kwargs.pop("return_metadata")
+
+        preprocessed_videos = self._preprocess(videos=videos, **kwargs)
+        if return_metadata:
+            preprocessed_videos["video_metadata"] = video_metadata
+        return preprocessed_videos
 
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
         """
