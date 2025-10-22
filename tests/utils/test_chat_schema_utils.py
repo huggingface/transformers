@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer
+from transformers import AutoTokenizer
 from transformers.testing_utils import require_jmespath
 from transformers.utils.chat_parsing_utils import recursive_parse
 
