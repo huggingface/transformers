@@ -113,6 +113,7 @@ def split_glu(sd, cnt, idx):
         dim=0,
     )
 
+
 def find_expert_weight(input_dict, layer_num, fc1=True):
     if fc1:
         pattern = re.compile(rf"^decoder\.layers\.{layer_num}\.mlp\.experts\.linear_fc1\.weight(\d+)$")
@@ -707,14 +708,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "n_shared_experts": text_config.get("n_shared_experts", 1),
         "norm_topk_prob": text_config.get("norm_topk_prob", True),
         "num_experts_per_tok": text_config.get("num_experts_per_tok", 8),
-        "rope_scaling": {
-            "type": "default",
-            "mrope_section": [
-                8,
-                12,
-                12
-            ]
-        }
+        "rope_scaling": {"type": "default", "mrope_section": [8, 12, 12]},
     }
     hf_config["text_config"] = txt_config
 

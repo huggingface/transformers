@@ -51,6 +51,7 @@ def _build_neox_to_llama_perm(rotary_dim: int) -> torch.Tensor:
     perm[1::2] = torch.arange(half, rotary_dim)
     return perm
 
+
 def _apply_rope_permute(q_or_k: torch.Tensor, blocks: int, head_dim: int, rotary_dim: int, neox_to_llama: bool = True):
     if rotary_dim == 0:
         return q_or_k
@@ -75,6 +76,7 @@ def _apply_rope_permute(q_or_k: torch.Tensor, blocks: int, head_dim: int, rotary
         h[:, :rotary_dim] = h[:, perm]
         return h.reshape(q_or_k.shape)
 
+
 def merge_qkv(
     sd_list,
     original_tp,
@@ -84,7 +86,7 @@ def merge_qkv(
     interleaved_qkv,
     convert_neox_to_llama: bool = True,
 ):
-    rotary_dim = attention_dim  // 2
+    rotary_dim = attention_dim // 2
     group_size = (num_attention_heads // multi_query_group_num + 2) * attention_dim
     q_chunks, k_chunks, v_chunks = [], [], []
 
@@ -126,6 +128,7 @@ def merge_qkv(
 
     return q, k, v
 
+
 def merge_glu(sd_list):
     return torch.cat(
         [sd.chunk(dim=0, chunks=2)[0].clone() for sd in sd_list]
@@ -150,6 +153,7 @@ def split_glu(sd, cnt, idx):
         ),
         dim=0,
     )
+
 
 def merge_tensors(
     tp_sd,
@@ -494,9 +498,9 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
 
         # GLM-4.1V Only
         if f"decoder.layers.{layer_i}.post_mlp_layernorm.weight" in full_weights:
-            complete_state_dict[f"model.language_model.layers.{layer_i}.post_mlp_layernorm.weight"] = (
-                full_weights[f"decoder.layers.{layer_i}.post_mlp_layernorm.weight"]
-            )
+            complete_state_dict[f"model.language_model.layers.{layer_i}.post_mlp_layernorm.weight"] = full_weights[
+                f"decoder.layers.{layer_i}.post_mlp_layernorm.weight"
+            ]
 
         if f"decoder.layers.{layer_i}.post_self_attn_layernorm.weight" in full_weights:
             complete_state_dict[f"model.language_model.layers.{layer_i}.post_self_attn_layernorm.weight"] = (
@@ -563,7 +567,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             num_attention_heads=vit_n_head,
             multi_query_group_num=vit_n_head,
             attention_dim=attention_dim,
-            interleaved_qkv=True
+            interleaved_qkv=True,
         )
         complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = torch.cat((q, k, v), dim=0)
 
@@ -674,14 +678,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "vocab_size": text_config.get("vocab_size", 151552),
         "partial_rotary_factor": 0.5,
         "num_experts_per_tok": text_config.get("num_experts_per_tok", 8),
-        "rope_scaling": {
-            "type": "default",
-            "mrope_section": [
-                8,
-                12,
-                12
-            ]
-        }
+        "rope_scaling": {"type": "default", "mrope_section": [8, 12, 12]},
     }
     hf_config["text_config"] = txt_config
 
