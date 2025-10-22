@@ -118,7 +118,7 @@ class HumanVRotaryEmbedding(nn.Module):
         seq_len: Optional[int] = None,
     ) -> tuple[torch.Tensor, float]:
         base = config.rope_parameters["rope_theta"]
-        dim = config.hidden_size // config.num_attention_heads
+        dim = config.head_dim
         attention_factor = 1.0
         # Optimized with higher base for long-context handling based on recent advancements
         inv_freq = 1.0 / (
