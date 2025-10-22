@@ -105,7 +105,9 @@ class DeepSeekOCRProcessor(ProcessorMixin):
             )
 
         image_count_iter = iter(num_img_tokens)
-        processed_text = [re.sub(re.escape(self.image_token), lambda _: self.image_token * next(image_count_iter), t) for t in text]
+        processed_text = [
+            re.sub(re.escape(self.image_token), lambda _: self.image_token * next(image_count_iter), t) for t in text
+        ]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(processed_text, **output_kwargs["text_kwargs"])

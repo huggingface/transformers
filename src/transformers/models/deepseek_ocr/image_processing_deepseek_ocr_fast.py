@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-import re
 from typing import Optional, Union
 
 import numpy as np
@@ -212,8 +211,10 @@ class DeepSeekOCRImageProcessorFast(BaseImageProcessorFast):
                 if patch_image_size == 640:
                     valid_img_tokens += len(processed_crops) * 100
 
-                crops_tensor = torch.stack(processed_crops, dim=0) if processed_crops else torch.zeros(
-                    1, 3, patch_image_size, patch_image_size
+                crops_tensor = (
+                    torch.stack(processed_crops, dim=0)
+                    if processed_crops
+                    else torch.zeros(1, 3, patch_image_size, patch_image_size)
                 )
             else:
                 crops_tensor = torch.zeros(1, 3, patch_image_size, patch_image_size)
@@ -334,7 +335,8 @@ class DeepSeekOCRImageProcessorFast(BaseImageProcessorFast):
                                 text_width = text_bbox[2] - text_bbox[0]
                                 text_height = text_bbox[3] - text_bbox[1]
                                 draw.rectangle(
-                                    [text_x, text_y, text_x + text_width, text_y + text_height], fill=(255, 255, 255, 30)
+                                    [text_x, text_y, text_x + text_width, text_y + text_height],
+                                    fill=(255, 255, 255, 30),
                                 )
                                 draw.text((text_x, text_y), label_type, font=font, fill=color)
                         except Exception as e:

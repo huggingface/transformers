@@ -18,9 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import math
 import warnings
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -31,11 +33,26 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from .configuration_deepseek_ocr import DeepSeekOCRConfig
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.generic import check_model_inputs
+from ..auto import AutoModel
+from .configuration_deepseek_ocr import (
+    DeepSeekOCRConfig,
+    DeepseekOcrConfig,
+    DeepseekOcrTextConfig,
+    DeepseekOcrVisionConfig,
+)
+
+
+logger = logging.get_logger(__name__)
 
 
 class DeepSeekOCRProjector(nn.Module):
@@ -65,35 +82,513 @@ class DeepSeekOCRProjector(nn.Module):
         return self.layers(x)
 
 
-class DeepSeekOCRSAMVisionModel(nn.Module):
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for deepseek_ocr vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
+    """
+)
+class DeepseekOcrVisionEncoderOutput(ModelOutput):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
+
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+
+
+class DeepseekOcrPatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values):
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        return embeddings
+
+
+class DeepseekOcrMLPBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
+        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
+        self.act = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.lin1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.lin2(hidden_states)
+        return hidden_states
+
+
+class DeepseekOcrLayerNorm(nn.LayerNorm):
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
+    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
+    """
+
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
+        self.data_format = data_format
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
+
+
+class DeepseekOcrVisionAttention(nn.Module):
+    """Multi-head Attention block with relative position embeddings."""
+
+    def __init__(self, config, window_size):
+        super().__init__()
+        input_size = (
+            (config.image_size // config.patch_size, config.image_size // config.patch_size)
+            if window_size == 0
+            else (window_size, window_size)
+        )
+
+        self.num_attention_heads = config.num_attention_heads
+        head_dim = config.hidden_size // config.num_attention_heads
+        self.scale = head_dim**-0.5
+        self.dropout = config.attention_dropout
+
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
+
+        self.use_rel_pos = config.use_rel_pos
+        if self.use_rel_pos:
+            if input_size is None:
+                raise ValueError("Input size must be provided if using relative positional encoding.")
+
+            # initialize relative positional embeddings
+            self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
+            self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
+
+    def get_rel_pos(self, q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor:
+        """
+        Get relative positional embeddings according to the relative positions of
+            query and key sizes.
+
+        Args:
+            q_size (int):
+                size of the query.
+            k_size (int):
+                size of key k.
+            rel_pos (`torch.Tensor`):
+                relative position embeddings (L, channel).
+
+        Returns:
+            Extracted positional embeddings according to relative positions.
+        """
+        max_rel_dist = int(2 * max(q_size, k_size) - 1)
+        # Interpolate rel pos.
+        rel_pos_resized = F.interpolate(
+            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
+            size=max_rel_dist,
+            mode="linear",
+        )
+        rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
+
+        # Scale the coords with short length if shapes for q and k are different.
+        q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
+        k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
+        relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
+
+        return rel_pos_resized[relative_coords.long()]
+
+    def get_decomposed_rel_pos(
+        self,
+        query: torch.Tensor,
+        rel_pos_h: torch.Tensor,
+        rel_pos_w: torch.Tensor,
+        q_size: tuple[int, int],
+        k_size: tuple[int, int],
+    ) -> torch.Tensor:
+        """
+        Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
+        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
+
+        Args:
+            query (`torch.Tensor`):
+                query q in the attention layer with shape (batch_size, query_height * query_width, channel).
+            rel_pos_h (`torch.Tensor`):
+                relative position embeddings (Lh, channel) for height axis.
+            rel_pos_w (`torch.Tensor`):
+                relative position embeddings (Lw, channel) for width axis.
+            q_size (tuple):
+                spatial sequence size of query q with (query_height, query_width).
+            k_size (tuple):
+                spatial sequence size of key k with (key_height, key_width).
+
+        Returns:
+            decomposed_rel_pos (`torch.Tensor`):
+                decomposed relative position embeddings.
+        """
+        query_height, query_width = q_size
+        key_height, key_width = k_size
+        relative_position_height = self.get_rel_pos(query_height, key_height, rel_pos_h)
+        relative_position_width = self.get_rel_pos(query_width, key_width, rel_pos_w)
+
+        batch_size, _, dim = query.shape
+        reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
+        rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
+        rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
+
+        decomposed_rel_pos = rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
+
+        return decomposed_rel_pos
+
+    def forward(self, hidden_states: torch.Tensor, output_attentions=None) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, height, width, _ = hidden_states.shape
+        # qkv with shape (3, batch_size, nHead, height * width, channel)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
+            .permute(2, 0, 3, 1, 4)
+        )
+        # q, k, v with shape (batch_size * nHead, height * width, channel)
+        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+
+        attn_weights = (query * self.scale) @ key.transpose(-2, -1)
+
+        if self.use_rel_pos:
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            )
+            decomposed_rel_pos = decomposed_rel_pos.reshape_as(attn_weights)
+            attn_weights = attn_weights + decomposed_rel_pos
+
+        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
+
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
+        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
+
+        attn_output = self.proj(attn_output)
+        return attn_output, attn_weights
+
+
+class DeepseekOcrVisionSdpaAttention(DeepseekOcrVisionAttention):
+    """
+    Multi-head Attention block with relative position embeddings.
+    Using SDPA instead of the default attention.
+    """
+
+    def __init__(self, config, window_size):
+        super().__init__(config, window_size)
+
+    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+        if output_attentions:
+            logger.warning_once(
+                "`DeepseekOcrVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "`output_attentions=True`. Falling back to the manual attention implementation, but "
+                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                output_attentions=output_attentions,
+            )
+
+        batch_size, height, width, _ = hidden_states.shape
+        # qkv with shape (3, B, nHead, H * W, C)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
+            .permute(2, 0, 3, 1, 4)
+        )
+        # q, k, v with shape (B * nHead, H * W, C)
+        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+
+        attn_bias = None
+        if self.use_rel_pos:
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            )
+            decomposed_rel_pos = decomposed_rel_pos.reshape(
+                batch_size, self.num_attention_heads, height * width, height * width
+            )
+            attn_bias = decomposed_rel_pos
+
+        query = query.view(batch_size, self.num_attention_heads, height * width, -1)
+        key = key.view(batch_size, self.num_attention_heads, height * width, -1)
+        value = value.view(batch_size, self.num_attention_heads, height * width, -1)
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
+
+        attn_output = (
+            attn_output.view(batch_size, self.num_attention_heads, height, width, -1)
+            .permute(0, 2, 3, 1, 4)
+            .reshape(batch_size, height, width, -1)
+        )
+
+        attn_output = self.proj(attn_output)
+        return attn_output, None
+
+
+DEEPSEEK_OCR_VISION_ATTENTION_CLASSES = {
+    "eager": DeepseekOcrVisionAttention,
+    "sdpa": DeepseekOcrVisionSdpaAttention,
+}
+
+
+class DeepseekOcrVisionLayer(GradientCheckpointingLayer):
+    def __init__(self, config, window_size):
+        super().__init__()
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attn = DEEPSEEK_OCR_VISION_ATTENTION_CLASSES[config._attn_implementation](config, window_size)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = DeepseekOcrMLPBlock(config)
+        self.window_size = window_size
+
+    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
+        """
+        Args:
+        Partition into non-overlapping windows with padding if needed.
+            hidden_states (tensor): input tokens with [batch_size, height, width, channel]. window_size (int): window
+            size.
+
+        Returns:
+            windows: windows after partition with [batch_size * num_windows, window_size, window_size, channel].
+            (pad_height, pad_width): padded height and width before partition
+        """
+        batch_size, height, width, channel = hidden_states.shape
+
+        pad_h = (window_size - height % window_size) % window_size
+        pad_w = (window_size - width % window_size) % window_size
+        hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
+        pad_height, pad_width = height + pad_h, width + pad_w
+
+        hidden_states = hidden_states.reshape(
+            batch_size, pad_height // window_size, window_size, pad_width // window_size, window_size, channel
+        )
+        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(-1, window_size, window_size, channel)
+        return windows, (pad_height, pad_width)
+
+    def window_unpartition(
+        self, windows: torch.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
+    ) -> torch.Tensor:
+        """
+        Args:
+        Window unpartition into original sequences and removing padding.
+            hidden_states (tensor):
+                input tokens with [batch_size * num_windows, window_size, window_size, channel].
+            window_size (int):
+                window size.
+            padding_shape (Tuple):
+                padded height and width (pad_height, pad_width).
+            original_shape (Tuple): original height and width (height, width) before padding.
+
+        Returns:
+            hidden_states: unpartitioned sequences with [batch_size, height, width, channel].
+        """
+        pad_height, pad_width = padding_shape
+        height, width = original_shape
+        batch_size = windows.shape[0] // (pad_height * pad_width // window_size // window_size)
+        hidden_states = windows.reshape(
+            batch_size, pad_height // window_size, pad_width // window_size, window_size, window_size, -1
+        )
+        hidden_states = (
+            hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(batch_size, pad_height, pad_width, -1)
+        )
+
+        hidden_states = hidden_states[:, :height, :width, :].contiguous()
+        return hidden_states
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.FloatTensor]:
+        residual = hidden_states
+        hidden_states = self.layer_norm1(hidden_states)
+        # Window partition
+        if self.window_size > 0:
+            height, width = hidden_states.shape[1], hidden_states.shape[2]
+            hidden_states, padding_shape = self.window_partition(hidden_states, self.window_size)
+
+        hidden_states, attn_weights = self.attn(
+            hidden_states=hidden_states,
+        )
+        # Reverse window partition
+        if self.window_size > 0:
+            hidden_states = self.window_unpartition(hidden_states, self.window_size, padding_shape, (height, width))
+
+        hidden_states = residual + hidden_states
+        layernorm_output = self.layer_norm2(hidden_states)
+        hidden_states = hidden_states + self.mlp(layernorm_output)
+        return hidden_states
+
+
+class DeepseekOcrVisionNeck(nn.Module):
+    def __init__(self, config: DeepseekOcrVisionConfig):
+        super().__init__()
+        self.config = config
+
+        self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
+        self.layer_norm1 = DeepseekOcrLayerNorm(config.output_channels, data_format="channels_first")
+        self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
+        self.layer_norm2 = DeepseekOcrLayerNorm(config.output_channels, data_format="channels_first")
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.layer_norm1(hidden_states)
+
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.layer_norm2(hidden_states)
+        return hidden_states
+
+
+class DeepseekOcrVisionEncoder(DeepseekOcrPreTrainedModel):
+    _can_record_outputs = {"hidden_states": DeepseekOcrVisionLayer, "attentions": DeepseekOcrVisionAttention}
+
+    def __init__(self, config: DeepseekOcrVisionConfig):
+        super().__init__(config)
+        self.config = config
+        self.image_size = config.image_size
+        self.patch_embed = DeepseekOcrPatchEmbeddings(config)
+
+        self.pos_embed = None
+        if config.use_abs_pos:
+            # Initialize absolute positional embedding with pretrain image size.
+            self.pos_embed = nn.Parameter(
+                torch.zeros(
+                    1,
+                    config.image_size // config.patch_size,
+                    config.image_size // config.patch_size,
+                    config.hidden_size,
+                )
+            )
+
+        self.layers = nn.ModuleList()
+        for i in range(config.num_hidden_layers):
+            layer = DeepseekOcrVisionLayer(
+                config,
+                window_size=config.window_size if i not in config.global_attn_indexes else 0,
+            )
+            self.layers.append(layer)
+
+        self.neck = DeepseekOcrVisionNeck(config)
+
+        self.gradient_checkpointing = False
+
+    def get_input_embeddings(self):
+        return self.patch_embed
+
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(
+        self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> DeepseekOcrVisionEncoderOutput:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.patch_embed(pixel_values)
+        if self.pos_embed is not None:
+            hidden_states = hidden_states + self.pos_embed
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states)
+        hidden_states = self.neck(hidden_states)
+        return DeepseekOcrVisionEncoderOutput(
+            last_hidden_state=hidden_states,
+        )
+
+
+@auto_docstring
+class DeepseekOcrPreTrainedModel(PreTrainedModel):
+    config: DeepseekOcrConfig
+    base_model_prefix = "deepseek_ocr"
+    main_input_name = "pixel_values"
+    input_modalities = "image"
+    _no_split_modules = ["DeepseekOcrVisionAttention"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+        if isinstance(module, DeepseekOcrVisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+        elif isinstance(module, DeepseekOcrVisionEncoder):
+            if self.config.use_abs_pos:
+                module.pos_embed.data.zero_()
+
+
+class DeepSeekOCRSAMVisionModel(DeepseekOcrPreTrainedModel):
     """
     SAM ViT-B vision encoder with additional neck layers for DeepSeek OCR.
     Wraps the SAM vision encoder and adds downsampling convolutions.
     """
 
+    _can_record_outputs = {"hidden_states": DeepseekOcrVisionLayer, "attentions": DeepseekOcrVisionAttention}
+
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
+        self.image_size = config.image_size
+        self.patch_embed = DeepseekOcrPatchEmbeddings(config)
 
-        sam_config = SamVisionConfig(
-            hidden_size=config.hidden_size,
-            num_hidden_layers=config.num_hidden_layers,
-            num_attention_heads=config.num_attention_heads,
-            mlp_dim=config.intermediate_size,
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            hidden_act=config.hidden_act,
-            layer_norm_eps=config.layer_norm_eps,
-            attention_dropout=config.attention_dropout,
-            use_abs_pos=config.use_abs_pos,
-            use_rel_pos=config.use_rel_pos,
-            window_size=config.window_size,
-            global_attn_indexes=config.global_attn_indexes,
-        )
+        self.pos_embed = None
+        if config.use_abs_pos:
+            # Initialize absolute positional embedding with pretrain image size.
+            self.pos_embed = nn.Parameter(
+                torch.zeros(
+                    1,
+                    config.image_size // config.patch_size,
+                    config.image_size // config.patch_size,
+                    config.hidden_size,
+                )
+            )
 
-        self.encoder = SamVisionEncoder(sam_config)
+        self.layers = nn.ModuleList()
+        for i in range(config.num_hidden_layers):
+            layer = DeepseekOcrVisionLayer(
+                config,
+                window_size=config.window_size if i not in config.global_attn_indexes else 0,
+            )
+            self.layers.append(layer)
 
+        self.neck = DeepseekOcrVisionNeck(config)
+
+        self.gradient_checkpointing = False
         out_channels = config.out_channels
         downsample_channels = config.downsample_channels
 
@@ -102,7 +597,11 @@ class DeepSeekOCRSAMVisionModel(nn.Module):
             downsample_channels[0], downsample_channels[1], kernel_size=3, stride=2, padding=1, bias=False
         )
 
-    def forward(self, pixel_values):
+    def get_input_embeddings(self):
+        return self.patch_embed
+
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(self, pixel_values) -> DeepseekOcrVisionEncoderOutput:
         encoder_output = self.encoder(pixel_values)
         hidden_states = encoder_output.last_hidden_state
 
@@ -112,34 +611,384 @@ class DeepSeekOCRSAMVisionModel(nn.Module):
         return x3
 
 
-class DeepSeekOCRCLIPVisionModel(nn.Module):
-    """
-    CLIP-L vision encoder for DeepSeek OCR.
-    Wraps the CLIP vision model.
-    """
+class DeepseekOcrVisionEmbeddings(nn.Module):
+    def __init__(self, config: DeepseekOcrVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
 
+        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            bias=False,
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches + 1
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
+            )
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
+class DeepseekOcrAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: Union[DeepseekOcrVisionConfig, DeepseekOcrTextConfig]):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, seq_length, embed_dim = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        # DEEPSEEK_OCR text model uses both `causal_attention_mask` and `attention_mask`
+        # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
+        if self.config._attn_implementation == "flash_attention_2":
+            self.is_causal = causal_attention_mask is not None
+        else:
+            if attention_mask is not None and causal_attention_mask is not None:
+                attention_mask = attention_mask + causal_attention_mask
+            elif causal_attention_mask is not None:
+                attention_mask = causal_attention_mask
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class DeepseekOcrMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-        clip_config = CLIPVisionConfig(
-            hidden_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-            num_hidden_layers=config.num_hidden_layers,
-            num_attention_heads=config.num_attention_heads,
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            hidden_act=config.hidden_act,
-            layer_norm_eps=config.layer_norm_eps,
-            attention_dropout=config.attention_dropout,
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class DeepseekOcrEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Union[DeepseekOcrVisionConfig, DeepseekOcrTextConfig]):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.self_attn = DeepseekOcrAttention(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = DeepseekOcrMLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        causal_attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+class DeepseekOcrEncoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`DeepseekOcrEncoderLayer`].
+
+    Args:
+        config: DeepseekOcrConfig
+    """
+
+    def __init__(self, config: DeepseekOcrConfig):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([DeepseekOcrEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    def forward(
+        self,
+        inputs_embeds,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        r"""
+        Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Causal mask for the text model. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+        """
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask,
+                causal_attention_mask,
+                **kwargs,
+            )
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
         )
 
-        self.model = CLIPVisionModel(clip_config)
 
-    def forward(self, pixel_values, patch_embeds=None):
-        outputs = self.model(pixel_values, output_hidden_states=True)
-        return outputs.last_hidden_state[:, 1:]
+class DeepseekOcrVisionTransformer(nn.Module):
+    def __init__(self, config: DeepseekOcrVisionConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = DeepseekOcrVisionEmbeddings(config)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.encoder = DeepseekOcrEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.pre_layrnorm(hidden_states)
+
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            **kwargs,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The vision model from DEEP_SEEK_O_C_R_C_L_I_P without any head or projection on top.
+    """
+)
+class DeepSeekOCRCLIPVisionModel(DeepseekOcrPreTrainedModel):
+    config: DeepseekOcrVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = "image"
+    _no_split_modules = ["DeepSeekOCRCLIPEncoderLayer"]
+
+    def __init__(self, config: DeepseekOcrVisionConfig):
+        super().__init__(config)
+        self.vision_model = DeepseekOcrVisionTransformer(config)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, DeepSeekOCRCLIPVisionModel
+
+        >>> model = DeepSeekOCRCLIPVisionModel.from_pretrained("openai/deep_seek_o_c_r_c_l_i_p-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/deep_seek_o_c_r_c_l_i_p-vit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
+
+        return self.vision_model(
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
+        )
 
 
 class DeepSeekOCRMLP(nn.Module):
@@ -271,32 +1120,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 def apply_rotary_emb(
@@ -511,7 +1334,7 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.language_model = DeepseekV2Model(config)
+        self.language_model = AutoModel.from_config(config.deepseek_config)
 
         self.sam_model = DeepSeekOCRSAMVisionModel(config.sam_vision_config)
         self.clip_model = DeepSeekOCRCLIPVisionModel(config.clip_vision_config)
@@ -540,9 +1363,6 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
             spatial_crop: (batch, 2) - [width_crop_num, height_crop_num]
         """
         batch_size = local_features.size(0) if local_features is not None else global_features.size(0)
-        device = global_features.device
-        dtype = global_features.dtype
-
         all_image_features = []
 
         for idx in range(batch_size):

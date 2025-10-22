@@ -16,17 +16,14 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...utils import logging
 from ..auto import AutoModel
-from ..clip.configuration_clip import CLIPVisionConfig
 from ..clip.modeling_clip import CLIPVisionModel
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM, DeepseekV2Model, DeepseekV2PreTrainedModel
-from ..sam.configuration_sam import SamVisionConfig
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2PreTrainedModel
 from ..sam.modeling_sam import SamVisionEncoder
 from .configuration_deepseek_ocr import DeepSeekOCRConfig
 
@@ -61,7 +58,7 @@ class DeepSeekOCRProjector(nn.Module):
         return self.layers(x)
 
 
-class DeepSeekOCRSAMVisionModel(nn.Module):
+class DeepSeekOCRSAMVisionModel(SamVisionEncoder):
     """
     SAM ViT-B vision encoder with additional neck layers for DeepSeek OCR.
     Wraps the SAM vision encoder and adds downsampling convolutions.
@@ -69,27 +66,6 @@ class DeepSeekOCRSAMVisionModel(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.config = config
-
-        sam_config = SamVisionConfig(
-            hidden_size=config.hidden_size,
-            num_hidden_layers=config.num_hidden_layers,
-            num_attention_heads=config.num_attention_heads,
-            mlp_dim=config.intermediate_size,
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            hidden_act=config.hidden_act,
-            layer_norm_eps=config.layer_norm_eps,
-            attention_dropout=config.attention_dropout,
-            use_abs_pos=config.use_abs_pos,
-            use_rel_pos=config.use_rel_pos,
-            window_size=config.window_size,
-            global_attn_indexes=config.global_attn_indexes,
-        )
-
-        self.encoder = SamVisionEncoder(sam_config)
-
         out_channels = config.out_channels
         downsample_channels = config.downsample_channels
 
@@ -108,41 +84,14 @@ class DeepSeekOCRSAMVisionModel(nn.Module):
         return x3
 
 
-class DeepSeekOCRCLIPVisionModel(nn.Module):
-    """
-    CLIP-L vision encoder for DeepSeek OCR.
-    Wraps the CLIP vision model.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-
-        clip_config = CLIPVisionConfig(
-            hidden_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-            num_hidden_layers=config.num_hidden_layers,
-            num_attention_heads=config.num_attention_heads,
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            hidden_act=config.hidden_act,
-            layer_norm_eps=config.layer_norm_eps,
-            attention_dropout=config.attention_dropout,
-        )
-
-        self.model = CLIPVisionModel(clip_config)
-
-    def forward(self, pixel_values, patch_embeds=None):
-        outputs = self.model(pixel_values, output_hidden_states=True)
-        return outputs.last_hidden_state[:, 1:]
+class DeepSeekOCRCLIPVisionModel(CLIPVisionModel):
+    pass
 
 
 class DeepSeekOCRPreTrainedModel(DeepseekV2PreTrainedModel):
     config_class = DeepSeekOCRConfig
     base_model_prefix = "model"
 
-class DeepSeekOCR
 
 class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
     """
@@ -182,9 +131,6 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
             spatial_crop: (batch, 2) - [width_crop_num, height_crop_num]
         """
         batch_size = local_features.size(0) if local_features is not None else global_features.size(0)
-        device = global_features.device
-        dtype = global_features.dtype
-
         all_image_features = []
 
         for idx in range(batch_size):
@@ -254,7 +200,9 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
             global_features = torch.cat([clip_global[:, 1:], sam_global.flatten(2).permute(0, 2, 1)], dim=-1)
             global_features = self.projector(global_features)
 
-            merged_features = self._merge_image_features(local_features, global_features, image_spatial_crop[idx : idx + 1])
+            merged_features = self._merge_image_features(
+                local_features, global_features, image_spatial_crop[idx : idx + 1]
+            )
             all_features.append(merged_features)
 
         return torch.cat(all_features, dim=0)
@@ -416,7 +364,7 @@ class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
             elif past_length < input_ids.shape[1]:
                 input_ids = input_ids[:, past_length:]
 
-        position_ids = kwargs.get("position_ids", None)
+        position_ids = kwargs.get("position_ids")
         if attention_mask is not None and position_ids is None:
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
@@ -443,7 +391,6 @@ class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
 
 
 __all__ = [
-    "DeepSeekOCRConfig",
     "DeepSeekOCRModel",
     "DeepSeekOCRForCausalLM",
     "DeepSeekOCRPreTrainedModel",
