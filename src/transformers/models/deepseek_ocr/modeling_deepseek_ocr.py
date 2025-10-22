@@ -31,6 +31,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -38,10 +39,11 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
+    ModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_deepseek_ocr import (
@@ -1337,7 +1339,7 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
         self.language_model = AutoModel.from_config(config.deepseek_config)
 
         self.sam_model = DeepSeekOCRSAMVisionModel(config.sam_vision_config)
-        self.clip_model = DeepSeekOCRCLIPVisionModel(config.clip_vision_config)
+        self.clip_model = AutoModel.from_config(config.clip_vision_config)
 
         self.projector = DeepSeekOCRProjector(config.projector_config)
 
@@ -1477,19 +1479,25 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
         )
 
 
-class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
+@auto_docstring(
+    custom_intro="""
+    The Deepseek-OCR model which consists of two vision backbones and a deepseek language model.
     """
-    DeepSeek OCR model with a language modeling head.
-    """
-
+)
+class DeepSeekOCRForConditionalGeneratin(DeepseekOcrPreTrainedModel, GenerationMixin):
+    _checkpoint_conversion_mapping = {
+        "^language_model.model": "model.language_model",
+        "^vision_tower": "model.vision_tower",
+        "^multi_modal_projector": "model.multi_modal_projector",
+        "^language_model.lm_head": "lm_head",
+    }
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.model = DeepSeekOCRModel(config)
-        self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        self.vocab_size = config.vocab_size
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1498,34 +1506,86 @@ class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
-        self.model.language_model = decoder
+        self.model.set_decoder(decoder)
 
     def get_decoder(self):
+        return self.model.get_decoder()
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+        **kwargs,
+    ):
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            **kwargs,
+        )
+
+    # Make modules available through conditional class for BC
+    @property
+    def language_model(self):
         return self.model.language_model
 
+    @property
+    def vision_tower(self):
+        return self.model.vision_tower
+
+    @property
+    def multi_modal_projector(self):
+        return self.model.multi_modal_projector
+
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         image_attention_mask: Optional[torch.BoolTensor] = None,
         image_spatial_crop: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, DeepseekOcrForConditionalGeneration
+
+        >>> model = DeepseekOcrForConditionalGeneration.from_pretrained("deepseek_ocr-hf/deepseek_ocr-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("deepseek_ocr-hf/deepseek_ocr-1.5-7b-hf")
+
+        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1541,29 +1601,18 @@ class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
             pixel_values=pixel_values,
             image_attention_mask=image_attention_mask,
             image_spatial_crop=image_spatial_crop,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = nn.CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1571,6 +1620,7 @@ class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
     def prepare_inputs_for_generation(

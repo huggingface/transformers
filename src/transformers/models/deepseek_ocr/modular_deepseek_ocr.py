@@ -13,22 +13,208 @@
 # limitations under the License.
 
 import math
+from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...utils import logging
-from ..auto import AutoModel
+from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..llava.modeling_llava import LlavaForConditionalGeneration
 from ..clip.modeling_clip import CLIPVisionModel
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2PreTrainedModel
 from ..sam.modeling_sam import SamVisionEncoder
 from .configuration_deepseek_ocr import DeepSeekOCRConfig
-
-
 logger = logging.get_logger(__name__)
+
+
+class DeepSeekOCRSAMVisionConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_sam_vision"
+    base_config_key = "sam_vision_config"
+
+    def __init__(
+        self,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        image_size=1024,
+        patch_size=16,
+        hidden_act="gelu",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        initializer_range=1e-10,
+        qkv_bias=True,
+        use_abs_pos=True,
+        use_rel_pos=True,
+        window_size=14,
+        global_attn_indexes=None,
+        mlp_ratio=4.0,
+        output_channels=256,
+        downsample_channels=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
+        self.qkv_bias = qkv_bias
+        self.use_abs_pos = use_abs_pos
+        self.use_rel_pos = use_rel_pos
+        self.window_size = window_size
+        self.global_attn_indexes = global_attn_indexes if global_attn_indexes is not None else [2, 5, 8, 11]
+        self.mlp_ratio = mlp_ratio
+        self.output_channels = output_channels
+        self.downsample_channels = downsample_channels if downsample_channels is not None else [512, 1024]
+        self.mlp_dim = int(hidden_size * mlp_ratio)
+        self.out_channels = output_channels
+
+
+class DeepSeekOCRCLIPVisionConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_clip_vision"
+    base_config_key = "clip_vision_config"
+
+    def __init__(
+        self,
+        hidden_size=1024,
+        intermediate_size=4096,
+        projection_dim=768,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        num_channels=3,
+        image_size=224,
+        patch_size=14,
+        hidden_act="quick_gelu",
+        layer_norm_eps=1e-5,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        initializer_factor=1.0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+
+
+class DeepSeekOCRProjectorConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_projector"
+    base_config_key = "projector_config"
+
+    def __init__(
+        self,
+        input_dim=2048,
+        n_embed=1280,
+        projector_type="linear",
+        depth=1,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.input_dim = input_dim
+        self.n_embed = n_embed
+        self.projector_type = projector_type
+        self.depth = depth
+
+
+class DeepSeekOCRConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "sam_vision_config": DeepSeekOCRSAMVisionConfig,
+        "clip_vision_config": DeepSeekOCRCLIPVisionConfig,
+        "projector_config": DeepSeekOCRProjectorConfig,
+    }
+
+    def __init__(
+        self,
+        text_config=None,
+        sam_vision_config=None,
+        clip_vision_config=None,
+        projector_config=None,
+        candidate_resolutions=None,
+        global_view_pos="head",
+        tile_tag="2D",
+        image_token_index=100015,
+        **kwargs,
+    ):
+        if candidate_resolutions is None:
+            candidate_resolutions = [[1024, 1024]]
+
+        self.candidate_resolutions = candidate_resolutions
+        self.global_view_pos = global_view_pos
+        self.tile_tag = tile_tag
+        self.image_token_index = image_token_index
+
+        if sam_vision_config is None:
+            self.sam_vision_config = DeepSeekOCRSAMVisionConfig()
+        elif isinstance(sam_vision_config, dict):
+            self.sam_vision_config = DeepSeekOCRSAMVisionConfig(**sam_vision_config)
+        else:
+            self.sam_vision_config = sam_vision_config
+
+        if clip_vision_config is None:
+            self.clip_vision_config = DeepSeekOCRCLIPVisionConfig()
+        elif isinstance(clip_vision_config, dict):
+            self.clip_vision_config = DeepSeekOCRCLIPVisionConfig(**clip_vision_config)
+        else:
+            self.clip_vision_config = clip_vision_config
+
+        if projector_config is None:
+            self.projector_config = DeepSeekOCRProjectorConfig()
+        elif isinstance(projector_config, dict):
+            self.projector_config = DeepSeekOCRProjectorConfig(**projector_config)
+        else:
+            self.projector_config = projector_config
+
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "deepseek_v2")
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["deepseek_v2"](
+                hidden_size=1280,
+                intermediate_size=6848,
+                num_hidden_layers=12,
+                num_attention_heads=10,
+                num_key_value_heads=10,
+                moe_intermediate_size=896,
+                n_routed_experts=64,
+                n_shared_experts=2,
+                num_experts_per_tok=6,
+                first_k_dense_replace=1,
+                vocab_size=129280,
+                max_position_embeddings=8192,
+                use_mla=False,
+            )
+
+        self.text_config = text_config
+        self.hidden_size = text_config.hidden_size
+        self.vocab_size = text_config.vocab_size
+
+        super().__init__(**kwargs)
 
 
 class DeepSeekOCRProjector(nn.Module):
@@ -105,7 +291,7 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
         self.language_model = AutoModel.from_config(config.deepseek_config)
 
         self.sam_model = DeepSeekOCRSAMVisionModel(config.sam_vision_config)
-        self.clip_model = DeepSeekOCRCLIPVisionModel(config.clip_vision_config)
+        self.clip_model = AutoModel.from_config(config.clip_vision_config)
 
         self.projector = DeepSeekOCRProjector(config.projector_config)
 
@@ -226,6 +412,7 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None and torch.sum(pixel_values[0, 1]).item() != 0:
+            
             vision_features = self._encode_images(pixel_values, image_spatial_crop)
 
             inputs_embeds = inputs_embeds.masked_scatter(
@@ -244,12 +431,12 @@ class DeepSeekOCRModel(DeepSeekOCRPreTrainedModel):
             return_dict=return_dict,
         )
 
-
-class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
+@auto_docstring(
+    custom_intro="""
+    The Deepseek-OCR model which consists of two vision backbones and a deepseek language model.
     """
-    DeepSeek OCR model with a language modeling head.
-    """
-
+)
+class DeepSeekOCRForConditionalGeneratin(LlavaForConditionalGeneration):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -260,39 +447,20 @@ class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.language_model = decoder
-
-    def get_decoder(self):
-        return self.model.language_model
-
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         image_attention_mask: Optional[torch.BoolTensor] = None,
         image_spatial_crop: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -309,29 +477,19 @@ class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
             pixel_values=pixel_values,
             image_attention_mask=image_attention_mask,
             image_spatial_crop=image_spatial_crop,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
 
         loss = None
         if labels is not None:
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = nn.CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -339,7 +497,9 @@ class DeepSeekOCRForCausalLM(DeepSeekOCRPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
+
 
     def prepare_inputs_for_generation(
         self,

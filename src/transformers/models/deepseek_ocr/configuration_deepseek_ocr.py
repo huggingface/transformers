@@ -18,5 +18,187 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ...configuration_utils import PreTrainedConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
-__all__ = ["DeepSeekOCRConfig"]
+
+class DeepSeekOCRSAMVisionConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_sam_vision"
+    base_config_key = "sam_vision_config"
+
+    def __init__(
+        self,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        image_size=1024,
+        patch_size=16,
+        hidden_act="gelu",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        initializer_range=1e-10,
+        qkv_bias=True,
+        use_abs_pos=True,
+        use_rel_pos=True,
+        window_size=14,
+        global_attn_indexes=None,
+        mlp_ratio=4.0,
+        output_channels=256,
+        downsample_channels=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
+        self.qkv_bias = qkv_bias
+        self.use_abs_pos = use_abs_pos
+        self.use_rel_pos = use_rel_pos
+        self.window_size = window_size
+        self.global_attn_indexes = global_attn_indexes if global_attn_indexes is not None else [2, 5, 8, 11]
+        self.mlp_ratio = mlp_ratio
+        self.output_channels = output_channels
+        self.downsample_channels = downsample_channels if downsample_channels is not None else [512, 1024]
+        self.mlp_dim = int(hidden_size * mlp_ratio)
+        self.out_channels = output_channels
+
+
+class DeepSeekOCRCLIPVisionConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_clip_vision"
+    base_config_key = "clip_vision_config"
+
+    def __init__(
+        self,
+        hidden_size=1024,
+        intermediate_size=4096,
+        projection_dim=768,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        num_channels=3,
+        image_size=224,
+        patch_size=14,
+        hidden_act="quick_gelu",
+        layer_norm_eps=1e-5,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        initializer_factor=1.0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+
+
+class DeepSeekOCRProjectorConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_projector"
+    base_config_key = "projector_config"
+
+    def __init__(
+        self,
+        input_dim=2048,
+        n_embed=1280,
+        projector_type="linear",
+        depth=1,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.input_dim = input_dim
+        self.n_embed = n_embed
+        self.projector_type = projector_type
+        self.depth = depth
+
+
+class DeepSeekOCRConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "sam_vision_config": DeepSeekOCRSAMVisionConfig,
+        "clip_vision_config": DeepSeekOCRCLIPVisionConfig,
+        "projector_config": DeepSeekOCRProjectorConfig,
+    }
+
+    def __init__(
+        self,
+        text_config=None,
+        sam_vision_config=None,
+        clip_vision_config=None,
+        projector_config=None,
+        candidate_resolutions=None,
+        global_view_pos="head",
+        tile_tag="2D",
+        image_token_index=100015,
+        **kwargs,
+    ):
+        if candidate_resolutions is None:
+            candidate_resolutions = [[1024, 1024]]
+
+        self.candidate_resolutions = candidate_resolutions
+        self.global_view_pos = global_view_pos
+        self.tile_tag = tile_tag
+        self.image_token_index = image_token_index
+
+        if sam_vision_config is None:
+            self.sam_vision_config = DeepSeekOCRSAMVisionConfig()
+        elif isinstance(sam_vision_config, dict):
+            self.sam_vision_config = DeepSeekOCRSAMVisionConfig(**sam_vision_config)
+        else:
+            self.sam_vision_config = sam_vision_config
+
+        if clip_vision_config is None:
+            self.clip_vision_config = DeepSeekOCRCLIPVisionConfig()
+        elif isinstance(clip_vision_config, dict):
+            self.clip_vision_config = DeepSeekOCRCLIPVisionConfig(**clip_vision_config)
+        else:
+            self.clip_vision_config = clip_vision_config
+
+        if projector_config is None:
+            self.projector_config = DeepSeekOCRProjectorConfig()
+        elif isinstance(projector_config, dict):
+            self.projector_config = DeepSeekOCRProjectorConfig(**projector_config)
+        else:
+            self.projector_config = projector_config
+
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "deepseek_v2")
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["deepseek_v2"](
+                hidden_size=1280,
+                intermediate_size=6848,
+                num_hidden_layers=12,
+                num_attention_heads=10,
+                num_key_value_heads=10,
+                moe_intermediate_size=896,
+                n_routed_experts=64,
+                n_shared_experts=2,
+                num_experts_per_tok=6,
+                first_k_dense_replace=1,
+                vocab_size=129280,
+                max_position_embeddings=8192,
+                use_mla=False,
+            )
+
+        self.text_config = text_config
+        self.hidden_size = text_config.hidden_size
+        self.vocab_size = text_config.vocab_size
+
+        super().__init__(**kwargs)
