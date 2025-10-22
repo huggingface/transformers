@@ -558,8 +558,8 @@ class WeightConverter:
     source_keys: Union[str, list[str]]
     target_keys: Optional[Union[str, list[str]]] = None
 
-    distributed_operation: Optional[dict[str,ConversionOps]] = None
-    quantization_operation: Optional[dict[str,ConversionOps]] = None
+    distributed_operation: Optional[dict[str, ConversionOps]] = None
+    quantization_operation: Optional[dict[str, ConversionOps]] = None
     _operations: list[ConversionOps] = field(default_factory=list, repr=False)
     _compiled: tuple[tuple[str, re.Pattern], ...] = field(default_factory=tuple, compare=False, repr=False)
 
@@ -596,6 +596,7 @@ class WeightConverter:
         else:
             self._operations = [v]
 
+
 def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, target_key, mismatch_keys, missing_keys):
     module_path, _, param_name = k.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
@@ -609,12 +610,14 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, targe
         missing_keys.remove(k)
     setattr(module_obj, param_name, param_value)
 
+
 @dataclass
 class ConversionEntry:
     weight_converter: WeightConverter
     collected_tensors: dict = field(default_factory=lambda: defaultdict(dict))
     matched_pattern: dict = field(default_factory=dict)
     used_operations: dict = field(default_factory=lambda: defaultdict(list))
+
 
 def convert_and_load_state_dict_in_model(
     model,
@@ -654,7 +657,9 @@ def convert_and_load_state_dict_in_model(
         if matched_pattern is not None:
             converter: WeightConverter = source_to_target[matched_pattern]
             extractor = _compile_single_glob_for_extract(matched_pattern)
-            entry: ConversionEntry = by_conversion_pattern.setdefault("|".join(converter.target_keys), ConversionEntry(converter))
+            entry: ConversionEntry = by_conversion_pattern.setdefault(
+                "|".join(converter.target_keys), ConversionEntry(converter)
+            )
             sub_with_extractor = partial(re.sub, extractor, string=original_key)
             target_unique_key = "|".join(map(sub_with_extractor, converter.target_keys))
             converter_key = re.sub(extractor, matched_pattern, original_key)
@@ -666,18 +671,22 @@ def convert_and_load_state_dict_in_model(
         else:
             converter = WeightConverter(original_key)
             converter_key = original_key
-            entry = by_conversion_pattern.setdefault(converter_key,ConversionEntry(converter))
+            entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
             entry.collected_tensors[converter_key] = {converter_key: tensor}
 
         for target_key in converter_key.split("|"):
-            if matched_tp_pattern:= match_glob(target_key, tp_plan_alt, tp_plan_by_group_name):
+            if matched_tp_pattern := match_glob(target_key, tp_plan_alt, tp_plan_by_group_name):
                 if getattr(converter, "distributed_operation", None) is None:
-                    converter.distributed_operation[target_key] = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
-            if getattr(converter, "quantization_operation", None) is None and quantizer.param_needs_quantization(target_key):
+                    converter.distributed_operation[target_key] = ALL_PARALLEL_STYLES[
+                        model.tp_plan[matched_tp_pattern]
+                    ].shard_tensor
+            if getattr(converter, "quantization_operation", None) is None and quantizer.param_needs_quantization(
+                target_key
+            ):
                 converter.quantization_operation[target_key] = Fp8Quantize()
 
     # 2. Actually convert the ckpt
-    for conversion_pattern, group in by_conversion_pattern.items():
+    for group in by_conversion_pattern.values():
         converter: WeightConverter = group.weight_converter
         for layer_name, tensors_for_this_layer in group.collected_tensors.items():
             concrete_target_keys = layer_name.split("|")
@@ -731,12 +740,20 @@ def convert_and_load_state_dict_in_model(
                         op = Cast(keep_in_dtype[matched_dtype_pattern])
                         output_value = op.convert(output_value)
                         group.used_operations[k].append(op)
-                    set_param_for_module(model, k, output_value, meta_model_state_dict, empty_tensor, target_key, mismatch_keys, missing_keys)
+                    set_param_for_module(
+                        model,
+                        k,
+                        output_value,
+                        meta_model_state_dict,
+                        empty_tensor,
+                        target_key,
+                        mismatch_keys,
+                        missing_keys,
+                    )
 
         for op in group.used_operations.values():
             op.clear_cache()
     return by_conversion_pattern, missing_keys, unexpected_keys, mismatch_keys, misc
-
 
 
 ANSI = {
@@ -751,13 +768,16 @@ ANSI = {
 
 _ansi_re = re.compile(r"\x1b\[[0-9;]*m")
 
+
 def _strip_ansi(s: str) -> str:
     return _ansi_re.sub("", str(s))
+
 
 def _pad(text, width):
     t = str(text)
     pad = max(0, width - len(_strip_ansi(t)))
     return t + " " * pad
+
 
 def _make_table(rows, headers):
     # compute display widths while ignoring ANSI codes
@@ -768,14 +788,17 @@ def _make_table(rows, headers):
     body = [" | ".join(_pad(c, w) for c, w in zip(r, widths)) for r in rows]
     return "\n".join([header_line, sep_line] + body)
 
+
 def _color(s, color):
     return f"{ANSI[color]}{s}{ANSI['reset']}"
+
 
 def _chunk(items, limit=200):
     it = list(items)
     if len(it) <= limit:
         return it, 0
     return it[:limit], len(it) - limit
+
 
 def log_state_dict_report(
     *,
@@ -789,19 +812,16 @@ def log_state_dict_report(
     mismatched_shapes,
     misc=None,
     update_key_name=lambda x: x,  # keep your mapper
-    limit_rows=200,               # safety for huge checkpoints
-    color=True,                   # allow disabling for plain logs
+    limit_rows=200,  # safety for huge checkpoints
+    color=True,  # allow disabling for plain logs
 ):
     if error_msgs:
         error_msg = "\n\t".join(error_msgs)
         if "size mismatch" in error_msg:
             error_msg += (
-                "\n\tYou may consider adding "
-                "`ignore_mismatched_sizes=True` to `from_pretrained(...)` if appropriate."
+                "\n\tYou may consider adding `ignore_mismatched_sizes=True` to `from_pretrained(...)` if appropriate."
             )
-        raise RuntimeError(
-            f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}"
-        )
+        raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
     rows = []
     if unexpected_keys:
@@ -825,7 +845,9 @@ def log_state_dict_report(
         for key, (shape_ckpt, shape_model) in pairs:
             status = "MISMATCH"
             status = _color(status, "yellow") if color else status
-            rows.append([key, status, "Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"])
+            rows.append(
+                [key, status, "Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"]
+            )
 
     if misc:
         for k in misc:
@@ -847,10 +869,10 @@ def log_state_dict_report(
     )
     tips = (
         f"{ANSI['italic']}Notes:\n"
-        f"- {_color('UNEXPECTED', 'orange')+ANSI['italic']}: can be ignored when loading from different task/architecture; not ok if you expect identical arch.\n"
-        f"- {_color('MISSING', 'red')+ANSI['italic']}: those params were newly initialized; consider training on your downstream task.\n"
-        f"- {_color('MISSMATCH', 'yellow')+ANSI['italic']}: if intentional, use "
-        f"- {_color('MISC', 'yellow')+ANSI['italic']}: originate from the conversion scheme"
+        f"- {_color('UNEXPECTED', 'orange') + ANSI['italic']}: can be ignored when loading from different task/architecture; not ok if you expect identical arch.\n"
+        f"- {_color('MISSING', 'red') + ANSI['italic']}: those params were newly initialized; consider training on your downstream task.\n"
+        f"- {_color('MISSMATCH', 'yellow') + ANSI['italic']}: if intentional, use "
+        f"- {_color('MISC', 'yellow') + ANSI['italic']}: originate from the conversion scheme"
         f"{ANSI['reset']}"
     )
 

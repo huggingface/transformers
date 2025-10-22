@@ -4718,15 +4718,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
-            _conversion_ops, missing_keys, unexpected_keys, mismatched_keys, misc = convert_and_load_state_dict_in_model(
-                model,
-                merged_state_dict,
-                weight_mapping,
-                tp_plan,
-                hf_quantizer,
-                device_map,
-                keep_in_dtype,
-                profile=profile_weight_conversion,
+            _conversion_ops, missing_keys, unexpected_keys, mismatched_keys, misc = (
+                convert_and_load_state_dict_in_model(
+                    model,
+                    merged_state_dict,
+                    weight_mapping,
+                    tp_plan,
+                    hf_quantizer,
+                    device_map,
+                    keep_in_dtype,
+                    profile=profile_weight_conversion,
+                )
             )
             model._conversion_ops = _conversion_ops
 
@@ -4797,7 +4799,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             mismatched_keys=mismatched_keys,
             mismatched_shapes=mismatched_keys,
             update_key_name=update_key_name,  # your existing function
-            misc=misc
+            misc=misc,
         )
         disk_offload_index = None
         return model, missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, error_msgs
