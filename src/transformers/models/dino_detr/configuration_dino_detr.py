@@ -34,92 +34,56 @@ class DinoDetrConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
-        disable_custom_kernels (`bool`, *optional*, defaults to `False`):
-            Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
-            kernels are not supported by PyTorch ONNX export.
-        use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
-            API.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        num_feature_levels (`int`, *optional*, defaults to 4):
-            The number of input feature levels.
-        num_heads (`int`, *optional*, defaults to 8): The number of heads in all the attention layers.
-        decoder_n_points (`int`, *optional*, defaults to 4):
-            The number of sampled keys in each feature level for each attention head in the decoder.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
-            `use_timm_backbone` = `True`.
-        position_embedding_type (`str`, *optional*, defaults to `"SineHW"`):
-            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        encoder_n_points (`int`, *optional*, defaults to 4):
-            The number of sampled keys in each feature level for each attention head in the encoder.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        d_ffn (`int`, *optional*, defaults to 2048): The hidden dimensions of the fully connected layers.
-        activation (`str`, *optional*, defaults to `"relu"`): Could be `"relu"`, `"gelu"`, `"glu"`, `"prelu"`, `"selu"`.
-        num_queries (`int`, *optional*, defaults to 900):
-            Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`DinoDetrModel`] can detect in a single image.
-        query_dim (`int`, *optional*, defaults to 4): The dimension of the object query embeddings.
-        num_encoder_layers (`int`, *optional*, defaults to 6): Number of encoder layers.
-        num_decoder_layers (`int`, *optional*, defaults to 6): Number of decoder layers.
-        embed_init_tgt (`bool`, *optional*, defaults to `True`): Whether to initialize the target embeddings.
-        num_classes (`int`, *optional*, defaults to 91): The number of object classes the model can predict.
-        dn_num_classes (`int`, *optional*, defaults to 91): The size of the label book for denoising training.
-        dn_number (`int`, *optional*, defaults to 100): The number of denoising queries.
-        dn_box_noise_scale (`float`, *optional*, defaults to 0.4): The scale of noise added to bounding boxes during denoising training.
-        dn_label_noise_ratio (`float`, *optional*, defaults to 0.5): The ratio of noise added to labels during denoising training.
-        auxiliary_loss (`bool`, *optional*, defaults to `True`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        dec_pred_class_embed_share (`bool`, *optional*, defaults to `True`): Whether to share class embeddings across decoder layers.
-        dec_pred_bbox_embed_share (`bool`, *optional*, defaults to `True`): Whether to share bounding box embeddings across decoder layers.
-        class_cost (`float`, *optional*, defaults to 2.0):
-            Relative weight of the classification error in the Hungarian matching cost.
-        bbox_cost (`float`, *optional*, defaults to 5.0):
-            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
-        giou_cost (`float`, *optional*, defaults to 2.0):
-            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        mask_loss_coefficient (`float`, *optional*, defaults to 1.0):
-            Relative weight of the Focal loss in the panoptic segmentation loss.
-        dice_loss_coefficient (`float`, *optional*, defaults to 1.0):
-            Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
-        cls_loss_coefficient (`float`, *optional*, defaults to 1.0): The weight of the classification loss.
-        bbox_loss_coefficient (`float`, *optional*, defaults to 5.0):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
-            Relative weight of the generalized IoU loss in the object detection loss.
-        use_dn (`bool`, *optional*, defaults to `True`): Whether to use denoising training.
-        use_masks (`bool`, *optional*, defaults to `True`): Whether to use masks in the model.
-        focal_alpha (`float`, *optional*, defaults to 0.25):
-            Alpha parameter in the focal loss.
-        enc_layer_share (`bool`, *optional*, defaults to `False`): Whether to share encoder layers.
-        dec_layer_share (`bool`, *optional*, defaults to `False`): Whether to share decoder layers.
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
-            case it will default to `ResNetConfig()`.
-        backbone_kwargs (`dict`, *optional*, defaults to `{'out_indices': [2, 3, 4]}`):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`): Whether the model is an encoder-decoder architecture.
-        pe_temperatureH (`float`, *optional*, defaults to 20): The temperature for positional encoding along the height dimension.
-        pe_temperatureW (`float`, *optional*, defaults to 20): The temperature for positional encoding along the width dimension.
-        activation_dropout (`float`, *optional*, defaults to 0.0): The dropout ratio for activations inside the fully connected layer.
+            is_encoder_decoder (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            d_model (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+            disable_custom_kernels (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            use_timm_backbone (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            num_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+            use_pretrained_backbone (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            init_std (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
+            backbone (`<fill_type>`, *optional*, defaults to `"resnet50"`): <fill_docstring>
+            num_feature_levels (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+            num_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+            decoder_n_points (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+            dilation (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            position_embedding_type (`<fill_type>`, *optional*, defaults to `"SineHW"`): <fill_docstring>
+            encoder_n_points (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+            dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+            activation_function (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
+            activation_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+            encoder_ffn_dim (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+            d_ffn (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+            activation (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
+            num_queries (`<fill_type>`, *optional*, defaults to 900): <fill_docstring>
+            query_dim (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+            num_encoder_layers (`<fill_type>`, *optional*, defaults to 6): <fill_docstring>
+            num_decoder_layers (`<fill_type>`, *optional*, defaults to 6): <fill_docstring>
+            embed_init_tgt (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            num_classes (`<fill_type>`, *optional*, defaults to 91): <fill_docstring>
+            use_dn (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            dn_num_classes (`<fill_type>`, *optional*, defaults to 91): <fill_docstring>
+            dn_number (`<fill_type>`, *optional*, defaults to 100): <fill_docstring>
+            dn_box_noise_scale (`<fill_type>`, *optional*, defaults to 0.4): <fill_docstring>
+            dn_label_noise_ratio (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
+            auxiliary_loss (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            use_masks (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            class_cost (`<fill_type>`, *optional*, defaults to 2.0): <fill_docstring>
+            bbox_cost (`<fill_type>`, *optional*, defaults to 5.0): <fill_docstring>
+            giou_cost (`<fill_type>`, *optional*, defaults to 2.0): <fill_docstring>
+            mask_loss_coefficient (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+            dice_loss_coefficient (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+            cls_loss_coefficient (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+            bbox_loss_coefficient (`<fill_type>`, *optional*, defaults to 5.0): <fill_docstring>
+            giou_loss_coefficient (`<fill_type>`, *optional*, defaults to 2.0): <fill_docstring>
+            focal_alpha (`<fill_type>`, *optional*, defaults to 0.25): <fill_docstring>
+            dec_pred_class_embed_share (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            dec_pred_bbox_embed_share (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            enc_layer_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            dec_layer_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            pe_temperature_H (`<fill_type>`, *optional*, defaults to 20): <fill_docstring>
+            pe_temperature_W (`<fill_type>`, *optional*, defaults to 20): <fill_docstring>
+            backbone_config (`<fill_type>`, *optional*): <fill_docstring>
+            backbone_kwargs (`<fill_type>`, *optional*, defaults to `{'out_indices': [2, 3, 4]}`): <fill_docstring>
 
     Examples:
 
