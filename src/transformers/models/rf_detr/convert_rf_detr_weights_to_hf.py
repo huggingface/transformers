@@ -28,7 +28,7 @@ from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
 
-from transformers import LwDetrImageProcessor, RfDetrConfig, RfDetrForObjectDetection
+from transformers import DeformableDetrImageProcessor, RfDetrConfig, RfDetrForObjectDetection
 from transformers.image_utils import load_image
 
 
@@ -227,19 +227,19 @@ IMAGE_PROCESSORS = {
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # backbone projector scaling layers, sampling layers are dealt with seperately depending on the config
-    r"backbone.0.encoder.encoder": r"backbone.conv_encoder.model",
-    r"backbone.0.projector.stages_sampling.(\d+).(\d+).(\d+).(weight|bias)":                                            r"backbone.conv_encoder.projector.scale_layers.\1.sampling_layers.\2.layers.\3.\4",
-    r"backbone.0.projector.stages_sampling.(\d+).(\d+).(\d+).conv.(weight|bias)":                                       r"backbone.conv_encoder.projector.scale_layers.\1.sampling_layers.\2.layers.\3.conv.\4",
-    r"backbone.0.projector.stages_sampling.(\d+).(\d+).(\d+).bn":                                                       r"backbone.conv_encoder.projector.scale_layers.\1.sampling_layers.\2.layers.\3.norm",
-    r"backbone.0.projector.stages.(\d+).0.cv1.conv.(weight|bias)":                                                      r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.conv1.conv.\2",
-    r"backbone.0.projector.stages.(\d+).0.cv1.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":           r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.conv1.norm.\2",
-    r"backbone.0.projector.stages.(\d+).0.cv2.conv.(weight|bias)":                                                      r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.conv2.conv.\2",
-    r"backbone.0.projector.stages.(\d+).0.cv2.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":           r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.conv2.norm.\2",
-    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv1.conv.(weight|bias)":                                              r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv1.conv.\3",
-    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv1.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":   r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv1.norm.\3",
-    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv2.conv.(weight|bias)":                                              r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv2.conv.\3",
-    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv2.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":   r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv2.norm.\3",
-    r"backbone.0.projector.stages.(\d+).1.(weight|bias)":                                                               r"backbone.conv_encoder.projector.scale_layers.\1.layer_norm.\2",
+    r"backbone.0.encoder.encoder": r"backbone.model",
+    r"backbone.0.projector.stages_sampling.(\d+).(\d+).(\d+).(weight|bias)":                                            r"backbone.projector.scale_layers.\1.sampling_layers.\2.layers.\3.\4",
+    r"backbone.0.projector.stages_sampling.(\d+).(\d+).(\d+).conv.(weight|bias)":                                       r"backbone.projector.scale_layers.\1.sampling_layers.\2.layers.\3.conv.\4",
+    r"backbone.0.projector.stages_sampling.(\d+).(\d+).(\d+).bn":                                                       r"backbone.projector.scale_layers.\1.sampling_layers.\2.layers.\3.norm",
+    r"backbone.0.projector.stages.(\d+).0.cv1.conv.(weight|bias)":                                                      r"backbone.projector.scale_layers.\1.projector_layer.conv1.conv.\2",
+    r"backbone.0.projector.stages.(\d+).0.cv1.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":           r"backbone.projector.scale_layers.\1.projector_layer.conv1.norm.\2",
+    r"backbone.0.projector.stages.(\d+).0.cv2.conv.(weight|bias)":                                                      r"backbone.projector.scale_layers.\1.projector_layer.conv2.conv.\2",
+    r"backbone.0.projector.stages.(\d+).0.cv2.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":           r"backbone.projector.scale_layers.\1.projector_layer.conv2.norm.\2",
+    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv1.conv.(weight|bias)":                                              r"backbone.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv1.conv.\3",
+    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv1.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":   r"backbone.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv1.norm.\3",
+    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv2.conv.(weight|bias)":                                              r"backbone.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv2.conv.\3",
+    r"backbone.0.projector.stages.(\d+).0.m.(\d+).cv2.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":   r"backbone.projector.scale_layers.\1.projector_layer.bottlenecks.\2.conv2.norm.\3",
+    r"backbone.0.projector.stages.(\d+).1.(weight|bias)":                                                               r"backbone.projector.scale_layers.\1.layer_norm.\2",
 
     # transformer decoder
     r"transformer.decoder.layers.(\d+).self_attn.out_proj.(weight|bias)":               r"decoder.layers.\1.self_attn.o_proj.\2",
@@ -249,9 +249,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.decoder.layers.(\d+).cross_attn.value_proj.(weight|bias)":            r"decoder.layers.\1.cross_attn.value_proj.\2",
     r"transformer.decoder.layers.(\d+).cross_attn.output_proj.(weight|bias)":           r"decoder.layers.\1.cross_attn.output_proj.\2",
     r"transformer.decoder.layers.(\d+).norm2.(weight|bias)":                            r"decoder.layers.\1.cross_attn_layer_norm.\2",
-    r"transformer.decoder.layers.(\d+).linear1.(weight|bias)":                          r"decoder.layers.\1.fc1.\2",
-    r"transformer.decoder.layers.(\d+).linear2.(weight|bias)":                          r"decoder.layers.\1.fc2.\2",
-    r"transformer.decoder.layers.(\d+).norm3.(weight|bias)":                            r"decoder.layers.\1.final_layer_norm.\2",
+    r"transformer.decoder.layers.(\d+).linear1.(weight|bias)":                          r"decoder.layers.\1.mlp.fc1.\2",
+    r"transformer.decoder.layers.(\d+).linear2.(weight|bias)":                          r"decoder.layers.\1.mlp.fc2.\2",
+    r"transformer.decoder.layers.(\d+).norm3.(weight|bias)":                            r"decoder.layers.\1.layer_norm.\2",
     r"transformer.decoder.norm.(weight|bias)":                                          r"decoder.layernorm.\1",
     r"transformer.decoder.ref_point_head.layers.(\d+).(weight|bias)":                   r"decoder.ref_point_head.layers.\1.\2",
 
@@ -287,25 +287,17 @@ def backbone_read_in_q_k_v(state_dict, config):
     for i in range(config.backbone_config.num_hidden_layers):
         # read in weights + bias of input projection layer of self-attention
         in_proj_weight = state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.qkv.weight")
-        if config.backbone_config.use_cae:
-            in_proj_bias = torch.cat([
-                state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.q_bias"),
-                state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.v_bias"),
-            ])
-        else:
-            in_proj_bias = state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.qkv.bias")
+        in_proj_bias = torch.cat([
+            state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.q_bias"),
+            state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.v_bias"),
+        ])
 
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size:2*hidden_size, :]
-        state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        if config.backbone_config.use_cae:
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
-        else:
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[hidden_size:2*hidden_size]
-            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size:2*hidden_size, :]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
+        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
     return state_dict
 
 def backbone_convert(state_dict):
@@ -314,7 +306,7 @@ def backbone_convert(state_dict):
         if key.startswith("model.backbone.0.encoder.encoder"):
             # backbone.0.encoder.encoder.embeddings...
             # backbone.0.encoder.encoder.encoder.layer...
-            new_key = key.replace("model.backbone.0.encoder.encoder", "model.backbone.conv_encoder.model")
+            new_key = key.replace("model.backbone.0.encoder.encoder", "model.backbone.model")
         else:
             new_key = key
         new_state_dict[new_key] = value
@@ -368,12 +360,12 @@ def get_backbone_projector_sampling_key_mapping(config: RfDetrConfig):
     for i, scale in enumerate(config.projector_scale_factors):
         if scale == 2.0:
             key_mapping.update({
-                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).(weight|bias)": fr"backbone.conv_encoder.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.\3",
+                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).(weight|bias)": fr"backbone.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.\3",
             })
         elif scale == 0.5:
             key_mapping.update({
-                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).conv.weight":                                                   fr"backbone.conv_encoder.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.conv.weight",
-                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).bn.(weight|bias|running_mean|running_var|num_batches_tracked)": fr"backbone.conv_encoder.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.norm.\3",
+                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).conv.weight":                                                   fr"backbone.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.conv.weight",
+                fr"backbone.0.projector.stages_sampling.{i}.(\d+).(\d+).bn.(weight|bias|running_mean|running_var|num_batches_tracked)": fr"backbone.projector.scale_layers.{i}.sampling_layers.\1.layers.\2.norm.\3",
             })
     return key_mapping
 
@@ -384,8 +376,7 @@ def prepare_img():
 
     return im
 
-def original_preprocess_image(image_url, size):
-    image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+def original_preprocess_image(image, size):
     transform = transforms.Compose([
             transforms.Resize(list(size.values())),
             transforms.ToTensor(),
@@ -394,37 +385,37 @@ def original_preprocess_image(image_url, size):
     image = transform(image)
     return image
 
-def test_models_outputs(model: RfDetrForObjectDetection, image_processor: LwDetrImageProcessor, model_name: str):
+def test_models_outputs(model: RfDetrForObjectDetection, image_processor: DeformableDetrImageProcessor, model_name: str):
     expected_outputs = {
     "rf-detr-nano": {
-        "logits": [-6.89646, -6.82470, -6.48171, -5.09048, -14.73658],
-        "boxes" : [0.77571, 0.78876, 0.23241, 0.19182, 0.86733],
+        "logits": [-6.68004, -5.66107, -11.70373, -8.32324, -5.76176],
+        "boxes" : [0.25828, 0.54991, 0.47220, 0.87432, 0.55099],
     },
     "rf-detr-small": {
-        "logits": [-6.53786, -4.32331, -6.68880, -4.62188, -4.77854],
-        "boxes" : [0.86929, 0.64537, 0.26117, 0.23585, 0.06304],
+        "logits": [-6.83893, -4.55097, -10.53040, -8.20657, -5.55314],
+        "boxes" : [0.25782, 0.55037, 0.47922, 0.87102, 0.77074],
     },
     "rf-detr-base": {
-        "logits": [-7.16158, -5.30077, -4.23749, -4.78081, -8.84890],
-        "boxes" : [0.06317, 0.62097, 0.12687, 0.19614, 0.86992],
+        "logits": [-7.60410, -4.65943, -10.03144, -5.63881, -9.88291],
+        "boxes" : [0.25465, 0.54864, 0.48583, 0.86991, 0.16926],
     },
     "rf-detr-base-2": {
-        "logits": [-6.75465, -5.04109, -4.54366, -4.83962, -8.49372],
-        "boxes" : [0.06318, 0.62112, 0.12686, 0.19601, 0.12544],
+        "logits": [-6.81648, -6.80946, -7.72004, -6.06710, -10.37419],
+        "boxes" : [0.16911, 0.19784, 0.21076, 0.09273, 0.25263],
     },
     "rf-detr-medium": {
-        "logits": [-6.59967, -4.09316, -5.85801, -4.15695, -5.08010],
-        "boxes" : [0.87006, 0.64707, 0.25973, 0.23519, 0.13283],
+        "logits": [-6.58581, -8.07883, -12.52392, -7.78248, -10.47323],
+        "boxes" : [0.16824, 0.19932, 0.21110, 0.09385, 0.77087],
     },
     "rf-detr-large": {
-        "logits": [-7.37104, -5.53663, -6.05739, -4.49802, -5.83191],
-        "boxes" : [0.87064, 0.64741, 0.25891, 0.23802, 0.12845],
+        "logits": [-7.60888, -4.36906, -4.98865, -8.06598, -5.52970],
+        "boxes" : [0.25576, 0.55051, 0.47765, 0.87141, 0.76966],
     },
 }
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     image_path = "https://media.roboflow.com/notebooks/examples/dog-2.jpeg"
-    image = load_image(image_path)
+    image = prepare_img()
     # Fake annotation for testing
     annotations = {
         "image_id": 0,
@@ -433,7 +424,7 @@ def test_models_outputs(model: RfDetrForObjectDetection, image_processor: LwDetr
         ],
     }
 
-    original_pixel_values = original_preprocess_image(image_path, image_processor.size).unsqueeze(0).to(device)
+    original_pixel_values = original_preprocess_image(image, image_processor.size).unsqueeze(0).to(device)
     inputs = image_processor(images=image, annotations=annotations, return_tensors="pt").to(device)
 
     torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
@@ -544,7 +535,7 @@ def convert_rf_detr_checkpoint(
 
     # Save image processor
     print("Saving image processor...")
-    image_processor = LwDetrImageProcessor(**image_processor_config, use_fast=True)
+    image_processor = DeformableDetrImageProcessor(**image_processor_config, use_fast=True)
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
     test_models_outputs(model, image_processor, model_name)
