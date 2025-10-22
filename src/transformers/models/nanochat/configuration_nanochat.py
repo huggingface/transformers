@@ -145,12 +145,6 @@ class NanoChatConfig(PretrainedConfig):
         self.logits_soft_cap = logits_soft_cap
         self.attention_bias = attention_bias
 
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters = rope_parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
@@ -158,6 +152,13 @@ class NanoChatConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+        # Validate the correctness of rotary position embeddings parameters
+        # Must be done after super().__init__() to avoid being overridden by kwargs
+        self.rope_parameters = rope_parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
 
 __all__ = ["NanoChatConfig"]
