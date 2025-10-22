@@ -605,7 +605,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             num_attention_heads=vit_n_head,
             multi_query_group_num=vit_n_head,
             attention_dim=attention_dim,
-            multi_query_attention=multi_query_attention,
             interleaved_qkv=interleaved_qkv,
         )
         complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = torch.cat((q, k, v), dim=0)
