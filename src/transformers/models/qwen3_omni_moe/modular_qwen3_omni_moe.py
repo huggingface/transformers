@@ -217,7 +217,7 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        rope_config_validation(self, ignore_keys={"mrope_section", "interleaved", "mrope_interleaved"})
 
 
 class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
@@ -1691,7 +1691,7 @@ class Qwen3OmniMoeTalkerOutputWithPast(MoeCausalLMOutputWithPast):
     generation_step: Optional[int] = None
 
 
-class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3RotaryEmbedding):
+class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
     pass
 
 
@@ -2578,7 +2578,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         )
         talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=300, left_context_size=25)
 
-        return thinker_result, talker_wavs.float()
+        return thinker_result.sequences, talker_wavs.float()
 
 
 class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):

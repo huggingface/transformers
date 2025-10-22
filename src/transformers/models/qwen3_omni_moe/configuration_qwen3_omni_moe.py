@@ -347,6 +347,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        rope_config_validation(self, ignore_keys={"mrope_section", "interleaved", "mrope_interleaved"})
 
 
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
