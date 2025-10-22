@@ -174,8 +174,20 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path):
     )
     config = AudioFlamingo3Config(text_config=text_config)
     model = AudioFlamingo3ForConditionalGeneration(config)
+    
+    # Update state dict to new key names if necessary
+    # TODO (ebezzam) double-check
+    projector_key_mapping = {
+        "multi_modal_projector.layers.0.weight": "multi_modal_projector.linear_1.weight",
+        "multi_modal_projector.layers.0.bias": "multi_modal_projector.linear_1.bias", 
+        "multi_modal_projector.layers.2.weight": "multi_modal_projector.linear_2.weight",
+        "multi_modal_projector.layers.2.bias": "multi_modal_projector.linear_2.bias",
+    }
+    for old_key, new_key in projector_key_mapping.items():
+        if old_key in state:
+            state[new_key] = state.pop(old_key)
+    
     # Load weights into the instantiated model so we can push via `push_to_hub` later.
-    # TODO (ebezzam) handle new state dict keys for `AudioFlamingo3MultiModalProjector`
     load_res = model.load_state_dict(state, strict=True)
     # Enforce a clean load
     if getattr(load_res, "missing_keys", None) and load_res.missing_keys:
