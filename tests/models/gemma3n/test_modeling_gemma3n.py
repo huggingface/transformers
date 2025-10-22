@@ -31,6 +31,7 @@ from transformers import (
     Gemma3nAudioConfig,
     Gemma3nAudioFeatureExtractor,
     Gemma3nConfig,
+    GenerationConfig,
     StaticCache,
     is_torch_available,
 )
@@ -1078,12 +1079,12 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.get_text_config().sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
+        out = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=20, do_sample=False))[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = Expectations({
             # FIXME: This test is VERY flaky on ROCm
-            ("cuda", None): [" and I am glad to be here. This is a nice place. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
+            ("cuda", None): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("rocm", (9, 4)): [' and I think it makes this place special. This is a nice place. This is a nice place', ', green, yellow, purple, orange, pink, brown, black, white.\n\nHere are'],
             ("xpu", None): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
