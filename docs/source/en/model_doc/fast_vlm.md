@@ -66,44 +66,6 @@ Each **checkpoint** is trained with a specific prompt format, depending on the u
 - Each message should be a dictionary with `"role"` and `"content"` keys.  
 - The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
 
-
-Here’s an example of how to structure your input. 
-We will use a conversation history of text and image. Each content field has to be a list of dicts, as follows:
-
-
-```python
-from transformers import AutoProcessor
-
-processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
-
-conversation = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"type": "text", "text": "What’s shown in this image?"},
-            ],
-    },
-    {
-        "role": "assistant",
-        "content": [{"type": "text", "text": "This image shows a red stop sign."},]
-    },
-    {
-
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "Describe the image in more details."},
-        ],
-    },
-]
-
-text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-
-# Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
-print(text_prompt)
->>> "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<image>\nWhat’s shown in this image?<|im_end|>\n<|im_start|>assistant\n\nThis image shows a red stop sign.<|im_end|>\n<|im_start|>user\n\nDescribe the image in more details.<|im_end|>\n<|im_start|>assistant\n"
-```
-
 ## Usage examples
 
 ### Single input inference
