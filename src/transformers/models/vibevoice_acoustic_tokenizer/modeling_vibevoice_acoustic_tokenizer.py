@@ -1,5 +1,4 @@
 import copy
-import math
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -15,15 +14,6 @@ from .configuration_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokeniz
 
 
 logger = logging.get_logger(__name__)
-
-
-def unpad1d(x: torch.Tensor, paddings: tuple[int, int]):
-    """Remove padding from x, handling properly zero padding. Only for 1d!"""
-    padding_left, padding_right = paddings
-    assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
-    assert (padding_left + padding_right) <= x.shape[-1]
-    end = x.shape[-1] - padding_right
-    return x[..., padding_left: end]
 
 
 # TODO (ebezzam) move to `src/transformers/cache_utils.py` and make similar to `DynamicCache`?
@@ -98,26 +88,16 @@ class VibeVoiceAcousticTokenizerStreamingConvTranspose1d(nn.Module):
         out_channels: int,
         kernel_size: int, 
         stride: int = 1, 
-        causal: bool = False,
-        trim_right_ratio: float = 1.,
         bias: bool = True
     ):
         super().__init__()
         self.convtr = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, bias=bias)
-        self.causal = causal
-        self.trim_right_ratio = trim_right_ratio
-        assert self.causal or self.trim_right_ratio == 1., \
-            "`trim_right_ratio` != 1.0 only makes sense for causal convolutions"
-        assert self.trim_right_ratio >= 0. and self.trim_right_ratio <= 1.
 
         # Store configuration
-        self.kernel_size = kernel_size
         self.stride = stride
-        self.in_channels = in_channels
-        self.out_channels = out_channels
 
         # For transposed convolution, padding calculation is different
-        self.padding_total = kernel_size - stride
+        self.truncation_right = kernel_size - stride
 
         # For streaming, we need to keep track of input history
         # Transposed conv needs to see multiple input samples to produce correct output
@@ -132,10 +112,9 @@ class VibeVoiceAcousticTokenizerStreamingConvTranspose1d(nn.Module):
         """
         Forward pass with optional streaming support via cache.
         """
-
         batch_size, channels, time_dim = x.shape
 
-        # Validate cache parameters
+        # Validate cache parameters if provided
         if past_conv_values is not None:
             if layer_idx is None:
                 raise ValueError("layer_idx must be provided when past_conv_values is used.")
@@ -150,50 +129,34 @@ class VibeVoiceAcousticTokenizerStreamingConvTranspose1d(nn.Module):
             y = self.convtr(x)
 
             # Calculate and remove padding
-            if self.causal:
-                padding_right = math.ceil(self.padding_total * self.trim_right_ratio)
-                padding_left = self.padding_total - padding_right
-            else:
-                padding_right = self.padding_total // 2
-                padding_left = self.padding_total - padding_right
-
-            if padding_left + padding_right > 0:
-                y = unpad1d(y, (padding_left, padding_right))
+            if self.truncation_right > 0:
+                end = y.shape[-1] - self.truncation_right
+                y = y[..., 0:end]
             return y
-        
-        # Cache operations (not compiled)
-        cached_input = past_conv_values.get(layer_idx, sample_indices)
 
+        # Streaming mode - get cached input
+        cached_input = past_conv_values.get(layer_idx, sample_indices)
         if cached_input is None:
-            # First chunk - no history yet
             cached_input = torch.zeros(batch_size, channels, 0, device=x.device, dtype=x.dtype)
 
         # Concatenate cached input with new input
         full_input = torch.cat([cached_input, x], dim=2)
-        # First chunk or debug mode - use uncompiled version
+        
+        # Apply transposed convolution
         full_output = self.convtr(full_input)
 
-        # Calculate padding to remove
-        if self.causal:
-            padding_right = math.ceil(self.padding_total * self.trim_right_ratio)
-            padding_left = self.padding_total - padding_right
-        else:
-            padding_right = self.padding_total // 2
-            padding_left = self.padding_total - padding_right
+        # Calculate and remove padding
+        if self.truncation_right > 0:
+            end = full_output.shape[-1] - self.truncation_right
+            full_output = full_output[..., 0:end]
 
-        # Remove padding
-        if padding_left + padding_right > 0:
-            full_output = unpad1d(full_output, (padding_left, padding_right))
-
-        # Determine which part of the output corresponds to the new input
+        # Extract output corresponding to new input
         if cached_input.shape[2] == 0:
             # First chunk - return all output
             output = full_output
         else:
             # Subsequent chunks - return only the new output
             expected_new_output = time_dim * self.stride
-
-            # Take the last expected_new_output samples
             if full_output.shape[2] >= expected_new_output:
                 output = full_output[:, :, -expected_new_output:]
             else:
@@ -204,8 +167,8 @@ class VibeVoiceAcousticTokenizerStreamingConvTranspose1d(nn.Module):
             new_cache = full_input[:, :, -self.context_size:]
         else:
             new_cache = full_input
-
         past_conv_values.update(layer_idx, sample_indices, new_cache)
+
         return output
 
 
@@ -453,10 +416,6 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        # Extract parameters from config
-        self.causal = True
-        trim_right_ratio = getattr(config, "trim_right_ratio", 1.0)
-
         # stem and upsampling layers
         self.upsample_layers = nn.ModuleList()
         self.upsample_layers.append(
@@ -468,8 +427,7 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
             out_ch = config.n_filters * (2 ** (len(config.depths) - 1 - i - 1))
             upsample_layer = VibeVoiceAcousticTokenizerStreamingConvTranspose1d(in_ch, out_ch,
                             kernel_size=config.ratios[i] * 2, stride=config.ratios[i],
-                            bias=config.bias,
-                            causal=self.causal, trim_right_ratio=trim_right_ratio)
+                            bias=config.bias)
             self.upsample_layers.append(upsample_layer)
 
         # configure ConvNext1D blocks
