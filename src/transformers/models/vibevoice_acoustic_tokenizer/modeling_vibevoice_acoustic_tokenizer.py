@@ -93,15 +93,10 @@ class VibeVoiceAcousticTokenizerStreamingConvTranspose1d(nn.Module):
         super().__init__()
         self.convtr = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, bias=bias)
 
-        # Store configuration
-        self.stride = stride
-
-        # For transposed convolution, padding calculation is different
-        self.truncation_right = kernel_size - stride
-
         # For streaming, we need to keep track of input history
         # Transposed conv needs to see multiple input samples to produce correct output
-        self.context_size = kernel_size - 1
+        self.context_size = kernel_size - stride
+        self.stride = stride
 
     def forward(self, 
         x: torch.Tensor,
@@ -123,51 +118,33 @@ class VibeVoiceAcousticTokenizerStreamingConvTranspose1d(nn.Module):
             if len(sample_indices) != batch_size:
                 raise ValueError("sample_indices length must match batch size")
 
-        # Non-streaming mode
+        # Get input for convolution (with context for streaming)
         if past_conv_values is None:
-            # Apply transposed convolution
-            y = self.convtr(x)
-
-            # Calculate and remove padding
-            if self.truncation_right > 0:
-                end = y.shape[-1] - self.truncation_right
-                y = y[..., 0:end]
-            return y
-
-        # Streaming mode - get cached input
-        cached_input = past_conv_values.get(layer_idx, sample_indices)
-        if cached_input is None:
-            cached_input = torch.zeros(batch_size, channels, 0, device=x.device, dtype=x.dtype)
-
-        # Concatenate cached input with new input
-        full_input = torch.cat([cached_input, x], dim=2)
-        
-        # Apply transposed convolution
-        full_output = self.convtr(full_input)
-
-        # Calculate and remove padding
-        if self.truncation_right > 0:
-            end = full_output.shape[-1] - self.truncation_right
-            full_output = full_output[..., 0:end]
-
-        # Extract output corresponding to new input
-        if cached_input.shape[2] == 0:
-            # First chunk - return all output
-            output = full_output
+            conv_input = x
+            is_first_chunk = True
         else:
-            # Subsequent chunks - return only the new output
-            expected_new_output = time_dim * self.stride
-            if full_output.shape[2] >= expected_new_output:
-                output = full_output[:, :, -expected_new_output:]
-            else:
-                output = full_output
+            cached_input = past_conv_values.get(layer_idx, sample_indices)
+            if cached_input is None:
+                cached_input = torch.zeros(batch_size, channels, 0, device=x.device, dtype=x.dtype)
+            conv_input = torch.cat([cached_input, x], dim=2)
+            is_first_chunk = cached_input.shape[2] == 0
 
-        # Update cache
-        if full_input.shape[2] > self.context_size:
-            new_cache = full_input[:, :, -self.context_size:]
-        else:
-            new_cache = full_input
-        past_conv_values.update(layer_idx, sample_indices, new_cache)
+        # Apply transposed convolution and remove padding
+        output = self.convtr(conv_input)
+        if self.context_size > 0:
+            output = output[..., :-self.context_size]
+
+        # For streaming mode, extract only the new output (except first chunk)
+        if past_conv_values is not None:
+            if not is_first_chunk:
+                expected_new_output = time_dim * self.stride
+                if output.shape[2] >= expected_new_output:
+                    output = output[:, :, -expected_new_output:]
+            
+            # Update cache with last context_size samples
+            if self.context_size > 0:
+                new_cache = conv_input[:, :, -self.context_size:]
+                past_conv_values.update(layer_idx, sample_indices, new_cache)
 
         return output
 
