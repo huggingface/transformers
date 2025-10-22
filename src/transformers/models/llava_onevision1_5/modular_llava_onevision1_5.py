@@ -14,7 +14,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from functools import partial
 from typing import Optional, Union
 
 import torch
