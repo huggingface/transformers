@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class VocosEncodecConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VocosModel`]. It is used to
+    This is the configuration class to store the configuration of a [`VocosEncodecConfig`]. It is used to
     instantiate a Vocos vocoder model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
     [charactr/vocos-encodec-24khz](https://huggingface.co/charactr/vocos-encodec-24khz).
@@ -33,7 +33,9 @@ class VocosEncodecConfig(PretrainedConfig):
 
     Args:
         codebook_dim (`int`, *optional*, defaults to 128):
-            Encodec codebook dimension.
+            Encodec codebook dimension. Codebook weights have shape `(num_quantizers, codebook_dim)`.
+        num_quantizers (`int`, *optional*, defaults to 16384):
+            Number of quantizers from the Encodec codebook. Codebook weights have shape `(num_quantizers, codebook_dim)`.
         hidden_size (`int`, *optional*, defaults to 384):
             Hidden dimension for the ConvNeXt backbone.
         intermediate_size (`int`, *optional*, defaults to 1152):
@@ -76,6 +78,7 @@ class VocosEncodecConfig(PretrainedConfig):
     def __init__(
         self,
         codebook_dim=128,
+        num_quantizers=16384,
         hidden_size=384,
         intermediate_size=1152,
         num_layers=8,
@@ -93,6 +96,7 @@ class VocosEncodecConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.codebook_dim = codebook_dim
+        self.num_quantizers = num_quantizers
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_layers = num_layers

@@ -21,8 +21,8 @@ import torch
 from transformers import (
     EncodecModel,
     VocosEncodecConfig,
-    VocosFeatureExtractor,
     VocosEncodecModel,
+    VocosFeatureExtractor,
     VocosProcessor,
 )
 from transformers.models.encodec.convert_encodec_checkpoint_to_pytorch import recursively_load_weights
@@ -38,20 +38,15 @@ def convert_old_keys_to_new_keys(original_state_dict: dict, model_name: str = "e
     converted_checkpoint = {}
     original_encodec = {}
 
-    # get original encodec from vocos
-    for old_key, value in original_state_dict.items():
-        # TODO (ebezzam) remove/update? as `feature_extractor.encodec.` isn't in state dict, namely no nested `encodec`
-        if old_key.startswith("feature_extractor.encodec."):
-            encodec_key = old_key[len("feature_extractor.encodec.") :]
-            encodec_key = encodec_key.replace(".conv.conv.", ".conv.").replace(".convtr.convtr.", ".conv.")
-            original_encodec[_rewrite_weight_norm(encodec_key)] = value
-
     #  convert it into hf format
     hf_encodec = EncodecModel.from_pretrained("facebook/encodec_24khz").eval()
     recursively_load_weights(original_encodec, hf_encodec, model_name)
 
     for old_key, value in original_state_dict.items():
-        if old_key.startswith("backbone.") or old_key in ["norm.scale.weight", "norm.shift.weight"]:
+        if old_key == "feature_extractor.codebook_weights":
+            new_key = old_key.replace("feature_extractor.codebook_weights", "codebook_weights")
+            converted_checkpoint[new_key] = value
+        elif old_key.startswith("backbone.") or old_key in ["norm.scale.weight", "norm.shift.weight"]:
             # Remove backbone prefix and flatten the structure
             new_key = old_key.replace("backbone.embed.", "embed.")
             new_key = new_key.replace("backbone.norm.", "norm.")
@@ -87,8 +82,21 @@ def safe_load(path: str) -> dict[str, torch.Tensor]:
 
 @torch.no_grad()
 def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub=None):
-    config = VocosEncodecConfig()
+    # determine shape of codebook weights
+    # original: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L74
+    bandwidths = [1.5, 3.0, 6.0, 12.0]
+    hf_encodec = EncodecModel.from_pretrained("facebook/encodec_24khz").eval()
+    num_quantizers = hf_encodec.quantizer.get_num_quantizers_for_bandwidth(bandwidth=max(bandwidths))
+    codebook_weights = torch.cat(
+        [layer.codebook.embed for layer in hf_encodec.quantizer.layers[:num_quantizers]], dim=0
+    )
 
+    # create model
+    config = VocosEncodecConfig(
+        bandwidths=bandwidths,
+        codebook_dim=codebook_weights.shape[1],
+        num_quantizers=codebook_weights.shape[0],
+    )
     with torch.device("meta"):
         model = VocosEncodecModel(config)
 
