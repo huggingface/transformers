@@ -18,11 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class DeepseekOcrSAMConfig(PreTrainedConfig):
+class DeepseekOcrSamConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_sam_vision"
     base_config_key = "sam_config"
 
@@ -127,20 +128,82 @@ class DeepseekOcrProjectorConfig(PreTrainedConfig):
         self.depth = depth
 
 
+class DeepseekOcrVisionConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_vision"
+    base_config_key = "vision_config"
+    sub_configs = {
+        "sam_config": DeepseekOcrSamConfig,
+        "clip_config": DeepseekOcrCLIPVisionConfig,
+    }
+
+    def __init__(self, sam_config=None, clip_config=None, **kwargs):
+        super().__init__(**kwargs)
+
+        if sam_config is None:
+            self.sam_config = DeepseekOcrSamConfig()
+        elif isinstance(sam_config, dict):
+            self.sam_config = DeepseekOcrSamConfig(**sam_config)
+        else:
+            self.sam_config = sam_config
+
+        if clip_config is None:
+            self.clip_config = DeepseekOcrCLIPVisionConfig()
+        elif isinstance(clip_config, dict):
+            self.clip_config = DeepseekOcrCLIPVisionConfig(**clip_config)
+        else:
+            self.clip_config = clip_config
+
+
 class DeepseekOcrConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`DeepseekOcrForConditionalGeneration`]. It is used to instantiate a
+    DeepseekOCR model according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `DeepseekV2Config`):
+            The config object or dictionary of the text backbone (DeepSeek-V2).
+        vision_config (`DeepseekOcrVisionConfig` or `dict`, *optional*):
+            The config object or dictionary of the vision encoders (SAM and CLIP).
+        projector_config (`DeepseekOcrProjectorConfig` or `dict`, *optional*):
+            The config object or dictionary of the projector that maps vision features to text embedding space.
+        candidate_resolutions (`list`, *optional*, defaults to `[[1024, 1024]]`):
+            List of candidate image resolutions for adaptive image processing.
+        global_view_pos (`str`, *optional*, defaults to `"head"`):
+            Position of the global view in the image sequence.
+        tile_tag (`str`, *optional*, defaults to `"2D"`):
+            Tag format for image tiles.
+        image_token_index (`int`, *optional*, defaults to 100015):
+            The index representing image tokens in the model's token vocabulary.
+
+    Example:
+
+    ```python
+    >>> from transformers import DeepseekOcrConfig, DeepseekOcrForConditionalGeneration
+
+    >>> # Initializing a DeepseekOCR configuration
+    >>> configuration = DeepseekOcrConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = DeepseekOcrForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "deepseek_ocr"
     sub_configs = {
         "text_config": AutoConfig,
-        "sam_vision_config": DeepseekOcrSAMConfig,
-        "clip_vision_config": DeepseekOcrCLIPVisionConfig,
+        "vision_config": DeepseekOcrVisionConfig,
         "projector_config": DeepseekOcrProjectorConfig,
     }
 
     def __init__(
         self,
         text_config=None,
-        sam_vision_config=None,
-        clip_vision_config=None,
+        vision_config=None,
         projector_config=None,
         candidate_resolutions=None,
         global_view_pos="head",
@@ -156,31 +219,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
         self.tile_tag = tile_tag
         self.image_token_index = image_token_index
 
-        if sam_vision_config is None:
-            self.sam_vision_config = DeepseekOcrSAMConfig()
-        elif isinstance(sam_vision_config, dict):
-            self.sam_vision_config = DeepseekOcrSAMConfig(**sam_vision_config)
-        else:
-            self.sam_vision_config = sam_vision_config
-
-        if clip_vision_config is None:
-            self.clip_vision_config = DeepseekOcrCLIPVisionConfig()
-        elif isinstance(clip_vision_config, dict):
-            self.clip_vision_config = DeepseekOcrCLIPVisionConfig(**clip_vision_config)
-        else:
-            self.clip_vision_config = clip_vision_config
-
-        if projector_config is None:
-            self.projector_config = DeepseekOcrProjectorConfig()
-        elif isinstance(projector_config, dict):
-            self.projector_config = DeepseekOcrProjectorConfig(**projector_config)
-        else:
-            self.projector_config = projector_config
-
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "deepseek_v2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
+        if text_config is None:
             text_config = CONFIG_MAPPING["deepseek_v2"](
                 hidden_size=1280,
                 intermediate_size=6848,
@@ -196,9 +235,36 @@ class DeepseekOcrConfig(PreTrainedConfig):
                 max_position_embeddings=8192,
                 use_mla=False,
             )
+        elif isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "deepseek_v2")
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
 
         self.text_config = text_config
-        self.hidden_size = text_config.hidden_size
-        self.vocab_size = text_config.vocab_size
+
+        if vision_config is None:
+            self.vision_config = DeepseekOcrVisionConfig()
+        elif isinstance(vision_config, dict):
+            self.vision_config = DeepseekOcrVisionConfig(**vision_config)
+        else:
+            self.vision_config = vision_config
+
+        if projector_config is None:
+            self.projector_config = DeepseekOcrProjectorConfig()
+        elif isinstance(projector_config, dict):
+            self.projector_config = DeepseekOcrProjectorConfig(**projector_config)
+        else:
+            self.projector_config = projector_config
+
+        self.hidden_size = self.text_config.hidden_size
+        self.vocab_size = self.text_config.vocab_size
 
         super().__init__(**kwargs)
+
+
+__all__ = [
+    "DeepseekOcrConfig",
+    "DeepseekOcrVisionConfig",
+    "DeepseekOcrSamConfig",
+    "DeepseekOcrCLIPVisionConfig",
+    "DeepseekOcrProjectorConfig",
+]
