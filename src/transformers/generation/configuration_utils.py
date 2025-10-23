@@ -1419,7 +1419,7 @@ class CompileConfig:
             Whether to try to use dynamic shape graphs.
         backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
             Backend to be used.
-        mode (`str`, *optional*, defaults to `"reduce-overhead"`):
+        mode (`str`, *optional*, defaults to `"default"`):
             Controls balance between performance and overhead.
         options (`dict`, *optional*):
             A dictionary of options to pass to the backend.
@@ -1446,7 +1446,7 @@ class CompileConfig:
     fullgraph: bool = False
     dynamic: Optional[bool] = None
     backend: Union[str, Callable] = "inductor"
-    mode: str = "reduce-overhead"
+    mode: str = "default"
     options: Optional[dict] = None
     # Used to flag our `generate` call to compile on e.g. CPU. Often not optimal, but useful for testing purposes.
     _compile_all_devices = None
