@@ -9,14 +9,18 @@ import torch.nn.functional as F
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoModel
-from ...utils import logging
+from ...utils import logging, is_diffusers_available
+from ...utils.import_utils import requires_backends
 from ..llama.modeling_llama import LlamaRMSNorm
 from .configuration_vibevoice import VibeVoiceConfig
 from .modular_vibevoice_diffusion_head import VibeVoiceDiffusionHead
-from .schedule.dpm_solver import DPMSolverMultistepScheduler
 
 
 logger = logging.get_logger(__name__)
+
+if is_diffusers_available():
+    import diffusers
+
 
 @dataclass
 class VibeVoiceCausalLMOutputWithPast(ModelOutput):
@@ -44,6 +48,8 @@ class VibeVoiceGenerationOutput(ModelOutput):
     speech_outputs: Optional[list[torch.FloatTensor]] = None
 
 
+# TODO (ebezzam) modular instead of using LlamaRMSNorm
+# and maybe even modular for SpeechConnector itself? (Voxtral?)
 class VibeVoiceSpeechConnector(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
@@ -125,7 +131,8 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self.prediction_head = AutoModel.from_config(config.diffusion_head_config).to(dtype)
 
         # Initialize noise scheduler
-        self.noise_scheduler = DPMSolverMultistepScheduler(
+        requires_backends(self, ["diffusers"])
+        self.noise_scheduler = diffusers.DPMSolverMultistepScheduler(
             num_train_timesteps=config.diffusion_head_config.ddpm_num_steps,
             beta_schedule=config.diffusion_head_config.ddpm_beta_schedule,
             prediction_type=config.diffusion_head_config.prediction_type

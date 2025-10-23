@@ -95,7 +95,7 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     with open(config_path, "r") as f:
         model_config = json.load(f)
 
-    # -- cleanup
+    # clean up semantic tokenizer config
     model_config["semantic_tokenizer_config"]["encoder_depths"] = list(map(int, model_config["semantic_tokenizer_config"]["encoder_depths"].split("-")))
     # -- reverse order of ratios here instead of in modeling
     model_config["semantic_tokenizer_config"]["downsampling_ratios"] = list(reversed(model_config["semantic_tokenizer_config"]["encoder_ratios"]))
@@ -176,6 +176,10 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         # always True
         del model_config["acoustic_tokenizer_config"]["causal"]
 
+    # clean up diffusion head config
+    if model_config["diffusion_head_config"]["ddpm_beta_schedule"] == "cosine":
+        model_config["diffusion_head_config"]["ddpm_beta_schedule"] = "squaredcos_cap_v2"
+    
     # 3) Update state dict to match HF model structure
     updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
 

@@ -236,6 +236,7 @@ from .import_utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_diffusers_available,
     is_torchcodec_available,
     is_torchdistx_available,
     is_torchdynamo_compiling,

@@ -1074,6 +1074,11 @@ def is_torchaudio_available() -> bool:
 
 
 @lru_cache
+def is_diffusers_available() -> bool:
+    return _is_package_available("diffusers")
+
+
+@lru_cache
 def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
     is_available, torchao_version = _is_package_available("torchao", return_version=True)
     return is_available and version.parse(torchao_version) >= version.parse(min_version)
@@ -1489,6 +1494,12 @@ runtime.
 """
 
 # docstyle-ignore
+DIFFUSERS_IMPORT_ERROR = """
+{0} requires the diffusers library but it was not found in your environment. Please install it and restart your
+runtime.
+"""
+
+# docstyle-ignore
 PANDAS_IMPORT_ERROR = """
 {0} requires the pandas library but it was not found in your environment. You can install it with pip as
 explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/install.html.
@@ -1688,6 +1699,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),
+        ("diffusers", (is_diffusers_available, DIFFUSERS_IMPORT_ERROR)),
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("nltk", (is_nltk_available, NLTK_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
