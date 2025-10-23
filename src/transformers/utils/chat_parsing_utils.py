@@ -55,7 +55,7 @@ def recursive_parse(
         return None
 
     # If not, we have to do a little parsing. First, set some vars and do basic validation
-    node_type = node_schema["type"]
+    node_type = node_schema.get("type")
     has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema or "x-regex-key-value" in node_schema
     if has_regex and not isinstance(node_content, str):
         raise TypeError(
@@ -232,5 +232,7 @@ def recursive_parse(
         else:
             # String type
             return node_content
+    elif node_type is None:
+        return node_content  # Don't touch it
     else:
         raise TypeError(f"Unsupported schema type {node_type} for node: {node_content}")
