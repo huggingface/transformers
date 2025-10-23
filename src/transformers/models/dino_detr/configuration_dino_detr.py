@@ -26,7 +26,10 @@ logger = logging.get_logger(__name__)
 class DinoDetrConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DinoDetrModel`]. It is used to instantiate
-    a Dino DETR model according to the specified arguments, defining the model architecture.
+    a Dino DETR model according to the specified arguments, defining the model architecture.Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the DINO-DETR
+    [kostaspitas/dino_detr](https://huggingface.co/kostaspitas/dino_detr) architecture.
+
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
