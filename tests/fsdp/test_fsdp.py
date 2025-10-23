@@ -16,7 +16,6 @@ import itertools
 import os
 import subprocess
 import unittest
-from copy import deepcopy
 from functools import partial
 
 from parameterized import parameterized
