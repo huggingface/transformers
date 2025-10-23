@@ -107,8 +107,6 @@
       title: 模型
     - local: main_classes/text_generation
       title: 文本生成
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: Optimization
     - local: main_classes/output
