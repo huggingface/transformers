@@ -794,8 +794,9 @@ class ProcessorMixin(PushToHubMixin):
 
             # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
             if attribute_name == "tokenizer":
-                attribute.save_pretrained(save_directory)
-            elif attribute._auto_class is not None:
+                # Create a subdirectory for this attribute to avoid filename conflicts
+                attribute_save_directory = os.path.join(save_directory, attribute_name)
+                attribute.save_pretrained(attribute_save_directory)            elif attribute._auto_class is not None:
                 custom_object_save(attribute, save_directory, config=attribute)
 
         if self._auto_class is not None:
@@ -1425,8 +1426,18 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
-
+            # Check if attribute was saved in its own subdirectory (new format) or in the main directory (legacy)
+            if isinstance(pretrained_model_name_or_path, str) and os.path.isdir(pretrained_model_name_or_path):
+                attribute_path = os.path.join(pretrained_model_name_or_path, attribute_name)
+                if os.path.isdir(attribute_path):
+                    # New format: load from subdirectory
+                    args.append(attribute_class.from_pretrained(attribute_path, **kwargs))
+                else:
+                    # Legacy format: load from main directory
+                    args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+            else:
+                # Remote path or file: use the original path
+                args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
 
     @staticmethod
