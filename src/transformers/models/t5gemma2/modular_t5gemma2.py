@@ -284,6 +284,16 @@ class T5Gemma2RotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: T5Gemma2ModuleConfig, device=None):
         super().__init__(config, device)
 
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[T5Gemma2ModuleConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        return super().compute_default_rope_parameters(
+            config, device, seq_len, layer_type
+        )
 
 class T5Gemma2SelfAttention(Gemma3Attention):
     def __init__(self, config: T5Gemma2ModuleConfig, layer_idx: int):
@@ -461,20 +471,13 @@ class T5Gemma2EncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings_global: tuple[torch.Tensor, torch.Tensor],
-        position_embeddings_local: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> torch.FloatTensor:
         residual = hidden_states
         hidden_states = self.pre_self_attn_layernorm(hidden_states)
-
-        # apply global RoPE to non-sliding layer only
-        if self.self_attn.is_sliding:
-            position_embeddings = position_embeddings_local
-        else:
-            position_embeddings = position_embeddings_global
 
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
@@ -510,8 +513,7 @@ class T5Gemma2DecoderLayer(T5Gemma2EncoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings_global: tuple[torch.Tensor, torch.Tensor],
-        position_embeddings_local: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
@@ -523,12 +525,6 @@ class T5Gemma2DecoderLayer(T5Gemma2EncoderLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
         hidden_states = self.pre_self_attn_layernorm(hidden_states)
-
-        # apply global RoPE to non-sliding layer only
-        if self.self_attn.is_sliding:
-            position_embeddings = position_embeddings_local
-        else:
-            position_embeddings = position_embeddings_global
 
         hidden_states, _, _ = self.self_attn(
             hidden_states=hidden_states,
@@ -691,14 +687,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
             [T5Gemma2EncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.dropout = nn.Dropout(config.dropout_rate)
-
-        # global rope.
-        self.rotary_emb = T5Gemma2RotaryEmbedding(config=config)
-        # local rope.
-        config = copy.deepcopy(config)
-        config.rope_theta = config.rope_local_base_freq
-        config.rope_scaling = {"rope_type": "default"}
-        self.rotary_emb_local = T5Gemma2RotaryEmbedding(config=config)
+        self.rotary_emb = T5Gemma2RotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -770,8 +759,9 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         hidden_states = inputs_embeds
 
         # global and local position embeddings
-        position_embeddings_global = self.rotary_emb(hidden_states, position_ids)
-        position_embeddings_local = self.rotary_emb_local(hidden_states, position_ids)
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
         hidden_states = self.dropout(hidden_states)
@@ -780,8 +770,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
             assert isinstance(layer_module, T5Gemma2EncoderLayer)
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings_global,
-                position_embeddings_local,
+                position_embeddings[layer_module.attention_type],
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
                 **kwargs,
@@ -885,8 +874,9 @@ class T5Gemma2Decoder(T5Gemma2Encoder):
         hidden_states = inputs_embeds
 
         # global and local position embeddings
-        position_embeddings_global = self.rotary_emb(hidden_states, position_ids)
-        position_embeddings_local = self.rotary_emb_local(hidden_states, position_ids)
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
         hidden_states = self.dropout(hidden_states)
@@ -895,8 +885,7 @@ class T5Gemma2Decoder(T5Gemma2Encoder):
             assert isinstance(layer_module, T5Gemma2DecoderLayer)
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings_global,
-                position_embeddings_local,
+                position_embeddings[layer_module.attention_type],
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
                 past_key_values,
