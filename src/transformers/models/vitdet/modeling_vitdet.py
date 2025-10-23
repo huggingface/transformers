@@ -589,6 +589,7 @@ class VitDetPreTrainedModel(PreTrainedModel):
     config: VitDetConfig
     base_model_prefix = "vitdet"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = []
 

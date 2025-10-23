@@ -1489,6 +1489,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TSpeechEncoder with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2SpeechEncoder(SeamlessM4Tv2PreTrainedModel):
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: SeamlessM4Tv2Config):
         super().__init__(config)
@@ -2291,7 +2292,7 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedMod
         if getattr(self.config, "tie_word_embeddings", True):
             output_embeddings = self.get_output_embeddings()
             if output_embeddings is not None:
-                self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+                self._tie_embedding_weights(output_embeddings, self.get_input_embeddings())
 
 
 ############ VOCODER related code ################
@@ -2478,6 +2479,7 @@ class SeamlessM4Tv2HifiGan(nn.Module):
 class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
     config: SeamlessM4Tv2Config
     main_input_name = "input_embeds"
+    input_modalities = "audio"
     _no_split_modules = []
 
     def __init__(self, config):
@@ -2692,9 +2694,9 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     def forward(
@@ -2912,6 +2914,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     """
 )
 class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    input_modalities = "audio"
     _keys_to_ignore_on_load_missing = ["text_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
@@ -2951,8 +2954,8 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.forward
@@ -3181,6 +3184,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     """
 )
 class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    output_modalities = "audio"
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
 
@@ -3227,9 +3231,9 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.forward with SeamlessM4T->SeamlessM4Tv2
@@ -3542,6 +3546,8 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     """
 )
 class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    input_modalities = "audio"
+    output_modalities = "audio"
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
@@ -3584,8 +3590,8 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.forward with SeamlessM4T->SeamlessM4Tv2
@@ -3910,6 +3916,8 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
     """
 )
 class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
+    input_modalities = ["audio", "text"]
+    output_modalities = ["audio", "text"]
     _tied_weights_keys = [
         "lm_head.weight",
         "text_encoder.embed_tokens.weight",
@@ -3973,9 +3981,9 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel._tie_weights
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.lm_head, self.shared)
+            self._tie_embedding_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_embedding_weights(self.lm_head, self.shared)
 
     @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.forward with SeamlessM4T->SeamlessM4Tv2

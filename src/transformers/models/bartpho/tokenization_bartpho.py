@@ -140,7 +140,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
                 self.fairseq_tokens_to_ids[str(token)] = cnt
                 cnt += 1
         with open(monolingual_vocab_file, "r", encoding="utf-8") as f:
-            for line in f.readlines():
+            for line in f:
                 token = line.strip().split()[0]
                 self.fairseq_tokens_to_ids[token] = len(self.fairseq_tokens_to_ids)
         if str(mask_token) not in self.fairseq_tokens_to_ids:
