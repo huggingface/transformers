@@ -26,6 +26,7 @@ from .utils import (
     is_torch_npu_available,
     logging,
 )
+from .utils.import_utils import is_tracing
 
 
 logger = logging.get_logger(__name__)
@@ -401,8 +402,11 @@ def _is_packed_sequence(position_ids, batch_size):
         1. Position ids exist
         2. Flattened sequences only are supported
         3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
+
+    NOTE: We disable this feature if torch compile or similar features are used due to dynamic control flows
+          we cannot avoid without losing control over the gradients, e.g. via `torch.cond`.
     """
-    if position_ids is None:
+    if is_tracing(position_ids) or position_ids is None:
         return False
 
     increasing_position_sequences = (
@@ -592,8 +596,10 @@ def _flash_attention_forward(
 
     # We will use `flash_varlen_fn` to prevent cross-example attention and also allow padding free approach under two cases:
     # Case 1. If position ids is provided and the position ids indicate packed sequences, see `_is_packed_sequence`.
+    #         --> not compile friendly, will be ignored if torch compile is used
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
-    # use `flash_varlen_fn` knowing we already have all necessary the kwargs.
+    #         use `flash_varlen_fn` knowing we already have all necessary the kwargs.
+    #         --> compile friendly, preferred option to use
     #
     # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
     # See #39121 for more information.
