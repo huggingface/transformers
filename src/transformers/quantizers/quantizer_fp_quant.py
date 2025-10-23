@@ -97,6 +97,10 @@ class FPQuantHfQuantizer(HfQuantizer):
     ):
         module, _ = get_module_from_name(model, param_name)
 
+        if target_device == "cpu" and param_name.endswith("weight"):
+            # Works agains hard-coded missing key dispatch to CPU
+            return
+
         # The module holds either:
         #  * `weight` when `store_master_weights=True`
         #  * `qweight` and `scales` when `store_master_weights=False` and `pseudoquantization=False`
@@ -139,9 +143,6 @@ class FPQuantHfQuantizer(HfQuantizer):
             fp_quant_linear_config=adapt_fp_quant_config(self.quantization_config),
         )
         model.config.quantization_config = self.quantization_config
-
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from fp_quant import FPQuantLinear

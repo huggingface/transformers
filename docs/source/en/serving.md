@@ -24,6 +24,7 @@ Transformer models can be efficiently deployed using libraries such as vLLM, Tex
 You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency well suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM, SGLang, or other inference engines remain our recommendations for large-scale production, `serve` avoids the extra runtime and operational overhead, and is on track to gain more production-oriented features.
 
 In this document, we dive into the different supported endpoints and modalities; we also cover the setup of several user interfaces that can be used on top of `transformers serve` in the following guides:
+
 - [Jan (text and MCP user interface)](./jan)
 - [Cursor (IDE)](./cursor)
 - [Open WebUI (text, image, speech user interface)](./open_webui)
@@ -379,7 +380,7 @@ CB is opt-in and currently applies to chat completions.
 ```sh
 transformers serve \
   --continuous-batching
-  --attn_implementation sdpa_paged
+  --attn_implementation "sdpa"
 ```
 
 ### Performance tips
@@ -389,11 +390,10 @@ transformers serve \
 ```sh
 transformers serve \
   --continuous_batching \
-  --attn_implementation paged_attention
+  --attn_implementation "flash_attention_2"
 ```
 
 > [!TIP]
-> If you choose `paged_attention`, you must install `flash-attn` separately: `pip install flash-attn --no-build-isolation`
 
 - `--dtype {bfloat16|float16}` typically improve throughput and memory use vs. `float32`
 

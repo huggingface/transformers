@@ -21,7 +21,8 @@
 
 import math
 import warnings
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -219,6 +220,7 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
 class VoxtralPreTrainedModel(PreTrainedModel):
     config: VoxtralConfig
     base_model_prefix = "model"
+    input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = None
     _skip_keys_device_placement = "past_key_values"
@@ -268,6 +270,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
     # Ignore copy
     config: VoxtralEncoderConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
     _no_split_modules = ["VoxtralEncoderLayer"]
     _can_record_outputs = {
         "attentions": VoxtralAttention,

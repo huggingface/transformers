@@ -15,8 +15,9 @@
 """PyTorch PatchTSMixer model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -681,6 +682,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     config: PatchTSMixerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
+    input_modalities = "time"
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):

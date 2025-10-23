@@ -16,7 +16,6 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import contextlib
-import copy
 import functools
 import glob
 import importlib.metadata
@@ -31,10 +30,10 @@ import sys
 import tempfile
 import time
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -66,7 +65,7 @@ from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
+from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -124,6 +123,7 @@ from .trainer_utils import (
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
+    load_sharded_checkpoint,
     neftune_post_forward_hook,
     number_of_arguments,
     seed_worker,
@@ -162,13 +162,11 @@ from .utils import (
     is_schedulefree_available,
     is_torch_hpu_available,
     is_torch_mlu_available,
-    is_torch_mps_available,
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
     is_torch_xla_available,
-    is_torch_xpu_available,
     is_torchao_available,
     logging,
     strtobool,
@@ -211,18 +209,18 @@ if is_peft_available():
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
-    from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
-        AutocastKwargs,
         DataLoaderConfiguration,
         DistributedDataParallelKwargs,
         DistributedType,
         load_fsdp_model,
         load_fsdp_optimizer,
+        release_memory,
         save_fsdp_model,
         save_fsdp_optimizer,
     )
+    from accelerate.utils.memory import clear_device_cache
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
@@ -320,7 +318,7 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
-        eval_dataset (Union[`torch.utils.data.Dataset`, dict[str, `torch.utils.data.Dataset`, `datasets.Dataset`]), *optional*):
+        eval_dataset (Union[`torch.utils.data.Dataset`, dict[str, `torch.utils.data.Dataset`], `datasets.Dataset`]), *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
@@ -328,12 +326,11 @@ class Trainer:
             Processing class used to process the data. If provided, will be used to automatically process the inputs
             for the model, and it will be saved along the model to make it easier to rerun an interrupted training or
             reuse the fine-tuned model.
-            This supersedes the `tokenizer` argument, which is now deprecated.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
 
-            The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
+            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to
             be able to choose different architectures according to hyper parameters (such as layer count, sizes of
             inner layers, dropout probabilities etc).
         compute_loss_func (`Callable`, *optional*):
@@ -739,6 +736,10 @@ class Trainer:
         # Internal variables to help with automatic batch size reduction
         self._train_batch_size = args.train_batch_size
         self._created_lr_scheduler = False
+
+        # Set use_cache for the model
+        if getattr(self.model, "config", None) is not None:
+            self.model.config.use_cache = self.args.use_cache
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
@@ -1454,70 +1455,57 @@ class Trainer:
             OptimizerNames.RMSPROP_8BIT,
             OptimizerNames.RMSPROP_32BIT,
         ]:
-            try:
-                from bitsandbytes.optim import AdamW, Lion, RMSprop
-
-                is_paged = False
-                optim_bits = 32
-                optimizer_cls = None
-                additional_optim_kwargs = adam_kwargs
-                if "paged" in args.optim:
-                    is_paged = True
-                if "8bit" in args.optim:
-                    optim_bits = 8
-                if "adam" in args.optim:
-                    optimizer_cls = AdamW
-                elif "lion" in args.optim:
-                    optimizer_cls = Lion
-                    additional_optim_kwargs = {"betas": (args.adam_beta1, args.adam_beta2)}
-                elif "rmsprop" in args.optim:
-                    optimizer_cls = RMSprop
-                    # Above we pass all `adam_kwargs` to the optimizer, here
-                    # we only pass `optim_args` which can be passed by the user.
-                    additional_optim_kwargs = optim_args
-                elif "ademamix" in args.optim:
-                    if is_bitsandbytes_available() and version.parse(
-                        importlib.metadata.version("bitsandbytes")
-                    ) < version.parse("0.44.0"):
-                        raise ValueError(
-                            "The AdEMAMix optimizer is not supported by your current version of `bitsandbytes`. "
-                            "Please install `bitsandbytes` >= 0.44.0."
-                        )
-
-                    from bitsandbytes.optim import AdEMAMix
-
-                    optimizer_cls = AdEMAMix
-                    additional_optim_kwargs = {
-                        "betas": (
-                            float(optim_args.get("beta1", args.adam_beta1)),
-                            float(optim_args.get("beta2", args.adam_beta2)),
-                            float(optim_args.get("beta3", 0.9999)),
-                        ),
-                        "alpha": float(optim_args.get("alpha", 5.0)),
-                        "eps": float(optim_args.get("eps", args.adam_epsilon)),
-                    }
-
-                    if "t_alpha" in optim_args:
-                        additional_optim_kwargs["t_alpha"] = int(optim_args["t_alpha"])
-
-                    if "t_beta3" in optim_args:
-                        additional_optim_kwargs["t_beta3"] = int(optim_args["t_beta3"])
-
-                bnb_kwargs = {"optim_bits": optim_bits}
-                if "rmsprop" not in args.optim:
-                    bnb_kwargs["is_paged"] = is_paged
-
-                optimizer_kwargs.update(additional_optim_kwargs)
-                optimizer_kwargs.update(bnb_kwargs)
-            except ImportError:
-                raise ValueError("Trainer tried to instantiate bnb optimizer but `bitsandbytes` is not installed!")
-            if is_bitsandbytes_available() and version.parse(
-                importlib.metadata.version("bitsandbytes")
-            ) < version.parse("0.41.1"):
-                logger.warning(
-                    "You are using 8-bit optimizers with a version of `bitsandbytes` < 0.41.1. "
-                    "It is recommended to update your version as a major bug has been fixed in 8-bit optimizers."
+            if not is_bitsandbytes_available():
+                raise ImportError(
+                    "You need to install `bitsandbytes` in order to use bitsandbytes optimizers: `pip install -U bitsandbytes`"
                 )
+
+            from bitsandbytes.optim import AdamW, Lion, RMSprop
+
+            is_paged = False
+            optim_bits = 32
+            optimizer_cls = None
+            additional_optim_kwargs = adam_kwargs
+            if "paged" in args.optim:
+                is_paged = True
+            if "8bit" in args.optim:
+                optim_bits = 8
+            if "adam" in args.optim:
+                optimizer_cls = AdamW
+            elif "lion" in args.optim:
+                optimizer_cls = Lion
+                additional_optim_kwargs = {"betas": (args.adam_beta1, args.adam_beta2)}
+            elif "rmsprop" in args.optim:
+                optimizer_cls = RMSprop
+                # Above we pass all `adam_kwargs` to the optimizer, here
+                # we only pass `optim_args` which can be passed by the user.
+                additional_optim_kwargs = optim_args
+            elif "ademamix" in args.optim:
+                from bitsandbytes.optim import AdEMAMix
+
+                optimizer_cls = AdEMAMix
+                additional_optim_kwargs = {
+                    "betas": (
+                        float(optim_args.get("beta1", args.adam_beta1)),
+                        float(optim_args.get("beta2", args.adam_beta2)),
+                        float(optim_args.get("beta3", 0.9999)),
+                    ),
+                    "alpha": float(optim_args.get("alpha", 5.0)),
+                    "eps": float(optim_args.get("eps", args.adam_epsilon)),
+                }
+
+                if "t_alpha" in optim_args:
+                    additional_optim_kwargs["t_alpha"] = int(optim_args["t_alpha"])
+
+                if "t_beta3" in optim_args:
+                    additional_optim_kwargs["t_beta3"] = int(optim_args["t_beta3"])
+
+            bnb_kwargs = {"optim_bits": optim_bits}
+            if "rmsprop" not in args.optim:
+                bnb_kwargs["is_paged"] = is_paged
+
+            optimizer_kwargs.update(additional_optim_kwargs)
+            optimizer_kwargs.update(bnb_kwargs)
         elif args.optim == OptimizerNames.ADAMW_ANYPRECISION:
             try:
                 from torchdistx.optimizers import AnyPrecisionAdamW
@@ -1805,8 +1793,6 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.RAY:
             params = trial
             params.pop("wandb", None)
-        elif self.hp_search_backend == HPSearchBackend.SIGOPT:
-            params = {k: int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
         elif self.hp_search_backend == HPSearchBackend.WANDB:
             params = trial
 
@@ -1825,8 +1811,6 @@ class Trainer:
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info(f"Trial: {trial.params}")
-        if self.hp_search_backend == HPSearchBackend.SIGOPT:
-            logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.hp_search_backend == HPSearchBackend.WANDB:
             logger.info(f"W&B Sweep parameters: {trial}")
         if self.is_deepspeed_enabled:
@@ -1864,15 +1848,15 @@ class Trainer:
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
                     raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            import ray.train
+            import ray.tune
 
             with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 checkpoint = None
                 if self.control.should_save:
                     self._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-                    checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+                    checkpoint = ray.tune.Checkpoint.from_directory(temp_checkpoint_dir)
                 metrics["objective"] = self.objective
-                ray.train.report(metrics, checkpoint=checkpoint)
+                ray.tune.report(metrics, checkpoint=checkpoint)
 
     def _tune_save_checkpoint(self, checkpoint_dir: str):
         output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
@@ -1895,40 +1879,6 @@ class Trainer:
 
         if model is None:
             raise RuntimeError("model_init should not return None.")
-
-        return model
-
-    def torch_jit_model_eval(self, model, dataloader, training=False):
-        if not training:
-            if dataloader is None:
-                logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
-                return model
-            example_batch = next(iter(dataloader))
-            example_batch = self._prepare_inputs(example_batch)
-            try:
-                jit_model = copy.copy(model)
-                jit_model.eval()
-                original_forward = jit_model.__dict__.pop("_original_forward", None)
-                # remove mixed precision hooks from the model
-                if original_forward:
-                    jit_model.forward = original_forward
-                autocast_handler = AutocastKwargs(cache_enabled=False)
-                with self.accelerator.autocast(autocast_handler=autocast_handler), torch.no_grad():
-                    if isinstance(example_batch, dict):
-                        jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
-                    else:
-                        jit_model = torch.jit.trace(
-                            jit_model,
-                            example_kwarg_inputs={key: example_batch[key] for key in example_batch},
-                            strict=False,
-                        )
-                jit_model = torch.jit.freeze(jit_model)
-                with torch.no_grad():
-                    jit_model(**example_batch)
-                    jit_model(**example_batch)
-                model = jit_model
-            except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
-                logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
         return model
 
@@ -1974,11 +1924,6 @@ class Trainer:
         # Multi-gpu training, 8bit models does not support DP
         if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
             model = nn.DataParallel(model)
-
-        if self.args.jit_mode_eval:
-            start_time = time.time()
-            model = self.torch_jit_model_eval(model, dataloader, training)
-            self.jit_compilation_time = round(time.time() - start_time, 4)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -2242,9 +2187,7 @@ class Trainer:
         self._train_batch_size = batch_size
         if self.args.auto_find_batch_size:
             if self.state.train_batch_size != self._train_batch_size:
-                from accelerate.utils import release_memory
-
-                (self.model_wrapped,) = release_memory(self.model_wrapped)
+                release_memory(self.model_wrapped)
                 self.model_wrapped = self.model
 
                 # Check for DeepSpeed *after* the initial pass and modify the config
@@ -2452,10 +2395,6 @@ class Trainer:
             epoch_dataloader = train_dataloader
             if hasattr(epoch_dataloader, "set_epoch"):
                 epoch_dataloader.set_epoch(epoch)
-
-            # Reset the past mems state at the beginning of each epoch if necessary.
-            if args.past_index >= 0:
-                self._past = None
 
             steps_in_epoch = (
                 len(epoch_dataloader)
@@ -2665,10 +2604,6 @@ class Trainer:
             if self.control.should_training_stop:
                 break
 
-        if args.past_index and hasattr(self, "_past"):
-            # Clean the state at the end of training
-            delattr(self, "_past")
-
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
             self._load_best_model()
@@ -2721,11 +2656,9 @@ class Trainer:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
             elif self.hp_search_backend == HPSearchBackend.RAY:
-                import ray.train
+                import ray.tune
 
-                run_id = ray.train.get_context().get_trial_id()
-            elif self.hp_search_backend == HPSearchBackend.SIGOPT:
-                run_id = trial.id
+                run_id = ray.tune.get_context().get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.WANDB:
                 import wandb
 
@@ -3515,7 +3448,7 @@ class Trainer:
         **kwargs,
     ) -> Union[BestRun, list[BestRun]]:
         """
-        Launch an hyperparameter search using `optuna` or `Ray Tune` or `SigOpt`. The optimized quantity is determined
+        Launch an hyperparameter search using `optuna` or `Ray Tune`. The optimized quantity is determined
         by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
         the sum of all metrics otherwise.
 
@@ -3531,8 +3464,8 @@ class Trainer:
         Args:
             hp_space (`Callable[["optuna.Trial"], dict[str, float]]`, *optional*):
                 A function that defines the hyperparameter search space. Will default to
-                [`~trainer_utils.default_hp_space_optuna`] or [`~trainer_utils.default_hp_space_ray`] or
-                [`~trainer_utils.default_hp_space_sigopt`] depending on your backend.
+                [`~trainer_utils.default_hp_space_optuna`] or [`~trainer_utils.default_hp_space_ray`]
+                depending on your backend.
             compute_objective (`Callable[[dict[str, float]], float]`, *optional*):
                 A function computing the objective to minimize or maximize from the metrics returned by the `evaluate`
                 method. Will default to [`~trainer_utils.default_compute_objective`].
@@ -3545,7 +3478,7 @@ class Trainer:
                 `"minimize"` and `"maximize"`, you should pick `"minimize"` when optimizing the validation loss,
                 `"maximize"` when optimizing one or several metrics.
             backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
-                The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
+                The backend to use for hyperparameter search. Will default to optuna or Ray Tune, depending
                 on which one is installed. If all are installed, will default to optuna.
             hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
                 A function that defines the trial/run name. Will default to None.
@@ -3560,9 +3493,6 @@ class Trainer:
                   If `resources_per_trial` is not set in the `kwargs`, it defaults to 1 CPU core and 1 GPU (if available).
                   If `progress_reporter` is not set in the `kwargs`,
                   [ray.tune.CLIReporter](https://docs.ray.io/en/latest/tune/api/doc/ray.tune.CLIReporter.html) is used.
-                - `sigopt`: the parameter `proxies` from
-                  [sigopt.Connection.set_proxies](https://docs.sigopt.com/support/faq#how-do-i-use-sigopt-with-a-proxy).
-
         Returns:
             [`trainer_utils.BestRun` or `list[trainer_utils.BestRun]`]: All the information about the best run or best
             runs for multi-objective optimization. Experiment summary can be found in `run_summary` attribute for Ray
@@ -3610,7 +3540,7 @@ class Trainer:
                 )
                 logs.update(speed_metrics("train", start_time, num_tokens=current_session_num_tokens))
 
-        output = {**logs, **{"step": self.state.global_step}}
+        output = {**logs, "step": self.state.global_step}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
@@ -3643,8 +3573,6 @@ class Trainer:
                 "The batch received was empty, your model won't be able to train on it. Double-check that your "
                 f"training dataset contains keys expected by the model: {','.join(self._signature_columns)}."
             )
-        if self.args.past_index >= 0 and self._past is not None:
-            inputs["mems"] = self._past
 
         return inputs
 
@@ -3841,22 +3769,7 @@ class Trainer:
                 self.args.torch_empty_cache_steps is not None
                 and self.state.global_step % self.args.torch_empty_cache_steps == 0
             ):
-                if is_torch_xpu_available():
-                    torch.xpu.empty_cache()
-                elif is_torch_mlu_available():
-                    torch.mlu.empty_cache()
-                elif is_torch_musa_available():
-                    torch.musa.empty_cache()
-                elif is_torch_npu_available():
-                    torch.npu.empty_cache()
-                elif is_torch_mps_available():
-                    torch.mps.empty_cache()
-                elif is_torch_hpu_available():
-                    logger.warning(
-                        "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
-                    )
-                else:
-                    torch.cuda.empty_cache()
+                clear_device_cache()
 
             kwargs = {}
 
@@ -3917,10 +3830,6 @@ class Trainer:
                 kwargs["num_items_in_batch"] = num_items_in_batch
             inputs = {**inputs, **kwargs}
         outputs = model(**inputs)
-        # Save past state if it exists
-        # TODO: this needs to be fixed and made cleaner later.
-        if self.args.past_index >= 0:
-            self._past = outputs[self.args.past_index]
 
         # User-defined compute_loss function
         if self.compute_loss_func is not None:
@@ -4240,7 +4149,7 @@ class Trainer:
         You can also subclass and override this method to inject custom behavior.
 
         Args:
-            eval_dataset (Union[`Dataset`, dict[str, `Dataset`]), *optional*):
+            eval_dataset (Union[`Dataset`, dict[str, `Dataset`]], *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
                 evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
@@ -4303,8 +4212,6 @@ class Trainer:
         )
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
-        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
-            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
         output.metrics.update(
@@ -4373,8 +4280,6 @@ class Trainer:
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         total_batch_size = self.args.eval_batch_size * self.args.world_size
-        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
-            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
         output.metrics.update(
@@ -4461,9 +4366,6 @@ class Trainer:
         # Do this before wrapping.
         eval_dataset = getattr(dataloader, "dataset", None)
 
-        if args.past_index >= 0:
-            self._past = None
-
         # Initialize containers
         all_losses = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
         all_preds = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
@@ -4548,9 +4450,6 @@ class Trainer:
 
         # After all calls to `.gather_function`, reset to `gather_for_metrics`:
         self.gather_function = self.accelerator.gather_for_metrics
-        if args.past_index and hasattr(self, "_past"):
-            # Clean the state at the end of the evaluation loop
-            delattr(self, "_past")
 
         # Gather all remaining tensors and put them back on the CPU
         all_losses = all_losses.get_arrays()
@@ -4595,8 +4494,6 @@ class Trainer:
             metrics[f"{metric_key_prefix}_loss"] = np.concatenate(all_losses).mean().item()
         elif isinstance(all_losses, np.ndarray):
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
-        if hasattr(self, "jit_compilation_time"):
-            metrics[f"{metric_key_prefix}_jit_compilation_time"] = self.jit_compilation_time
         if hasattr(self, "model_preparation_time"):
             metrics[f"{metric_key_prefix}_model_preparation_time"] = self.model_preparation_time
 
@@ -4620,9 +4517,7 @@ class Trainer:
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
-        elif (self.args.distributed_state is not None and self.args.distributed_state.distributed_type != "NO") or (
-            self.args.distributed_state is None and self.args.local_rank != -1
-        ):
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             tensors = distributed_concat(tensors)
         return tensors
 
@@ -4721,9 +4616,6 @@ class Trainer:
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
                     else:
                         logits = outputs
-                    # TODO: this needs to be fixed and made cleaner later.
-                    if self.args.past_index >= 0:
-                        self._past = outputs[self.args.past_index - 1]
 
         if prediction_loss_only:
             return (loss, None, None)
@@ -5074,7 +4966,18 @@ class Trainer:
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
-        args = {"deepspeed_plugin": self.args.deepspeed_plugin, "dataloader_config": dataloader_config}
+        fsdp_plugin = None
+        if self.args.fsdp_plugin_args is not None:
+            from accelerate.utils import FullyShardedDataParallelPlugin
+
+            fsdp_plugin = FullyShardedDataParallelPlugin(**self.args.fsdp_plugin_args)
+
+        args = {
+            "mixed_precision": self.args.mixed_precision,
+            "dataloader_config": dataloader_config,
+            "fsdp_plugin": fsdp_plugin,
+            "deepspeed_plugin": self.args.deepspeed_plugin,
+        }
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
@@ -5088,13 +4991,22 @@ class Trainer:
         if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
             if self.args.parallelism_config is not None:
-                if version.parse(accelerate_version) > version.parse("1.10.1"):
+                if is_accelerate_available("1.10.1"):
                     if self.args.parallelism_config is not None:
                         from accelerate import ParallelismConfig
 
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
                     raise ValueError("Requires accelerate>1.10.1 to use Tensor Parallelism.")
+
+        if is_accelerate_available("1.2.0"):
+            # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
+            from accelerate.utils import TorchDynamoPlugin
+
+            dynamo_plugin = TorchDynamoPlugin(
+                backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode
+            )
+            args["dynamo_plugin"] = dynamo_plugin
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
@@ -5209,9 +5121,10 @@ class Trainer:
                 pass
 
         if num_items_in_batch is not None:
-            if self.args.average_tokens_across_devices and self.args.world_size >= 1:
-                num_items_in_batch = self.accelerator.gather(num_items_in_batch.to(device)).sum()
-            elif self.args.n_gpu >= 1:
+            if self.args.average_tokens_across_devices:
+                if self.args.world_size > 1:
+                    num_items_in_batch = self.accelerator.gather(num_items_in_batch.to(device)).sum()
+            elif self.args.n_gpu > 1:
                 # In DP case, if we don't average, we need to divide by the number of gpu. This is the simplest approximation.
                 # Otherwise, we would have to scatter labels and calculate num_items_in_batch for each gpu.
                 num_items_in_batch = num_items_in_batch // self.args.n_gpu

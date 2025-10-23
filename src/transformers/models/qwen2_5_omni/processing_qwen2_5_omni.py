@@ -32,17 +32,17 @@ from ...video_utils import VideoInput
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
 # and does not use them in video processor class
-class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    min_frames: Optional[int]
-    max_frames: Optional[int]
-    use_audio_in_video: Optional[bool]
-    seconds_per_chunk: Optional[float]
-    position_id_per_seconds: Optional[int]
+class Qwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
+    use_audio_in_video: bool
+    seconds_per_chunk: float
+    position_id_per_seconds: Union[int, float]
 
 
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
@@ -341,11 +341,13 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
+        video_processor_input_names = self.video_processor.model_input_names
         return list(
             dict.fromkeys(
                 tokenizer_input_names
                 + feature_extractor_input_names
                 + image_processor_input_names
+                + video_processor_input_names
                 + ["feature_attention_mask"]
                 + ["video_second_per_grid"]
             )

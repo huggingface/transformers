@@ -328,15 +328,43 @@ class TorchAoHfQuantizer(HfQuantizer):
                     module_fqn, _ = param_name.rsplit(".", 1)
                     c = None
                     if module_fqn in config.module_fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "module fqn should not start with`re:`, which is used for specifying regex"
+                        )
                         c = config.module_fqn_to_config[module_fqn]
                     else:
-                        c = config.module_fqn_to_config.get("_default", None)
+                        for maybe_module_fqn_pattern in config.module_fqn_to_config:
+                            if not maybe_module_fqn_pattern.startswith("re:"):
+                                continue
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
+                                # we'll apply the config for first fully matched pattern
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                        else:
+                            c = config.module_fqn_to_config.get("_default", None)
+
                     if c is not None:
                         # filter_fn: not filtering out any modules
                         quantize_(module, c, filter_fn=lambda x, fqn: True)
                     return
 
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
+
+    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
+        """
+        Setting model attributes and/or converting model before weights loading. At this point
+        the model should be initialized on the meta device so you can freely manipulate the skeleton
+        of the model in order to replace modules in-place. Make sure to override the abstract method `_process_model_before_weight_loading`.
+
+        Args:
+            model (`~transformers.PreTrainedModel`):
+                The model to quantize
+            kwargs (`dict`, *optional*):
+                The keyword arguments that are passed along `_process_model_before_weight_loading`.
+        """
+        super().preprocess_model(model, config, dtype, checkpoint_files, **kwargs)
+        # Torchao needs access to all metadata later
+        self.set_metadata(checkpoint_files)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""

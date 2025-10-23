@@ -15,11 +15,11 @@
 
 import inspect
 import json
+import os
 import random
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -136,7 +136,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
-    def prepare_text_inputs(self, batch_size: Optional[int] = None, modalities: Optional[Union[str, list]] = None):
+    def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
         if isinstance(modalities, str):
             modalities = [modalities]
 
@@ -158,7 +158,7 @@ class ProcessorTesterMixin:
         ] * (batch_size - 2)
 
     @require_vision
-    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+    def prepare_image_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
         if batch_size is None:
             return prepare_image_inputs()[0]
@@ -167,7 +167,7 @@ class ProcessorTesterMixin:
         return prepare_image_inputs() * batch_size
 
     @require_vision
-    def prepare_video_inputs(self, batch_size: Optional[int] = None):
+    def prepare_video_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
         video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
         video_input = np.array(video_input)
@@ -175,7 +175,7 @@ class ProcessorTesterMixin:
             return video_input
         return [video_input] * batch_size
 
-    def prepare_audio_inputs(self, batch_size: Optional[int] = None):
+    def prepare_audio_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy audio."""
         raw_speech = floats_list((1, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
@@ -222,8 +222,7 @@ class ProcessorTesterMixin:
         processor_first = self.get_processor()
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            # Save with `legacy_serialization=False` so that all attrbiutes are saved in one json file
-            saved_files = processor_first.save_pretrained(tmpdirname, legacy_serialization=False)
+            saved_files = processor_first.save_pretrained(tmpdirname)
             check_json_file_has_correct_format(saved_files[0])
 
             # Load it back and check if loaded correctly
@@ -383,7 +382,7 @@ class ProcessorTesterMixin:
 
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         """
-        We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
+        We use do_rescale=True, rescale_factor=-1.0 to ensure that image_processor kwargs are preserved in the processor.
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
@@ -391,7 +390,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
-            "image_processor", do_rescale=True, rescale_factor=-1
+            "image_processor", do_rescale=True, rescale_factor=-1.0
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -437,7 +436,9 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
+        inputs = processor(
+            text=input_str, images=image_input, do_rescale=True, rescale_factor=-1.0, return_tensors="pt"
+        )
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs(self):
@@ -455,7 +456,7 @@ class ProcessorTesterMixin:
             images=image_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="max_length",
             max_length=76,
         )
@@ -478,7 +479,7 @@ class ProcessorTesterMixin:
             images=image_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="longest",
             max_length=76,
         )
@@ -503,7 +504,7 @@ class ProcessorTesterMixin:
             _ = processor(
                 text=input_str,
                 images=image_input,
-                images_kwargs={"do_rescale": True, "rescale_factor": -1},
+                images_kwargs={"do_rescale": True, "rescale_factor": -1.0},
                 do_rescale=True,
                 return_tensors="pt",
             )
@@ -534,7 +535,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -557,7 +558,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -683,7 +684,7 @@ class ProcessorTesterMixin:
 
     def test_video_processor_defaults_preserved_by_video_kwargs(self):
         """
-        We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
+        We use do_rescale=True, rescale_factor=-1.0 to ensure that image_processor kwargs are preserved in the processor.
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
@@ -691,7 +692,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["video_processor"] = self.get_component(
-            "video_processor", do_rescale=True, rescale_factor=-1
+            "video_processor", do_rescale=True, rescale_factor=-1.0
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=167, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -747,7 +748,7 @@ class ProcessorTesterMixin:
             videos=video_input,
             do_sample_frames=False,
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             return_tensors="pt",
         )
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
@@ -768,7 +769,7 @@ class ProcessorTesterMixin:
             do_sample_frames=False,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="max_length",
             max_length=176,
         )
@@ -792,7 +793,7 @@ class ProcessorTesterMixin:
             do_sample_frames=False,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="longest",
             max_length=176,
         )
@@ -818,7 +819,7 @@ class ProcessorTesterMixin:
                 text=input_str,
                 videos=video_input,
                 do_sample_frames=False,
-                videos_kwargs={"do_rescale": True, "rescale_factor": -1},
+                videos_kwargs={"do_rescale": True, "rescale_factor": -1.0},
                 do_rescale=True,
                 return_tensors="pt",
             )
@@ -837,7 +838,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 
@@ -860,7 +861,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 
@@ -942,17 +943,15 @@ class ProcessorTesterMixin:
         if "chat_template" not in {*signature.parameters.keys()}:
             self.skipTest("Processor doesn't accept chat templates at input")
 
-        existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
         processor.chat_template = "test template"
         with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.save_pretrained(tmpdirname, save_jinja_files=False)
-            self.assertTrue(Path(tmpdirname, "chat_template.json").is_file())
-            self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
+            processor.save_pretrained(tmpdirname)
+            with open(Path(tmpdirname, "chat_template.json"), "w") as fp:
+                json.dump({"chat_template": processor.chat_template}, fp)
+            os.remove(Path(tmpdirname, "chat_template.jinja"))
+
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-            # When we don't use single-file chat template saving, processor and tokenizer chat templates
-            # should remain separate
-            self.assertEqual(getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname)
@@ -976,12 +975,6 @@ class ProcessorTesterMixin:
             # When we save as single files, tokenizers and processors share a chat template, which means
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
-
-        with self.assertRaises(ValueError):
-            # Saving multiple templates in the legacy format is not permitted
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                processor.chat_template = {"default": "a", "secondary": "b"}
-                processor.save_pretrained(tmpdirname, save_jinja_files=False)
 
     @require_torch
     def _test_apply_chat_template(

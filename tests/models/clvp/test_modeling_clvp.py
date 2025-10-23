@@ -162,8 +162,6 @@ class ClvpEncoderTester:
 class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpEncoder,) if is_torch_available() else ()
 
-    test_torchscript = False
-
     def setUp(self):
         self.model_tester = ClvpEncoderTester(self)
         self.encoder_config_tester = ConfigTester(self, config_class=ClvpEncoderConfig, hidden_size=32)
@@ -357,10 +355,10 @@ class ClvpModelForConditionalGenerationTester:
         speech_config = self.clvp_encoder_tester.get_config()
         speech_config.vocab_size = 300
 
-        return ClvpConfig.from_sub_model_configs(
-            text_config,
-            speech_config,
-            decoder_config,
+        return ClvpConfig(
+            text_config=text_config,
+            speech_config=speech_config,
+            decoder_config=decoder_config,
             projection_dim=16,
         )
 
@@ -410,7 +408,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)

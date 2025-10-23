@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -417,6 +418,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     config: ParakeetCTCConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ParakeetEncoderBlock"]
     _supports_flat_attention_mask = True
