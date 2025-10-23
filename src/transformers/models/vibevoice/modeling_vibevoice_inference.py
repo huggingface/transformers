@@ -128,9 +128,8 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
 
     def _process_speech_inputs(self, speech_tensors, speech_masks):
         """Process speech inputs through tokenizers and connectors."""
-        # TODO can remove unsqueeze since if we keep batch dim in processor?
-        encoder_output = self.model.acoustic_tokenizer.encode(speech_tensors.unsqueeze(1))
-        acoustic_latents = self.model.acoustic_tokenizer.sample(encoder_output)[0]
+        # TODO (ebezzam) can remove unsqueeze since if we keep batch dim in processor?
+        acoustic_latents = self.model.acoustic_tokenizer.encode(speech_tensors.unsqueeze(1), sample=True).latents
 
         # Apply scaling and bias
         acoustic_features = (acoustic_latents + self.model.speech_bias_factor.to(acoustic_latents.device)) * self.model.speech_scaling_factor.to(acoustic_latents.device)

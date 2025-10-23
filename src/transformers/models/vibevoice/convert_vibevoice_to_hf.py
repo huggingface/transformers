@@ -136,7 +136,7 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     # clean up acoustic tokenizer config
     model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-")))
     if "std_dist_type" in model_config["acoustic_tokenizer_config"]:
-        model_config["acoustic_tokenizer_config"]["sample_latent"] = False if model_config["acoustic_tokenizer_config"]["std_dist_type"] == "none" else True
+        # always gaussian
         del model_config["acoustic_tokenizer_config"]["std_dist_type"]
     # -- reverse order of ratios here instead of in modeling
     model_config["acoustic_tokenizer_config"]["downsampling_ratios"] = list(reversed(model_config["acoustic_tokenizer_config"]["encoder_ratios"]))
@@ -145,6 +145,7 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     model_config["acoustic_tokenizer_config"]["depths"] = model_config["acoustic_tokenizer_config"].pop("encoder_depths")
     model_config["acoustic_tokenizer_config"]["hidden_size"] = model_config["acoustic_tokenizer_config"].pop("vae_dim")
     model_config["acoustic_tokenizer_config"]["bias"] = model_config["acoustic_tokenizer_config"].pop("conv_bias")
+    model_config["acoustic_tokenizer_config"]["vae_std"] = model_config["acoustic_tokenizer_config"].pop("fix_std")
     # -- remove decoder parameters as they can be derived from encoder ones
     if "decoder_depths" in model_config["acoustic_tokenizer_config"]:
         del model_config["acoustic_tokenizer_config"]["decoder_depths"]

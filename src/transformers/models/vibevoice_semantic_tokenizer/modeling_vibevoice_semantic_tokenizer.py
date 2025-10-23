@@ -29,7 +29,7 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_vibevoice_semantic_tokenizer import VibeVoiceSemanticTokenizerConfig
 
 
@@ -238,12 +238,8 @@ class VibeVoiceSemanticTokenizerConvNext1dLayer(nn.Module):
         self.norm = VibeVoiceSemanticTokenizerRMSNorm(hidden_size, eps=config.rms_norm_eps)
         self.ffn_norm = VibeVoiceSemanticTokenizerRMSNorm(hidden_size, eps=config.rms_norm_eps)
         self.ffn = VibeVoiceEncoderFeedForward(config, hidden_size)
-        if config.layer_scale_init_value > 0:
-            self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
-            self.ffn_gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
-        else:
-            self.gamma = None
-            self.ffn_gamma = None
+        self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
+        self.ffn_gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
 
         # TODO (ebezzam) original code has option for DropPath but is never actually used (and `nn.modules.DropPath` does not exist):
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L637
@@ -273,8 +269,7 @@ class VibeVoiceSemanticTokenizerConvNext1dLayer(nn.Module):
         # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L382
         hidden_states = F.pad(hidden_states, (self.causal_padding, 0))
         hidden_states = self.mixer(hidden_states)
-        if self.gamma is not None:
-            hidden_states = hidden_states * self.gamma.unsqueeze(-1)
+        hidden_states = hidden_states * self.gamma.unsqueeze(-1)
         # (ebezzam) original code (https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653)
         # as mentioned above, drop_path is not used and the VibeVoice authors don't use the `forward` method but a custom
         # call which does `residual + hidden_states` directly (see link below), which is same as using identity
@@ -286,8 +281,7 @@ class VibeVoiceSemanticTokenizerConvNext1dLayer(nn.Module):
         hidden_states = self.ffn_norm(hidden_states.transpose(1, 2))  # [B, T, C]
         hidden_states = self.ffn(hidden_states)  # FFN expects [B, T, C]
         hidden_states = hidden_states.transpose(1, 2)  # Back to [B, C, T]
-        if self.ffn_gamma is not None:
-            hidden_states = hidden_states * self.ffn_gamma.unsqueeze(-1)
+        hidden_states = hidden_states * self.ffn_gamma.unsqueeze(-1)
         # (ebezzam) see comment above
         hidden_states = residual + self.drop_path(hidden_states)
         return hidden_states
@@ -391,9 +385,10 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
         # Initialize encoder
         self.encoder = VibeVoiceSemanticTokenizerEncoder(config)
 
-        # Initialize weights and apply final processing
+        # Initialize weights
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def encode(self, audio, past_conv_values=None, sample_indices=None, use_cache=None):
         r"""
@@ -421,6 +416,7 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
             past_conv_values=past_conv_values if use_cache else None,
         )
 
+    @can_return_tuple
     @auto_docstring
     def forward(self, audio, past_conv_values=None, sample_indices=None, use_cache=None):
         r"""
