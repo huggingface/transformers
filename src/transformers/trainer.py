@@ -3635,23 +3635,32 @@ class Trainer:
             getattr(self.accelerator, "parallelism_config", None) is not None
             and self.accelerator.parallelism_config.cp_enabled
         ):
-            if hasattr(model, "config"):
-                if model.config._attn_implementation != "sdpa":
-                    raise ValueError(
-                        f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
-                    )
+            if self.accelerator.parallelism_config.backend == "torch":
+                if hasattr(model, "config"):
+                    if model.config._attn_implementation != "sdpa":
+                        raise ValueError(
+                            f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
+                        )
+
+                if "shift_labels" not in inputs:
+                    logger.warning_once("Shift labels not found in the inputs, shifting manually")
+                    if "labels" in inputs:
+                        _ignore_index = -100
+                        labels = nn.functional.pad(inputs["labels"], (0, 1), value=_ignore_index)
+                        inputs["shift_labels"] = labels[:, 1:].contiguous()
+
+            # carve out space to make it clear there are other backends with different requirements, even though no code needs to be run at the moment
+            elif self.accelerator.parallelism_config.backend == "deepspeed":
+                # - accelerator.parallelism_config performs the `model.config._attn_implementation` checks already and it supports more than `dspa`
+                # - UlyssesSPDataLoaderAdapter called from Accelerate performs the `shift_label` creation - must not interfere
+                # - position_ids generation should be done by HF Trainer if it wasn't done by the user
+                pass
 
             if "position_ids" not in inputs:
                 logger.warning_once("Position IDs not found in the inputs, generating manually")
                 inputs["position_ids"] = torch.arange(
                     inputs["input_ids"].size(1), device=inputs["input_ids"].device
                 ).expand(inputs["input_ids"].size(0), -1)
-            if "shift_labels" not in inputs:
-                logger.warning_once("Shift labels not found in the inputs, shifting manually")
-                if "labels" in inputs:
-                    _ignore_index = -100
-                    labels = nn.functional.pad(inputs["labels"], (0, 1), value=_ignore_index)
-                    inputs["shift_labels"] = labels[:, 1:].contiguous()
 
             buffers = []
             buffer_seq_dims = []
@@ -3820,6 +3829,33 @@ class Trainer:
         Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
         make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.backend == "deepspeed":
+            unwrapped_model = self.accelerator.unwrap_model(model)
+
+            outputs = model(**inputs)
+            shift_labels = inputs["shift_labels"]
+            loss = unwrapped_model.loss_function(
+                logits=outputs.logits,
+                labels=None,
+                shift_labels=shift_labels,
+                vocab_size=unwrapped_model.config.vocab_size,
+            )
+
+            if pc.cp_size > 1:
+                sp_group = self.accelerator.torch_device_mesh["cp"].get_group()
+                sp_world_size = pc.cp_size
+                # differentiable weighted per-shard-loss aggregation across ranks
+                losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
+                # special dealing with SFT that has prompt tokens that aren't used in loss computation
+                good_tokens = (shift_labels != -100).view(-1).sum()
+                good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
+                total_loss = sum(losses_per_rank[rank] * good_tokens_per_rank[rank] for rank in range(sp_world_size))
+                total_good_tokens = sum(good_tokens_per_rank)
+                loss = total_loss / max(total_good_tokens, 1)
+
+            return (loss, outputs) if return_outputs else loss
+
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
         else:
@@ -3913,7 +3949,11 @@ class Trainer:
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         # We are in N-D parallelism if we have parallelism_config set, so we check accelerate if we're on a to_save rank
         elif getattr(self.accelerator, "parallelism_config", None) is not None:
-            if self.accelerator.should_save_model:
+            # deepspeed already takes care of saving the checkpoint below, so we need this only for the torch cp backend
+            if (
+                self.accelerator.should_save_model
+                and getattr(self.accelerator, "parallelism_config").backend == "torch"
+            ):
                 self._save(output_dir)
         # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
         elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
@@ -4981,9 +5021,11 @@ class Trainer:
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
-            if not is_accelerate_available("1.10.1"):
+            # XXX: this will need to change once https://github.com/huggingface/accelerate/pull/3817 is merged and 1.11.1 is out
+            min_accelerate_version = "1.10.1"
+            if not is_accelerate_available(min_accelerate_version):
                 raise ImportError(
-                    "ParallelismConfig requires accelerate v1.10.1 and above. Please upgrade accelerate to use this feature."
+                    f"ParallelismConfig requires accelerate>={min_accelerate_version}). Please upgrade accelerate to use this feature."
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
@@ -5136,7 +5178,9 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                if pc := getattr(self.accelerator, "parallelism_config", None):
+                # XXX: double check if this is only for fsdp
+                pc = getattr(self.accelerator, "parallelism_config", None)
+                if pc is not None and pc.backend == "torch":
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
 
         return num_items_in_batch
