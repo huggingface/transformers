@@ -747,7 +747,6 @@ class T5Stack(T5PreTrainedModel):
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.config.is_decoder:
-            # Decoder: causal + padding combined
             causal_mask = create_causal_mask(
                 config=self.config,
                 input_embeds=inputs_embeds,
@@ -756,13 +755,10 @@ class T5Stack(T5PreTrainedModel):
                 past_key_values=past_key_values,
             )
         else:
-            # Encoder: bidirectional attention mask
             causal_mask = create_bidirectional_mask(
                 config=self.config,
                 input_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                cache_position=None,
-                past_key_values=None,
             )
 
         # If a 2D or 3D attention mask is provided for the cross-attention
@@ -773,8 +769,6 @@ class T5Stack(T5PreTrainedModel):
                 config=self.config,
                 input_embeds=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                cache_position=None,
-                past_key_values=None,
             )
         else:
             encoder_extended_attention_mask = None
