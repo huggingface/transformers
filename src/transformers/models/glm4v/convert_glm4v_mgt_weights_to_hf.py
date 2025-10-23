@@ -78,13 +78,13 @@ def _apply_rope_permute(q_or_k: torch.Tensor, blocks: int, head_dim: int, rotary
 
 
 def merge_qkv(
-        sd_list,
-        original_tp,
-        num_attention_heads,
-        multi_query_group_num,
-        attention_dim,
-        interleaved_qkv,
-        convert_neox_to_llama: bool = True,
+    sd_list,
+    original_tp,
+    num_attention_heads,
+    multi_query_group_num,
+    attention_dim,
+    interleaved_qkv,
+    convert_neox_to_llama: bool = True,
 ):
     rotary_dim = attention_dim // 2
     group_size = (num_attention_heads // multi_query_group_num + 2) * attention_dim
@@ -129,13 +129,7 @@ def merge_qkv(
     return q, k, v
 
 
-def merge_qkv_vit(
-        sd_list,
-        original_tp,
-        num_attention_heads,
-        multi_query_group_num,
-        attention_dim
-):
+def merge_qkv_vit(sd_list, original_tp, num_attention_heads, multi_query_group_num, attention_dim):
     group_size = (num_attention_heads // multi_query_group_num + 2) * attention_dim
     q, k, v = [], [], []
     for sd in sd_list:
@@ -189,13 +183,13 @@ def split_glu(sd, cnt, idx):
 
 
 def merge_tensors(
-        tp_sd,
-        keys,
-        original_tp,
-        target_tp,
-        current_tp,
-        slice_dim=None,
-        merge_fn=None,
+    tp_sd,
+    keys,
+    original_tp,
+    target_tp,
+    current_tp,
+    slice_dim=None,
+    merge_fn=None,
 ):
     cnt = original_tp // target_tp
     offset = cnt * current_tp
@@ -232,7 +226,7 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
     layered_dict["others"] = {}
     for key, value in state_dict.items():
         if not any(f"model.language_model.layers.{i}." in key for i in range(num_layers)) and not any(
-                f"model.visual.blocks.{i}." in key for i in range(vision_num_layers)
+            f"model.visual.blocks.{i}." in key for i in range(vision_num_layers)
         ):
             layered_dict["others"][key] = value
 
@@ -275,7 +269,7 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
 
         save_file(shard, shard_path, metadata={"format": "pt"})
         print(f"Saved shard {i + 1}/{len(shards)}: {shard_filename}")
-        print(f"  Shard size: {sum(p.numel() * p.element_size() for p in shard.values()) / (1024 ** 3):.2f} GB")
+        print(f"  Shard size: {sum(p.numel() * p.element_size() for p in shard.values()) / (1024**3):.2f} GB")
         print(f"  Keys in shard: {len(shard)}")
 
     index_path = os.path.join(output_path, "model.safetensors.index.json")
