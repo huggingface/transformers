@@ -97,7 +97,7 @@ class MaskFormerModelTester:
         return config, pixel_values, pixel_mask, mask_labels, class_labels
 
     def get_config(self):
-        return MaskFormerConfig.from_backbone_and_decoder_configs(
+        return MaskFormerConfig(
             backbone_config=SwinConfig(
                 depths=[1, 1, 1, 1],
                 embed_dim=16,
@@ -205,7 +205,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
 
     is_encoder_decoder = False
-    test_pruning = False
+
     test_missing_keys = False
     zero_init_hidden_state = True
     test_torch_exportable = True

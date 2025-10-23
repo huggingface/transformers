@@ -109,6 +109,3 @@ model = AutoModel.from_config(config)
 
 ## 推送到 Hub
 [[autodoc]] utils.PushToHubMixin
-
-## 分片检查点
-[[autodoc]] modeling_utils.load_sharded_checkpoint

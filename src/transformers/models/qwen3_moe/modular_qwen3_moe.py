@@ -49,6 +49,7 @@ logger = logging.get_logger(__name__)
 class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        del self.layer_type
         self.sliding_window = getattr(config, "sliding_window", None)
 
 
@@ -77,7 +78,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         routing_weights, selected_experts = torch.topk(routing_weights, self.num_experts_per_tok, dim=-1)
         if self.norm_topk_prob:
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        routing_weights = routing_weights.to(router_logits.dtype)
         return selected_experts, routing_weights
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

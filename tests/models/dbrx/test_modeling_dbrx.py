@@ -15,8 +15,6 @@
 
 import unittest
 
-from parameterized import parameterized
-
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow
 
@@ -86,22 +84,7 @@ class DbrxModelTester(CausalLMModelTester):
 
 @require_torch
 class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (DbrxModel, DbrxForCausalLM) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": DbrxModel,
-            "text-generation": DbrxForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = DbrxModelTester
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
@@ -122,21 +105,6 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip(reason="Dbrx models do not work with offload")
     def test_disk_offload_bin(self):
         pass
-
-    @unittest.skip("Dbrx doesn't have RoPE scaling implemented")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Dbrx doesn't have RoPE scaling implemented")
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
-
-    #
-    # @unittest.skip(reason="Not that big not that slow offload")
-    # def test_model_is_small(self):
-    #     pass
-    #
 
 
 @require_torch

@@ -967,6 +967,7 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
     config: ConditionalDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [r"ConditionalDetrConvEncoder", r"ConditionalDetrEncoderLayer", r"ConditionalDetrDecoderLayer"]
 
     def _init_weights(self, module):
@@ -1512,11 +1513,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         self.post_init()
 
     # taken from https://github.com/Atten4Vis/conditionalDETR/blob/master/models/conditional_detr.py
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @auto_docstring

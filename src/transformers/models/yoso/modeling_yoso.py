@@ -15,7 +15,6 @@
 """PyTorch YOSO model."""
 
 import math
-from pathlib import Path
 from typing import Optional, Union
 
 import torch
@@ -33,9 +32,10 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     auto_docstring,
+    is_kernels_available,
     is_ninja_available,
     is_torch_cuda_available,
     logging,
@@ -51,17 +51,12 @@ lsh_cumulation = None
 
 def load_cuda_kernels():
     global lsh_cumulation
-    from torch.utils.cpp_extension import load
+    if not is_kernels_available():
+        raise ImportError("kernels is not installed, please install it with `pip install kernels`")
+    from kernels import get_kernel
 
-    def append_root(files):
-        src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "yoso"
-        return [src_folder / file for file in files]
-
-    src_files = append_root(["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"])
-
-    load("fast_lsh_cumulation", src_files, verbose=True)
-
-    import fast_lsh_cumulation as lsh_cumulation
+    yoso = get_kernel("kernels-community/yoso")
+    lsh_cumulation = yoso.lsh_cumulation
 
 
 def to_contiguous(input_tensors):
@@ -244,7 +239,6 @@ class YosoEmbeddings(nn.Module):
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2, persistent=False
         )
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "token_type_ids",
             torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
@@ -276,18 +270,18 @@ class YosoEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings += position_embeddings
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
 
 class YosoSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -310,9 +304,6 @@ class YosoSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = (
-            position_embedding_type if position_embedding_type is not None else config.position_embedding_type
-        )
 
         self.use_expectation = config.use_expectation
         self.hash_code_len = config.hash_code_len
@@ -449,29 +440,10 @@ class YosoSelfOutput(nn.Module):
 
 
 class YosoAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
-        self.self = YosoSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = YosoSelfAttention(config)
         self.output = YosoSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         self_outputs = self.self(hidden_states, attention_mask, output_attentions)
@@ -674,14 +646,6 @@ class YosoModel(YosoPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(

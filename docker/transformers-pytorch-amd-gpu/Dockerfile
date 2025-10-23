@@ -1,4 +1,4 @@
-FROM rocm/pytorch:rocm6.4.1_ubuntu24.04_py3.12_pytorch_release_2.7.1
+FROM rocm/pytorch:rocm7.0.2_ubuntu24.04_py3.12_pytorch_release_2.7.1
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -10,8 +10,8 @@ RUN apt update && \
 
 RUN git lfs install
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip numpy
-RUN python3 -m pip install --no-cache-dir --upgrade importlib-metadata setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
+RUN python3 -m pip install --no-cache-dir --upgrade pip numpy importlib-metadata setuptools wheel ninja pytesseract "itsdangerous<2.1.0"
+RUN python3 -m pip install --no-cache-dir --no-build-isolation git+https://github.com/facebookresearch/detectron2.git
 
 ARG REF=main
 WORKDIR /
@@ -39,6 +39,7 @@ RUN python3 -m pip install --no-cache-dir "torchcodec==0.5"
 # Install flash attention from source. Tested with commit 6387433156558135a998d5568a9d74c1778666d8
 RUN git clone https://github.com/ROCm/flash-attention/ -b tridao && \
     cd flash-attention && \
-    GPU_ARCHS="gfx942" python setup.py install
+    GPU_ARCHS="gfx942;gfx950" python setup.py install  
+# GPU_ARCHS builds for MI300, MI325 and MI355
 
 RUN python3 -m pip install --no-cache-dir einops

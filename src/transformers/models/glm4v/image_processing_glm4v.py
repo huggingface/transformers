@@ -47,7 +47,7 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
-class Glm4vImageProcessorKwargs(ImagesKwargs):
+class Glm4vImageProcessorKwargs(ImagesKwargs, total=False):
     """
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -57,9 +57,9 @@ class Glm4vImageProcessorKwargs(ImagesKwargs):
         The merge size of the vision encoder to llm encoder.
     """
 
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
 def smart_resize(
@@ -313,7 +313,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        videos: Optional[VideoInput] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
@@ -335,9 +334,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            videos (`VideoInput`):
-                Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
-                passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):

@@ -14,15 +14,16 @@
 # limitations under the License.
 """PyTorch ALBERT model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -36,16 +37,10 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import (
     apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
 )
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_albert import AlbertConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -69,7 +64,6 @@ class AlbertEmbeddings(nn.Module):
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -106,11 +100,11 @@ class AlbertEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings = embeddings + position_embeddings
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -125,40 +119,15 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    use_cache: Optional[bool] = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
     # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3))
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    # Relative positional embeddings
-    if module.position_embedding_type == "relative_key" or module.position_embedding_type == "relative_key_query":
-        query_length, key_length = query.shape[2], key.shape[2]
-        if use_cache:
-            position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=query.device).view(-1, 1)
-        else:
-            position_ids_l = torch.arange(query_length, dtype=torch.long, device=query.device).view(-1, 1)
-        position_ids_r = torch.arange(key_length, dtype=torch.long, device=query.device).view(1, -1)
-        distance = position_ids_l - position_ids_r
-
-        positional_embedding = module.distance_embedding(distance + module.max_position_embeddings - 1)
-        positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
-
-        if module.position_embedding_type == "relative_key":
-            relative_position_scores = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
-            attn_weights = attn_weights + relative_position_scores
-        elif module.position_embedding_type == "relative_key_query":
-            relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
-            relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key, positional_embedding)
-            attn_weights = attn_weights + relative_position_scores_query + relative_position_scores_key
-
-    # Scaling is shifted in case of embeddings being relative
-    attn_weights = attn_weights * scaling
-
-    if attention_mask is not None and attention_mask.ndim == 4:
+    if attention_mask is not None:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
@@ -196,32 +165,8 @@ class AlbertAttention(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pruned_heads = set()
-
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_causal = False
-
-    def prune_heads(self, heads: list[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.num_attention_heads, self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.query = prune_linear_layer(self.query, index)
-        self.key = prune_linear_layer(self.key, index)
-        self.value = prune_linear_layer(self.value, index)
-        self.dense = prune_linear_layer(self.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.num_attention_heads = self.num_attention_heads - len(heads)
-        self.all_head_size = self.attention_head_size * self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -239,11 +184,6 @@ class AlbertAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.position_embedding_type != "absolute":
-                raise ValueError(
-                    f"You are using {self.config._attn_implementation} as attention type. However, non-absolute "
-                    'positional embeddings can not work with them. Please load the model with `attn_implementation="eager"`.'
-                )
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
@@ -254,8 +194,6 @@ class AlbertAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout.p,
             scaling=self.scaling,
-            # only for relevant for non-absolute positional embeddings
-            use_cache=False,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -429,7 +367,6 @@ class AlbertModel(AlbertPreTrainedModel):
             self.pooler_activation = None
 
         self.attn_implementation = config._attn_implementation
-        self.position_embedding_type = config.position_embedding_type
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -440,24 +377,7 @@ class AlbertModel(AlbertPreTrainedModel):
     def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} ALBERT has
-        a different architecture in that its layers are shared across groups, which then has inner groups. If an ALBERT
-        model has 12 hidden layers and 2 hidden groups, with two inner groups, there is a total of 4 different layers.
-
-        These layers are flattened: the indices [0,1] correspond to the two inner groups of the first hidden layer,
-        while [2,3] correspond to the two inner groups of the second hidden layer.
-
-        Any layer with in index other than [0,1,2,3] will result in an error. See base class PreTrainedModel for more
-        information about head pruning
-        """
-        for layer, heads in heads_to_prune.items():
-            group_idx = int(layer / self.config.inner_group_num)
-            inner_group_idx = int(layer - group_idx * self.config.inner_group_num)
-            self.encoder.albert_layer_groups[group_idx].albert_layers[inner_group_idx].attention.prune_heads(heads)
-
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -475,7 +395,11 @@ class AlbertModel(AlbertPreTrainedModel):
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
 
-        attention_mask = self._update_full_mask(attention_mask, embedding_output)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -492,27 +416,6 @@ class AlbertModel(AlbertPreTrainedModel):
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
         )
-
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
 
 
 @auto_docstring(
