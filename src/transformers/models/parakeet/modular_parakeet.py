@@ -43,6 +43,7 @@ from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 class ParakeetEncoderModelOutput(BaseModelOutput):
     attention_mask: Optional[torch.Tensor] = None
 
+
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
     """Relative positional encoding for Parakeet."""
 
@@ -467,8 +468,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
                 )
 
         return ParakeetEncoderModelOutput(
-            last_hidden_state=hidden_states,
-            attention_mask=output_mask.int() if output_attention_mask else None
+            last_hidden_state=hidden_states, attention_mask=output_mask.int() if output_attention_mask else None
         )
 
 
