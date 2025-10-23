@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     get_device_properties,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
