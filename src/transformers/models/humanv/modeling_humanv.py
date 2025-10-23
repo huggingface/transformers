@@ -189,9 +189,10 @@ def eager_attention_forward(
             # For causal, set is_causal=True
             # Tune thresholds as per docs (e.g., pvthreshd tunable)
             attn_output = sageattn(
-                query * scaling,  # Apply scaling to query if needed
+                query,  # <--- تصحیح شد: query مستقیم ارسال می‌شود
                 key,
                 value,
+                sm_scale=scaling,  # <--- تصحیح شد: scaling به عنوان پارامتر ارسال می‌شود
                 tensor_layout="HND",
                 is_causal=module.is_causal
             )
@@ -212,7 +213,6 @@ def eager_attention_forward(
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
-
 
 def flash_attention_forward(
     module: nn.Module,
