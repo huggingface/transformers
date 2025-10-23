@@ -97,7 +97,17 @@ def is_bad_commit(target_test, commit):
     # Restore to original commit
     repo.git.checkout(original_head)
 
-    return result.returncode != 0
+    n_passed = 0
+    o = re.findall(r"====.* (\d+) passed", result.stdout)
+    if len(o) > 0:
+        n_passed = int(o[0])
+
+    n_failed = 0
+    o = re.findall(r"====.* (\d+) failed", result.stdout)
+    if len(o) > 0:
+        n_failed = int(o[0])
+
+    return result.returncode != 0, n_failed, n_passed
 
 
 def find_bad_commit(target_test, start_commit, end_commit):
@@ -114,7 +124,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
 
     # check if `end_commit` fails the test
     # (we only need one failure to conclude the test is flaky on the previous run with `end_commit`)
-    failed_before = is_bad_commit(target_test, end_commit)
+    failed_before, _, _ = is_bad_commit(target_test, end_commit)
     if failed_before:
         return (
             None,
@@ -132,8 +142,8 @@ def find_bad_commit(target_test, start_commit, end_commit):
     # Now, we are (almost) sure `target_test` is not failing at `end_commit`
     # check if `start_commit` fail the test
     # **IMPORTANT** we only need one pass to conclude the test is flaky on the current run with `start_commit`!
-    failed_now = is_bad_commit(target_test, start_commit)
-    if not failed_now:
+    failed_now, n_failed, n_passed = is_bad_commit(target_test, start_commit)
+    if not failed_now or n_passed > 0:
         # failed on CI run, but not reproducible here --> don't report
         return None, f"flaky: test fails on the current CI run (commit: {start_commit}) but passes during the check."
 
