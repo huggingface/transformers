@@ -643,6 +643,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(batched_generated_texts[0], generated_text_0[0])
         self.assertEqual(batched_generated_texts[1], generated_text_1[0])
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_torch_gpu
     @require_bitsandbytes

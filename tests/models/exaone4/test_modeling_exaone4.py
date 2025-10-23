@@ -120,6 +120,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, text)
 
+    @pytest.mark.flash_attn_test
     @slow
     @require_torch_accelerator
     @require_flash_attn

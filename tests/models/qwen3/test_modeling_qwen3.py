@@ -266,6 +266,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
     @require_flash_attn
     @slow
+    @pytest.mark.flash_attn_test
     def test_600m_generation(self):
         model_id = "Qwen/Qwen3-0.6B-Base"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
