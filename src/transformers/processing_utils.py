@@ -797,8 +797,8 @@ class ProcessorMixin(PushToHubMixin):
                 # Create a subdirectory for this attribute to avoid filename conflicts
                 attribute_save_directory = os.path.join(save_directory, attribute_name)
                 attribute.save_pretrained(attribute_save_directory)
-                elif attribute._auto_class is not None:                custom_object_save(attribute, save_directory, config=attribute)
-
+                elif attribute._auto_class is not None:
+                    custom_object_save(attribute, save_directory, config=attribute)
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
             for attribute_name in self.attributes:
