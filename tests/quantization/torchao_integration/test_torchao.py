@@ -48,6 +48,7 @@ if is_torchao_available():
     from torchao.quantization import (
         Float8Tensor,
         Float8WeightOnlyConfig,
+        Int4WeightOnlyConfig,
         Int8DynamicActivationInt8WeightConfig,
         Int8WeightOnlyConfig,
         IntxWeightOnlyConfig,
@@ -61,8 +62,6 @@ if is_torchao_available():
         from torchao.dtypes import Int4CPULayout
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0"):
         from torchao.dtypes import Int4XPULayout
-    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.14.0"):
-        from torchao.quantization import Int4WeightOnlyConfig
 
 
 def check_torchao_int4_wo_quantized(test_module, qlayer):
@@ -514,24 +513,23 @@ class TorchAoAcceleratorTest(TorchAoTest):
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
 
-@require_torchao
-@require_torchao_version_greater_or_equal("0.8.0")
+@require_torchao_version_greater_or_equal("0.11.0")
 class TorchAoSerializationTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    quant_scheme_kwargs = (
-        {"group_size": 32, "layout": Int4CPULayout(), "version": 1}
-        if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
-        else {"group_size": 32}
-    )
-    quant_scheme = Int4WeightOnlyConfig(**quant_scheme_kwargs)
 
     device = "cpu"
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
+        cls.quant_scheme_kwargs = (
+            {"group_size": 32, "layout": Int4CPULayout(), "version": 1}
+            if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
+            else {"group_size": 32}
+        )
+        cls.quant_scheme = Int4WeightOnlyConfig(**cls.quant_scheme_kwargs)
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
 
@@ -616,12 +614,13 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
 
 
 class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = Int8DynamicActivationInt8WeightConfig(), {}
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        cls.quant_scheme = Int8DynamicActivationInt8WeightConfig()
+        cls.quant_scheme_kwargs = {}
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
     @require_torch_accelerator
@@ -633,12 +632,13 @@ class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):
 
 
 class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = Int8WeightOnlyConfig(), {}
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        cls.quant_scheme = Int8WeightOnlyConfig()
+        cls.quant_scheme_kwargs = {}
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
     @require_torch_accelerator
@@ -652,7 +652,6 @@ class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
 @require_torch_accelerator
 @require_torchao
 class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = Int4WeightOnlyConfig(**{"group_size": 32, "version": 1}), {}
     device = f"{torch_device}:0"
 
     # called only once for all test in this class
@@ -660,6 +659,8 @@ class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
     def setUpClass(cls):
         super().setUpClass()
         # fmt: off
+        cls.quant_scheme = Int4WeightOnlyConfig(**{"group_size": 32, "version": 1})
+        cls.quant_scheme_kwargs = {}
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
@@ -672,25 +673,27 @@ class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
 
 @require_torch_accelerator
 class TorchAoSerializationW8A8AcceleratorTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = Int8DynamicActivationInt8WeightConfig(), {}
     device = f"{torch_device}:0"
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        cls.quant_scheme = Int8DynamicActivationInt8WeightConfig()
+        cls.quant_scheme_kwargs = {}
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
 
 @require_torch_accelerator
 class TorchAoSerializationW8AcceleratorTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = Int8WeightOnlyConfig(), {}
     device = f"{torch_device}:0"
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        cls.quant_scheme = Int8WeightOnlyConfig()
+        cls.quant_scheme_kwargs = {}
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
 
