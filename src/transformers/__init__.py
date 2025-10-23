@@ -712,14 +712,14 @@ if TYPE_CHECKING:
 
     # Tokenization
     from .tokenization_sentencepiece import SentencePieceBackend as SentencePieceBackend
+    from .tokenization_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+    from .tokenization_tokenizers import TokenizersBackend as TokenizersBackend
     from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan
     from .tokenization_utils_base import PreTrainedTokenizerBase as PreTrainedTokenizerBase
     from .tokenization_utils_base import TokenSpan as TokenSpan
-    from .tokenization_tokenizers import TokenizersBackend as TokenizersBackend
-    from .tokenization_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
 
     # Trainer
     from .trainer import Trainer as Trainer

@@ -15,18 +15,15 @@
 SentencePiece-based tokenization class for loading from sentencepiece.model files.
 """
 
-import bisect
 import itertools
 import os
 import re
-import unicodedata
 from collections import OrderedDict
 from shutil import copyfile
 from typing import Any, Optional, Union, overload
 
 import sentencepiece as spm
 
-from .convert_slow_tokenizer import import_protobuf
 from .tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
@@ -34,19 +31,14 @@ from .tokenization_utils_base import (
     AddedToken,
     BatchEncoding,
     EncodedInput,
-    EncodedInputPair,
     PreTokenizedInput,
-    PreTokenizedInputPair,
     PreTrainedTokenizerBase,
     TextInput,
-    TextInputPair,
     TruncationStrategy,
-    _get_prepend_scheme,
     generate_merges,
 )
-from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging, requires_backends
 
-from .utils import requires_backends
 
 logger = logging.get_logger(__name__)
 
@@ -304,11 +296,12 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
     This class also contain the added tokens in a unified way on top of all tokenizers so we don't have to handle the
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
 
     def __init__(self, **kwargs):
         # 1. Extract sentencepiece-specific parameters
-        self.vocab_file = kwargs.get("vocab_file", None)
+        self.vocab_file = kwargs.get("vocab_file")
         self.legacy = kwargs.get("legacy", True)
         self.sp_model_kwargs = kwargs.pop("sp_model_kwargs", {})
         from_slow = kwargs.pop("from_slow", False)
@@ -329,7 +322,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         tokenizer.Load(self.vocab_file)
         self.sp_model = tokenizer
-        
+
         # 6. Initialize total_vocab_size based on sp_model size
         self.total_vocab_size = self.sp_model.get_piece_size()
 
@@ -356,7 +349,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         """
         Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
         optimisation in `self._added_tokens_encoder` for the slow tokenizers.
-        
+
         Only returns tokens that are NOT in the base SentencePiece vocabulary.
         """
         # Use the filtered added_tokens_decoder property to ensure consistency
@@ -366,7 +359,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
     def added_tokens_decoder(self) -> dict[int, AddedToken]:
         """
         Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
-        
+
         Only returns tokens that are NOT in the base SentencePiece vocabulary (i.e., index >= vocab_size).
 
         Returns:
@@ -484,7 +477,9 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
             # piece_to_id returns unk_id for unknown tokens, so we need to verify
             tok_id = self.sp_model.piece_to_id(token.content)
             # Check if the token actually exists in the vocab by verifying round-trip
-            in_base_vocab = tok_id < self.sp_model.get_piece_size() and self.sp_model.IdToPiece(tok_id) == token.content
+            in_base_vocab = (
+                tok_id < self.sp_model.get_piece_size() and self.sp_model.IdToPiece(tok_id) == token.content
+            )
 
             if in_base_vocab:
                 # Token is already in base vocab, don't add it to added_tokens_decoder
@@ -495,7 +490,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 token_index = next_index
                 next_index += 1
                 num_added += 1
-                
+
                 if token.special and str(token) not in self.all_special_tokens:
                     self._special_tokens_map["additional_special_tokens"].append(token)
                 # the setter automatically updates the reverse map
@@ -646,8 +641,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
         unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
-        return tokens[unk_token_length :] if len(tokens) >= unk_token_length else tokens
-
+        return tokens[unk_token_length:] if len(tokens) >= unk_token_length else tokens
 
     def _convert_token_to_id_with_added_voc(self, token):
         if token is None:
@@ -713,7 +707,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
-        
+
         # Detect if text is a list of tuples (batched pairs)
         is_batched_pairs = (
             isinstance(text, (list, tuple))
@@ -723,7 +717,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
             and isinstance(text[0][0], str)
             and isinstance(text[0][1], str)
         )
-        
+
         if is_batched_pairs:
             # Unpack the tuples into separate lists
             texts = [pair[0] for pair in text]
@@ -750,16 +744,13 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 verbose=verbose,
                 **kwargs,
             )
-        
+
         # Detect batched inputs (list of sequences)
-        is_batched = (
-            isinstance(text, (list, tuple))
-            and (
-                # Regular batch (not pretokenized)
-                (not is_split_into_words and (len(text) == 0 or isinstance(text[0], (str, list, tuple, int))))
-                # Batched pretokenized inputs (is_split_into_words and each item is a list)
-                or (is_split_into_words and len(text) > 0 and isinstance(text[0], (list, tuple)))
-            )
+        is_batched = isinstance(text, (list, tuple)) and (
+            # Regular batch (not pretokenized)
+            (not is_split_into_words and (len(text) == 0 or isinstance(text[0], (str, list, tuple, int))))
+            # Batched pretokenized inputs (is_split_into_words and each item is a list)
+            or (is_split_into_words and len(text) > 0 and isinstance(text[0], (list, tuple)))
         )
 
         if is_batched:
@@ -784,7 +775,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 ):
                     # Unpack the pair
                     current_text, current_pair = current_text[0], current_text[1]
-                
+
                 ids = get_input_ids(current_text)
                 pair_ids = get_input_ids(current_pair) if current_pair is not None else None
                 outputs = self.prepare_for_model(
@@ -892,7 +883,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                     "ids is already formatted with special tokens for the model."
                 )
 
-            return [1 if token in  self.all_special_ids  else 0 for token in token_ids_0]
+            return [1 if token in self.all_special_ids else 0 for token in token_ids_0]
 
         return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
@@ -939,7 +930,6 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         token = self.sp_model.IdToPiece(index)
         return token
 
-
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (string) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
@@ -960,7 +950,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         """
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return 
+            return
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"]
         )
@@ -1112,7 +1102,11 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 "set return_token_type_ids to None."
             )
 
-        if return_overflowing_tokens and truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is not None:
+        if (
+            return_overflowing_tokens
+            and truncation_strategy == TruncationStrategy.LONGEST_FIRST
+            and pair_ids is not None
+        ):
             raise ValueError(
                 "Not possible to return overflowing tokens for pair of sequences with the "
                 "`longest_first`. Please select another truncation strategy than `longest_first`, "
@@ -1127,7 +1121,9 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
 
         # Calculate total length with special tokens
         pair = pair_ids is not None
-        total_len = len(ids) + len(pair_ids or []) + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        total_len = (
+            len(ids) + len(pair_ids or []) + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        )
 
         # Truncation: Handle max sequence length
         overflowing_tokens = []
@@ -1150,13 +1146,15 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
 
         # Build encoded inputs
         encoded_inputs = {"input_ids": sequence}
-        
+
         if return_token_type_ids:
             encoded_inputs["token_type_ids"] = token_type_ids
-        
+
         if return_special_tokens_mask:
-            encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids) if add_special_tokens else [0] * len(sequence)
-        
+            encoded_inputs["special_tokens_mask"] = (
+                self.get_special_tokens_mask(ids, pair_ids) if add_special_tokens else [0] * len(sequence)
+            )
+
         if return_overflowing_tokens:
             encoded_inputs["overflowing_tokens"] = overflowing_tokens
             encoded_inputs["num_truncated_tokens"] = total_len - max_length if max_length else 0

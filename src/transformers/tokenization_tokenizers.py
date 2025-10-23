@@ -20,7 +20,6 @@ import copy
 import json
 import os
 from collections import defaultdict
-from collections.abc import Iterable
 from typing import Any, Optional, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
@@ -186,24 +185,29 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if hash(repr(token)) not in added_tokens_decoder_hash
         ]
         encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
-        # if some of the special tokens are strings, we check if we don't already have a token
-        tokens_to_add += [
-            token for token in self.all_special_tokens if token not in encoder and token not in tokens_to_add
-        ]
+        # if some of the special tokens are not already in the tokenizer, add them
+        # we iterate over _special_tokens_map to preserve AddedToken properties (lstrip, rstrip, etc.)
+        for special_token_value in self._special_tokens_map.values():
+            if special_token_value is None:
+                continue
+            # Handle both single tokens and lists of tokens (for additional_special_tokens)
+            special_tokens_to_check = (
+                special_token_value if isinstance(special_token_value, (list, tuple)) else [special_token_value]
+            )
+            for token in special_tokens_to_check:
+                if str(token) not in encoder and token not in tokens_to_add:
+                    tokens_to_add.append(token)
 
         if len(tokens_to_add) > 0:
             tokens = []
-            special_tokens = self.all_special_tokens
             for token in tokens_to_add:
-                is_special = (
-                    (token.special or str(token) in special_tokens)
-                    if isinstance(token, AddedToken)
-                    else str(token) in special_tokens
-                )
                 if isinstance(token, str):
-                    token = AddedToken(token, special=is_special)
-                else:
-                    token.special = is_special
+                    # Convert string to AddedToken, assuming it's special
+                    token = AddedToken(token, special=True)
+                elif isinstance(token, AddedToken):
+                    # Ensure the special flag is set correctly for special tokens
+                    if not token.special and str(token) in [str(t) for t in self._special_tokens_map.values() if t]:
+                        token.special = True
                 tokens.append(token)
             if tokens:
                 self.add_tokens(tokens)
@@ -288,7 +292,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         Post-initialization hook that runs after the tokenizer is fully set up.
         This is called by from_pretrained() after loading the tokenizer, which allows
         us to add any special tokens that may have been passed as AddedToken objects.
-        
+
         Child classes should call super()._post_init() if they override this method.
         """
         tokens_to_add = []
@@ -307,19 +311,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             elif isinstance(token_value, str):
                 if self._tokenizer.token_to_id(token_value) is None:
                     tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
-        
+
         if tokens_to_add:
             self.add_tokens(tokens_to_add)
-        
-        if hasattr(self, '_add_bos_token') or hasattr(self, '_add_eos_token'):
+
+        if hasattr(self, "_add_bos_token") or hasattr(self, "_add_eos_token"):
             self.update_post_processor()
-        
+
         # Update add_prefix_space in the pre_tokenizer if needed
-        if hasattr(self, 'add_prefix_space'):
+        if hasattr(self, "add_prefix_space"):
             try:
                 tokenizer_json = json.loads(self.backend_tokenizer.to_str())
                 pre_tok = tokenizer_json.get("pre_tokenizer", {})
-                
+
                 # Recursively update add_prefix_space in pretokenizers
                 def update_add_prefix_space(pretok_dict, value):
                     updated = False
@@ -330,7 +334,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         pretok_dict["add_prefix_space"] = value
                         updated = True
                     return updated
-                
+
                 if update_add_prefix_space(pre_tok, self.add_prefix_space):
                     self._tokenizer = TokenizerFast.from_str(json.dumps(tokenizer_json))
             except Exception:
@@ -449,7 +453,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 encoding_dict["length"].append(len(e.ids))
 
         return encoding_dict, encodings
-
 
     def _convert_token_to_id_with_added_voc(self, token: str) -> int:
         index = self._tokenizer.token_to_id(token)
@@ -593,7 +596,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if _padding != target:
                 self._tokenizer.enable_padding(**target)
 
-
     def _encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
@@ -729,7 +731,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         for input_ids in sanitized_tokens["input_ids"]:
             self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
-        
+
         batched_output = BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
 
         # If single input, remove the batch dimension (unless returning overflowing tokens)
