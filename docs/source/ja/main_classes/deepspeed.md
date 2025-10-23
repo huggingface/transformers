@@ -1292,7 +1292,7 @@ DeepSpeed は、`LRRangeTest`、`OneCycle`、`WarmupLR`、および`WarmupDecayL
   したがって、スケジューラを設定しない場合、これがデフォルトで設定されるスケジューラになります。
 
 設定ファイルで `scheduler` エントリを設定しない場合、[`Trainer`] は
-`--lr_scheduler_type`、`--learning_rate`、および `--warmup_steps` または `--warmup_ratio` の値を設定します。
+`--lr_scheduler_type`、`--learning_rate`、および `--warmup_steps` の値を設定します。
 🤗 それのトランスフォーマーバージョン。
 
 以下は、`WarmupLR`の自動構成された`scheduler`エントリの例です。
@@ -1316,8 +1316,7 @@ DeepSpeed は、`LRRangeTest`、`OneCycle`、`WarmupLR`、および`WarmupDecayL
 
 - `warmup_min_lr` の値は `0` です。
 - `warmup_max_lr` と `--learning_rate` の値。
-- `warmup_num_steps` と `--warmup_steps` の値 (指定されている場合)。それ以外の場合は `--warmup_ratio` を使用します
-  トレーニング ステップの数を乗算し、切り上げます。
+- `warmup_num_steps` と `--warmup_steps` の値 (指定されている場合)
 - `total_num_steps` には `--max_steps` の値を指定するか、指定されていない場合は実行時に自動的に導出されます。
   環境、データセットのサイズ、およびその他のコマンド ライン引数 (
   `WarmupDecayLR`)。
