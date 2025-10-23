@@ -650,6 +650,7 @@ class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
 
 
 @require_torch_accelerator
+@require_torchao
 class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = Int4WeightOnlyConfig(**{"group_size": 32, "version": 1}), {}
     device = f"{torch_device}:0"
