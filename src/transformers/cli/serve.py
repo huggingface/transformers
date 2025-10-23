@@ -377,14 +377,10 @@ class Serve:
                 help="Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
             ),
         ] = None,
-        load_in_8bit: Annotated[
-            bool, typer.Option(help="Whether to use 8 bit precision for the base model - works only with LoRA.")
-        ] = False,
-        load_in_4bit: Annotated[
-            bool, typer.Option(help="Whether to use 4 bit precision for the base model - works only with LoRA.")
-        ] = False,
-        bnb_4bit_quant_type: Annotated[str, typer.Option(help="Quantization type.")] = "nf4",
-        use_bnb_nested_quant: Annotated[bool, typer.Option(help="Whether to use nested quantization.")] = False,
+        quantization: Annotated[
+            Optional[str],
+            typer.Option(help="Which quantization method to use. choices: 'bnb-4bit', 'bnb-8bit'"),
+        ] = None,
         host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
         port: Annotated[int, typer.Option(help="Port the server will listen to.")] = 8000,
         model_timeout: Annotated[
@@ -424,10 +420,7 @@ class Serve:
         self.dtype = dtype
         self.trust_remote_code = trust_remote_code
         self.attn_implementation = attn_implementation
-        self.load_in_8bit = load_in_8bit
-        self.load_in_4bit = load_in_4bit
-        self.bnb_4bit_quant_type = bnb_4bit_quant_type
-        self.use_bnb_nested_quant = use_bnb_nested_quant
+        self.quantization = quantization
         self.host = host
         self.port = port
         self.model_timeout = model_timeout
@@ -1688,21 +1681,19 @@ class Serve:
         Returns:
             `Optional[BitsAndBytesConfig]`: The quantization config.
         """
-        if self.load_in_4bit:
+        if self.quantization == "bnb-4bit":
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `dtype`
-                bnb_4bit_compute_dtype=self.dtype,
-                bnb_4bit_quant_type=self.bnb_4bit_quant_type,
-                bnb_4bit_use_double_quant=self.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=self.dtype,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
             )
-        elif self.load_in_8bit:
-            quantization_config = BitsAndBytesConfig(
-                load_in_8bit=True,
-            )
+        elif self.quantization == "bnb-8bit":
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         else:
             quantization_config = None
+
+        if quantization_config is not None:
+            logger.info(f"Quantization applied with the following config: {quantization_config}")
 
         return quantization_config
 
@@ -1750,7 +1741,6 @@ class Serve:
             revision=revision,
             trust_remote_code=self.trust_remote_code,
         )
-
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         quantization_config = self.get_quantization_config()
 
@@ -1758,18 +1748,14 @@ class Serve:
             "revision": revision,
             "attn_implementation": self.attn_implementation,
             "dtype": dtype,
-            "device_map": "auto",
+            "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
+            "quantization_config": quantization_config,
         }
-        if quantization_config is not None:
-            model_kwargs["quantization_config"] = quantization_config
 
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
         architecture = getattr(transformers, config.architectures[0])
         model = architecture.from_pretrained(model_id, **model_kwargs)
-
-        if getattr(model, "hf_device_map", None) is None:
-            model = model.to(self.device)
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
