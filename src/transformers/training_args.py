@@ -285,10 +285,9 @@ class TrainingArguments:
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
         lr_scheduler_kwargs (`dict` or `str`, *optional*, defaults to `None`):
             The extra arguments for the lr_scheduler. See the documentation of each scheduler for possible values.
-        warmup_ratio (`float`, *optional*, defaults to 0.0):
-            Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
-        warmup_steps (`int`, *optional*, defaults to 0):
-            Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of `warmup_ratio`.
+        warmup_steps (`int` or `float`, *optional*, defaults to 0):
+            Number of steps used for a linear warmup from 0 to `learning_rate`.  Should be an integer or a float in range `[0,1)`.
+            If smaller than 1, will be interpreted as ratio of steps used for a linear warmup from 0 to `learning_rate`.
         log_level (`str`, *optional*, defaults to `passive`):
             Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
             'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and keeps the
@@ -850,10 +849,14 @@ class TrainingArguments:
             )
         },
     )
-    warmup_ratio: float = field(
-        default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
+    warmup_ratio: Optional[float] = field(
+        default=None,
+        metadata={
+            "help": "This argument is deprecated and will be removed in v5. Use `warmup_steps` instead as it also works with float values."
+        },
     )
-    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+
+    warmup_steps: float = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     log_level: str = field(
         default="passive",
@@ -1637,16 +1640,12 @@ class TrainingArguments:
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
 
-        if self.warmup_ratio < 0 or self.warmup_ratio > 1:
-            raise ValueError("warmup_ratio must lie in range [0,1]")
-        elif self.warmup_ratio > 0 and self.warmup_steps > 0:
-            logger.info(
-                "Both warmup_ratio and warmup_steps given, warmup_steps will override any effect of warmup_ratio"
-                " during training"
-            )
+        if self.warmup_ratio is not None:
+            logger.warning("warmup_ratio is deprecated and will be removed in v5.2. Use `warmup_steps` instead.")
+            self.warmup_steps = self.warmup_ratio
 
-        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
-            raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
+        if self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be an integer or a float")
 
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
@@ -2047,7 +2046,7 @@ class TrainingArguments:
         Get number of steps used for a linear warmup.
         """
         warmup_steps = (
-            self.warmup_steps if self.warmup_steps > 0 else math.ceil(num_training_steps * self.warmup_ratio)
+            int(self.warmup_steps) if self.warmup_steps >= 1 else math.ceil(num_training_steps * self.warmup_steps)
         )
         return warmup_steps
 
@@ -2535,8 +2534,8 @@ class TrainingArguments:
         name: Union[str, SchedulerType] = "linear",
         num_epochs: float = 3.0,
         max_steps: int = -1,
-        warmup_ratio: float = 0,
-        warmup_steps: int = 0,
+        warmup_steps: float = 0,
+        warmup_ratio: Optional[float] = None,
     ):
         """
         A method that regroups all arguments linked to the learning rate scheduler and its hyperparameters.
@@ -2551,11 +2550,9 @@ class TrainingArguments:
                 If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
                 For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
                 `max_steps` is reached.
-            warmup_ratio (`float`, *optional*, defaults to 0.0):
-                Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
-            warmup_steps (`int`, *optional*, defaults to 0):
-                Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of
-                `warmup_ratio`.
+            warmup_steps (`float`, *optional*, defaults to 0):
+                Number of steps used for a linear warmup from 0 to `learning_rate`.  Should be an integer or a float in range `[0,1)`.
+                If smaller than 1, will be interpreted as ratio of steps used for a linear warmup from 0 to `learning_rate`.
 
         Example:
 
@@ -2563,15 +2560,18 @@ class TrainingArguments:
         >>> from transformers import TrainingArguments
 
         >>> args = TrainingArguments("working_dir")
-        >>> args = args.set_lr_scheduler(name="cosine", warmup_ratio=0.05)
-        >>> args.warmup_ratio
+        >>> args = args.set_lr_scheduler(name="cosine", warmup_steps=0.05)
+        >>> args.warmup_steps
         0.05
         ```
         """
+        if warmup_ratio is not None:
+            logger.warning("warmup_ratio is deprecated and will be removed in v5. Use `warmup_steps` instead.")
+            warmup_steps = warmup_ratio
+
         self.lr_scheduler_type = SchedulerType(name)
         self.num_train_epochs = num_epochs
         self.max_steps = max_steps
-        self.warmup_ratio = warmup_ratio
         self.warmup_steps = warmup_steps
         return self
 
