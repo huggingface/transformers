@@ -269,7 +269,12 @@ def main() -> None:
     args = ap.parse_args()
 
     src_root = Path(args.src_dir).resolve()
+    if not src_root.is_dir():
+        raise FileNotFoundError(f"Source directory not found: {src_root}")
+
     dst_root = Path(args.dst_dir).resolve()
+    if dst_root.exists():
+        raise FileExistsError(f"Destination already exists: {dst_root}")
 
     processor = write_processor(src_root, dst_root)
     model = merge_and_shard_weights(src_root, dst_root)

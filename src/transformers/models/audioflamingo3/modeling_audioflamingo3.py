@@ -262,6 +262,7 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
 
     config_class = AudioFlamingo3Config
     base_model_prefix = "model"
+    input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["AudioFlamingo3Attention"]
     _skip_keys_device_placement = "past_key_values"
@@ -301,6 +302,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
     config: AudioFlamingo3EncoderConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
 
     def __init__(self, config: AudioFlamingo3EncoderConfig):
