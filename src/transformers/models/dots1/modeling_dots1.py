@@ -232,7 +232,7 @@ class Dots1Attention(nn.Module):
         from ...integrations.hub_kernels import lazy_load_kernel
 
         rotary_kernel = lazy_load_kernel("rotary_emb")
-        self.rotary_fn = rotary_kernel.apply_rotary_kernel if rotary_kernel is not None else apply_rotary_pos_emb
+        self.rotary_fn = rotary_kernel.apply_rotary_transformers if rotary_kernel is not None else apply_rotary_pos_emb
 
     def forward(
         self,
