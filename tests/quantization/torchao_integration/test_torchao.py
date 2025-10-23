@@ -64,6 +64,7 @@ if is_torchao_available():
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.14.0"):
         from torchao.quantization import Int4WeightOnlyConfig
 
+
 def check_torchao_int4_wo_quantized(test_module, qlayer):
     weight = qlayer.weight
     test_module.assertEqual(weight.quant_min, 0)
