@@ -767,8 +767,9 @@ class T5Stack(T5PreTrainedModel):
         if self.is_decoder and encoder_hidden_states is not None:
             encoder_extended_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=encoder_hidden_states,
+                input_embeds=inputs_embeds,
                 attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
         else:
             encoder_extended_attention_mask = None
