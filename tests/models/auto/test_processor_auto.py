@@ -126,37 +126,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
 
-    def test_processor_from_feat_extr_processor_class(self):
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            feature_extractor = Wav2Vec2FeatureExtractor()
-            tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
-
-            processor = Wav2Vec2Processor(feature_extractor, tokenizer)
-
-            # save in new folder
-            processor.save_pretrained(tmpdirname)
-
-            if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
-                # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
-                    config_dict = json.load(f)
-                    config_dict.pop("processor_class")
-
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
-                    f.write(json.dumps(config_dict))
-
-            # drop `processor_class` in tokenizer
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE)) as f:
-                config_dict = json.load(f)
-                config_dict.pop("processor_class")
-
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "w") as f:
-                f.write(json.dumps(config_dict))
-
-            processor = AutoProcessor.from_pretrained(tmpdirname)
-
-        self.assertIsInstance(processor, Wav2Vec2Processor)
-
     def test_processor_from_tokenizer_processor_class(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             feature_extractor = Wav2Vec2FeatureExtractor()
@@ -167,21 +136,11 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # save in new folder
             processor.save_pretrained(tmpdirname)
 
-            if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
-                # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
-                    config_dict = json.load(f)
-                    config_dict.pop("processor_class")
-
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
-                    f.write(json.dumps(config_dict))
-
-            # drop `processor_class` in feature extractor
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME)) as f:
+            # drop `processor_class` in processor
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
-
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
                 f.write(json.dumps(config_dict))
 
             processor = AutoProcessor.from_pretrained(tmpdirname)
@@ -517,20 +476,6 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 tokenizer=tokenizer, image_processor=image_processor, chat_template=chat_template
             )
             self.assertEqual(processor.chat_template, chat_template)
-
-            existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
-            with TemporaryHubRepo(token=self._token) as tmp_repo:
-                processor.save_pretrained(
-                    tmp_dir, repo_id=tmp_repo.repo_id, token=self._token, push_to_hub=True, save_jinja_files=False
-                )
-                reloaded_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
-                self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-                # When we don't use single-file chat template saving, processor and tokenizer chat templates
-                # should remain separate
-                self.assertEqual(
-                    getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template
-                )
-
             with TemporaryHubRepo(token=self._token) as tmp_repo:
                 processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, token=self._token, push_to_hub=True)
                 reloaded_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
