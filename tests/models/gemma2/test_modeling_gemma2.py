@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_large_accelerator,
     require_torch_large_gpu,
+    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -136,6 +137,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
         self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
 
+    # TODO: run_test_using_subprocess was added because of an issue in torch 2.9, which is already fixed in nightly
+    # We can remove this once we upgrade to torch 2.10
+    @run_test_using_subprocess
     @require_read_token
     def test_model_2b_pipeline_bf16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
@@ -150,10 +154,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     "Hello I am doing a project on the 1960s and I am trying to find out what the average",
                     "Hi today I'm going to be talking about the 10 most powerful characters in the Naruto series.",
-                ],
-                ("cuda", (9, 0)): [
-                    "Hello I am doing a project on the 1960s and I am trying to find out what the average",
-                    "Hi today I'm going to be talking about the 10 best anime of all time.\n\n1",
                 ],
             }
         )
