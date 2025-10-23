@@ -1352,6 +1352,12 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
+        decoder_config = self.config.decoder
+        if decoder_config.final_logit_softcapping is not None:
+            logits = logits / decoder_config.final_logit_softcapping
+            logits = torch.tanh(logits)
+            logits = logits * decoder_config.final_logit_softcapping
+
         loss = None
         if labels is not None:
             # Input has right-shifted so we directly perform masked lm loss

@@ -18,10 +18,8 @@ import inspect
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import T5Gemma2Config, T5Gemma2ModuleConfig, is_torch_available
-from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -229,8 +227,8 @@ class T5Gemma2ModelTester:
     def prepare_config_and_inputs(self):
         config = self.get_config()
 
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size-1) + 1
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size-1) + 1
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size - 1) + 1
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1) + 1
         # Vision inputs.
         pixel_values = floats_tensor(
             [
@@ -536,7 +534,10 @@ class T5Gemma2ModelTester:
 
         # first forward pass
         outputs = model(
-            decoder_input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attention_mask, use_cache=True
+            decoder_input_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=attention_mask,
+            use_cache=True,
         )
 
         output, past_key_values = outputs.to_tuple()
@@ -586,7 +587,8 @@ class T5Gemma2ModelTester:
         )
         torch.manual_seed(0)
         output_with_past_cache = model.generate(
-            input_ids, pixel_values=pixel_values, num_beams=2, max_length=5, do_sample=True)
+            input_ids, pixel_values=pixel_values, num_beams=2, max_length=5, do_sample=True
+        )
         self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
     def create_and_check_model_fp16_forward(
@@ -605,7 +607,7 @@ class T5Gemma2ModelTester:
             pixel_values=pixel_values,
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask
+            decoder_attention_mask=decoder_attention_mask,
         )["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
@@ -789,11 +791,7 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
 
         for pixel_values in [None, input_dict["pixel_values"]]:
-            model = (
-                self.model_tester.sequence_classification_class(config)
-                .to(torch_device)
-                .eval()
-            )
+            model = self.model_tester.sequence_classification_class(config).to(torch_device).eval()
             result = model(input_ids, pixel_values=pixel_values, attention_mask=attention_mask, labels=sequence_labels)
             self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
@@ -807,11 +805,7 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
 
         for pixel_values in [None, input_dict["pixel_values"]]:
-            model = (
-                self.model_tester.sequence_classification_class(config)
-                .to(torch_device)
-                .eval()
-            )
+            model = self.model_tester.sequence_classification_class(config).to(torch_device).eval()
             result = model(input_ids, pixel_values=pixel_values, attention_mask=attention_mask, labels=sequence_labels)
             self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
@@ -827,11 +821,7 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         ).to(torch.float)
 
         for pixel_values in [None, input_dict["pixel_values"]]:
-            model = (
-                self.model_tester.sequence_classification_class(config)
-                .to(torch_device)
-                .eval()
-            )
+            model = self.model_tester.sequence_classification_class(config).to(torch_device).eval()
             result = model(input_ids, pixel_values=pixel_values, attention_mask=attention_mask, labels=sequence_labels)
             self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
@@ -845,13 +835,15 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
 
         for pixel_values in [None, input_dict["pixel_values"]]:
-            model = (
-                self.model_tester.token_classification_class(config)
-                .to(torch_device)
-                .eval()
-            )
+            model = self.model_tester.token_classification_class(config).to(torch_device).eval()
 
-            result = model(input_ids, decoder_input_ids=decoder_input_ids, pixel_values=pixel_values, attention_mask=attention_mask, labels=token_labels)
+            result = model(
+                input_ids,
+                decoder_input_ids=decoder_input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                labels=token_labels,
+            )
             self.assertEqual(
                 result.logits.shape,
                 (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
@@ -1223,7 +1215,7 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 mask_shared_prefix,
                 position_ids_shared_prefix,
             ) = self._get_custom_4d_mask_test_data()
-            mask_shared_prefix = (mask_shared_prefix == 0.0)
+            mask_shared_prefix = mask_shared_prefix == 0.0
 
             outputs = model.forward(
                 decoder_input_ids=input_ids,
@@ -1243,8 +1235,7 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             # logits_shared_prefix.shape == torch.Size([1, 6, ...])
 
             torch.testing.assert_close(
-                outputs.encoder_last_hidden_state[0],
-                outputs_shared_prefix.encoder_last_hidden_state[0]
+                outputs.encoder_last_hidden_state[0], outputs_shared_prefix.encoder_last_hidden_state[0]
             )
 
             out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
