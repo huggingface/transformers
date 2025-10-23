@@ -526,7 +526,8 @@ class TorchAoSerializationTest(unittest.TestCase):
     def setUpClass(cls):
         cls.quant_scheme_kwargs = (
             {"group_size": 32, "layout": Int4CPULayout(), "version": 1}
-            if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
+            if is_torchao_available()
+            and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
             else {"group_size": 32}
         )
         cls.quant_scheme = Int4WeightOnlyConfig(**cls.quant_scheme_kwargs)
@@ -614,7 +615,6 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
 
 
 class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):
-
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
@@ -632,7 +632,6 @@ class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):
 
 
 class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
-
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
