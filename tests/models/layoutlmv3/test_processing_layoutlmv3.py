@@ -60,10 +60,6 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         return tokenizer_class.from_pretrained(cls.tmpdirname, unk_token="<unk>")
 
-    @unittest.skip("LayoutLMv3Processor requires images")
-    def test_tokenizer_defaults(self):
-        pass
-
     @unittest.skip("LayoutLMv3 Image Processor doesn't return image tensors")
     def test_image_processor_defaults(self):
         pass

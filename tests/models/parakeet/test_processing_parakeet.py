@@ -26,7 +26,3 @@ class ParakeetProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ParakeetProcessor
     text_input_name = "labels"
     model_id = "nvidia/parakeet-ctc-1.1b"
-
-    @unittest.skip("ParakeetProcessor requires audio input")
-    def test_tokenizer_defaults(self):
-        pass

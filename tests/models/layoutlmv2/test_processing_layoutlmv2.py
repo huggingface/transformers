@@ -66,10 +66,6 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
         return LayoutLMv2Tokenizer.from_pretrained(cls.tmpdirname)
 
-    @unittest.skip("LayoutLMv2Processor requires images")
-    def test_tokenizer_defaults(self):
-        pass
-
     @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
     def test_image_processor_defaults(self):
         pass

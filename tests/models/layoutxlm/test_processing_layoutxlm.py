@@ -52,10 +52,6 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         return tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-layoutxlm")
 
-    @unittest.skip("LayoutXLMProcessor requires images")
-    def test_tokenizer_defaults(self):
-        pass
-
     @unittest.skip("LayoutXLM Image Processor doesn't return image tensors")
     def test_image_processor_defaults(self):
         pass

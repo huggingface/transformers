@@ -40,10 +40,6 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     input_keys = ["protein_input_ids", "protein_attention_mask", "input_ids", "attention_mask"]
 
     @unittest.skip("EvollaProcessor requires `messages_list` and `proteins` inputs.")
-    def test_tokenizer_defaults(self):
-        pass
-
-    @unittest.skip("EvollaProcessor requires `messages_list` and `proteins` inputs.")
     def test_processor_with_multiple_inputs(self):
         pass
 

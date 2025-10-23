@@ -35,10 +35,6 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = tokenizer_class.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
         return tokenizer
 
-    @unittest.skip("GotOcr2Processor requires image inputs")
-    def test_tokenizer_defaults(self):
-        pass
-
     @unittest.skip("GotOcr2Processor pop the image processor output 'num_patches'")
     def test_image_processor_defaults(self):
         pass

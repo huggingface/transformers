@@ -968,6 +968,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("donut-swin", "donut"),
         ("kosmos-2", "kosmos2"),
         ("kosmos-2.5", "kosmos2_5"),
+        ("omdet-turbo", "omdet_turbo"),
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),

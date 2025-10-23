@@ -39,11 +39,11 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ColQwen2Processor
     model_id = "Qwen/Qwen2-VL-2B-Instruct"
 
-    @unittest.skip("ColpaliProcessor can only process one of text or images at a time")
+    @unittest.skip("ColQwen2Processor can only process one of text or images at a time")
     def test_processor_with_multiple_inputs(self):
         pass
 
-    @unittest.skip("ColpaliProcessor adds a prefix and suffix to the text")
+    @unittest.skip("ColQwen2Processor adds a prefix and suffix to the text")
     def test_tokenizer_defaults(self):
         pass
 
