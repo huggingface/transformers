@@ -34,6 +34,16 @@ from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
+    """
+)
+class ParakeetEncoderModelOutput(BaseModelOutput):
+    attention_mask: Optional[torch.Tensor] = None
+
+
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
     """Relative positional encoding for Parakeet."""
 
@@ -399,9 +409,13 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         self,
         input_features: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        output_attention_mask: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
+        output_attention_mask (`bool`, *optional*):
+            Whether to return the output attention mask.
+
         Example:
 
         ```python
@@ -432,8 +446,8 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         )
 
         if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
-            attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
+            output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = output_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
             attention_mask = attention_mask & attention_mask.transpose(1, 2)
             attention_mask = attention_mask.unsqueeze(1)
 
@@ -453,7 +467,9 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
                     **kwargs,
                 )
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return ParakeetEncoderModelOutput(
+            last_hidden_state=hidden_states, attention_mask=output_mask.int() if output_attention_mask else None
+        )
 
 
 @dataclass
