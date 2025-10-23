@@ -129,7 +129,9 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
     def _process_speech_inputs(self, speech_tensors, speech_masks):
         """Process speech inputs through tokenizers and connectors."""
         # TODO (ebezzam) can remove unsqueeze since if we keep batch dim in processor?
-        acoustic_latents = self.model.acoustic_tokenizer.encode(speech_tensors.unsqueeze(1), sample=True).latents
+        with torch.no_grad():
+            # TODO (ebezzam) shifted no_grad from model def to when actually calling: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L1062
+            acoustic_latents = self.model.acoustic_tokenizer.encode(speech_tensors.unsqueeze(1), sample=True).latents
 
         # Apply scaling and bias
         acoustic_features = (acoustic_latents + self.model.speech_bias_factor.to(acoustic_latents.device)) * self.model.speech_scaling_factor.to(acoustic_latents.device)
@@ -581,12 +583,13 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
 
                 # Decode acoustic latent to audio using acoustic streaming cache
                 scaled_latent = speech_latent / self.model.speech_scaling_factor.to(speech_latent.device) - self.model.speech_bias_factor.to(speech_latent.device)
-                audio_output = self.model.acoustic_tokenizer.decode(
-                    scaled_latent.to(self.model.acoustic_tokenizer.device),
-                    past_conv_values=acoustic_cache,  # Use acoustic-specific cache
-                    sample_indices=diffusion_indices.to(self.model.acoustic_tokenizer.device),
-                    use_cache=True
-                )
+                with torch.no_grad():
+                    audio_output = self.model.acoustic_tokenizer.decode(
+                        scaled_latent.to(self.model.acoustic_tokenizer.device),
+                        past_conv_values=acoustic_cache,  # Use acoustic-specific cache
+                        sample_indices=diffusion_indices.to(self.model.acoustic_tokenizer.device),
+                        use_cache=True
+                    )
                 audio_chunk = audio_output.audio
                 acoustic_cache = audio_output.past_conv_values
 
@@ -603,12 +606,13 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                     audio_streamer.put(audio_chunk, diffusion_indices)
 
                 # Encode audio to semantic features using semantic streaming cache
-                semantic_outputs = self.model.semantic_tokenizer.encode(
-                    audio_chunk,
-                    past_conv_values=semantic_cache,  # Use semantic-specific cache
-                    sample_indices=diffusion_indices,
-                    use_cache=True
-                )
+                with torch.no_grad():
+                    semantic_outputs = self.model.semantic_tokenizer.encode(
+                        audio_chunk,
+                        past_conv_values=semantic_cache,  # Use semantic-specific cache
+                        sample_indices=diffusion_indices,
+                        use_cache=True
+                    )
                 semantic_features = semantic_outputs.latents
                 semantic_cache = semantic_outputs.past_conv_values
 
