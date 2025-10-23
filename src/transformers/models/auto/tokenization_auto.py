@@ -1155,10 +1155,7 @@ class AutoTokenizer:
                 ) from e
             raise
 
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
-        )
-
+        raise ValueError(f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n")
 
     @staticmethod
     def register(config_class, slow_tokenizer_class=None, fast_tokenizer_class=None, exist_ok=False):
