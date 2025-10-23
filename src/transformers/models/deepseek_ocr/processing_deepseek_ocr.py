@@ -27,19 +27,19 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class DeepSeekOCRProcessorKwargs(ProcessingKwargs, total=False):
+class DeepseekOcrProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
-class DeepSeekOCRProcessor(ProcessorMixin):
+class DeepseekOcrProcessor(ProcessorMixin):
     r"""
     Constructs a DeepSeek OCR processor which wraps an image processor and a tokenizer into a single processor.
 
-    [`DeepSeekOCRProcessor`] offers all the functionalities of [`DeepSeekOCRImageProcessorFast`] and tokenizer.
-    See the [`~DeepSeekOCRProcessor.__call__`] and [`~DeepSeekOCRProcessor.decode`] for more information.
+    [`DeepseekOcrProcessor`] offers all the functionalities of [`DeepseekOcrImageProcessorFast`] and tokenizer.
+    See the [`~DeepseekOcrProcessor.__call__`] and [`~DeepseekOcrProcessor.decode`] for more information.
 
     Args:
-        image_processor (`DeepSeekOCRImageProcessorFast`):
+        image_processor (`DeepseekOcrImageProcessorFast`):
             The image processor to use for images.
         tokenizer (PreTrainedTokenizer):
             The tokenizer to use for text.
@@ -49,7 +49,7 @@ class DeepSeekOCRProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = "AutoTokenizer"
-    image_processor_class = "DeepSeekOCRImageProcessorFast"
+    image_processor_class = "DeepseekOcrImageProcessorFast"
 
     def __init__(
         self,
@@ -86,7 +86,7 @@ class DeepSeekOCRProcessor(ProcessorMixin):
             - **image_spatial_crop** -- Spatial crop information for images.
         """
 
-        output_kwargs = self._merge_kwargs(DeepSeekOCRProcessorKwargs, self.tokenizer.init_kwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(DeepseekOcrProcessorKwargs, self.tokenizer.init_kwargs, **kwargs)
         image_kwargs = output_kwargs["images_kwargs"]
 
         image_inputs = self.image_processor(images, **image_kwargs) if images is not None else {}
@@ -164,4 +164,4 @@ class DeepSeekOCRProcessor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + ["image_attention_mask"]))
 
 
-__all__ = ["DeepSeekOCRProcessor"]
+__all__ = ["DeepseekOcrProcessor"]

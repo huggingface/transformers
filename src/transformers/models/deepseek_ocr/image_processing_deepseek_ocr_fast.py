@@ -35,7 +35,7 @@ from ...utils import TensorType, auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-class DeepSeekOCRImageProcessorKwargs(ImagesKwargs, total=False):
+class DeepseekOcrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*):
         The size of the patch.
@@ -51,7 +51,7 @@ class DeepSeekOCRImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class DeepSeekOCRImageProcessorFast(BaseImageProcessorFast):
+class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     size = {"height": 640, "width": 640}
     base_size = {"height": 1024, "width": 1024}
@@ -63,10 +63,10 @@ class DeepSeekOCRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = DeepSeekOCRImageProcessorKwargs
+    valid_kwargs = DeepseekOcrImageProcessorKwargs
     model_input_names = ["pixel_values", "image_attention_mask", "image_spatial_crop"]
 
-    def __init__(self, **kwargs: Unpack[DeepSeekOCRImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DeepseekOcrImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height, image_size):
@@ -138,7 +138,7 @@ class DeepSeekOCRImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[DeepSeekOCRImageProcessorKwargs],
+        **kwargs: Unpack[DeepseekOcrImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -343,4 +343,4 @@ class DeepSeekOCRImageProcessorFast(BaseImageProcessorFast):
         return img_draw
 
 
-__all__ = ["DeepSeekOCRImageProcessorFast"]
+__all__ = ["DeepseekOcrImageProcessorFast"]

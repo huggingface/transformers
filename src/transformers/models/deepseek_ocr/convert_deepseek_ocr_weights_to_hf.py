@@ -21,7 +21,13 @@ from textwrap import dedent
 import torch
 from safetensors.torch import load_file
 
-from transformers import DeepseekOcrConfig, DeepseekOcrForConditionalGeneration
+from transformers import (
+    AutoTokenizer,
+    DeepseekOcrConfig,
+    DeepseekOcrForConditionalGeneration,
+    DeepseekOcrImageProcessorFast,
+    DeepseekOcrProcessor,
+)
 
 
 CHAT_TEMPLATE = dedent(
@@ -76,7 +82,7 @@ STATE_DICT_MAPPING = {
     r"^model\.vision_model\.transformer\.layers\.(\d+)\.mlp\.fc(\d+)\.(weight|bias)":             r"model.clip_model.vision_model.encoder.layers.\1.mlp.fc\2.\3",
     r"^model\.vision_model\.post_layernorm\.(weight|bias)":                                       r"model.clip_model.vision_model.post_layernorm.\1",
 
-    r"^model\.projector\.layers\.(weight|bias)":                                                  r"model.projector.layers.\1",
+    r"^model\.projector\.layers\.(weight|bias)":                                                  r"model.multi_modal_projector.layers.\1",
 
     r"^model\.embed_tokens\.weight":                                                              r"model.language_model.embed_tokens.weight",
     r"^model\.layers\.(\d+)\.input_layernorm\.weight":                                            r"model.language_model.layers.\1.input_layernorm.weight",
@@ -146,19 +152,6 @@ def convert_state_dict(original_state_dict, config):
     return new_state_dict
 
 
-TOKENIZER_RELATED_FILES = [
-    "tokenizer.json",
-    "tokenizer_config.json",
-    "tokenizer.model",
-    "special_tokens_map.json",
-    "added_tokens.json",
-    "vocab.json",
-    "merges.txt",
-    "processor_config.json",
-    "preprocessor_config.json",
-    "generation_config.json",
-    "chat_template.json",
-]
 
 
 def main():
@@ -174,17 +167,6 @@ def main():
         type=str,
         required=True,
         help="Path where to save the converted model",
-    )
-    parser.add_argument(
-        "--push_to_hub",
-        action="store_true",
-        help="Whether to push the converted model to the Hugging Face Hub",
-    )
-    parser.add_argument(
-        "--repo_id",
-        type=str,
-        default=None,
-        help="Repository ID for pushing to the Hub (required if --push_to_hub is set)",
     )
 
     args = parser.parse_args()
@@ -202,6 +184,14 @@ def main():
         print(f"Loading config from {config_path}")
         with open(config_path, "r") as f:
             config_dict = json.load(f)
+        if "language_config" in config_dict:
+            config_dict["text_config"] = config_dict.pop("language_config")
+
+        if "text_config" in config_dict and "head_dim" not in config_dict["text_config"]:
+            text_config = config_dict["text_config"]
+            if "hidden_size" in text_config and "num_attention_heads" in text_config:
+                text_config["head_dim"] = text_config["hidden_size"] // text_config["num_attention_heads"]
+
         config = DeepseekOcrConfig(**config_dict)
     else:
         print("Config not found, using default config")
@@ -227,39 +217,17 @@ def main():
     model.save_pretrained(output_path)
     config.save_pretrained(output_path)
 
+    print("Creating and saving processor...")
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint_path.parent)
+    image_processor = DeepseekOcrImageProcessorFast()
+    processor = DeepseekOcrProcessor(
+        image_processor=image_processor,
+        tokenizer=tokenizer,
+        chat_template=CHAT_TEMPLATE,
+    )
+    processor.save_pretrained(output_path)
+
     print("Conversion complete!")
-
-    if args.push_to_hub:
-        if not args.repo_id:
-            raise ValueError("--repo_id must be provided when --push_to_hub is set")
-
-        print(f"Pushing model to Hub: {args.repo_id}")
-        model.push_to_hub(args.repo_id)
-        print("Model pushed successfully!")
-
-    print("Copying tokenizer / processor files if available...")
-    for filename in TOKENIZER_RELATED_FILES:
-        source_file = checkpoint_path.parent / filename
-        if source_file.exists():
-            target_file = output_path / filename
-            target_file.write_bytes(source_file.read_bytes())
-            print(f"Copied {filename}")
-
-    tokenizer_config_path = output_path / "tokenizer_config.json"
-    if tokenizer_config_path.exists():
-        with open(tokenizer_config_path, "r", encoding="utf-8") as f:
-            tokenizer_config = json.load(f)
-        tokenizer_config["chat_template"] = CHAT_TEMPLATE
-        with open(tokenizer_config_path, "w", encoding="utf-8") as f:
-            json.dump(tokenizer_config, f, indent=2, ensure_ascii=False)
-
-    processor_config_path = output_path / "processor_config.json"
-    if processor_config_path.exists():
-        with open(processor_config_path, "r", encoding="utf-8") as f:
-            processor_config = json.load(f)
-        processor_config["chat_template"] = CHAT_TEMPLATE
-        with open(processor_config_path, "w", encoding="utf-8") as f:
-            json.dump(processor_config, f, indent=2, ensure_ascii=False)
 
 
 if __name__ == "__main__":
