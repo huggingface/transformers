@@ -175,6 +175,8 @@ def _unpad_input(hidden_states, attention_mask, unused_mask=None):
     seqlens_in_batch = all_masks.sum(dim=-1, dtype=torch.int32)
     used_seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(all_masks.flatten(), as_tuple=False).flatten()
+    # `.item()` is necessary to work with torch compile as the FA API requires base ints, not tensors.
+    # You might need to set `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1`.
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
 
@@ -224,8 +226,8 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.T
     """
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    # NOTE: Similar to the `.item()` in prepare_fa2_from_position_ids, with torch compile,
-    # this might cause a graph break
+    # `.item()` is necessary to work with torch compile as the FA API requires base ints, not tensors.
+    # You might need to set `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1`.
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
@@ -347,11 +349,8 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
     # for some models (e.g. qwen2-vl).
     max_length_q = cu_seq_lens_q.diff().max()
-    # NOTE: With torch compile, this will cause a graph break if you don't set
-    # `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1` in the environment or call
-    # `torch._dynamo.config.capture_scalar_outputs = True` before doing the forward pass.
-    # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
-    # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
+    # `.item()` is necessary to work with torch compile as the FA API requires base ints, not tensors.
+    # You might need to set `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1`.
     max_length_q = max_length_q.item()
     max_length_k = max_length_q
 
