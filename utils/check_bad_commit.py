@@ -206,12 +206,13 @@ def get_commit_info(commit):
         if pr_for_commit["merged_by"] is not None:
             merged_author = pr_for_commit["merged_by"]["login"]
 
+    url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
+    commit_info = requests.get(url).json()
+    parent = commit_info["parents"][0]["sha"]
     if author is None:
-        url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
-        commit_info = requests.get(url).json()
         author = commit_info["author"]["login"]
 
-    return {"commit": commit, "pr_number": pr_number, "author": author, "merged_by": merged_author}
+    return {"commit": commit, "pr_number": pr_number, "author": author, "merged_by": merged_author, "parent": parent}
 
 
 if __name__ == "__main__":
