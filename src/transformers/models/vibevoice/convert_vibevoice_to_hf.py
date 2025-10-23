@@ -179,6 +179,12 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     # clean up diffusion head config
     if model_config["diffusion_head_config"]["ddpm_beta_schedule"] == "cosine":
         model_config["diffusion_head_config"]["ddpm_beta_schedule"] = "squaredcos_cap_v2"
+    if "speech_vae_dim" in model_config["diffusion_head_config"]:
+        del model_config["diffusion_head_config"]["speech_vae_dim"]
+    if "diffusion_type" in model_config["diffusion_head_config"]:
+        del model_config["diffusion_head_config"]["diffusion_type"]
+    if "ddpm_batch_mul" in model_config["diffusion_head_config"]:
+        del model_config["diffusion_head_config"]["ddpm_batch_mul"]
     
     # 3) Update state dict to match HF model structure
     updated_state_dict = update_state_dict_for_hf_model(original_state_dict)

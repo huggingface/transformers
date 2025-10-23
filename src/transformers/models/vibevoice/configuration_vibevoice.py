@@ -34,13 +34,11 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
         head_ffn_ratio=3.0,
         rms_norm_eps=1e-5,
         latent_size=64,
-        speech_vae_dim=None,
         prediction_type="v_prediction",
-        diffusion_type="ddpm",
         ddpm_num_steps=1000,
         ddpm_num_inference_steps=20,
-        ddpm_beta_schedule="cosine",
-        ddpm_batch_mul=4,
+        ddpm_beta_schedule="squaredcos_cap_v2",
+        hidden_act="gelu",
         **kwargs
     ):
         self.hidden_size = hidden_size
@@ -48,15 +46,14 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
         self.head_ffn_ratio = head_ffn_ratio
         self.rms_norm_eps = rms_norm_eps
         self.latent_size = latent_size
-        self.speech_vae_dim = speech_vae_dim
         self.prediction_type = prediction_type
-        self.diffusion_type = diffusion_type
         self.ddpm_num_steps = ddpm_num_steps
         self.ddpm_num_inference_steps = ddpm_num_inference_steps
         self.ddpm_beta_schedule = ddpm_beta_schedule
-        self.ddpm_batch_mul = ddpm_batch_mul
+        self.hidden_act = hidden_act
 
         super().__init__(**kwargs)
+
 
 class VibeVoiceConfig(PretrainedConfig):
     model_type = "vibevoice"
