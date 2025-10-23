@@ -19,9 +19,10 @@ from typing import Optional
 
 import torch
 
+from ...utils import is_torch_xpu_available
 from ...utils.logging import logging
 from ...utils.metrics import traced
-from ...utils import is_torch_xpu_available
+
 
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
