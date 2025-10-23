@@ -543,7 +543,7 @@ class BartEncoder(BartPreTrainedModel):
         )
 
         if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
+            self.embed_tokens = embed_tokens
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -687,7 +687,7 @@ class BartDecoder(BartPreTrainedModel):
         )
 
         if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
+            self.embed_tokens = embed_tokens
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
