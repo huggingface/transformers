@@ -23,7 +23,7 @@ import copy
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
@@ -53,33 +53,31 @@ class T5Gemma2ModuleConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=262_208,
-        hidden_size=2304,
-        intermediate_size=9216,
-        num_hidden_layers=26,
-        num_attention_heads=8,
-        num_key_value_heads=4,
-        head_dim=256,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=131_072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
-        tie_word_embeddings=True,
-        rope_theta=1_000_000.0,
-        attention_bias=False,
-        attention_dropout=0.0,
-        query_pre_attn_scalar=256,
-        sliding_window=4096,
-        layer_types=None,
-        final_logit_softcapping=None,
-        attn_logit_softcapping=None,
-        rope_scaling=None,
-        rope_local_base_freq=10_000.0,
-        use_bidirectional_attention=False,
+        vocab_size: Optional[int] = 262_208,
+        hidden_size: Optional[int] = 2304,
+        intermediate_size: Optional[int] = 9216,
+        num_hidden_layers: Optional[int] = 26,
+        num_attention_heads: Optional[int] = 8,
+        num_key_value_heads: Optional[int] = 4,
+        head_dim: Optional[int] = 256,
+        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
+        max_position_embeddings: Optional[int] = 131_072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 1,
+        bos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        query_pre_attn_scalar: Optional[int] = 256,
+        sliding_window: Optional[int] = 4096,
+        layer_types: Optional[list[str]] = None,
+        final_logit_softcapping: Optional[float] = None,
+        attn_logit_softcapping: Optional[float] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        use_bidirectional_attention: Optional[bool] = False,
         **kwargs,
     ):
         super().__init__(
@@ -100,7 +98,6 @@ class T5Gemma2ModuleConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
@@ -109,13 +106,14 @@ class T5Gemma2ModuleConfig(PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        if rope_scaling is not None:
+            rope_parameters = {"sliding_attention": {"rope_type": "default"}, "full_attention": rope_scaling}
+        self.rope_parameters = rope_parameters
         self.use_bidirectional_attention = use_bidirectional_attention
         if use_bidirectional_attention:
             self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
-
-        self.rope_local_base_freq = rope_local_base_freq
-        self.rope_scaling = rope_scaling
-        rope_config_validation(self)
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
@@ -126,6 +124,14 @@ class T5Gemma2ModuleConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = getattr(self, "rope_theta", 1_000_000.0)
+        rope_local_base_freq = getattr(self, "rope_local_base_freq", 10000.0)
+        standardize_rope_params(
+            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
+        )
+        rope_config_validation(self)
 
 
 class T5Gemma2Config(PreTrainedConfig):
