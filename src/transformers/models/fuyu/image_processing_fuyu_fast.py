@@ -46,6 +46,7 @@ logger = logging.get_logger(__name__)
 
 class FuyuImagesKwargs(ImagesKwargs, total=False):
     """Keyword arguments for Fuyu image processing."""
+
     patch_size: Optional[SizeDict]
 
 
@@ -240,11 +241,11 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         processed_images = []
         for img in resized_images:
             if do_pad:
-                img = self.pad_image(img, size=size, constant_values=self.padding_value, padding_mode=self.padding_mode)
+                img = self.pad_image(
+                    img, size=size, constant_values=self.padding_value, padding_mode=self.padding_mode
+                )
             # Rescale and normalize
-            img = self.rescale_and_normalize(
-                img, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
+            img = self.rescale_and_normalize(img, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             processed_images.append(img)
         # Wrap each image in a list to maintain expected structure for Fuyu
         batch_images = [[img] for img in processed_images]
@@ -367,7 +368,9 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
                         )
                         image = image[:, :new_h, :new_w]
                         image_height, image_width = new_h, new_w
-                    num_patches = self.get_num_patches(image_height=image_height, image_width=image_width, patch_size=patch_size)
+                    num_patches = self.get_num_patches(
+                        image_height=image_height, image_width=image_width, patch_size=patch_size
+                    )
                     # Create tensor of placeholder IDs
                     tensor_of_image_ids = torch.full(
                         [num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device
@@ -445,5 +448,6 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
             patch_size = SizeDict(**get_size_dict(patch_size, param_name="patch_size"))
         kwargs["patch_size"] = patch_size
         return kwargs
+
 
 __all__ = ["FuyuImageProcessorFast"]

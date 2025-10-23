@@ -18,6 +18,7 @@ if is_torch_available() and is_vision_available():
 if is_vision_available():
     from PIL import Image
 
+
 @require_torch
 @require_vision
 @require_torchvision
@@ -65,6 +66,7 @@ class TestFuyuImageProcessorFast(unittest.TestCase):
         sample_tensor = torch.from_numpy(self.sample_image).permute(2, 0, 1).float()
         # (h:450, w:210) fitting (160, 320) -> (160, 210*160/450) = (160, 74.67) -> (160, 74)
         from transformers.image_utils import SizeDict
+
         size_dict = SizeDict(height=self.size["height"], width=self.size["width"])
         scaled_image = self.processor_fast.resize(sample_tensor, size=size_dict)
         self.assertEqual(scaled_image.shape[1], 160)
@@ -110,6 +112,7 @@ class TestFuyuImageProcessorFast(unittest.TestCase):
     def test_pad_image(self):
         """Test that padding works correctly."""
         from transformers.image_utils import SizeDict
+
         # Create small image
         small_image = torch.rand(3, 100, 100)
         size_dict = SizeDict(height=160, width=320)
@@ -191,6 +194,7 @@ class TestFuyuImageProcessorFast(unittest.TestCase):
     def test_do_not_resize_if_smaller(self):
         """Test that images smaller than target size are not resized."""
         from transformers.image_utils import SizeDict
+
         # Create small image
         small_image = torch.rand(3, 100, 150)
         size_dict = SizeDict(height=160, width=320)
