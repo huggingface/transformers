@@ -649,18 +649,21 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
     hf_config = {
         "architectures": ["Glm4vForConditionalGeneration"],
         "model_type": "glm4v",
-    }
-    txt_config = {
-        "attention_bias": model_config.get("add_qkv_bias", True),
-        "attention_dropout": 0.0,
-        "pad_token_id": model_config.get("pad_token_id", 151329),
-        "eos_token_id": model_config.get("eos_token_id", [151329, 151336, 151338]),
         "image_start_token_id": model_config.get("image_start_token_id", 151339),
         "image_end_token_id": model_config.get("image_end_token_id", 151340),
         "video_start_token_id": model_config.get("video_start_token_id", 151341),
         "video_end_token_id": model_config.get("video_end_token_id", 151342),
         "image_token_id": model_config.get("image_token_id", 151343),
         "video_token_id": model_config.get("video_token_id", 151344),
+        "tie_word_embeddings": False,
+        "transformers_version": "4.57.0.dev0",
+    }
+    txt_config = {
+        "model_type": "glm4v_text",
+        "attention_bias": model_config.get("add_qkv_bias", True),
+        "attention_dropout": 0.0,
+        "pad_token_id": model_config.get("pad_token_id", 151329),
+        "eos_token_id": model_config.get("eos_token_id", [151329, 151336, 151338]),
         "hidden_act": text_config.get("hidden_act", "silu"),
         "hidden_size": text_config.get("hidden_size", 4096),
         "initializer_range": 0.02,
@@ -670,9 +673,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "num_hidden_layers": text_config.get("num_layers", 40),
         "num_key_value_heads": text_config.get("num_key_value_heads", 2),
         "rms_norm_eps": text_config.get("layernorm_epsilon", 1e-05),
-        "tie_word_embeddings": False,
-        "torch_dtype": text_config.get("torch_dtype", "bfloat16"),
-        "transformers_version": "4.57.1",
+        "dtype": text_config.get("torch_dtype", "bfloat16"),
         "use_cache": text_config.get("use_cache", True),
         "vocab_size": text_config.get("vocab_size", 151552),
         "partial_rotary_factor": 0.5,
