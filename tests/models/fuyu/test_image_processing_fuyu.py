@@ -115,7 +115,7 @@ class TestFuyuImageProcessorFast(unittest.TestCase):
         size_dict = SizeDict(height=160, width=320)
         padded = self.processor_fast.pad_image(small_image, size=size_dict, constant_values=1.0)
         self.assertEqual(padded.shape[1], 160)
-        self.assertEqual(padded.shape[2], 320)  
+        self.assertEqual(padded.shape[2], 320)
         # Check that padding values are correct (bottom right should be 1.0)
         self.assertTrue(torch.allclose(padded[:, 100:, :], torch.ones_like(padded[:, 100:, :])))
         self.assertTrue(torch.allclose(padded[:, :, 100:], torch.ones_like(padded[:, :, 100:])))
@@ -157,7 +157,7 @@ class TestFuyuImageProcessorFast(unittest.TestCase):
             image_placeholder_id=100,
             image_newline_id=101,
             variable_sized=True,
-        ) 
+        )
         # Check output structure
         self.assertIn("images", result)
         self.assertIn("image_input_ids", result)
@@ -198,4 +198,3 @@ class TestFuyuImageProcessorFast(unittest.TestCase):
         # Should not be resized since it's smaller
         self.assertEqual(resized.shape[1], 100)
         self.assertEqual(resized.shape[2], 150)
-        
