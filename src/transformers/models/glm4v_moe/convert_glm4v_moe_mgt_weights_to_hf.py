@@ -581,9 +581,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             f"vision_model.transformer.layers.{layer_i}.mlp.linear_fc1.layer_norm_weight"
         ]
 
-        # qkv_weight = merge_qkv_vit(
-        #     full_weights[f"vision_model.transformer.layers.{layer_i}.self_attention.linear_qkv.weight"])
-        # complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = qkv_weight.clone()
         q, k, v = merge_qkv(
             sd_list=full_weights[f"vision_model.transformer.layers.{layer_i}.self_attention.linear_qkv.weight"],
             original_tp=origin_tp,

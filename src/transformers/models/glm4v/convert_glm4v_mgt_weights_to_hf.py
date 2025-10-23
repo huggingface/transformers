@@ -78,13 +78,13 @@ def _apply_rope_permute(q_or_k: torch.Tensor, blocks: int, head_dim: int, rotary
 
 
 def merge_qkv(
-    sd_list,
-    original_tp,
-    num_attention_heads,
-    multi_query_group_num,
-    attention_dim,
-    interleaved_qkv,
-    convert_neox_to_llama: bool = True,
+        sd_list,
+        original_tp,
+        num_attention_heads,
+        multi_query_group_num,
+        attention_dim,
+        interleaved_qkv,
+        convert_neox_to_llama: bool = True,
 ):
     rotary_dim = attention_dim // 2
     group_size = (num_attention_heads // multi_query_group_num + 2) * attention_dim
@@ -129,6 +129,39 @@ def merge_qkv(
     return q, k, v
 
 
+def merge_qkv_vit(
+        sd_list,
+        original_tp,
+        num_attention_heads,
+        multi_query_group_num,
+        attention_dim
+):
+    group_size = (num_attention_heads // multi_query_group_num + 2) * attention_dim
+    q, k, v = [], [], []
+    for sd in sd_list:
+        shape = sd.shape
+        q_, k_, v_ = sd.view((multi_query_group_num // original_tp, group_size) + (shape[1:])).split(
+            [
+                (num_attention_heads // multi_query_group_num * attention_dim),
+                attention_dim,
+                attention_dim,
+            ],
+            dim=1,
+        )
+        q_ = q_.reshape((-1,) + (shape[1:]))
+        k_ = k_.reshape((-1,) + (shape[1:]))
+        v_ = v_.reshape((-1,) + (shape[1:]))
+        q.append(q_.clone())
+        k.append(k_.clone())
+        v.append(v_.clone())
+
+    q = torch.cat(q, dim=0)
+    k = torch.cat(k, dim=0)
+    v = torch.cat(v, dim=0)
+
+    return q, k, v
+
+
 def merge_glu(sd_list):
     return torch.cat(
         [sd.chunk(dim=0, chunks=2)[0].clone() for sd in sd_list]
@@ -156,13 +189,13 @@ def split_glu(sd, cnt, idx):
 
 
 def merge_tensors(
-    tp_sd,
-    keys,
-    original_tp,
-    target_tp,
-    current_tp,
-    slice_dim=None,
-    merge_fn=None,
+        tp_sd,
+        keys,
+        original_tp,
+        target_tp,
+        current_tp,
+        slice_dim=None,
+        merge_fn=None,
 ):
     cnt = original_tp // target_tp
     offset = cnt * current_tp
@@ -199,7 +232,7 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
     layered_dict["others"] = {}
     for key, value in state_dict.items():
         if not any(f"model.language_model.layers.{i}." in key for i in range(num_layers)) and not any(
-            f"model.visual.blocks.{i}." in key for i in range(vision_num_layers)
+                f"model.visual.blocks.{i}." in key for i in range(vision_num_layers)
         ):
             layered_dict["others"][key] = value
 
@@ -242,7 +275,7 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
 
         save_file(shard, shard_path, metadata={"format": "pt"})
         print(f"Saved shard {i + 1}/{len(shards)}: {shard_filename}")
-        print(f"  Shard size: {sum(p.numel() * p.element_size() for p in shard.values()) / (1024**3):.2f} GB")
+        print(f"  Shard size: {sum(p.numel() * p.element_size() for p in shard.values()) / (1024 ** 3):.2f} GB")
         print(f"  Keys in shard: {len(shard)}")
 
     index_path = os.path.join(output_path, "model.safetensors.index.json")
@@ -561,13 +594,12 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             f"vision_model.transformer.layers.{layer_i}.mlp.linear_fc1.layer_norm_weight"
         ]
 
-        q, k, v = merge_qkv(
+        q, k, v = merge_qkv_vit(
             sd_list=full_weights[f"vision_model.transformer.layers.{layer_i}.self_attention.linear_qkv.weight"],
             original_tp=origin_tp,
             num_attention_heads=vit_n_head,
             multi_query_group_num=vit_n_head,
             attention_dim=attention_dim,
-            interleaved_qkv=True,
         )
         complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = torch.cat((q, k, v), dim=0)
 
@@ -653,10 +685,10 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "image_end_token_id": model_config.get("image_end_token_id", 151340),
         "video_start_token_id": model_config.get("video_start_token_id", 151341),
         "video_end_token_id": model_config.get("video_end_token_id", 151342),
-        "image_token_id": model_config.get("image_token_id", 151343),
-        "video_token_id": model_config.get("video_token_id", 151344),
+        "image_token_id": model_config.get("image_token_id", 151363),
+        "video_token_id": model_config.get("video_token_id", 151364),
         "tie_word_embeddings": False,
-        "transformers_version": "4.57.0.dev0",
+        "transformers_version": "4.57.1",
     }
     txt_config = {
         "model_type": "glm4v_text",
