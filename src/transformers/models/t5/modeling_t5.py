@@ -22,6 +22,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from transformers.masking_utils import create_bidirectional_mask, create_causal_mask
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -45,7 +47,6 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from transformers.masking_utils import create_attention_mask, create_causal_mask
 from .configuration_t5 import T5Config
 
 
@@ -756,7 +757,7 @@ class T5Stack(T5PreTrainedModel):
             )
         else:
             # Encoder: bidirectional attention mask
-            causal_mask = create_attention_mask(
+            causal_mask = create_bidirectional_mask(
                 config=self.config,
                 input_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -768,7 +769,7 @@ class T5Stack(T5PreTrainedModel):
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         # Cross-attention mask using new interface
         if self.is_decoder and encoder_hidden_states is not None:
-            encoder_extended_attention_mask = create_attention_mask(
+            encoder_extended_attention_mask = create_bidirectional_mask(
                 config=self.config,
                 input_embeds=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
