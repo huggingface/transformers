@@ -16,11 +16,11 @@
 Tokenization class for LayoutLMv2. Based on WordPiece.
 """
 
-import json
 from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors
 
+from ...tokenization_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
@@ -31,7 +31,6 @@ from ...tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from ...tokenization_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, logging
 
 
@@ -214,9 +213,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
             }
 
         # Initialize WordPiece tokenizer
-        self._tokenizer = Tokenizer(
-            models.WordPiece(vocab=_vocab, unk_token=str(unk_token))
-        )
+        self._tokenizer = Tokenizer(models.WordPiece(vocab=_vocab, unk_token=str(unk_token)))
 
         # Set normalizer
         self._tokenizer.normalizer = normalizers.BertNormalizer(
