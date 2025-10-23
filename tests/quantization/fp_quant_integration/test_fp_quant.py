@@ -23,9 +23,7 @@ from transformers.testing_utils import (
     require_fp_quant,
     require_qutlass,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
