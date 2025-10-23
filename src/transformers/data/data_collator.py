@@ -1370,6 +1370,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - no padding will be added, returns `input_ids`, `labels` and `position_ids` by default
     - optionally returns the kwargs contained in FlashAttentionKwargs
     - optionally returns seq_idx indicating which sequence each token belongs to
+    - `pack_sequence_labels`: if True, will pack integer labels for sequence classification into a `(batch_size,)` tensor instead of broadcasting them to match `input_ids`.
 
     <Tip warning={true}>
 
@@ -1386,6 +1387,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         separator_id=-100,
         return_flash_attn_kwargs=False,
         return_seq_idx=False,
+        pack_sequence_labels=False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -1393,6 +1395,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self.separator_id = separator_id
         self.return_flash_attn_kwargs = return_flash_attn_kwargs
         self.return_seq_idx = return_seq_idx
+        self.pack_sequence_labels = pack_sequence_labels
         self._int_64_keys = {"labels", "position_ids", "input_ids"}
         self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
         self._py_int_keys = {"max_length_q", "max_length_k"}
@@ -1403,6 +1406,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         if separator_id is None:
             separator_id = self.separator_id
         is_labels_provided = "labels" in features[0]
+
+        is_labels_sequence = is_labels_provided and isinstance(features[0].get("labels"), (list, tuple, np.ndarray))
+
         batch = {"input_ids": [], "labels": []}
         if self.return_position_ids:
             batch.update({"position_ids": []})
@@ -1411,13 +1417,19 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         if self.return_flash_attn_kwargs:
             cu_seq_lens = [0]
             max_length = 0
+
         for seq_idx, sample in enumerate(features):
             input_ids = sample["input_ids"]
             batch["input_ids"] += input_ids
             if is_labels_provided:
-                batch["labels"] += [separator_id] + sample["labels"][1:]
+                if is_labels_sequence:
+                    # Original logic for token-level labels.
+                    batch["labels"] += [self.separator_id] + sample["labels"][1:]
+                else:
+                    # Default "safe" behavior: broadcast the integer label to all tokens.
+                    batch["labels"] += [sample["labels"]] * len(input_ids)
             else:
-                batch["labels"] += [separator_id] + input_ids[1:]
+                batch["labels"] += [self.separator_id] + input_ids[1:]
             if self.return_position_ids:
                 batch["position_ids"] += list(range(len(input_ids)))
             if self.return_seq_idx:
@@ -1426,11 +1438,14 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 cu_seq_lens.append(cu_seq_lens[-1] + len(input_ids))
                 max_length = max(max_length, len(input_ids))
 
+        # If packing is enabled for sequence classification, overwrite the broadcasted labels.
+        if is_labels_provided and not is_labels_sequence and self.pack_sequence_labels:
+            batch["labels"] = [feature["labels"] for feature in features]
+
         if self.return_flash_attn_kwargs:
             batch["cu_seq_lens_q"] = batch["cu_seq_lens_k"] = cu_seq_lens
             batch["max_length_q"] = batch["max_length_k"] = max_length
 
-        # FlashAttentionKwargs and seq_idx are expected to be int32s.
         if return_tensors == "pt":
             import torch
 
@@ -1445,9 +1460,12 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             raise ValueError(f'return_tensors must be one of ("pt", "np"), {return_tensors=} not supported')
 
         for k, v in batch.items():
-            if k in self._batch_dim_keys:
+            # For packed sequence labels, we want a 1D tensor, not a 2D tensor of shape (1, batch_size).
+            if k == "labels" and is_labels_provided and not is_labels_sequence and self.pack_sequence_labels:
+                pass
+            elif k in self._batch_dim_keys:
                 v = [v]
-            # Flash attention max_len_{q,k} are python ints
+
             if k not in self._py_int_keys:
                 batch[k] = data_cls(v, dtype=dtype_64 if k in self._int_64_keys else dtype_32)
 
