@@ -37,7 +37,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_kernels_available
+from transformers.utils.import_utils import is_kernels_available
 
 
 if is_kernels_available():
@@ -60,16 +60,16 @@ class TestHubKernels(TestCasePlus):
         )
         cls.input = "Hello"
 
-    def tearDown(self):
-        # Delete large objects to drop references early
+    @classmethod
+    def tearDownClass(cls):
         for attr in [
             "model_kernelized",
             "model_not_kernelized",
             "tokenizer",
         ]:
-            if hasattr(self, attr):
+            if hasattr(cls, attr):
                 try:
-                    delattr(self, attr)
+                    delattr(cls, attr)
                 except Exception:
                     pass
 
@@ -83,6 +83,7 @@ class TestHubKernels(TestCasePlus):
         except Exception:
             pass
 
+    def tearDown(self):
         # Free accelerator memory/cache and trigger GC
         cleanup(torch_device, gc_collect=True)
 
@@ -357,17 +358,21 @@ class TestAttentionKernelRegistration(TestCasePlus):
 
 @require_kernels
 class TestUseKernelsLifecycle(TestCasePlus):
-    def setUp(self):
-        self.model_id = "unsloth/Llama-3.2-1B-Instruct"
-        self.model = AutoModelForCausalLM.from_pretrained(self.model_id, use_kernels=False, device_map=torch_device)
+    @classmethod
+    def setUpClass(cls):
+        cls.model_id = "unsloth/Llama-3.2-1B-Instruct"
+        cls.model = AutoModelForCausalLM.from_pretrained(cls.model_id, use_kernels=False, device_map=torch_device)
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         # Delete large objects to drop references early
-        if hasattr(self, "model"):
+        if hasattr(cls, "model"):
             try:
-                del self.model
+                del cls.model
             except Exception:
                 pass
+
+    def tearDown(self):
         # Free accelerator memory/cache and trigger GC
         cleanup(torch_device, gc_collect=True)
 
