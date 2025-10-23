@@ -306,7 +306,7 @@ class ChatSchemaParserTest(unittest.TestCase):
                 "role": "assistant",
                 "tool_calls": [
                     {"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris"}}}
-                ]
+                ],
             },
         )
 
@@ -340,6 +340,6 @@ class ChatSchemaParserTest(unittest.TestCase):
                             },
                         },
                     }
-                ]
+                ],
             },
         )
