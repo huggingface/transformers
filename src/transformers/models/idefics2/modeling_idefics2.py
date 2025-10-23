@@ -407,6 +407,7 @@ class Idefics2Encoder(nn.Module):
 class Idefics2PreTrainedModel(PreTrainedModel):
     config: Idefics2Config
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -447,6 +448,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     config: Idefics2VisionConfig
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -703,6 +705,7 @@ class Idefics2PerceiverLayer(nn.Module):
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
     config: Idefics2PerceiverConfig
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attention_2 = True
     _supports_flex_attn = True
@@ -1089,7 +1092,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         >>> from PIL import Image
         >>> from io import BytesIO
 
-        >>> from transformers import AutoProcessor, AutoModelForVision2Seq
+        >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> from transformers.image_utils import load_image
 
         >>> # Note that passing the image urls (instead of the actual pil images) to the processor is also possible
@@ -1098,7 +1101,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b-base")
-        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/idefics2-8b-base", device_map="auto")
+        >>> model = AutoModelForImageTextToText.from_pretrained("HuggingFaceM4/idefics2-8b-base", device_map="auto")
 
         >>> BAD_WORDS_IDS = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
         >>> EOS_WORDS_IDS = [processor.tokenizer.eos_token_id]

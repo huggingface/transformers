@@ -132,8 +132,6 @@ class ClvpEncoderConfig(PreTrainedConfig):
     def from_pretrained(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], config_type: str = "text_config", **kwargs
     ):
-        cls._set_token_in_kwargs(kwargs)
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # make sure to have the config_type be either "text_config" or "speech_config"

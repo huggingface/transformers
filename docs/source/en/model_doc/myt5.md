@@ -40,7 +40,3 @@ The original code can be found [here](https://github.com/tomlimi/MYTE).
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
-
-## MyT5Tokenizer
-
-[[autodoc]] MyT5Tokenizer
