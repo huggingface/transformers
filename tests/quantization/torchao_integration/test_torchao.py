@@ -48,7 +48,6 @@ if is_torchao_available():
     from torchao.quantization import (
         Float8Tensor,
         Float8WeightOnlyConfig,
-        Int4WeightOnlyConfig,
         Int8DynamicActivationInt8WeightConfig,
         Int8WeightOnlyConfig,
         IntxWeightOnlyConfig,
@@ -62,7 +61,8 @@ if is_torchao_available():
         from torchao.dtypes import Int4CPULayout
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0"):
         from torchao.dtypes import Int4XPULayout
-
+    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.14.0"):
+        from torchao.quantization import Int4WeightOnlyConfig
 
 def check_torchao_int4_wo_quantized(test_module, qlayer):
     weight = qlayer.weight
