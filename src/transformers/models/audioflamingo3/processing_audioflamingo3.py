@@ -38,7 +38,6 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
-            "padding_side": "left",
         },
         "audio_kwargs": {
             "sound_token": "<sound>",  # Placeholder token used in text for audio expansion.
@@ -47,6 +46,7 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {
             "return_tensors": "pt",
+            "padding_side": "left",
         },
     }
 
