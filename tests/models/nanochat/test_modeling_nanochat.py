@@ -135,7 +135,7 @@ class NanoChatIntegrationTest(unittest.TestCase):
         ]
 
         EXPECTED_TEXT_COMPLETION = [
-            "The capital of France is Paris.PatrickPatrickPatrickPatrickPatrickPatrickPatrickPatrickPatrickPatrickPatrickPatrick",
+            "The capital of France is Paris.",
             "I'm ready to help. What's the first thing you'd like to know or discuss?",
         ]
 
