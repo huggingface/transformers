@@ -319,7 +319,7 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
-        eval_dataset (Union[`torch.utils.data.Dataset`, dict[str, `torch.utils.data.Dataset`, `datasets.Dataset`]), *optional*):
+        eval_dataset (Union[`torch.utils.data.Dataset`, dict[str, `torch.utils.data.Dataset`], `datasets.Dataset`]), *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
@@ -4150,7 +4150,7 @@ class Trainer:
         You can also subclass and override this method to inject custom behavior.
 
         Args:
-            eval_dataset (Union[`Dataset`, dict[str, `Dataset`]), *optional*):
+            eval_dataset (Union[`Dataset`, dict[str, `Dataset`]], *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
                 evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
