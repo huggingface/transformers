@@ -189,10 +189,10 @@ def eager_attention_forward(
             # For causal, set is_causal=True
             # Tune thresholds as per docs (e.g., pvthreshd tunable)
             attn_output = sageattn(
-                query,  # <--- تصحیح شد: query مستقیم ارسال می‌شود
+                query,  # <--- تصحیح شده
                 key,
                 value,
-                sm_scale=scaling,  # <--- تصحیح شد: scaling به عنوان پارامتر ارسال می‌شود
+                sm_scale=scaling,  # <--- تصحیح شده
                 tensor_layout="HND",
                 is_causal=module.is_causal
             )
