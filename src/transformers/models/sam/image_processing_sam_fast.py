@@ -27,6 +27,10 @@ from torchvision.transforms.v2 import functional as F_t
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_transforms import (
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -37,7 +41,10 @@ from ...image_utils import (
     pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
-from ...utils import auto_docstring
+from ...utils import (
+    TensorType,
+    auto_docstring,
+)
 from .image_processing_sam import SamImageProcessorKwargs
 
 
@@ -182,12 +189,11 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         )
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
-        pixel_values = self._preprocess(images, **images_kwargs)["pixel_values"]
-        reshaped_input_sizes = [image.shape[-2:] for image in images]
+        image_outputs = self._preprocess(images, **images_kwargs)
         data = {
-            "pixel_values": pixel_values,
+            "pixel_values": image_outputs.pixel_values,
             "original_sizes": original_sizes,
-            "reshaped_input_sizes": reshaped_input_sizes,
+            "reshaped_input_sizes": image_outputs.reshaped_input_sizes,
         }
 
         if segmentation_maps is not None:
@@ -214,6 +220,58 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             data["labels"] = processed_segmentation_maps["pixel_values"].squeeze(1).to(torch.int64)
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        do_pad: Optional[bool],
+        pad_size: Optional[SizeDict],
+        disable_grouping: Optional[bool],
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> BatchFeature:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+        reshaped_input_sizes = [image.shape[-2:] for image in resized_images]
+
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        if do_pad:
+            processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
+
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        return BatchFeature(
+            data={"pixel_values": processed_images, "reshaped_input_sizes": reshaped_input_sizes},
+            tensor_type=return_tensors,
+        )
 
     def generate_crop_boxes(
         self,
@@ -378,7 +436,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
             is given by original_size.
         """
-        pad_size = self.size if pad_size is None else pad_size
+        pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
         if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
             original_sizes = original_sizes.tolist()

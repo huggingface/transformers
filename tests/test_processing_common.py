@@ -615,7 +615,7 @@ class ProcessorTesterMixin:
                 expected_output_keys.append(getattr(self, output_key_attr))
 
         # Test combined processing
-        inputs = processor(**processor_inputs)
+        inputs = processor(**processor_inputs, return_tensors="pt")
 
         # Verify output contains all expected keys
         for key in expected_output_keys:
@@ -846,6 +846,8 @@ class ProcessorTesterMixin:
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -865,6 +867,8 @@ class ProcessorTesterMixin:
         """
         if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=-1.0
@@ -884,6 +888,8 @@ class ProcessorTesterMixin:
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
         processor_kwargs = self.prepare_processor_dict()
@@ -900,6 +906,8 @@ class ProcessorTesterMixin:
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=1
@@ -1048,6 +1056,8 @@ class ProcessorTesterMixin:
     def test_tokenizer_defaults_preserved_by_kwargs_audio(self):
         if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=300, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -1064,6 +1074,8 @@ class ProcessorTesterMixin:
     def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
         if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117)
         processor_kwargs = self.prepare_processor_dict()
@@ -1118,7 +1130,8 @@ class ProcessorTesterMixin:
     def test_structured_kwargs_audio_nested(self):
         if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117)
         processor_kwargs = self.prepare_processor_dict()
@@ -1142,6 +1155,8 @@ class ProcessorTesterMixin:
     def test_tokenizer_defaults_preserved_by_kwargs_video(self):
         if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=167, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -1161,6 +1176,8 @@ class ProcessorTesterMixin:
         """
         if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["video_processor"] = self.get_component(
             "video_processor", do_rescale=True, rescale_factor=-1.0
@@ -1180,6 +1197,8 @@ class ProcessorTesterMixin:
     def test_kwargs_overrides_default_tokenizer_kwargs_video(self):
         if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
         processor_kwargs = self.prepare_processor_dict()
@@ -1201,6 +1220,8 @@ class ProcessorTesterMixin:
     def test_kwargs_overrides_default_video_processor_kwargs(self):
         if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["video_processor"] = self.get_component(
             "video_processor", do_rescale=True, rescale_factor=1

@@ -1007,6 +1007,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
+        ("wav2vec2-bert", "wav2vec2_bert"),
     ]
 )
 
