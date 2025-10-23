@@ -18,8 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -153,6 +155,212 @@ class DeepseekOcrVisionConfig(PreTrainedConfig):
         else:
             self.clip_config = clip_config
 
+        # Aggregate commonly accessed vision attributes.
+        self.image_size = self.sam_config.image_size
+        self.patch_size = self.sam_config.patch_size
+
+
+class DeepseekOcrTextConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`DeepseekOcrTextModel`]. It is used to instantiate a DeepSeek
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of DeepSeek-V2-Lite" [deepseek-ai/DeepSeek-V2-Lite"](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite").
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 32000):
+            Vocabulary size of the DeepSeek model. Defines the number of different tokens that can be represented by the
+            `input_ids` passed when calling [`DeepseekOcrTextModel`].
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 11008):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*):
+            The number of key-value heads used to implement Grouped Query Attention (GQA). If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi-Head Attention (MHA). If
+            `num_key_value_heads=1`, the model will use Multi-Query Attention (MQA). Otherwise, GQA is used.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated normal initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon value used by the RMS normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/value attentions (useful for inference optimization).
+        pad_token_id (`int`, *optional*):
+            Padding token ID.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            Beginning-of-sequence token ID.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            End-of-sequence token ID.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie input and output embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value, and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability applied to attention weights.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias term in the MLP layers.
+        first_k_dense_replace (`int`, *optional*, defaults to 0):
+            Number of dense layers in the shallow layers before switching to MoE layers.
+        kv_lora_rank (`int`, *optional*, defaults to 512):
+            Rank of the LoRA decomposition for key-value projections.
+        q_lora_rank (`int`, *optional*, defaults to 1536):
+            Rank of the LoRA decomposition for query projections.
+            Specifically, it determines the dimensionality to which the query (q) vectors are compressed before being expanded back to their original size.
+            It reduces computational overhead while maintaining model performance.
+        n_group (`int`, *optional*):
+            Number of groups for routed experts.
+        n_routed_experts (`int`, *optional*, defaults to 64):
+            Number of routed experts (None indicates a dense model).
+        n_shared_experts (`int`, *optional*, defaults to 2):
+            Number of shared experts (None indicates a dense model).
+        qk_nope_head_dim (`int`, *optional*, defaults to 128):
+            The head dimension for the QK (query-key) projections when using NOPE (Neural Operator Position Encoding).
+        qk_rope_head_dim (`int`, *optional*, defaults to 64):
+            The head dimension for QK projections when using RoPE.
+        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
+            Scaling factor for routed experts in MoE models.
+        topk_group (`int`, *optional*):
+            Number of selected groups per token for expert selection.
+        topk_method (`str`, *optional*, defaults to `"greedy"`):
+            The method used for selecting top-k experts in the routed gate mechanism.
+        v_head_dim (`int`, *optional*, defaults to 128):
+            The dimension of value projections in the attention layers.
+        num_experts_per_tok (`int`, *optional*):
+            The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
+        moe_intermediate_size (`int`, *optional*, defaults to 1407):
+            Dimension of the MoE (Mixture of Experts) representations.
+
+    ```python
+    >>> from transformers import DeepseekOcrTextModel, DeepseekOcrTextConfig
+    >>> # Initializing a DeepSeek-V2 style configuration
+    >>> configuration = DeepseekOcrTextConfig()
+    >>> # Accessing the model configuration
+    >>> model = DeepseekOcrTextModel(configuration)
+    >>> print(model.config)
+    ```
+    """
+
+    model_type = "deepseek_ocr_text"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.q_a_proj": "colwise",
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    def __init__(
+        self,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        first_k_dense_replace: Optional[int] = 0,
+        kv_lora_rank: Optional[int] = 512,
+        q_lora_rank: Optional[int] = 1536,
+        n_group: Optional[int] = None,
+        n_routed_experts: Optional[int] = 64,
+        n_shared_experts: Optional[int] = 2,
+        qk_nope_head_dim: Optional[int] = 128,
+        qk_rope_head_dim: Optional[int] = 64,
+        routed_scaling_factor: Optional[float] = 1.0,
+        topk_group: Optional[int] = None,
+        topk_method: Optional[str] = "greedy",
+        v_head_dim: Optional[int] = 128,
+        num_experts_per_tok: Optional[int] = None,
+        moe_intermediate_size: Optional[int] = 1407,
+        **kwargs,
+    ):
+        self.first_k_dense_replace = first_k_dense_replace
+        self.kv_lora_rank = kv_lora_rank
+        self.q_lora_rank = q_lora_rank
+        self.n_group = n_group
+        self.n_routed_experts = n_routed_experts
+        self.n_shared_experts = n_shared_experts
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_rope_head_dim = qk_rope_head_dim
+        self.routed_scaling_factor = routed_scaling_factor
+        self.topk_group = topk_group
+        self.topk_method = topk_method
+        self.v_head_dim = v_head_dim
+        self.num_experts_per_tok = num_experts_per_tok
+        self.moe_intermediate_size = moe_intermediate_size
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.mlp_bias = mlp_bias
+
+        self.head_dim = qk_rope_head_dim
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+
 
 class DeepseekOcrConfig(PreTrainedConfig):
     r"""
@@ -209,6 +417,9 @@ class DeepseekOcrConfig(PreTrainedConfig):
         global_view_pos="head",
         tile_tag="2D",
         image_token_index=100015,
+        image_grid_pinpoints=None,
+        vision_feature_layer=-2,
+        vision_feature_select_strategy="default",
         **kwargs,
     ):
         if candidate_resolutions is None:
@@ -218,6 +429,10 @@ class DeepseekOcrConfig(PreTrainedConfig):
         self.global_view_pos = global_view_pos
         self.tile_tag = tile_tag
         self.image_token_index = image_token_index
+        self.image_token_id = image_token_index
+        self.image_grid_pinpoints = image_grid_pinpoints if image_grid_pinpoints is not None else [[1024, 1024]]
+        self.vision_feature_layer = vision_feature_layer
+        self.vision_feature_select_strategy = vision_feature_select_strategy
 
         if text_config is None:
             text_config = CONFIG_MAPPING["deepseek_v2"](

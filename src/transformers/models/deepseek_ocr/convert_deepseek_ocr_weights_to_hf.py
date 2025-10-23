@@ -16,11 +16,38 @@ import argparse
 import json
 import re
 from pathlib import Path
+from textwrap import dedent
 
 import torch
 from safetensors.torch import load_file
 
-from transformers import DeepseekOcrConfig, DeepseekOcrForConditionalGeneratin
+from transformers import DeepseekOcrConfig, DeepseekOcrForConditionalGeneration
+
+
+CHAT_TEMPLATE = dedent(
+    """
+    {%- for message in messages %}
+        {%- set role = message['role'] | lower %}
+        {%- if message['content'] is string %}
+{{ message['content'] }}
+        {%- else %}
+            {%- for content in message['content'] %}
+                {%- if content['type'] == 'text' %}
+{{ content['text'] }}
+                {%- elif content['type'] == 'image' %}
+<image>
+                {%- endif %}
+            {%- endfor %}
+        {%- endif %}
+        {%- if not loop.last %}
+
+        {%- endif %}
+    {%- endfor %}
+    {%- if add_generation_prompt %}
+<|Assistant|>
+    {%- endif %}
+    """
+).strip()
 
 
 # fmt: off
@@ -32,7 +59,9 @@ STATE_DICT_MAPPING = {
     r"^model\.sam_model\.blocks\.(\d+)\.attn\.rel_pos_([hw])":                                   r"model.sam_model.layers.\1.attn.rel_pos_\2",
     r"^model\.sam_model\.blocks\.(\d+)\.mlp\.lin(\d+)\.(weight|bias)":                           r"model.sam_model.layers.\1.mlp.lin\2.\3",
     r"^model\.sam_model\.neck\.0\.weight":                                                        r"model.sam_model.neck.conv1.weight",
+    r"^model\.sam_model\.neck\.1\.(weight|bias)":                                                 r"model.sam_model.neck.layer_norm1.\1",
     r"^model\.sam_model\.neck\.2\.weight":                                                        r"model.sam_model.neck.conv2.weight",
+    r"^model\.sam_model\.neck\.3\.(weight|bias)":                                                 r"model.sam_model.neck.layer_norm2.\1",
     r"^model\.sam_model\.net_2\.weight":                                                          r"model.sam_model.net_2.weight",
     r"^model\.sam_model\.net_3\.weight":                                                          r"model.sam_model.net_3.weight",
     r"^model\.sam_model\.pos_embed":                                                              r"model.sam_model.pos_embed",
@@ -54,7 +83,14 @@ STATE_DICT_MAPPING = {
     r"^model\.layers\.(\d+)\.post_attention_layernorm\.weight":                                   r"model.language_model.layers.\1.post_attention_layernorm.weight",
     r"^model\.layers\.(\d+)\.self_attn\.(q|k|v|o)_proj\.weight":                                  r"model.language_model.layers.\1.self_attn.\2_proj.weight",
     r"^model\.layers\.(\d+)\.mlp\.(gate|up|down)_proj\.weight":                                   r"model.language_model.layers.\1.mlp.\2_proj.weight",
+    r"^model\.layers\.(\d+)\.mlp\.(gate|up|down)\.(weight|bias)":                                 r"model.language_model.layers.\1.mlp.\2.\3",
     r"^model\.norm\.weight":                                                                      r"model.language_model.norm.weight",
+    r"^model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.(gate|up|down)_proj\.(weight|bias)":            r"model.language_model.layers.\1.mlp.experts.\2.\3_proj.\4",
+    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(\d+)\.(gate|up|down)_proj\.(weight|bias)":     r"model.language_model.layers.\1.mlp.shared_experts.\2.\3_proj.\4",
+    r"^model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.(gate|up|down)\.(weight|bias)":                 r"model.language_model.layers.\1.mlp.experts.\2.\3.\4",
+    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(\d+)\.(gate|up|down)\.(weight|bias)":          r"model.language_model.layers.\1.mlp.shared_experts.\2.\3.\4",
+    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(gate|up|down)_proj\.(weight|bias)":            r"model.language_model.layers.\1.mlp.shared_experts.\2_proj.\3",
+    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(gate|up|down)\.(weight|bias)":                 r"model.language_model.layers.\1.mlp.shared_experts.\2.\3",
 
     r"^model\.image_newline":                                                                     r"model.image_newline",
     r"^model\.view_seperator":                                                                    r"model.view_seperator",
@@ -95,8 +131,8 @@ def split_qkv_weights(key, tensor, num_heads, hidden_size):
 def convert_state_dict(original_state_dict, config):
     new_state_dict = {}
 
-    clip_hidden_size = config.clip_vision_config.hidden_size
-    clip_num_heads = config.clip_vision_config.num_attention_heads
+    clip_hidden_size = config.vision_config.clip_config.hidden_size
+    clip_num_heads = config.vision_config.clip_config.num_attention_heads
 
     for old_key, tensor in original_state_dict.items():
         new_key = map_old_key_to_new(old_key)
@@ -108,6 +144,21 @@ def convert_state_dict(original_state_dict, config):
             new_state_dict[new_key] = tensor
 
     return new_state_dict
+
+
+TOKENIZER_RELATED_FILES = [
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "tokenizer.model",
+    "special_tokens_map.json",
+    "added_tokens.json",
+    "vocab.json",
+    "merges.txt",
+    "processor_config.json",
+    "preprocessor_config.json",
+    "generation_config.json",
+    "chat_template.json",
+]
 
 
 def main():
@@ -158,9 +209,11 @@ def main():
 
     print("Converting state dict...")
     converted_state_dict = convert_state_dict(original_state_dict, config)
+    reference_dtype = next(iter(original_state_dict.values())).dtype
 
     print("Creating model...")
-    model = DeepseekOcrForConditionalGeneratin(config)
+    model = DeepseekOcrForConditionalGeneration(config)
+    model.to(dtype=reference_dtype)
 
     print("Loading converted state dict into model...")
     missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
@@ -183,6 +236,30 @@ def main():
         print(f"Pushing model to Hub: {args.repo_id}")
         model.push_to_hub(args.repo_id)
         print("Model pushed successfully!")
+
+    print("Copying tokenizer / processor files if available...")
+    for filename in TOKENIZER_RELATED_FILES:
+        source_file = checkpoint_path.parent / filename
+        if source_file.exists():
+            target_file = output_path / filename
+            target_file.write_bytes(source_file.read_bytes())
+            print(f"Copied {filename}")
+
+    tokenizer_config_path = output_path / "tokenizer_config.json"
+    if tokenizer_config_path.exists():
+        with open(tokenizer_config_path, "r", encoding="utf-8") as f:
+            tokenizer_config = json.load(f)
+        tokenizer_config["chat_template"] = CHAT_TEMPLATE
+        with open(tokenizer_config_path, "w", encoding="utf-8") as f:
+            json.dump(tokenizer_config, f, indent=2, ensure_ascii=False)
+
+    processor_config_path = output_path / "processor_config.json"
+    if processor_config_path.exists():
+        with open(processor_config_path, "r", encoding="utf-8") as f:
+            processor_config = json.load(f)
+        processor_config["chat_template"] = CHAT_TEMPLATE
+        with open(processor_config_path, "w", encoding="utf-8") as f:
+            json.dump(processor_config, f, indent=2, ensure_ascii=False)
 
 
 if __name__ == "__main__":

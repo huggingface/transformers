@@ -118,7 +118,8 @@ class DeepSeekOCRImageProcessorFast(BaseImageProcessorFast):
         for i in range(blocks):
             box_x = (i % target_aspect_ratio[0]) * patch_size
             box_y = (i // target_aspect_ratio[0]) * patch_size
-            box = (box_x, box_y, box_x + patch_size, box_y + patch_size)
+            # TODO simplify this block
+            # box = (box_x, box_y, box_x + patch_size, box_y + patch_size)
 
             split_img = F.crop(resized_img, box_y, box_x, patch_size, patch_size)
             processed_images.append(split_img)

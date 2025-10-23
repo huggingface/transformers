@@ -30,22 +30,23 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
-from .configuration_deepseek_ocr import DeepseekOcrConfig, DeepseekOcrTextConfig, DeepseekOcrVisionConfig
+from .configuration_deepseek_ocr import (
+    DeepseekOcrCLIPVisionConfig,
+    DeepseekOcrConfig,
+    DeepseekOcrTextConfig,
+    DeepseekOcrVisionConfig,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -113,6 +114,48 @@ class DeepseekOcrSamVisionNeck(nn.Module):
         hidden_states = self.conv2(hidden_states)
         hidden_states = self.layer_norm2(hidden_states)
         return hidden_states
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Deepseek OCR model outputs with optional image hidden states.
+    """
+)
+class DeepseekOcrModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        Hidden states extracted from the visual encoder and projected into the language embedding space.
+    """
+
+    image_hidden_states: Optional[torch.FloatTensor] = None
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Deepseek OCR causal language model outputs with image hidden states.
+    """
+)
+class DeepseekOcrCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modelling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modelling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        Hidden states produced by the visual encoder after multimodal projection.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[Cache] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -535,9 +578,12 @@ class DeepseekOcrSamVisionEncoder(DeepseekOcrPreTrainedModel):
 
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(self, pixel_values) -> DeepseekOcrVisionEncoderOutput:
-        encoder_output = self.encoder(pixel_values)
-        hidden_states = encoder_output.last_hidden_state
-
+        hidden_states = self.patch_embed(pixel_values)
+        if self.pos_embed is not None:
+            hidden_states = hidden_states + self.pos_embed
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states)
+        hidden_states = self.neck(hidden_states)
         hidden_states = self.net_2(hidden_states)
         hidden_states = self.net_3(hidden_states)
 
@@ -608,14 +654,13 @@ class DeepseekOcrVisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values, patch_embeds, interpolate_pos_encoding=False) -> torch.Tensor:
+    def forward(self, pixel_values, patch_embeds=None, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
 
-        # if patch_embeds is not None:
-        #    patch_embeds = patch_embeds
-        # else:
-        patch_embeds = self.patch_embedding(pixel_values)  # Deepseek OCR CLIP embedder always uses SAM features
-
+        if patch_embeds is None:
+            patch_embeds = self.patch_embedding(pixel_values)
+        if patch_embeds.dim() == 4:
+            patch_embeds = patch_embeds.permute(0, 2, 3, 1)
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
@@ -779,7 +824,7 @@ class DeepseekOcrCLIPEncoder(nn.Module):
         config: DeepseekOcrCLIPConfig
     """
 
-    def __init__(self, config: DeepseekOcrConfig):
+    def __init__(self, config: DeepseekOcrCLIPVisionConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([DeepseekOcrEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -790,6 +835,7 @@ class DeepseekOcrCLIPEncoder(nn.Module):
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -814,16 +860,27 @@ class DeepseekOcrCLIPEncoder(nn.Module):
                 [What are attention masks?](../glossary#attention-mask)
         """
         hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
-            hidden_states = encoder_layer(
+
+        all_hidden_states = [] if output_hidden_states else None
+
+        for layer_module in self.layers:
+            if output_hidden_states:
+                all_hidden_states.append(hidden_states)
+
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
                 causal_attention_mask,
                 **kwargs,
             )
 
+        if output_hidden_states:
+            all_hidden_states.append(hidden_states)
+            all_hidden_states = tuple(all_hidden_states)
+
         return BaseModelOutput(
             last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
         )
 
 
@@ -841,17 +898,21 @@ class DeepseekOcrCLIPVisionTransformer(nn.Module):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        patch_embeds: Optional[torch.FloatTensor] = None,  # from SAM
         interpolate_pos_encoding: Optional[bool] = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values, patch_embeds, interpolate_pos_encoding=interpolate_pos_encoding)
+        patch_embeds = kwargs.pop("patch_embeds", None)
+        hidden_states = self.embeddings(
+            pixel_values,
+            patch_embeds,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
         hidden_states = self.pre_layrnorm(hidden_states)
 
-        encoder_outputs: BaseModelOutput = self.encoder(
+        encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             **kwargs,
         )
@@ -859,10 +920,10 @@ class DeepseekOcrCLIPVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
-
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -876,6 +937,7 @@ class DeepseekOcrCLIPVisionModel(DeepseekOcrPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "image"
     _no_split_modules = ["DeepseekOcrCLIPEncoderLayer"]
+    config_class = DeepseekOcrCLIPVisionConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -892,11 +954,15 @@ class DeepseekOcrCLIPVisionModel(DeepseekOcrPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        patch_embeds: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
+        Args:
+            patch_embeds (`torch.FloatTensor`, *optional*):
+                Precomputed patch embeddings derived from the SAM vision encoder. When provided, the transformer will
+                reuse them instead of recomputing embeddings from `pixel_values`.
+
         Example:
 
         ```python
@@ -917,6 +983,7 @@ class DeepseekOcrCLIPVisionModel(DeepseekOcrPreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
 
+        patch_embeds = kwargs.pop("patch_embeds", None)
         return self.vision_model(
             pixel_values=pixel_values,
             patch_embeds=patch_embeds,
@@ -1182,7 +1249,12 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         sam_features = self.sam_model(pixel_values)
         sam_seq = sam_features.flatten(2).permute(0, 2, 1)
 
-        clip_out = self.clip_model(pixel_values, sam_features)
+        clip_out = self.clip_model(
+            pixel_values=pixel_values,
+            patch_embeds=sam_features,
+            output_hidden_states=True,
+            return_dict=True,
+        )
 
         vision_feature_layer_index = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -1241,7 +1313,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        image_spatial_crop: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
@@ -1254,20 +1325,48 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        image_spatial_crop = kwargs.pop("image_spatial_crop", None)
+        image_sizes = kwargs.pop("image_sizes", None)
+        if image_sizes is None and image_spatial_crop is not None:
+            image_sizes = image_spatial_crop
+
+        image_hidden_states = None
         if pixel_values is not None and torch.sum(pixel_values[0, 1]).item() != 0:
-            vision_features = self.get_image_features(pixel_values, image_spatial_crop)
+            if image_sizes is None:
+                raise ValueError("image_sizes must be provided when pixel_values are passed to the model.")
+            image_hidden_states = self.get_image_features(pixel_values, image_sizes)
 
-            special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, vision_features)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, vision_features.to(inputs_embeds.dtype))
+            special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, image_hidden_states.to(inputs_embeds.dtype)
+            )
 
-        return self.language_model(
+        outputs = self.language_model(
             input_ids=None,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            return_dict=return_dict,
             **kwargs,
+        )
+
+        if not isinstance(outputs, BaseModelOutputWithPast):
+            last_hidden_state = outputs[0]
+            past = outputs[1] if len(outputs) > 1 else None
+            hidden = outputs[2] if len(outputs) > 2 else None
+            attn = outputs[3] if len(outputs) > 3 else None
+        else:
+            last_hidden_state = outputs.last_hidden_state
+            past = outputs.past_key_values
+            hidden = outputs.hidden_states
+            attn = outputs.attentions
+
+        return DeepseekOcrModelOutputWithPast(
+            last_hidden_state=last_hidden_state,
+            past_key_values=past,
+            hidden_states=hidden,
+            attentions=attn,
+            image_hidden_states=image_hidden_states,
         )
 
 
@@ -1355,10 +1454,9 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_spatial_crop: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, DeepseekOcrCausalLMOutputWithPast]:
         r"""
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
@@ -1390,6 +1488,10 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot (...)"
         ```"""
+        image_spatial_crop = kwargs.pop("image_spatial_crop", None)
+        image_sizes = kwargs.pop("image_sizes", None)
+        if image_sizes is None and image_spatial_crop is not None:
+            image_sizes = image_spatial_crop
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1399,10 +1501,11 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             image_spatial_crop=image_spatial_crop,
+            image_sizes=image_sizes,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -1413,7 +1516,7 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return DeepseekOcrCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1511,6 +1614,8 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
 
 
 __all__ = [
+    "DeepseekOcrModelOutputWithPast",
+    "DeepseekOcrCausalLMOutputWithPast",
     "DeepseekOcrModel",
     "DeepseekOcrForConditionalGeneration",
     "DeepseekOcrPreTrainedModel",
