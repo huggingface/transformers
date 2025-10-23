@@ -379,7 +379,7 @@ class Serve:
         ] = None,
         quantization: Annotated[
             Optional[str],
-            typer.Option(help="Which quantization method to use. choices: 'bitsandbytes-4bit', 'bitsandbytes-8bit'"),
+            typer.Option(help="Which quantization method to use. choices: 'bnb-4bit', 'bnb-8bit'"),
         ] = None,
         host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
         port: Annotated[int, typer.Option(help="Port the server will listen to.")] = 8000,
@@ -1681,16 +1681,19 @@ class Serve:
         Returns:
             `Optional[BitsAndBytesConfig]`: The quantization config.
         """
-        if self.quantization == "bitsandbytes-4bit":
+        if self.quantization == "bnb-4bit":
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
             )
-        elif self.quantization == "bitsandbytes-8bit":
+        elif self.quantization == "bnb-8bit":
             quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         else:
             quantization_config = None
+
+        if quantization_config is not None:
+            logger.info(f"Quantization applied with the following config: {quantization_config}")
 
         return quantization_config
 
