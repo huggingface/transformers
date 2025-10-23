@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import torch
 
-from .image_processing_fuyu import FuyuBatchFeature
 from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
@@ -35,6 +34,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from .image_processing_fuyu import FuyuBatchFeature
 
 
 if is_torchvision_available():
@@ -52,7 +52,7 @@ class FuyuImagesKwargs(ImagesKwargs, total=False):
 class FuyuImageProcessorFast(BaseImageProcessorFast):
     """
     Fast image processor for Fuyu using PyTorch and TorchVision for GPU acceleration.
-    This class handles the image processing part before the main FuyuForCausalLM. In particular, it handles: 
+    This class handles the image processing part before the main FuyuForCausalLM. In particular, it handles:
     - Processing Images:
         Taking a batch of images as input. If the images are variable-sized, it resizes them based on the desired patch
         dimensions. The image output is always img_h, img_w of (1080, 1920)
@@ -61,7 +61,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         For each patch, a placeholder ID is given to identify where these patches belong in a token sequence. For
         variable-sized images, each line of patches is terminated with a newline ID.
     - Image Patch Indices:
-        For each image patch, the code maintains an index where these patches should be inserted in a token stream.    
+        For each image patch, the code maintains an index where these patches should be inserted in a token stream.
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image to `size`.
@@ -286,9 +286,9 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
             image (`torch.Tensor`):
                 Image to convert. Shape: [batch, channels, height, width]
             patch_size (`SizeDict`, *optional*):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.  
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
         """
-        requires_backends(self, ["torch"])    
+        requires_backends(self, ["torch"])
         if patch_size is None:
             patch_size = SizeDict(**self.patch_size)
         patch_height, patch_width = patch_size.height, patch_size.width
@@ -340,7 +340,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         if patch_size is None:
             patch_size = SizeDict(**self.patch_size)
         else:
-            patch_size = SizeDict(**patch_size)  
+            patch_size = SizeDict(**patch_size)
         patch_height, patch_width = patch_size.height, patch_size.width
         # Only images that are present
         images: list[list[torch.Tensor]] = []
@@ -400,7 +400,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         for sample_image_input_ids in batch_image_input_ids:
             index_offset = 0
             per_batch_indices = []
-            per_subsequence_indices = []          
+            per_subsequence_indices = []
             for subseq_image_input_ids in sample_image_input_ids:
                 # Indices of image patches
                 patches_mask = subseq_image_input_ids == image_placeholder_id

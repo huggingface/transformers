@@ -115,6 +115,11 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
 
 ## FuyuImageProcessor
 
+[[autodoc]] FuyuImageProcessor
+    - __call__
+
+## FuyuImageProcessor
+
 [[autodoc]] FuyuImageProcessorFast
     - __call__
 
