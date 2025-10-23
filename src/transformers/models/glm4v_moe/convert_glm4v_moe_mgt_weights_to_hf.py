@@ -695,7 +695,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "num_hidden_layers": text_config.get("num_layers", 46),
         "num_key_value_heads": text_config.get("multi_query_group_num", 2),
         "rms_norm_eps": text_config.get("layernorm_epsilon", 1e-05),
-        "rope_theta": text_config.get("rotary_base", 10000.0),
         "tie_word_embeddings": False,
         "torch_dtype": text_config.get("torch_dtype", "bfloat16"),
         "transformers_version": "4.53.0dev",
@@ -708,7 +707,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "n_shared_experts": text_config.get("n_shared_experts", 1),
         "norm_topk_prob": text_config.get("norm_topk_prob", True),
         "num_experts_per_tok": text_config.get("num_experts_per_tok", 8),
-        "rope_scaling": {"type": "default", "mrope_section": [8, 12, 12]},
+        "rope_scaling": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [8, 12, 12]},
     }
     hf_config["text_config"] = txt_config
 

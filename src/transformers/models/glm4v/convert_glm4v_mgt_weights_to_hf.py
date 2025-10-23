@@ -670,15 +670,13 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "num_hidden_layers": text_config.get("num_layers", 40),
         "num_key_value_heads": text_config.get("num_key_value_heads", 2),
         "rms_norm_eps": text_config.get("layernorm_epsilon", 1e-05),
-        "rope_theta": text_config.get("rotary_base", 500000.0),
         "tie_word_embeddings": False,
         "torch_dtype": text_config.get("torch_dtype", "bfloat16"),
         "transformers_version": "4.57.1",
         "use_cache": text_config.get("use_cache", True),
         "vocab_size": text_config.get("vocab_size", 151552),
         "partial_rotary_factor": 0.5,
-        "num_experts_per_tok": text_config.get("num_experts_per_tok", 8),
-        "rope_scaling": {"type": "default", "mrope_section": [8, 12, 12]},
+        "rope_scaling": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [8, 12, 12]},
     }
     hf_config["text_config"] = txt_config
 
