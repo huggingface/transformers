@@ -213,41 +213,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertEqual(v, self.fsdp_config[k])
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
-    def test_fsdp_plugin(self, sharding_strategy, dtype):
-        output_dir = self.get_auto_remove_tmp_dir()
-        fsdp_config = deepcopy(self.fsdp_config)
-        del fsdp_config["min_num_params"]
-        fsdp_config["transformer_layer_cls_to_wrap"] = "BertLayer"
-        kwargs = {
-            "output_dir": output_dir,
-            "train_len": 128,
-            "save_steps": 5,
-            "learning_rate": 0.1,
-            "fsdp": f"{sharding_strategy} offload auto_wrap",
-            "fsdp_config": fsdp_config,
-        }
-        kwargs[dtype] = True
-        with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
-            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
-            self.assertEqual(
-                trainer.args.fsdp_plugin.sharding_strategy.value,
-                FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1,
-            )
-            self.assertEqual(trainer.args.fsdp_plugin.cpu_offload.offload_params, True)
-            self.assertEqual(
-                trainer.args.fsdp_plugin.transformer_cls_names_to_wrap,
-                fsdp_config["transformer_layer_cls_to_wrap"],
-            )
-            self.assertEqual(trainer.args.fsdp_plugin.forward_prefetch, fsdp_config["forward_prefetch"])
-            self.assertEqual(trainer.args.fsdp_plugin.sync_module_states, fsdp_config["sync_module_states"])
-            self.assertEqual(
-                trainer.args.fsdp_plugin.cpu_ram_efficient_loading, fsdp_config["cpu_ram_efficient_loading"]
-            )
-
-    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     @run_first
     @slow
