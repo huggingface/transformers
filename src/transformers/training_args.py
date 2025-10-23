@@ -462,6 +462,8 @@ class TrainingArguments:
             fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`.
 
             A List of config and its options:
+                - fsdp_version (`int`, *optional*, defaults to `1`):
+                    The version of FSDP to use. Defaults to 1.
                 - min_num_params (`int`, *optional*, defaults to `0`):
                     FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
                     passed).
@@ -1534,6 +1536,28 @@ class TrainingArguments:
 
         self.optim = OptimizerNames(self.optim)
 
+        # We need to get from the env as we are setting deepspeed mixed precison afterwards
+        self.mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+        if self.fp16:
+            self.mixed_precision = "fp16"
+        elif self.bf16:
+            self.mixed_precision = "bf16"
+
+        if (self.torch_compile_mode is not None or self.torch_compile_backend is not None) and not self.torch_compile:
+            self.torch_compile = True
+        if self.torch_compile and self.torch_compile_backend is None:
+            if not self.use_cpu and is_torch_hpu_available():
+                self.torch_compile_backend = "hpu_backend"
+            else:
+                self.torch_compile_backend = "inductor"
+
+        if self.torch_compile:
+            # TODO: remove this once we've bumped the minimum accelerate version
+            if not is_accelerate_available("1.2.0"):
+                os.environ["ACCELERATE_DYNAMO_BACKEND"] = self.torch_compile_backend
+                if self.torch_compile_mode is not None:
+                    os.environ["ACCELERATE_DYNAMO_MODE"] = self.torch_compile_mode
+
         # We need to setup the accelerator config here *before* the first call to `self.device`
         if is_accelerate_available():
             if not isinstance(self.accelerator_config, AcceleratorConfig):
@@ -1559,22 +1583,6 @@ class TrainingArguments:
         # Initialize device before we proceed
         if is_torch_available():
             self.device
-
-        if (self.torch_compile_mode is not None or self.torch_compile_backend is not None) and not self.torch_compile:
-            self.torch_compile = True
-        if self.torch_compile and self.torch_compile_backend is None:
-            if not self.use_cpu and is_torch_hpu_available():
-                self.torch_compile_backend = "hpu_backend"
-            else:
-                self.torch_compile_backend = "inductor"
-
-        # accelerate integration for torch compile
-        if self.torch_compile:
-            # set env vars for accelerate
-            prefix = "ACCELERATE_DYNAMO_"
-            os.environ[prefix + "BACKEND"] = self.torch_compile_backend
-            if self.torch_compile_mode is not None:
-                os.environ[prefix + "MODE"] = self.torch_compile_mode
 
         if is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
@@ -1612,14 +1620,6 @@ class TrainingArguments:
                         torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
-        # if training args is specified, it will override the one specified in the accelerate config
-        mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-        if self.fp16:
-            mixed_precision_dtype = "fp16"
-        elif self.bf16:
-            mixed_precision_dtype = "bf16"
-        os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
-
         if self.report_to == "all" or self.report_to == ["all"]:
             # Import at runtime to avoid a circular import.
             from .integrations import get_available_reporting_integrations
@@ -1648,129 +1648,14 @@ class TrainingArguments:
         if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
             raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
 
-        if self.fsdp is None:
-            self.fsdp = []
-        elif self.fsdp is True:
-            self.fsdp = [FSDPOption.FULL_SHARD]
-        elif isinstance(self.fsdp, str):
-            self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
-
-        if self.fsdp == [FSDPOption.OFFLOAD]:
-            raise ValueError(
-                "`--fsdp offload` can't work on its own. It needs to be added to `--fsdp full_shard` or "
-                '`--fsdp shard_grad_op`. For example, `--fsdp "full_shard offload"`.'
-            )
-        elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
-            raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
-
-        if self.gradient_checkpointing and (
-            FSDPOption.FULL_SHARD in self.fsdp or FSDPOption.HYBRID_SHARD in self.fsdp
-        ):
-            logger.warning(
-                "When using FSDP full shard, instead of using `gradient_checkpointing` in TrainingArguments, please"
-                " use `activation_checkpointing` in `fsdp_config`. The former introduces a redundant AllGather"
-                " operation in backward pass. Reference: https://github.com/huggingface/transformers/issues/30404"
-            )
-
-        if self.fsdp_config is None:
-            self.fsdp_config = {}
-
-        if isinstance(self.fsdp_config, str):
-            if len(self.fsdp) == 0:
-                warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
-            with open(self.fsdp_config, encoding="utf-8") as f:
-                self.fsdp_config = json.load(f)
-
-        if self.fsdp_config is not None and isinstance(self.fsdp_config, dict):
-            for k in list(self.fsdp_config.keys()):
-                if k.startswith("fsdp_"):
-                    v = self.fsdp_config.pop(k)
-                    self.fsdp_config[k[5:]] = v
-
-        self.fsdp_config["min_num_params"] = self.fsdp_config.get("min_num_params", 0)
-
-        # if fsdp_config["transformer_layer_cls_to_wrap"] is specified as a string, convert it to a list with a single object
-        if isinstance(self.fsdp_config.get("transformer_layer_cls_to_wrap", None), str):
-            self.fsdp_config["transformer_layer_cls_to_wrap"] = [self.fsdp_config["transformer_layer_cls_to_wrap"]]
-
-        if len(self.fsdp) == 0 and self.fsdp_config["min_num_params"] > 0:
-            warnings.warn("`min_num_params` is useful only when `--fsdp` is specified.")
-
-        if len(self.fsdp) == 0 and self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None:
-            warnings.warn("`transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
-
-        if (
-            len(self.fsdp) > 0
-            and self.fsdp_config["min_num_params"] > 0
-            and self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None
-        ):
-            raise ValueError("`min_num_params` and `transformer_layer_cls_to_wrap` are mutually exclusive.")
-        self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
-        self.fsdp_config["xla_fsdp_v2"] = self.fsdp_config.get("xla_fsdp_v2", False)
-        self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
-        if self.fsdp_config["xla"]:
-            if len(self.fsdp) > 0:
-                # store XLA fsdp configuration parameters into a dictionary
-                # Copy the config to avoid modifying the original config (which may be used for JSON serialization)
-                self.xla_fsdp_config = self.fsdp_config.get("xla_fsdp_settings", {}).copy()
-                # apply appropriate string to torch.dtype conversions for parameters
-                if "compute_dtype" in self.xla_fsdp_config:
-                    self.xla_fsdp_config["compute_dtype"] = getattr(torch, self.xla_fsdp_config["compute_dtype"])
-                if "buffer_dtype" in self.xla_fsdp_config:
-                    self.xla_fsdp_config["buffer_dtype"] = getattr(torch, self.xla_fsdp_config["buffer_dtype"])
-            else:
-                warnings.warn("XLA FSDP can be used only when `--fsdp` is specified.")
-        else:
-            if self.fsdp_config["xla_fsdp_grad_ckpt"]:
-                warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
-
-        # accelerate integration for FSDP
-        if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
-            os.environ["ACCELERATE_USE_FSDP"] = "true"
-            from accelerate.utils.constants import (
-                FSDP_AUTO_WRAP_POLICY,
-                FSDP_SHARDING_STRATEGY,
-            )
-
-            prefix = "FSDP_"
-            for fsdp_option in self.fsdp:
-                if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
-                    # set environment variable for FSDP sharding strategy
-                    os.environ[f"{prefix}SHARDING_STRATEGY"] = str(
-                        FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1
-                    )
-                elif fsdp_option == FSDPOption.OFFLOAD:
-                    os.environ[f"{prefix}OFFLOAD_PARAMS"] = "true"
-                elif fsdp_option == FSDPOption.AUTO_WRAP:
-                    os.environ[f"{prefix}AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
-                    if self.fsdp_config["min_num_params"] > 0:
-                        os.environ[f"{prefix}MIN_NUM_PARAMS"] = str(self.fsdp_config["min_num_params"])
-                        os.environ[f"{prefix}AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[1]
-                    elif self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None:
-                        os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"] = ",".join(
-                            self.fsdp_config["transformer_layer_cls_to_wrap"]
-                        )
-            prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
-            os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
-            os.environ[f"{prefix}FORWARD_PREFETCH"] = str(self.fsdp_config.get("forward_prefetch", "false")).lower()
-
-            sync_module_states = str(self.fsdp_config.get("sync_module_states", "true")).lower()
-            cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false")).lower()
-
-            if sync_module_states == "false" and cpu_ram_efficient_loading == "true":
-                # In this case, all the processes except the main process would have random weights leading
-                # to unexpected behaviour during training, thus throwing error here to prevent it.
-                raise ValueError('`sync_module_states` must be `"True"` if `cpu_ram_efficient_loading` is `"True"`')
-
-            os.environ[f"{prefix}SYNC_MODULE_STATES"] = sync_module_states
-            os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
-
-            os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
-
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
         elif self.debug is None:
             self.debug = []
+
+        self.fsdp_plugin_args = None
+        # we can't save the plugin due to a pickle issue, so we do not initialize the plugin here
+        self.fsdp_plugin_args = self._process_fsdp_args()
 
         self.deepspeed_plugin = None
         if self.deepspeed:
@@ -1790,15 +1675,13 @@ class TrainingArguments:
             # Accelerate DeepSpeed Plugin
             from accelerate.utils import DeepSpeedPlugin
 
-            os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
             self.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
         elif strtobool(os.environ.get("ACCELERATE_USE_DEEPSPEED", "false")):
             # Accelerate DeepSpeed Plugin
             from accelerate.utils import DeepSpeedPlugin
 
             self.deepspeed_plugin = DeepSpeedPlugin()
-            mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-            self.deepspeed_plugin.set_mixed_precision(mixed_precision)
+            self.deepspeed_plugin.set_mixed_precision(self.mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
         if self.use_cpu:
@@ -1879,8 +1762,6 @@ class TrainingArguments:
         else:
             AcceleratorState._reset_state(reset_partial_state=True)
             self.distributed_state = None
-        if "ACCELERATE_USE_IPEX" not in os.environ:
-            os.environ["ACCELERATE_USE_IPEX"] = "false"
 
         self._n_gpu = 1
         if self.use_cpu or strtobool(os.environ.get("ACCELERATE_USE_CPU", "False")):
@@ -2761,6 +2642,127 @@ class TrainingArguments:
         self.ignore_data_skip = ignore_data_skip
         self.data_seed = sampler_seed
         return self
+
+    def _process_fsdp_args(self):
+        if self.fsdp is None:
+            self.fsdp = []
+        elif self.fsdp is True:
+            self.fsdp = [FSDPOption.FULL_SHARD]
+        elif isinstance(self.fsdp, str):
+            self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
+
+        if self.fsdp == [FSDPOption.OFFLOAD]:
+            raise ValueError(
+                "`--fsdp offload` can't work on its own. It needs to be added to `--fsdp full_shard` or "
+                '`--fsdp shard_grad_op`. For example, `--fsdp "full_shard offload"`.'
+            )
+        elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
+            raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
+
+        if self.gradient_checkpointing and (
+            FSDPOption.FULL_SHARD in self.fsdp or FSDPOption.HYBRID_SHARD in self.fsdp
+        ):
+            logger.warning(
+                "When using FSDP full shard, instead of using `gradient_checkpointing` in TrainingArguments, please"
+                " use `activation_checkpointing` in `fsdp_config`. The former introduces a redundant AllGather"
+                " operation in backward pass. Reference: https://github.com/huggingface/transformers/issues/30404"
+            )
+
+        if self.fsdp_config is None:
+            self.fsdp_config = {}
+
+        if isinstance(self.fsdp_config, str):
+            if len(self.fsdp) == 0:
+                warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
+            with open(self.fsdp_config, encoding="utf-8") as f:
+                self.fsdp_config = json.load(f)
+
+        if self.fsdp_config is not None and isinstance(self.fsdp_config, dict):
+            for k in list(self.fsdp_config.keys()):
+                if k.startswith("fsdp_"):
+                    v = self.fsdp_config.pop(k)
+                    self.fsdp_config[k[5:]] = v
+
+        self.fsdp_config["min_num_params"] = self.fsdp_config.get("min_num_params", 0)
+
+        # if fsdp_config["transformer_layer_cls_to_wrap"] is specified as a string, convert it to a list with a single object
+        if isinstance(self.fsdp_config.get("transformer_layer_cls_to_wrap", None), str):
+            self.fsdp_config["transformer_layer_cls_to_wrap"] = [self.fsdp_config["transformer_layer_cls_to_wrap"]]
+
+        if len(self.fsdp) == 0 and self.fsdp_config["min_num_params"] > 0:
+            warnings.warn("`min_num_params` is useful only when `--fsdp` is specified.")
+
+        if len(self.fsdp) == 0 and self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None:
+            warnings.warn("`transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
+
+        if (
+            len(self.fsdp) > 0
+            and self.fsdp_config["min_num_params"] > 0
+            and self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None
+        ):
+            raise ValueError("`min_num_params` and `transformer_layer_cls_to_wrap` are mutually exclusive.")
+        self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
+        self.fsdp_config["xla_fsdp_v2"] = self.fsdp_config.get("xla_fsdp_v2", False)
+        self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
+        if self.fsdp_config["xla"]:
+            if len(self.fsdp) > 0:
+                # store XLA fsdp configuration parameters into a dictionary
+                # Copy the config to avoid modifying the original config (which may be used for JSON serialization)
+                self.xla_fsdp_config = self.fsdp_config.get("xla_fsdp_settings", {}).copy()
+                # apply appropriate string to torch.dtype conversions for parameters
+                if "compute_dtype" in self.xla_fsdp_config:
+                    self.xla_fsdp_config["compute_dtype"] = getattr(torch, self.xla_fsdp_config["compute_dtype"])
+                if "buffer_dtype" in self.xla_fsdp_config:
+                    self.xla_fsdp_config["buffer_dtype"] = getattr(torch, self.xla_fsdp_config["buffer_dtype"])
+            else:
+                warnings.warn("XLA FSDP can be used only when `--fsdp` is specified.")
+        else:
+            if self.fsdp_config["xla_fsdp_grad_ckpt"]:
+                warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
+
+        # accelerate integration for FSDP
+        fsdp_plugin_args = None
+        if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
+            from accelerate.utils.constants import (
+                FSDP_AUTO_WRAP_POLICY,
+                FSDP_SHARDING_STRATEGY,
+            )
+
+            fsdp_plugin_args = {}
+            for fsdp_option in self.fsdp:
+                if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
+                    fsdp_plugin_args["sharding_strategy"] = fsdp_option
+                elif fsdp_option == FSDPOption.OFFLOAD:
+                    fsdp_plugin_args["cpu_offload"] = True
+                elif fsdp_option == FSDPOption.AUTO_WRAP:
+                    fsdp_plugin_args["auto_wrap_policy"] = FSDP_AUTO_WRAP_POLICY[0]
+                    if self.fsdp_config["min_num_params"] > 0:
+                        fsdp_plugin_args["min_num_params"] = self.fsdp_config["min_num_params"]
+                        fsdp_plugin_args["auto_wrap_policy"] = FSDP_AUTO_WRAP_POLICY[1]
+                    elif self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None:
+                        fsdp_plugin_args["transformer_cls_names_to_wrap"] = ",".join(
+                            self.fsdp_config["transformer_layer_cls_to_wrap"]
+                        )
+            fsdp_plugin_args["fsdp_version"] = self.fsdp_config.get("fsdp_version", 1)
+            prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
+            fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
+            fsdp_plugin_args["forward_prefetch"] = str(self.fsdp_config.get("forward_prefetch", "false")).lower()
+
+            sync_module_states = str(self.fsdp_config.get("sync_module_states", "true")).lower()
+            cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false")).lower()
+            if sync_module_states == "false" and cpu_ram_efficient_loading == "true":
+                # In this case, all the processes except the main process would have random weights leading
+                # to unexpected behaviour during training, thus throwing error here to prevent it.
+                raise ValueError('`sync_module_states` must be `"True"` if `cpu_ram_efficient_loading` is `"True"`')
+
+            # we need to set the env here as otherwise we get a warning in accelerate + we need to set it for transformers
+            fsdp_plugin_args["cpu_ram_efficient_loading"] = cpu_ram_efficient_loading
+            os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
+
+            fsdp_plugin_args["sync_module_states"] = sync_module_states
+            fsdp_plugin_args["use_orig_params"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
+
+        return fsdp_plugin_args
 
 
 class ParallelMode(Enum):
