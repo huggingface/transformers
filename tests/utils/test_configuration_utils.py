@@ -43,29 +43,7 @@ config_common_kwargs = {
     "cross_attention_hidden_size": 128,
     "add_cross_attention": True,
     "tie_encoder_decoder": True,
-    "max_length": 50,
-    "min_length": 3,
-    "do_sample": True,
-    "early_stopping": True,
-    "num_beams": 3,
-    "num_beam_groups": 3,
-    "diversity_penalty": 0.5,
-    "temperature": 2.0,
-    "top_k": 10,
-    "top_p": 0.7,
-    "typical_p": 0.2,
-    "repetition_penalty": 0.8,
-    "length_penalty": 0.8,
-    "no_repeat_ngram_size": 5,
-    "encoder_no_repeat_ngram_size": 5,
-    "bad_words_ids": [1, 2, 3],
-    "num_return_sequences": 3,
     "chunk_size_feed_forward": 5,
-    "output_scores": True,
-    "return_dict_in_generate": True,
-    "forced_bos_token_id": 2,
-    "forced_eos_token_id": 3,
-    "remove_invalid_values": True,
     "architectures": ["BertModel"],
     "finetuning_task": "translation",
     "id2label": {0: "label"},
@@ -77,9 +55,6 @@ config_common_kwargs = {
     "eos_token_id": 8,
     "sep_token_id": 9,
     "decoder_start_token_id": 10,
-    "exponential_decay_length_penalty": (5, 1.01),
-    "suppress_tokens": [0, 1],
-    "begin_suppress_tokens": 2,
     "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
@@ -275,19 +250,19 @@ class ConfigTestUtils(unittest.TestCase):
         old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
         self.assertEqual(old_configuration.hidden_size, 768)
 
-    def test_saving_config_with_custom_generation_kwargs_raises_warning(self):
-        config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
+    def test_saving_config_with_custom_generation_kwargs_raises_error(self):
+        config = BertConfig()
+        config.min_length = 3  # `min_length = 3` is a non-default generation kwarg
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertWarns(UserWarning) as cm:
+            with self.assertRaises(ValueError):
                 config.save_pretrained(tmp_dir)
-            self.assertIn("min_length", str(cm.warning))
 
     def test_get_non_default_generation_parameters(self):
         config = BertConfig()
         self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
-        config = BertConfig(min_length=3)
+        config.min_length = 3
         self.assertTrue(len(config._get_non_default_generation_parameters()) > 0)
-        config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
+        config.min_length = 0  # `min_length = 0` is a default generation kwarg
         self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
 
     def test_loading_config_do_not_raise_future_warnings(self):
