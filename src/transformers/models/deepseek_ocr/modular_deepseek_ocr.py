@@ -36,6 +36,14 @@ from ..clip.modeling_clip import (
     CLIPVisionTransformer,
 )
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
+from ..deepseek_v2.modeling_deepseek_v2 import (
+    DeepseekV2DecoderLayer,
+    DeepseekV2MLP,
+    DeepseekV2Model,
+    DeepseekV2Moe,
+    DeepseekV2RMSNorm,
+)
+from ..llama.modeling_llama import LlamaAttention
 from ..llava_next.modeling_llava_next import (
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
@@ -550,6 +558,26 @@ class DeepseekOcrCLIPVisionModel(CLIPVisionModel):
         )
 
 
+class DeepseekOcrTextStandardAttention(LlamaAttention):
+    pass
+
+
+class DeepseekOcrTextDecoderLayer(DeepseekV2DecoderLayer):
+    def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
+        if not config.use_mla:
+            self.self_attn = DeepseekOcrTextStandardAttention(config, layer_idx)
+
+
+class DeepseekOcrTextModel(DeepseekV2Model):
+    def __init__(self, config):
+        super().__init__(config)
+        if not config.use_mla:
+            self.layers = nn.ModuleList(
+                [DeepseekOcrTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            )
+
+
 class DeepseekOcrModel(LlavaNextModel):
     """
     Deepseek OCR model with dual vision encoders (SAM + CLIP) and a projector.
@@ -566,7 +594,7 @@ class DeepseekOcrModel(LlavaNextModel):
         self.multi_modal_projector = DeepseekOcrProjector(config.projector_config)
 
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModel.from_config(config.text_config)
+        self.language_model = DeepseekOcrTextModel(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
 
         embed_std = 1 / math.sqrt(config.hidden_size)
