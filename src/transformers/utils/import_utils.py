@@ -1135,6 +1135,11 @@ def is_jinja_available() -> bool:
 
 
 @lru_cache
+def is_jmespath_available() -> bool:
+    return _is_package_available("jmespath")
+
+
+@lru_cache
 def is_mlx_available() -> bool:
     return _is_package_available("mlx")
 
@@ -2161,7 +2166,7 @@ def create_import_structure_from_path(module_path):
     {
         'albert': {
             frozenset(): {
-                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+                'configuration_albert': {'AlbertConfig'}
             },
             frozenset({'tokenizers'}): {
                 'tokenization_albert_fast': {'AlbertTokenizerFast'}
@@ -2337,7 +2342,7 @@ def spread_import_structure(nested_import_structure):
     {
         'albert': {
             frozenset(): {
-                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+                'configuration_albert': {'AlbertConfig'}
             },
             frozenset({'tokenizers'}): {
                 'tokenization_albert_fast': {'AlbertTokenizerFast'}
@@ -2364,7 +2369,7 @@ def spread_import_structure(nested_import_structure):
             'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
         },
         frozenset(): {
-            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'albert.configuration_albert': {'AlbertConfig'},
             'align.processing_align': {'AlignProcessor'},
             'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
             'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
@@ -2465,7 +2470,7 @@ def define_import_structure(module_path: str, prefix: str | None = None) -> IMPO
             'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
         },
         frozenset(): {
-            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'albert.configuration_albert': {'AlbertConfig'},
             'align.processing_align': {'AlignProcessor'},
             'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
             'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
