@@ -775,13 +775,22 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 # Create mask
                 padding_mask = seq_range >= lengths_expand
 
-                audio_attention_mask_ = padding_mask.view(batch_size, 1, 1, max_seq_len).expand(
-                    batch_size, 1, max_seq_len, max_seq_len
-                )
-                audio_attention_mask = audio_attention_mask_.to(
-                    dtype=self.audio_tower.conv1.weight.dtype, device=self.audio_tower.conv1.weight.device
-                )
-                audio_attention_mask[audio_attention_mask_] = float("-inf")
+                # Flash attention requires a 2D boolean mask (batch_size, seq_len) where 1 means valid and 0 means padding
+                # Eager/SDPA attention requires a 4D mask with -inf for padding
+                if self.audio_tower.config._attn_implementation in ["flash_attention_2", "flash_attention_3"]:
+                    # For flash attention: 2D mask with 1 for valid tokens, 0 for padding
+                    audio_attention_mask = (~padding_mask).to(
+                        dtype=torch.int32, device=self.audio_tower.conv1.weight.device
+                    )
+                else:
+                    # For eager/SDPA: 4D mask with -inf for padding
+                    audio_attention_mask_ = padding_mask.view(batch_size, 1, 1, max_seq_len).expand(
+                        batch_size, 1, max_seq_len, max_seq_len
+                    )
+                    audio_attention_mask = audio_attention_mask_.to(
+                        dtype=self.audio_tower.conv1.weight.dtype, device=self.audio_tower.conv1.weight.device
+                    )
+                    audio_attention_mask[audio_attention_mask_] = float("-inf")
 
                 audio_outputs = self.audio_tower(input_features, attention_mask=audio_attention_mask)
                 selected_audio_feature = audio_outputs.last_hidden_state
