@@ -24,6 +24,7 @@ from .utils import (
     is_flash_attn_3_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
+    is_torch_xpu_available,
     logging,
 )
 
@@ -45,7 +46,7 @@ def flash_attn_supports_top_left_mask():
 
 # TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
-    return is_flash_attn_3_available() or is_flash_attn_2_available() or is_torch_npu_available()
+    return is_flash_attn_3_available() or is_flash_attn_2_available() or is_torch_npu_available() or is_torch_xpu_available()
 
 
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves
@@ -87,6 +88,10 @@ def _lazy_imports(implementation: Optional[str]):
         # Flash-Attention2 related apis for Ascend NPU must be imported from `.integrations.npu_flash_attention` module
         from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
         from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
+    elif implementation == "flash_attention_2" and is_torch_xpu_available():
+        # Package `flash_attn` is unavailable on XPU, which will cause ImportError
+        # XPU will redirect flash_attention_2 to kernels-community/flash-attn implementation
+        from .integrations.xpu_flash_attention import flash_attn_func, flash_attn_varlen_func
     else:
         if implementation == "flash_attention_3" or (implementation is None and is_fa3):
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
