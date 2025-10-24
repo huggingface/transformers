@@ -39,7 +39,7 @@ class Fgclip2ProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "max_num_patches": 256,
             "patch_size": 16,
-            "dynamic_max_patches":True,
+            "dynamic_max_patches": True,
         },
     }
 
@@ -69,5 +69,3 @@ class Fgclip2Processor(ProcessorMixin):
 
 
 __all__ = ["Fgclip2Processor"]
-
-

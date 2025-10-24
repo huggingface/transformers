@@ -36,7 +36,10 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from .image_processing_fgclip2 import Fgclip2ImageProcessorKwargs, get_image_size_for_max_num_patches
+from .image_processing_fgclip2 import (
+    Fgclip2ImageProcessorKwargs,
+    get_image_size_for_max_num_patches,
+)
 
 
 if is_torch_available():
@@ -60,7 +63,9 @@ def convert_image_to_patches(image: "torch.Tensor", patch_size: int) -> "torch.T
     num_channels, image_height, image_width = image.shape
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
-    patched_image = image.reshape(num_channels, num_patches_height, patch_size, num_patches_width, patch_size)
+    patched_image = image.reshape(
+        num_channels, num_patches_height, patch_size, num_patches_width, patch_size
+    )
     patched_image = patched_image.permute(1, 3, 2, 4, 0)
     patched_image = patched_image.reshape(num_patches_height * num_patches_width, -1)
     return patched_image
@@ -77,16 +82,17 @@ def pad_along_first_dim(
     mask = torch.ones((target_length,), dtype=torch.int32)
     if padding_length > 0:
         padding = [0, 0] * (tensor.ndim - 1) + [0, padding_length]
-        tensor = torch.nn.functional.pad(tensor, padding, mode="constant", value=pad_value)
+        tensor = torch.nn.functional.pad(
+            tensor, padding, mode="constant", value=pad_value
+        )
         mask[-padding_length:] = 0
     return tensor, mask
 
 
-
 def _determine_max_value(image, patch_size: int = 16) -> int:
 
-    image_height=image.shape[1]
-    image_width=image.shape[2]
+    image_height = image.shape[1]
+    image_width = image.shape[2]
 
     num_patches = (image_width // patch_size) * (image_height // patch_size)
 
@@ -125,7 +131,9 @@ class Fgclip2ImageProcessorFast(BaseImageProcessorFast):
         return super()._validate_preprocess_kwargs(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Fgclip2ImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[Fgclip2ImageProcessorKwargs]
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -150,7 +158,9 @@ class Fgclip2ImageProcessorFast(BaseImageProcessorFast):
         spatial_shapes = []
 
         if dynamic_max_patches:
-            candidate_values = [_determine_max_value(img, patch_size=patch_size) for img in images]
+            candidate_values = [
+                _determine_max_value(img, patch_size=patch_size) for img in images
+            ]
             max_num_patches = max(candidate_values)
 
         for image in images:
@@ -162,9 +172,13 @@ class Fgclip2ImageProcessorFast(BaseImageProcessorFast):
                     max_num_patches=max_num_patches,
                 )
                 side_dict = SizeDict(height=height, width=width)
-                image = self.resize(image=image, size=side_dict, interpolation=interpolation)
+                image = self.resize(
+                    image=image, size=side_dict, interpolation=interpolation
+                )
 
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            image = self.rescale_and_normalize(
+                image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
 
             # (num_channels, height, width) -> (num_patches, patch_size * patch_size * num_channels)
             patches = convert_image_to_patches(image, patch_size)

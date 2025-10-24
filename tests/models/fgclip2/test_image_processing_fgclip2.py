@@ -34,7 +34,10 @@ from transformers.image_utils import (
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 from ...test_processing_common import url_to_local_path
 
 
@@ -46,6 +49,7 @@ if is_vision_available():
 
 if is_torchvision_available():
     from transformers import Fgclip2ImageProcessorFast
+
 
 def _determine_max_value(image, patch_size: int = 16) -> int:
     image_height = image.shape[0]
@@ -147,7 +151,9 @@ class Fgclip2ImageProcessingTester:
 
         return max_num_patches, self.patch_size * self.patch_size * self.num_channels
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -164,7 +170,9 @@ class Fgclip2ImageProcessingTester:
 # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest with CLIP->Fgclip2
 class Fgclip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Fgclip2ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Fgclip2ImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = (
+        Fgclip2ImageProcessorFast if is_torchvision_available() else None
+    )
     # fast_image_processing_class = None  # will be None → skip fast tests
 
     def setUp(self):
@@ -193,13 +201,18 @@ class Fgclip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # Ignore copy
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict
+            )
             self.assertEqual(image_processor.max_num_patches, 256)
             self.assertEqual(image_processor.patch_size, 16)
             self.assertEqual(image_processor.dynamic_max_patches, True)
 
             image_processor = self.image_processing_class.from_dict(
-                self.image_processor_dict, patch_size=32, max_num_patches=512, dynamic_max_patches=False
+                self.image_processor_dict,
+                patch_size=32,
+                max_num_patches=512,
+                dynamic_max_patches=False,
             )
             self.assertEqual(image_processor.patch_size, 32)
             self.assertEqual(image_processor.max_num_patches, 512)
@@ -215,16 +228,27 @@ class Fgclip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if (
+            self.image_processing_class is None
+            or self.fast_image_processing_class is None
+        ):
+            self.skipTest(
+                reason="Skipping slow/fast equivalence test as one of the image processors is not defined"
+            )
 
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        dummy_image = load_image(
+            url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
+        )
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(
+            **self.image_processor_dict
+        )
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_values, encoding_fast.pixel_values
+        )
 
     # increase mean tolerance to 1e-3 -> 2e-3
     # Ignore copy
@@ -232,19 +256,33 @@ class Fgclip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if (
+            self.image_processing_class is None
+            or self.fast_image_processing_class is None
+        ):
+            self.skipTest(
+                reason="Skipping slow/fast equivalence test as one of the image processors is not defined"
+            )
 
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+        if (
+            hasattr(self.image_processor_tester, "do_center_crop")
+            and self.image_processor_tester.do_center_crop
+        ):
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, torchify=True
+        )
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(
+            **self.image_processor_dict
+        )
 
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_values, encoding_fast.pixel_values
+        )

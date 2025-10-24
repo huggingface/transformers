@@ -22,7 +22,11 @@ import torch.nn as nn
 from torch.nn.init import _calculate_fan_in_and_fan_out
 from torchvision.ops import roi_align
 
-from transformers.models.siglip2.configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
+from transformers.models.siglip2.configuration_siglip2 import (
+    Siglip2Config,
+    Siglip2TextConfig,
+    Siglip2VisionConfig,
+)
 from transformers.models.siglip2.modeling_siglip2 import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -45,12 +49,16 @@ from transformers.models.siglip2.modeling_siglip2 import (
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    filter_out_non_signature_kwargs,
+)
 from ...utils.generic import check_model_inputs
 
 
 class Fgclip2TextConfig(Siglip2TextConfig):
-
     r"""
     This is the configuration class to store the configuration of a [`Fgclip2TextModel`]. It is used to instantiate a
     Fgclip2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -134,7 +142,12 @@ class Fgclip2TextConfig(Siglip2TextConfig):
         longtext_len=196,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -145,7 +158,9 @@ class Fgclip2TextConfig(Siglip2TextConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
-        self.projection_size = projection_size if projection_size is not None else hidden_size
+        self.projection_size = (
+            projection_size if projection_size is not None else hidden_size
+        )
         self.keep_len = keep_len
         self.longtext_len = longtext_len
 
@@ -200,6 +215,7 @@ class Fgclip2VisionConfig(Siglip2VisionConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     pass
 
 
@@ -244,7 +260,9 @@ class Fgclip2Config(Siglip2Config):
 
     >>> config = Fgclip2Config.from_text_vision_configs(config_text, config_vision)
     ```"""
+
     pass
+
 
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
@@ -283,7 +301,11 @@ def _trunc_normal_(tensor, mean, std, a, b):
 
 
 def trunc_normal_tf_(
-    tensor: torch.Tensor, mean: float = 0.0, std: float = 1.0, a: float = -2.0, b: float = 2.0
+    tensor: torch.Tensor,
+    mean: float = 0.0,
+    std: float = 1.0,
+    a: float = -2.0,
+    b: float = 2.0,
 ) -> torch.Tensor:
     """Fills the input Tensor with values drawn from a truncated
     normal distribution. The values are effectively drawn from the
@@ -336,6 +358,7 @@ def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
 def lecun_normal_(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
 
+
 def default_flax_embed_init(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
@@ -347,14 +370,18 @@ class Fgclip2VisionOutput(Siglip2VisionOutput):
 class Fgclip2TextOutput(Siglip2TextOutput):
     pass
 
+
 class Fgclip2Attention(Siglip2Attention):
     pass
+
 
 class Fgclip2MLP(Siglip2MLP):
     pass
 
+
 class Fgclip2EncoderLayer(Siglip2EncoderLayer):
     pass
+
 
 class Fgclip2Output(Siglip2Output):
     pass
@@ -366,6 +393,7 @@ class Fgclip2VisionEmbeddings(Siglip2VisionEmbeddings):
 
 class Fgclip2VisionTransformer(Siglip2VisionTransformer):
     pass
+
 
 class Fgclip2PreTrainedModel(Siglip2PreTrainedModel):
     config: Fgclip2Config
@@ -430,6 +458,7 @@ class Fgclip2PreTrainedModel(Siglip2PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+
 class Fgclip2TextEmbeddings(Siglip2TextEmbeddings):
 
     # Update: add `position_embedding_res`, `position_embedding_ori`, `mask1` and `mask2`
@@ -439,14 +468,15 @@ class Fgclip2TextEmbeddings(Siglip2TextEmbeddings):
         embed_dim = config.hidden_size
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+        self.position_embedding = nn.Embedding(
+            config.max_position_embeddings, embed_dim
+        )
 
         keep_len = config.keep_len
         longtext_len = config.longtext_len
 
         self.position_embedding_res = nn.Embedding(longtext_len, embed_dim)
         self.position_embedding_ori = nn.Embedding(longtext_len, embed_dim)
-
 
         self.mask1 = torch.zeros([longtext_len, 1])
         self.mask1[:keep_len, :] = 1
@@ -466,7 +496,6 @@ class Fgclip2TextEmbeddings(Siglip2TextEmbeddings):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_short_position_ids: Optional[bool] = True,
     ) -> torch.Tensor:
-
         r"""
         Args:
         use_short_position_ids (`bool`, optional, defaults to `True`):
@@ -475,7 +504,9 @@ class Fgclip2TextEmbeddings(Siglip2TextEmbeddings):
             Assumes compact semantic structure and local dependency dominance.
         """
 
-        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        seq_length = (
+            input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        )
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
@@ -483,18 +514,23 @@ class Fgclip2TextEmbeddings(Siglip2TextEmbeddings):
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
-
         if use_short_position_ids:
             position_embeddings = self.position_embedding(position_ids)
             embeddings = inputs_embeds + position_embeddings
         else:
             position_embeddings_res = self.position_embedding_res(position_ids)
             position_embeddings_ori = self.position_embedding_ori(position_ids)
-            embeddings = inputs_embeds + (position_embeddings_ori*self.mask1.to(inputs_embeds.device)).type(inputs_embeds.dtype).to(inputs_embeds.device) + \
-                        (position_embeddings_res*self.mask2.to(inputs_embeds.device)).type(inputs_embeds.dtype).to(inputs_embeds.device)
+            embeddings = (
+                inputs_embeds
+                + (position_embeddings_ori * self.mask1.to(inputs_embeds.device))
+                .type(inputs_embeds.dtype)
+                .to(inputs_embeds.device)
+                + (position_embeddings_res * self.mask2.to(inputs_embeds.device))
+                .type(inputs_embeds.dtype)
+                .to(inputs_embeds.device)
+            )
 
         return embeddings
-
 
 
 class Fgclip2TextTransformer(Siglip2TextTransformer):
@@ -506,23 +542,23 @@ class Fgclip2TextTransformer(Siglip2TextTransformer):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        walk_type: str = "short", # Modified: Single parameter
+        walk_type: str = "short",  # Modified: Single parameter
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-            Args:
-            walk_type (`str`, optional, defaults to `"short"`):
-                The traversal strategy used during feature extraction. Must be one of
-                `"short"`, `"box"`, or `"long"`. This controls how contextual information
-                is aggregated across the input:
-                - `"short"`: Optimized for short-text understanding, focusing on tight semantic coherence
-                and direct word interactions. Suitable when the input is a phrase or brief sentence.
-                - `"box"`: Designed for local-region description processing, such as grounding in vision-language
-                models or processing localized textual descriptions (e.g., object regions or segments).
-                Emphasizes dense features within bounded semantic units.
-                - `"long"`: Tailored for long-form text processing, enabling modeling of extended dependencies
-                and discourse structure. Uses strategies like chunking or hierarchical attention to handle
-                longer sequences effectively.
+        Args:
+        walk_type (`str`, optional, defaults to `"short"`):
+            The traversal strategy used during feature extraction. Must be one of
+            `"short"`, `"box"`, or `"long"`. This controls how contextual information
+            is aggregated across the input:
+            - `"short"`: Optimized for short-text understanding, focusing on tight semantic coherence
+            and direct word interactions. Suitable when the input is a phrase or brief sentence.
+            - `"box"`: Designed for local-region description processing, such as grounding in vision-language
+            models or processing localized textual descriptions (e.g., object regions or segments).
+            Emphasizes dense features within bounded semantic units.
+            - `"long"`: Tailored for long-form text processing, enabling modeling of extended dependencies
+            and discourse structure. Uses strategies like chunking or hierarchical attention to handle
+            longer sequences effectively.
         """
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
@@ -530,16 +566,22 @@ class Fgclip2TextTransformer(Siglip2TextTransformer):
         # Validate walk_type
         walk_type = walk_type.lower()
         if walk_type not in ["short", "box", "long"]:
-            raise ValueError(f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'.")
+            raise ValueError(
+                f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'."
+            )
 
         # Convert walk_type to boolean flags for internal logic
-        walk_short = (walk_type == "short")
-        walk_box = (walk_type == "box")
-        walk_long = (walk_type == "long")
+        walk_short = walk_type == "short"
+        walk_box = walk_type == "box"
+        walk_long = walk_type == "long"
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
-        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids, use_short_position_ids=(not walk_long))
+        hidden_states = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            use_short_position_ids=(not walk_long),
+        )
         # note: fgclip2's text model does not use a causal mask, unlike the original CLIP model.
         # expand attention_mask
         uses_flash_attention = "flash" in self.config._attn_implementation
@@ -547,7 +589,9 @@ class Fgclip2TextTransformer(Siglip2TextTransformer):
             attention_mask = None
         elif attention_mask is not None and not uses_flash_attention:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, hidden_states.dtype
+            )
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
@@ -562,8 +606,8 @@ class Fgclip2TextTransformer(Siglip2TextTransformer):
             assert not walk_long
             temp_pool_out = []
             for i in range(pooled_output.shape[0]):
-                temp_pool_out.append(self.head(pooled_output[i:i+1]))
-            pooled_output = torch.cat(temp_pool_out,dim=0)
+                temp_pool_out.append(self.head(pooled_output[i : i + 1]))
+            pooled_output = torch.cat(temp_pool_out, dim=0)
             # pooled_output = self.head(pooled_output)
         if walk_box:
             assert not walk_short
@@ -578,6 +622,7 @@ class Fgclip2TextTransformer(Siglip2TextTransformer):
             pooler_output=pooled_output,
         )
 
+
 class Fgclip2TextModel(Siglip2TextModel):
     # Update: add `walk_type`
     @check_model_inputs(tie_last_hidden_states=False)
@@ -587,7 +632,7 @@ class Fgclip2TextModel(Siglip2TextModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        walk_type: str = "short", # Modified: Single parameter
+        walk_type: str = "short",  # Modified: Single parameter
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -609,32 +654,38 @@ class Fgclip2TextModel(Siglip2TextModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            walk_type=walk_type, # Modified: Pass single parameter
+            walk_type=walk_type,  # Modified: Pass single parameter
             **kwargs,
         )
+
 
 class Fgclip2MultiheadAttentionPoolingHead(Siglip2MultiheadAttentionPoolingHead):
 
     # Update: The following improvements have been made, ensuring that the precision difference
     # between the output results of batch inference and individual inference remains stable below 1e-5.
-    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
         if attention_mask is not None:
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, hidden_state.dtype, target_len
+            )
             attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
             attention_mask = attention_mask.reshape(-1, target_len, source_len)
 
-        hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
+        hidden_state = self.attention(
+            probe, hidden_state, hidden_state, attn_mask=attention_mask
+        )[0]
 
         residual = hidden_state
         hidden_state = self.layernorm(hidden_state)
         hidden_state = residual + self.mlp(hidden_state)
 
         return hidden_state[:, 0]
-
 
 
 class Fgclip2VisionModel(Siglip2VisionModel):
@@ -684,7 +735,6 @@ class Fgclip2VisionModel(Siglip2VisionModel):
 
 
 class Fgclip2Model(Siglip2Model):
-
 
     # Update: add `dense_feature_head`, `longtext_head` and `boxtext_head`
     def __init__(self, config: Fgclip2Config):
@@ -766,8 +816,6 @@ class Fgclip2Model(Siglip2Model):
             spatial_shapes=spatial_shapes,
         )
 
-
-
     # NOTE: Fgclip2Model uses Pretrained backbones, so we don't need to add `check_model_inputs` here
     # Update: add `walk_type`
     @can_return_tuple
@@ -835,16 +883,24 @@ class Fgclip2Model(Siglip2Model):
         walk_type = walk_type.lower()
 
         if walk_type not in ["short", "box", "long"]:
-            raise ValueError(f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'.")
+            raise ValueError(
+                f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'."
+            )
 
-        walk_short = (walk_type == "short")
-        walk_box = (walk_type == "box")
-        walk_long = (walk_type == "long")
+        walk_short = walk_type == "short"
+        walk_box = walk_type == "box"
+        walk_long = walk_type == "long"
 
         # Use Fgclip2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
@@ -864,7 +920,6 @@ class Fgclip2Model(Siglip2Model):
             walk_type=walk_type,
         )
 
-
         image_embeds = vision_outputs.pooler_output
 
         if walk_short:
@@ -876,15 +931,18 @@ class Fgclip2Model(Siglip2Model):
         if walk_long:
             text_embeds = self.longtext_head(text_outputs.pooler_output)
 
-
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
+        logits_per_text = torch.matmul(
+            text_embeds, image_embeds.t().to(text_embeds.device)
+        )
 
-        logit_scale, logit_bias = self.logit_scale.to(text_embeds.device), self.logit_bias.to(text_embeds.device)
+        logit_scale, logit_bias = self.logit_scale.to(
+            text_embeds.device
+        ), self.logit_bias.to(text_embeds.device)
         logits_per_text = logits_per_text * logit_scale.exp() + logit_bias
 
         logits_per_image = logits_per_text.t()
@@ -964,11 +1022,13 @@ class Fgclip2Model(Siglip2Model):
         walk_type = walk_type.lower()
 
         if walk_type not in ["short", "box", "long"]:
-            raise ValueError(f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'.")
+            raise ValueError(
+                f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'."
+            )
 
-        walk_short = (walk_type == "short")
-        walk_box = (walk_type == "box")
-        walk_long = (walk_type == "long")
+        walk_short = walk_type == "short"
+        walk_box = walk_type == "box"
+        walk_long = walk_type == "long"
 
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
@@ -986,9 +1046,7 @@ class Fgclip2Model(Siglip2Model):
         if walk_long:
             pooled_output = self.longtext_head(text_outputs.pooler_output)
 
-
         return pooled_output
-
 
     # New function: Acquire dense visual features of images with support for dynamic resolution
     @filter_out_non_signature_kwargs()
@@ -998,7 +1056,7 @@ class Fgclip2Model(Siglip2Model):
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.LongTensor] = None,
-    )-> torch.FloatTensor:
+    ) -> torch.FloatTensor:
         r"""
         Extract dense visual features from input images by forwarding through the vision backbone.
 
@@ -1026,20 +1084,25 @@ class Fgclip2Model(Siglip2Model):
 
         if attention_mask is not None:
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
-            attention_mask = attention_mask.repeat(1, self.dense_feature_head.num_heads, 1, 1)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, hidden_state.dtype, target_len
+            )
+            attention_mask = attention_mask.repeat(
+                1, self.dense_feature_head.num_heads, 1, 1
+            )
             attention_mask = attention_mask.reshape(-1, target_len, source_len)
 
-        hidden_state = self.dense_feature_head.attention(probe,hidden_state,hidden_state, attn_mask=attention_mask)[0]
+        hidden_state = self.dense_feature_head.attention(
+            probe, hidden_state, hidden_state, attn_mask=attention_mask
+        )[0]
         residual = hidden_state
         hidden_state = self.dense_feature_head.layernorm(hidden_state)
-        hidden_state = residual+self.dense_feature_head.mlp(hidden_state)
+        hidden_state = residual + self.dense_feature_head.mlp(hidden_state)
         feature_map = hidden_state
 
         return feature_map
 
-
-    #New function: Acquire local features of images, applicable to retrieval, classification, and localization, with support for dynamic resolution
+    # New function: Acquire local features of images, applicable to retrieval, classification, and localization, with support for dynamic resolution
     @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_image_region_features(
@@ -1116,13 +1179,17 @@ class Fgclip2Model(Siglip2Model):
             bboxes = region_infos[i]
 
             if not bboxes:
-                all_region_features.append(torch.empty(0, hidden_dim, device=dense_feature_map.device))
+                all_region_features.append(
+                    torch.empty(0, hidden_dim, device=dense_feature_map.device)
+                )
                 continue
 
             # Reshape to (1, C, H', W')
             num_valid = h * w
             feat_seq = dense_feature_map[i, :num_valid]  # (num_valid, D)
-            feat_map = feat_seq.view(h, w, hidden_dim).permute(2, 0, 1).unsqueeze(0)  # (1, D, H', W')
+            feat_map = (
+                feat_seq.view(h, w, hidden_dim).permute(2, 0, 1).unsqueeze(0)
+            )  # (1, D, H', W')
 
             # Normalize bboxes to feature map coordinates
             rois = []
@@ -1132,7 +1199,9 @@ class Fgclip2Model(Siglip2Model):
                 nx2 = (x2 / img_w) * w
                 ny2 = (y2 / img_h) * h
                 rois.append([0, nx1, ny1, nx2, ny2])  #
-            rois_tensor = torch.tensor(rois, dtype=torch.float32, device=feat_map.device)  # (N, 5)
+            rois_tensor = torch.tensor(
+                rois, dtype=torch.float32, device=feat_map.device
+            )  # (N, 5)
 
             # RoI Align on single image
             pooled = roi_align(
@@ -1148,8 +1217,6 @@ class Fgclip2Model(Siglip2Model):
             all_region_features.append(region_feats)
 
         return all_region_features
-
-
 
 
 __all__ = [

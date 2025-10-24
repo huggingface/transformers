@@ -38,7 +38,12 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_vision_available,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -60,13 +65,19 @@ class Fgclip2ImageProcessorKwargs(ImagesKwargs, total=False):
         If `False`, uses `max_num_patches` (either passed or default).
 
     """
+
     patch_size: Optional[int]
     max_num_patches: Optional[int]
     dynamic_max_patches: Optional[bool]
 
+
 @lru_cache(maxsize=256)
 def get_image_size_for_max_num_patches(
-    image_height: int, image_width: int, patch_size: int, max_num_patches: int, eps: float = 1e-5
+    image_height: int,
+    image_width: int,
+    patch_size: int,
+    max_num_patches: int,
+    eps: float = 1e-5,
 ) -> tuple[int, int]:
     """
     Determine image size based on max number of patches, ensure dimensions are divisible by patch size and image is at least 1 patch.
@@ -89,7 +100,9 @@ def get_image_size_for_max_num_patches(
 
     def get_scaled_image_size(scale: float, size: int, patch_size: int) -> int:
         scaled_size = size * scale
-        scaled_size = math.ceil(scaled_size / patch_size) * patch_size  # make divisible by patch_size
+        scaled_size = (
+            math.ceil(scaled_size / patch_size) * patch_size
+        )  # make divisible by patch_size
         scaled_size = max(patch_size, scaled_size)  # ensure at least 1 patch
         return int(scaled_size)
 
@@ -120,13 +133,17 @@ def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
     image_height, image_width, num_channels = image.shape
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
-    patched_image = image.reshape(num_patches_height, patch_size, num_patches_width, patch_size, num_channels)
+    patched_image = image.reshape(
+        num_patches_height, patch_size, num_patches_width, patch_size, num_channels
+    )
     patched_image = patched_image.transpose(0, 2, 1, 3, 4)
     patched_image = patched_image.reshape(num_patches_height * num_patches_width, -1)
     return patched_image
 
 
-def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 0) -> tuple[np.ndarray, np.ndarray]:
+def pad_along_first_dim(
+    array: np.ndarray, target_length: int, pad_value: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Pad the array along the first dimension.
     """
@@ -142,8 +159,8 @@ def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 
 
 def _determine_max_value(image, patch_size: int = 16) -> int:
 
-    image_height=image.shape[0]
-    image_width=image.shape[1]
+    image_height = image.shape[0]
+    image_width = image.shape[1]
 
     num_patches = (image_width // patch_size) * (image_height // patch_size)
 
@@ -157,6 +174,7 @@ def _determine_max_value(image, patch_size: int = 16) -> int:
         return 256
     else:
         return 128
+
 
 class Fgclip2ImageProcessor(BaseImageProcessor):
     r"""
@@ -227,7 +245,6 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
         self.patch_size = patch_size
         self.dynamic_max_patches = dynamic_max_patches
         self.max_num_patches = max_num_patches
-
 
     @filter_out_non_signature_kwargs()
     def preprocess(
@@ -302,14 +319,24 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
         patch_size = patch_size if patch_size is not None else self.patch_size
-        max_num_patches = max_num_patches if max_num_patches is not None else self.max_num_patches
-        dynamic_max_patches = dynamic_max_patches if dynamic_max_patches is not None else self.dynamic_max_patches  # ← 获取设置
+        max_num_patches = (
+            max_num_patches if max_num_patches is not None else self.max_num_patches
+        )
+        dynamic_max_patches = (
+            dynamic_max_patches
+            if dynamic_max_patches is not None
+            else self.dynamic_max_patches
+        )  # ← 获取设置
 
         data_format = ChannelDimension.LAST
         images = self.fetch_images(images)
@@ -348,14 +375,22 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
         pixel_masks = []
         spatial_shapes = []
 
-        images = [to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images]
+        images = [
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
+        ]
 
         if dynamic_max_patches:
             original_max_num_patches = max_num_patches
-            candidate_values = [_determine_max_value(img, patch_size=patch_size) for img in images]
+            candidate_values = [
+                _determine_max_value(img, patch_size=patch_size) for img in images
+            ]
             max_num_patches = max(candidate_values)
-            logger.info(f"Dynamically set max_num_patches={max_num_patches} (originally {original_max_num_patches})")
-
+            logger.info(
+                f"Dynamically set max_num_patches={max_num_patches} (originally {original_max_num_patches})"
+            )
 
         for image in images:
             if do_resize:
@@ -365,13 +400,25 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
                     patch_size=patch_size,
                     max_num_patches=max_num_patches,
                 )
-                image = resize(image=image, size=(height, width), resample=resample, input_data_format=data_format)
+                image = resize(
+                    image=image,
+                    size=(height, width),
+                    resample=resample,
+                    input_data_format=data_format,
+                )
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=data_format)
+                image = self.rescale(
+                    image=image, scale=rescale_factor, input_data_format=data_format
+                )
 
             if do_normalize:
-                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=data_format)
+                image = self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=data_format,
+                )
 
             patches = convert_image_to_patches(image, patch_size)
             patches, mask = pad_along_first_dim(patches, max_num_patches)
@@ -392,5 +439,6 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
         )
 
         return batch_feature
+
 
 __all__ = ["Fgclip2ImageProcessor"]
