@@ -309,7 +309,7 @@ class DeepseekOcrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
 
 
-class DeepseekOcrProjector(nn.Module):
+class DeepseekOcrProjector(PreTrainedModel):
     """
     Projector that maps concatenated SAM + CLIP features to language model space.
     """
@@ -614,13 +614,13 @@ class DeepseekOcrModel(LlavaNextModel):
         del self.vision_tower
         del self.multi_modal_projector
 
-        self.sam_model = DeepseekOcrSamVisionEncoder(config.vision_config.sam_config)
-        self.clip_model = DeepseekOcrCLIPVisionModel(config.vision_config.clip_config)
+        self.sam_model = DeepseekOcrSamVisionEncoder._from_config(config.vision_config.sam_config)
+        self.clip_model = DeepseekOcrCLIPVisionModel._from_config(config.vision_config.clip_config)
 
-        self.multi_modal_projector = DeepseekOcrProjector(config.projector_config)
+        self.multi_modal_projector = DeepseekOcrProjector._from_config(config.projector_config)
 
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = DeepseekOcrTextModel(config.text_config)
+        self.language_model = DeepseekOcrTextModel._from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
 
         embed_std = 1 / math.sqrt(config.hidden_size)
