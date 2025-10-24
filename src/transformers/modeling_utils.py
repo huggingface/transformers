@@ -4037,6 +4037,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             from kernels import use_kernel_mapping
 
+            from .integrations.hub_kernels import register_kernel_mapping_transformers
+
+            register_kernel_mapping_transformers()
+
             if kernel_config is not None and isinstance(kernel_config, KernelConfig):
                 # This will make sure the mapping is valid, and the layers are registered in the model
                 kernel_config.sanitize_kernel_mapping(self)

@@ -62,6 +62,12 @@ try:
                     layer_name="LigerRMSNorm",
                 )
             },
+            "xpu": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/rmsnorm",
+                    layer_name="RMSNorm",
+                )
+            },
         },
         "MLP": {
             "cuda": LayerRepository(
@@ -136,13 +142,19 @@ try:
             }
         },
     }
-    # We pin the version here for xpu support, if kernels is not available at all we won't reach this point, so it's safe.
-    if is_kernels_available(MIN_VERSION="0.10.2"):
-        register_kernel_mapping(_KERNEL_MAPPING)
-    else:
-        raise ImportError(
-            "kernels is not installed or uses an incompatible version. Please install the latest version with `pip install -U kernels`."
-        )
+
+    def has_key(d, key):
+        return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
+
+    def register_kernel_mapping_transformers(mapping = None):
+        if mapping is None:
+            mapping = _KERNEL_MAPPING
+        if has_key(mapping, "xpu") and not is_kernels_available(MIN_VERSION="0.10.2"):
+            raise ImportError(
+                "kernels uses an incompatible version. Please install the latest version with `pip install -U kernels`."
+            )
+        register_kernel_mapping(mapping)
+
 
 except ImportError:
     _kernels_available = False
@@ -286,6 +298,7 @@ __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
     "register_kernel_mapping",
+    "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
     "lazy_load_kernel",
 ]
