@@ -56,11 +56,11 @@ class HrmConfig(PretrainedConfig):
                 Dimension of the hidden representations and embeddings.
             num_hidden_layers (`int`, *optional*, defaults to 4):
                 Number of transformer layers in both high-level (H) and low-level (L) modules.
-                Use `h_layers` and `l_layers` to set them independently.
-            h_layers (`int`, *optional*):
+                Use `high_layers` and `low_layers` to set them independently.
+            high_layers (`int`, *optional*):
                 Number of transformer layers in the high-level (H) module for abstract planning.
                 If not specified, defaults to `num_hidden_layers`.
-            l_layers (`int`, *optional*):
+            low_layers (`int`, *optional*):
                 Number of transformer layers in the low-level (L) module for detailed computations.
                 If not specified, defaults to `num_hidden_layers`.
             num_attention_heads (`int`, *optional*, defaults to 8):
@@ -73,9 +73,9 @@ class HrmConfig(PretrainedConfig):
             max_position_embeddings (`int`, *optional*, defaults to 81):
                 The maximum sequence length that this model might ever be used with. For Sudoku, this is 81 (9x9 grid).
                 For ARC tasks, this can be up to 900 (30x30 grid).
-            h_cycles (`int`, *optional*, defaults to 2):
+            high_cycles (`int`, *optional*, defaults to 2):
                 Number of high-level reasoning cycles per forward pass. Controls the depth of abstract planning.
-            l_cycles (`int`, *optional*, defaults to 2):
+            low_cycles (`int`, *optional*, defaults to 2):
                 Number of low-level computation cycles per high-level cycle. Controls granularity of detailed
                 processing.
             pos_encodings (`str`, *optional*, defaults to `"rope"`):
@@ -84,12 +84,12 @@ class HrmConfig(PretrainedConfig):
                 The base period of the RoPE embeddings. Only used when `pos_encodings="rope"`.
             rms_norm_eps (`float`, *optional*, defaults to 1e-05):
                 The epsilon used by the RMS normalization layers for numerical stability.
-            puzzle_emb_ndim (`int`, *optional*, defaults to 0):
+            puzzle_embedding_dim (`int`, *optional*, defaults to 0):
                 Dimension of per-puzzle sparse embeddings. Set to 0 to disable puzzle-specific embeddings.
                 When > 0, each unique puzzle gets a learned embedding of this dimension.
             num_puzzle_identifiers (`int`, *optional*, defaults to 1):
                 Total number of unique puzzle types/IDs for which to learn separate embeddings.
-                Only used when `puzzle_emb_ndim > 0`.
+                Only used when `puzzle_embedding_dim > 0`.
             halt_max_steps (`int`, *optional*, defaults to 16):
                 Maximum number of computation steps before forcing the ACT mechanism to halt.
                 Controls the computational budget per sequence.
@@ -113,8 +113,8 @@ class HrmConfig(PretrainedConfig):
     ...     hidden_size=512,
     ...     num_hidden_layers=4,
     ...     max_position_embeddings=81,  # 9x9 grid
-    ...     h_cycles=2,
-    ...     l_cycles=2,
+    ...     high_cycles=2,
+    ...     low_cycles=2,
     ... )
 
     >>> # Initializing a model from the configuration
@@ -132,18 +132,18 @@ class HrmConfig(PretrainedConfig):
         vocab_size=11,
         hidden_size=512,
         num_hidden_layers=4,
-        h_layers=None,
-        l_layers=None,
+        high_layers=None,
+        low_layers=None,
         num_attention_heads=8,
         intermediate_size=None,
         expansion=4.0,
         max_position_embeddings=81,
-        h_cycles=2,
-        l_cycles=2,
+        high_cycles=2,
+        low_cycles=2,
         pos_encodings="rope",
         rope_theta=10000.0,
         rms_norm_eps=1e-5,
-        puzzle_emb_ndim=0,
+        puzzle_embedding_dim=0,
         num_puzzle_identifiers=1,
         halt_max_steps=16,
         halt_exploration_prob=0.1,
@@ -155,18 +155,18 @@ class HrmConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.h_layers = h_layers if h_layers is not None else num_hidden_layers
-        self.l_layers = l_layers if l_layers is not None else num_hidden_layers
+        self.high_layers = high_layers if high_layers is not None else num_hidden_layers
+        self.low_layers = low_layers if low_layers is not None else num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.expansion = expansion
         self.intermediate_size = intermediate_size if intermediate_size is not None else int(hidden_size * expansion)
         self.max_position_embeddings = max_position_embeddings
-        self.h_cycles = h_cycles
-        self.l_cycles = l_cycles
+        self.high_cycles = high_cycles
+        self.low_cycles = low_cycles
         self.pos_encodings = pos_encodings
         self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
-        self.puzzle_emb_ndim = puzzle_emb_ndim
+        self.puzzle_embedding_dim = puzzle_embedding_dim
         self.num_puzzle_identifiers = num_puzzle_identifiers
         self.halt_max_steps = halt_max_steps
         self.halt_exploration_prob = halt_exploration_prob

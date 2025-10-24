@@ -23,33 +23,6 @@ hierarchical and multi-timescale processing with Adaptive Computation Time (ACT)
 on tasks like Sudoku solving, maze navigation, and abstract reasoning with minimal training data.
 
 This implementation follows the architecture described in the paper: https://arxiv.org/abs/2506.21734
-
-## Modular Design Notes
-
-HRM follows the modular transformers pattern by inheriting reusable components from Llama where appropriate:
-- `apply_rotary_pos_emb`, `rotate_half`: Inherited from Llama (identical implementations)
-- `LlamaRotaryEmbedding`: Available for import but not used (see HrmRotaryEmbedding below)
-
-However, HRM has several unique architectural components that cannot inherit from existing models:
-
-### Custom Components (cannot inherit):
-
-1. **HrmLinear, HrmEmbedding**: Use custom truncated normal initialization specific to HRM's training dynamics.
-   Cannot inherit from standard nn.Linear/nn.Embedding due to initialization requirements.
-
-2. **HrmRotaryEmbedding**: Precomputes cos/sin for all positions (simpler than LlamaRotaryEmbedding which
-   supports dynamic rope scaling). HRM doesn't need rope_scaling or position_ids in forward().
-
-3. **HrmAttention**: Uses fused QKV projection and custom initialization. While similar to standard attention,
-   the projection layout and initialization make inheritance from LlamaAttention impractical.
-
-4. **HrmCarry, HrmInner, HrmReasoningModule, HrmBlock**: Core hierarchical reasoning architecture unique to HRM.
-   These implement the two-level (H/L) hierarchical processing and carry state mechanism.
-
-5. **HrmModel, HrmForCausalLM**: Use carry state instead of KV cache, implement ACT halting mechanism,
-   and have unique forward passes that cannot inherit from standard transformer models.
-
-This design balances code reuse (via inherited functions) with the need to preserve HRM's novel architecture.
 """
 
 import math
@@ -62,12 +35,11 @@ from torch import nn
 
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..falcon_mamba.modeling_falcon_mamba import rms_forward
-from ..llama.modeling_llama import apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
 
 
 logger = logging.get_logger(__name__)
@@ -107,11 +79,11 @@ class HrmConfig(PretrainedConfig):
                 Dimension of the hidden representations and embeddings.
             num_hidden_layers (`int`, *optional*, defaults to 4):
                 Number of transformer layers in both high-level (H) and low-level (L) modules.
-                Use `h_layers` and `l_layers` to set them independently.
-            h_layers (`int`, *optional*):
+                Use `high_layers` and `low_layers` to set them independently.
+            high_layers (`int`, *optional*):
                 Number of transformer layers in the high-level (H) module for abstract planning.
                 If not specified, defaults to `num_hidden_layers`.
-            l_layers (`int`, *optional*):
+            low_layers (`int`, *optional*):
                 Number of transformer layers in the low-level (L) module for detailed computations.
                 If not specified, defaults to `num_hidden_layers`.
             num_attention_heads (`int`, *optional*, defaults to 8):
@@ -124,9 +96,9 @@ class HrmConfig(PretrainedConfig):
             max_position_embeddings (`int`, *optional*, defaults to 81):
                 The maximum sequence length that this model might ever be used with. For Sudoku, this is 81 (9x9 grid).
                 For ARC tasks, this can be up to 900 (30x30 grid).
-            h_cycles (`int`, *optional*, defaults to 2):
+            high_cycles (`int`, *optional*, defaults to 2):
                 Number of high-level reasoning cycles per forward pass. Controls the depth of abstract planning.
-            l_cycles (`int`, *optional*, defaults to 2):
+            low_cycles (`int`, *optional*, defaults to 2):
                 Number of low-level computation cycles per high-level cycle. Controls granularity of detailed
                 processing.
             pos_encodings (`str`, *optional*, defaults to `"rope"`):
@@ -135,12 +107,12 @@ class HrmConfig(PretrainedConfig):
                 The base period of the RoPE embeddings. Only used when `pos_encodings="rope"`.
             rms_norm_eps (`float`, *optional*, defaults to 1e-05):
                 The epsilon used by the RMS normalization layers for numerical stability.
-            puzzle_emb_ndim (`int`, *optional*, defaults to 0):
+            puzzle_embedding_dim (`int`, *optional*, defaults to 0):
                 Dimension of per-puzzle sparse embeddings. Set to 0 to disable puzzle-specific embeddings.
                 When > 0, each unique puzzle gets a learned embedding of this dimension.
             num_puzzle_identifiers (`int`, *optional*, defaults to 1):
                 Total number of unique puzzle types/IDs for which to learn separate embeddings.
-                Only used when `puzzle_emb_ndim > 0`.
+                Only used when `puzzle_embedding_dim > 0`.
             halt_max_steps (`int`, *optional*, defaults to 16):
                 Maximum number of computation steps before forcing the ACT mechanism to halt.
                 Controls the computational budget per sequence.
@@ -164,8 +136,8 @@ class HrmConfig(PretrainedConfig):
     ...     hidden_size=512,
     ...     num_hidden_layers=4,
     ...     max_position_embeddings=81,  # 9x9 grid
-    ...     h_cycles=2,
-    ...     l_cycles=2,
+    ...     high_cycles=2,
+    ...     low_cycles=2,
     ... )
 
     >>> # Initializing a model from the configuration
@@ -183,18 +155,18 @@ class HrmConfig(PretrainedConfig):
         vocab_size=11,
         hidden_size=512,
         num_hidden_layers=4,
-        h_layers=None,
-        l_layers=None,
+        high_layers=None,
+        low_layers=None,
         num_attention_heads=8,
         intermediate_size=None,
         expansion=4.0,
         max_position_embeddings=81,
-        h_cycles=2,
-        l_cycles=2,
+        high_cycles=2,
+        low_cycles=2,
         pos_encodings="rope",
         rope_theta=10000.0,
         rms_norm_eps=1e-5,
-        puzzle_emb_ndim=0,
+        puzzle_embedding_dim=0,
         num_puzzle_identifiers=1,
         halt_max_steps=16,
         halt_exploration_prob=0.1,
@@ -206,18 +178,18 @@ class HrmConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.h_layers = h_layers if h_layers is not None else num_hidden_layers
-        self.l_layers = l_layers if l_layers is not None else num_hidden_layers
+        self.high_layers = high_layers if high_layers is not None else num_hidden_layers
+        self.low_layers = low_layers if low_layers is not None else num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.expansion = expansion
         self.intermediate_size = intermediate_size if intermediate_size is not None else int(hidden_size * expansion)
         self.max_position_embeddings = max_position_embeddings
-        self.h_cycles = h_cycles
-        self.l_cycles = l_cycles
+        self.high_cycles = high_cycles
+        self.low_cycles = low_cycles
         self.pos_encodings = pos_encodings
         self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
-        self.puzzle_emb_ndim = puzzle_emb_ndim
+        self.puzzle_embedding_dim = puzzle_embedding_dim
         self.num_puzzle_identifiers = num_puzzle_identifiers
         self.halt_max_steps = halt_max_steps
         self.halt_exploration_prob = halt_exploration_prob
@@ -363,94 +335,71 @@ class HrmEmbedding(nn.Embedding):
         return F.embedding(input, self.weight.to(self.cast_to))
 
 
-class HrmRotaryEmbedding(nn.Module):
-    """
-    Rotary Position Embedding (RoPE) precomputation.
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    """Pure PyTorch attention implementation for HRM."""
+    batch, seq_len, num_heads, head_dim = query.shape
+    # Transpose to (batch, num_heads, seq_len, head_dim)
+    query = query.transpose(1, 2)
+    key = key.transpose(1, 2)
+    value = value.transpose(1, 2)
 
-    Note: Does not inherit from LlamaRotaryEmbedding because HRM uses a simpler approach.
-    HRM precomputes cos/sin for all positions at initialization and doesn't need:
-    - Dynamic rope scaling (rope_scaling config)
-    - Position-dependent forward passes (position_ids parameter)
-    - Rope type variations (default/linear/dynamic/yarn/longrope)
-    This simpler design is sufficient for HRM's fixed-length reasoning tasks.
-    """
+    # Compute attention scores
+    scores = torch.matmul(query, key.transpose(-2, -1)) * scaling
 
-    def __init__(self, dim=None, max_position_embeddings=None, base=10000.0, device=None, config=None):
-        super().__init__()
-        # Support both direct parameters and config-based initialization
-        if config is not None:
-            dim = config.hidden_size // config.num_attention_heads
-            max_position_embeddings = config.max_position_embeddings
-            base = config.rope_theta
+    # Apply causal mask if needed
+    if module.causal:
+        mask = torch.triu(torch.ones(seq_len, seq_len, device=query.device, dtype=torch.bool), diagonal=1)
+        scores = scores.masked_fill(mask, float("-inf"))
 
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim))
-        t = torch.arange(max_position_embeddings, dtype=torch.float32, device=device)
-        freqs = torch.outer(t, inv_freq)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos(), persistent=False)
-        self.register_buffer("sin_cached", emb.sin(), persistent=False)
+    # Softmax and apply to values
+    attn_weights = torch.softmax(scores, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = F.dropout(attn_weights, p=dropout, training=module.training)
+    output = torch.matmul(attn_weights, value)
 
-    def forward(self, position_ids=None) -> tuple[torch.Tensor, torch.Tensor]:
-        """Forward pass - position_ids parameter is accepted for compatibility but not used."""
-        return self.cos_cached, self.sin_cached
+    # Transpose back to (batch, seq_len, num_heads, head_dim)
+    return output.transpose(1, 2).contiguous(), attn_weights
 
 
 class HrmAttention(nn.Module):
     """
     Multi-head self-attention with FlashAttention and eager fallback.
 
-    Note: Does not inherit from LlamaAttention due to architectural differences:
-    - Uses fused QKV projection (single linear layer) instead of separate Q, K, V projections
-    - Custom truncated normal initialization via HrmLinear
-    - Simpler interface without cache_position, past_key_values, or output_attentions
-    These differences make inheritance from LlamaAttention impractical while still reusing
-    the core rope functions (apply_rotary_pos_emb, rotate_half).
+    Note: Uses fused QKV projection (single linear layer) instead of separate Q, K, V projections
+    for efficiency with HRM's custom truncated normal initialization.
     """
 
     def __init__(self, config: HrmConfig, causal: bool = False):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.output_size = self.head_dim * config.num_attention_heads
         self.num_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_attention_heads
         self.causal = causal
+        self.scaling = self.head_dim**-0.5
 
-        self.qkv_proj = HrmLinear(
+        self.qkv_projection = HrmLinear(
             self.hidden_size,
             (self.num_heads + 2 * self.num_key_value_heads) * self.head_dim,
             bias=False,
         )
-        self.o_proj = HrmLinear(self.output_size, self.hidden_size, bias=False)
-
-    def _eager_attention(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
-        """Pure PyTorch fallback attention when FlashAttention is not available."""
-        batch, seq_len, num_heads, head_dim = query.shape
-        # Transpose to (batch, num_heads, seq_len, head_dim)
-        query = query.transpose(1, 2)
-        key = key.transpose(1, 2)
-        value = value.transpose(1, 2)
-
-        # Compute attention scores
-        scores = torch.matmul(query, key.transpose(-2, -1)) / (head_dim**0.5)
-
-        # Apply causal mask if needed
-        if self.causal:
-            mask = torch.triu(torch.ones(seq_len, seq_len, device=query.device, dtype=torch.bool), diagonal=1)
-            scores = scores.masked_fill(mask, float("-inf"))
-
-        # Softmax and apply to values
-        attn = torch.softmax(scores, dim=-1)
-        output = torch.matmul(attn, value)
-
-        # Transpose back to (batch, seq_len, num_heads, head_dim)
-        return output.transpose(1, 2).contiguous()
+        self.output_projection = HrmLinear(self.output_size, self.hidden_size, bias=False)
 
     def forward(
         self, hidden_states: torch.Tensor, cos_sin: Optional[tuple[torch.Tensor, torch.Tensor]] = None
     ) -> torch.Tensor:
         batch_size, seq_len, _ = hidden_states.shape
-        qkv = self.qkv_proj(hidden_states)
+        qkv = self.qkv_projection(hidden_states)
         qkv = qkv.view(batch_size, seq_len, self.num_heads + 2 * self.num_key_value_heads, self.head_dim)
         query = qkv[:, :, : self.num_heads]
         key = qkv[:, :, self.num_heads : self.num_heads + self.num_key_value_heads]
@@ -464,23 +413,23 @@ class HrmAttention(nn.Module):
             # HRM uses (batch, seq_len, heads, head_dim) so unsqueeze_dim=2
             query, key = apply_rotary_pos_emb(query, key, cos, sin, unsqueeze_dim=2)
 
-        # Try FlashAttention first, fall back to eager if not available
-        try:
-            attn_output = _flash_attention_forward(
-                query_states=query,
-                key_states=key,
-                value_states=value,
-                attention_mask=None,  # HRM doesn't use attention masks
-                query_length=seq_len,
-                is_causal=self.causal,
-                dropout=0.0,  # HRM doesn't use attention dropout
-            )
-        except (ValueError, ImportError):
-            # Fall back to eager attention if Flash Attention is not available
-            attn_output = self._eager_attention(query, key, value)
+        # Select attention implementation
+        attention_interface = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, _ = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=None,  # HRM doesn't use attention masks
+            scaling=self.scaling,
+            dropout=0.0,  # HRM doesn't use attention dropout
+        )
 
         attn_output = attn_output.view(batch_size, seq_len, self.output_size)
-        return self.o_proj(attn_output)
+        return self.output_projection(attn_output)
 
 
 class HrmSwiGLU(nn.Module):
@@ -495,12 +444,12 @@ class HrmSwiGLU(nn.Module):
             inter = int(config.expansion * config.hidden_size * 2 / 3)
             # Round up to multiple of 256 for efficiency
             inter = ((inter + 255) // 256) * 256
-        self.gate_up_proj = HrmLinear(config.hidden_size, inter * 2, bias=False)
-        self.down_proj = HrmLinear(inter, config.hidden_size, bias=False)
+        self.gate_up_projection = HrmLinear(config.hidden_size, inter * 2, bias=False)
+        self.down_projection = HrmLinear(inter, config.hidden_size, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        gate, up = self.gate_up_proj(x).chunk(2, dim=-1)
-        return self.down_proj(F.silu(gate) * up)
+        gate, up = self.gate_up_projection(x).chunk(2, dim=-1)
+        return self.down_projection(F.silu(gate) * up)
 
 
 class HrmBlock(nn.Module):
@@ -573,42 +522,52 @@ class HrmInner(nn.Module):
         )
 
         # Embeddings
-        self.embed_scale = math.sqrt(config.hidden_size)
-        embed_init_std = 1.0 / self.embed_scale
-        self.embed_tokens = HrmEmbedding(config.vocab_size, config.hidden_size, embed_init_std, self.forward_dtype)
+        self.embedding_scale = math.sqrt(config.hidden_size)
+        embedding_init_std = 1.0 / self.embedding_scale
+        self.token_embeddings = HrmEmbedding(
+            config.vocab_size, config.hidden_size, embedding_init_std, self.forward_dtype
+        )
 
         # Output heads
         self.lm_head = HrmLinear(config.hidden_size, config.vocab_size, bias=False)
         self.q_head = HrmLinear(config.hidden_size, 2, bias=True)
 
         # Puzzle embeddings (sparse, optional)
-        self.puzzle_emb_len = -(config.puzzle_emb_ndim // -config.hidden_size)  # ceil div
-        if config.puzzle_emb_ndim > 0:
+        self.puzzle_embedding_length = -(config.puzzle_embedding_dim // -config.hidden_size)  # ceil div
+        if config.puzzle_embedding_dim > 0:
             # Simplified version without CastedSparseEmbedding
-            self.puzzle_emb = nn.Embedding(config.num_puzzle_identifiers, config.puzzle_emb_ndim)
-            nn.init.zeros_(self.puzzle_emb.weight)
+            self.puzzle_embedding = nn.Embedding(config.num_puzzle_identifiers, config.puzzle_embedding_dim)
+            nn.init.zeros_(self.puzzle_embedding.weight)
 
         # Positional encodings - always initialize appropriate type based on config
-        self.pos_encodings = config.pos_encodings
-        if self.pos_encodings == "rope":
-            self.rotary_emb = HrmRotaryEmbedding(
-                dim=config.hidden_size // config.num_attention_heads,
-                max_position_embeddings=config.max_position_embeddings + self.puzzle_emb_len,
-                base=config.rope_theta,
-            )
-        elif self.pos_encodings == "learned":
-            self.embed_pos = HrmEmbedding(
-                config.max_position_embeddings + self.puzzle_emb_len,
+        self.positional_encoding_type = config.pos_encodings
+        if self.positional_encoding_type == "rope":
+            # Create a temporary config for LlamaRotaryEmbedding with adjusted max_position_embeddings
+            rope_config = type(
+                "obj",
+                (object,),
+                {
+                    "hidden_size": config.hidden_size,
+                    "num_attention_heads": config.num_attention_heads,
+                    "max_position_embeddings": config.max_position_embeddings + self.puzzle_embedding_length,
+                    "rope_theta": config.rope_theta,
+                    "rope_scaling": None,
+                },
+            )()
+            self.rotary_embedding = LlamaRotaryEmbedding(rope_config)
+        elif self.positional_encoding_type == "learned":
+            self.position_embeddings = HrmEmbedding(
+                config.max_position_embeddings + self.puzzle_embedding_length,
                 config.hidden_size,
-                embed_init_std,
+                embedding_init_std,
                 self.forward_dtype,
             )
         else:
             raise ValueError(f"Unknown pos_encodings: {config.pos_encodings}")
 
         # Reasoning modules
-        self.high_level_module = HrmReasoningModule(layers=[HrmBlock(config) for _ in range(config.h_layers)])
-        self.low_level_module = HrmReasoningModule(layers=[HrmBlock(config) for _ in range(config.l_layers)])
+        self.high_level_module = HrmReasoningModule(layers=[HrmBlock(config) for _ in range(config.high_layers)])
+        self.low_level_module = HrmReasoningModule(layers=[HrmBlock(config) for _ in range(config.low_layers)])
 
         # Initial states
         self.register_buffer(
@@ -622,34 +581,40 @@ class HrmInner(nn.Module):
             persistent=True,
         )
 
-    def _get_rotary_embeddings(self) -> Optional[tuple[torch.Tensor, torch.Tensor]]:
+    def _get_rotary_embeddings(
+        self, seq_len: int, device: torch.device
+    ) -> Optional[tuple[torch.Tensor, torch.Tensor]]:
         """Get rotary embeddings if using RoPE, otherwise return None."""
-        if self.pos_encodings == "rope":
-            return self.rotary_emb()
+        if self.positional_encoding_type == "rope":
+            # Create position_ids for the sequence
+            position_ids = torch.arange(seq_len, dtype=torch.long, device=device).unsqueeze(0)
+            # LlamaRotaryEmbedding returns (cos, sin) with position_ids applied
+            cos, sin = self.rotary_embedding(torch.zeros(1, seq_len, 1, device=device), position_ids)
+            return cos, sin
         return None
 
     def _input_embeddings(
         self, input: torch.Tensor, puzzle_identifiers: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """Compute input embeddings with token, puzzle, and position encoding."""
-        embedding = self.embed_tokens(input.to(torch.int32))
+        embedding = self.token_embeddings(input.to(torch.int32))
 
         # Puzzle embeddings
-        if self.config.puzzle_emb_ndim > 0 and puzzle_identifiers is not None:
-            puzzle_embedding = self.puzzle_emb(puzzle_identifiers)
-            pad_count = self.puzzle_emb_len * self.config.hidden_size - puzzle_embedding.shape[-1]
+        if self.config.puzzle_embedding_dim > 0 and puzzle_identifiers is not None:
+            puzzle_embedding = self.puzzle_embedding(puzzle_identifiers)
+            pad_count = self.puzzle_embedding_length * self.config.hidden_size - puzzle_embedding.shape[-1]
             if pad_count > 0:
                 puzzle_embedding = F.pad(puzzle_embedding, (0, pad_count))
             embedding = torch.cat(
-                (puzzle_embedding.view(-1, self.puzzle_emb_len, self.config.hidden_size), embedding), dim=-2
+                (puzzle_embedding.view(-1, self.puzzle_embedding_length, self.config.hidden_size), embedding), dim=-2
             )
 
         # Position embeddings
         if self.config.pos_encodings == "learned":
             # Scale factor is 1/sqrt(2) to maintain variance after adding two embeddings
-            embedding = math.sqrt(0.5) * (embedding + self.embed_pos.weight.to(self.forward_dtype))
+            embedding = math.sqrt(0.5) * (embedding + self.position_embeddings.weight.to(self.forward_dtype))
 
-        return self.embed_scale * embedding
+        return self.embedding_scale * embedding
 
     def empty_state(self, batch_size: int, sequence_length: int, device: torch.device) -> HrmInnerState:
         """Create uninitialized state tensors.
@@ -665,14 +630,14 @@ class HrmInner(nn.Module):
         return HrmInnerState(
             high_level_state=torch.empty(
                 batch_size,
-                sequence_length + self.puzzle_emb_len,
+                sequence_length + self.puzzle_embedding_length,
                 self.config.hidden_size,
                 dtype=self.forward_dtype,
                 device=device,
             ),
             low_level_state=torch.empty(
                 batch_size,
-                sequence_length + self.puzzle_emb_len,
+                sequence_length + self.puzzle_embedding_length,
                 self.config.hidden_size,
                 dtype=self.forward_dtype,
                 device=device,
@@ -693,37 +658,41 @@ class HrmInner(nn.Module):
         self, state: HrmInnerState, batch: dict
     ) -> tuple[HrmInnerState, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Execute hierarchical reasoning forward pass with 1-step gradient."""
-        # Get rotary embeddings if using RoPE (None for learned positional embeddings)
-        cos_sin = self._get_rotary_embeddings()
-
         # Input encoding
         input_embeddings = self._input_embeddings(batch["input_ids"], batch.get("puzzle_identifiers"))
 
+        # Get rotary embeddings if using RoPE (None for learned positional embeddings)
+        seq_len = input_embeddings.shape[1]
+        device = input_embeddings.device
+        cos_sin = self._get_rotary_embeddings(seq_len, device)
+
         # Forward iterations without gradients (for computational efficiency)
         with torch.no_grad():
-            high = state.high_level_state
-            low = state.low_level_state
+            high_level_state = state.high_level_state
+            low_level_state = state.low_level_state
 
-            for high_cycle_idx in range(self.config.h_cycles):
-                for low_cycle_idx in range(self.config.l_cycles):
+            for high_cycle_idx in range(self.config.high_cycles):
+                for low_cycle_idx in range(self.config.low_cycles):
                     # Skip the last L-level update (will be done with gradients)
-                    is_last_cycle = (high_cycle_idx == self.config.h_cycles - 1) and (
-                        low_cycle_idx == self.config.l_cycles - 1
+                    is_last_cycle = (high_cycle_idx == self.config.high_cycles - 1) and (
+                        low_cycle_idx == self.config.low_cycles - 1
                     )
                     if not is_last_cycle:
-                        low = self.low_level_module(low, high + input_embeddings, cos_sin=cos_sin)
+                        low_level_state = self.low_level_module(
+                            low_level_state, high_level_state + input_embeddings, cos_sin=cos_sin
+                        )
                 # Skip the last H-level update (will be done with gradients)
-                if high_cycle_idx != self.config.h_cycles - 1:
-                    high = self.high_level_module(high, low, cos_sin=cos_sin)
+                if high_cycle_idx != self.config.high_cycles - 1:
+                    high_level_state = self.high_level_module(high_level_state, low_level_state, cos_sin=cos_sin)
 
         # Final iteration with 1-step gradient for backpropagation
-        low = self.low_level_module(low, high + input_embeddings, cos_sin=cos_sin)
-        high = self.high_level_module(high, low, cos_sin=cos_sin)
+        low_level_state = self.low_level_module(low_level_state, high_level_state + input_embeddings, cos_sin=cos_sin)
+        high_level_state = self.high_level_module(high_level_state, low_level_state, cos_sin=cos_sin)
 
         # Prepare outputs
-        new_state = HrmInnerState(high_level_state=high.detach(), low_level_state=low.detach())
-        output = self.lm_head(high)[:, self.puzzle_emb_len :]
-        q_logits = self.q_head(high[:, 0]).to(torch.float32)
+        new_state = HrmInnerState(high_level_state=high_level_state.detach(), low_level_state=low_level_state.detach())
+        output = self.lm_head(high_level_state)[:, self.puzzle_embedding_length :]
+        q_logits = self.q_head(high_level_state[:, 0]).to(torch.float32)
 
         return new_state, output, (q_logits[..., 0], q_logits[..., 1])
 
@@ -832,16 +801,16 @@ class HrmModel(HrmPreTrainedModel):
         new_current_data = {}
 
         # Separate keys into common and state-only for batch processing
-        common_keys = [k for k in state.current_data.keys() if k in batch]
-        state_only_keys = [k for k in state.current_data.keys() if k not in batch]
+        common_keys = [key for key in state.current_data.keys() if key in batch]
+        state_only_keys = [key for key in state.current_data.keys() if key not in batch]
 
         # Get halted indices once for reuse across all keys
         halted_indices = state.halted.nonzero(as_tuple=False).squeeze(-1)
 
         # Process common keys using scatter operations
-        for k in common_keys:
-            batch_val = batch[k]
-            state_val = state.current_data[k]
+        for key in common_keys:
+            batch_val = batch[key]
+            state_val = state.current_data[key]
 
             # During generation, input_ids may be a single token while state has full sequence
             # Pad batch to match state size in this expected case
@@ -855,11 +824,11 @@ class HrmModel(HrmPreTrainedModel):
             if halted_indices.numel() > 0:
                 result.index_copy_(0, halted_indices, batch_val.index_select(0, halted_indices))
 
-            new_current_data[k] = result
+            new_current_data[key] = result
 
         # Keep existing state data for keys not in current batch
-        for k in state_only_keys:
-            new_current_data[k] = state.current_data[k]
+        for key in state_only_keys:
+            new_current_data[key] = state.current_data[key]
 
         # Forward inner model
         new_inner_state, logits, (q_halt_logits, q_continue_logits) = self.inner(new_inner_state, new_current_data)
@@ -893,7 +862,7 @@ class HrmModel(HrmPreTrainedModel):
             embeddings = self.inner._input_embeddings(
                 new_current_data["input_ids"], new_current_data.get("puzzle_identifiers")
             )
-            puzzle_len = self.inner.puzzle_emb_len
+            puzzle_len = self.inner.puzzle_embedding_length
 
             # Get the sequence length from input_ids (which may be just 1 token during generation)
             seq_len = input_ids.shape[1]

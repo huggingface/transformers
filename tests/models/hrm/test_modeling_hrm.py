@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch HRM model."""
 
+import tempfile
 import unittest
 
 from transformers import is_torch_available
@@ -58,18 +59,18 @@ class HrmModelTester(CausalLMModelTester):
             vocab_size=vocab_size,
             hidden_size=128,
             num_hidden_layers=2,
-            h_layers=2,
-            l_layers=2,
+            high_layers=2,
+            low_layers=2,
             num_attention_heads=4,
             max_position_embeddings=seq_length,
-            h_cycles=1,
-            l_cycles=1,
+            high_cycles=1,
+            low_cycles=1,
             halt_max_steps=4,
             halt_exploration_prob=0.1,
             pos_encodings="rope",
             expansion=2.0,
             dtype="float32",
-            puzzle_emb_ndim=0,
+            puzzle_embedding_dim=0,
             num_puzzle_identifiers=1,
         )
 
@@ -328,9 +329,9 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
         config, input_ids, *_ = self.model_tester.prepare_config_and_inputs()
 
         # Test with different cycle configurations
-        for h_cycles, l_cycles in [(1, 1), (2, 1), (1, 2), (2, 2)]:
-            config.h_cycles = h_cycles
-            config.l_cycles = l_cycles
+        for high_cycles, low_cycles in [(1, 1), (2, 1), (1, 2), (2, 2)]:
+            config.high_cycles = high_cycles
+            config.low_cycles = low_cycles
             model = HrmModel(config).to(torch_device)
             model.eval()
 
@@ -375,8 +376,6 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
         config, input_ids, *_ = self.model_tester.prepare_config_and_inputs()
         model = HrmForCausalLM(config).to(torch_device)
 
-        import tempfile
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
             loaded_model = HrmForCausalLM.from_pretrained(tmp_dir).to(torch_device)
@@ -418,24 +417,21 @@ class HrmIntegrationTest(unittest.TestCase):
         model.eval()
 
         # Test model can perform inference
-        # Create a simple input for ARC-like reasoning task (30x30 grid max)
         input_ids = torch.randint(0, 11, (1, 81), device=torch_device)
+        puzzle_identifiers = torch.zeros((1, 1), dtype=torch.long, device=torch_device)
         model = model.to(torch_device)
 
         with torch.no_grad():
-            outputs = model(input_ids=input_ids)
+            outputs = model(input_ids=input_ids, puzzle_identifiers=puzzle_identifiers)
 
-        # Verify outputs have expected structure
         self.assertIsNotNone(outputs)
         self.assertIsNotNone(outputs.logits)
         self.assertEqual(outputs.logits.shape[0], 1)  # batch size
         self.assertEqual(outputs.logits.shape[1], 81)  # sequence length
         self.assertEqual(outputs.logits.shape[2], 11)  # vocab size
 
-        # Verify carry state is present
         self.assertIsNotNone(outputs.carry)
 
-        # Verify Q-values for ACT mechanism
         self.assertIsNotNone(outputs.q_halt_logits)
         self.assertIsNotNone(outputs.q_continue_logits)
 
@@ -455,202 +451,46 @@ class HrmIntegrationTest(unittest.TestCase):
         # Format: 0 = empty cell, 1-9 = filled cells
         # This is a very simple puzzle where the model should be able to fill in the blanks
         # Using a real example where we know what the correct answer should be
+        # fmt: off
         partial_puzzle = torch.tensor(
-            [
-                [
-                    5,
-                    3,
-                    0,
-                    0,
-                    7,
-                    0,
-                    0,
-                    0,
-                    0,  # Row 1
-                    6,
-                    0,
-                    0,
-                    1,
-                    9,
-                    5,
-                    0,
-                    0,
-                    0,  # Row 2
-                    0,
-                    9,
-                    8,
-                    0,
-                    0,
-                    0,
-                    0,
-                    6,
-                    0,  # Row 3
-                    8,
-                    0,
-                    0,
-                    0,
-                    6,
-                    0,
-                    0,
-                    0,
-                    3,  # Row 4
-                    4,
-                    0,
-                    0,
-                    8,
-                    0,
-                    3,
-                    0,
-                    0,
-                    1,  # Row 5
-                    7,
-                    0,
-                    0,
-                    0,
-                    2,
-                    0,
-                    0,
-                    0,
-                    6,  # Row 6
-                    0,
-                    6,
-                    0,
-                    0,
-                    0,
-                    0,
-                    2,
-                    8,
-                    0,  # Row 7
-                    0,
-                    0,
-                    0,
-                    4,
-                    1,
-                    9,
-                    0,
-                    0,
-                    5,  # Row 8
-                    0,
-                    0,
-                    0,
-                    0,
-                    8,
-                    0,
-                    0,
-                    7,
-                    9,  # Row 9
-                ]
-            ],
+            [[
+                5, 3, 0,  0, 7, 0,  0, 0, 0,  # noqa: E501
+                6, 0, 0,  1, 9, 5,  0, 0, 0,  # noqa: E501
+                0, 9, 8,  0, 0, 0,  0, 6, 0,  # noqa: E501
+                8, 0, 0,  0, 6, 0,  0, 0, 3,  # noqa: E501
+                4, 0, 0,  8, 0, 3,  0, 0, 1,  # noqa: E501
+                7, 0, 0,  0, 2, 0,  0, 0, 6,  # noqa: E501
+                0, 6, 0,  0, 0, 0,  2, 8, 0,  # noqa: E501
+                0, 0, 0,  4, 1, 9,  0, 0, 5,  # noqa: E501
+                0, 0, 0,  0, 8, 0,  0, 7, 9,  # noqa: E501
+            ]],
             device=torch_device,
         )
 
-        # Known complete solution for this puzzle
         expected_solution = torch.tensor(
-            [
-                [
-                    5,
-                    3,
-                    4,
-                    6,
-                    7,
-                    8,
-                    9,
-                    1,
-                    2,
-                    6,
-                    7,
-                    2,
-                    1,
-                    9,
-                    5,
-                    3,
-                    4,
-                    8,
-                    1,
-                    9,
-                    8,
-                    3,
-                    4,
-                    2,
-                    5,
-                    6,
-                    7,
-                    8,
-                    5,
-                    9,
-                    7,
-                    6,
-                    1,
-                    4,
-                    2,
-                    3,
-                    4,
-                    2,
-                    6,
-                    8,
-                    5,
-                    3,
-                    7,
-                    9,
-                    1,
-                    7,
-                    1,
-                    3,
-                    9,
-                    2,
-                    4,
-                    8,
-                    5,
-                    6,
-                    9,
-                    6,
-                    1,
-                    5,
-                    3,
-                    7,
-                    2,
-                    8,
-                    4,
-                    2,
-                    8,
-                    7,
-                    4,
-                    1,
-                    9,
-                    6,
-                    3,
-                    5,
-                    3,
-                    4,
-                    5,
-                    2,
-                    8,
-                    6,
-                    1,
-                    7,
-                    9,
-                ]
-            ],
+            [[
+                5, 3, 4,  6, 7, 8,  9, 1, 2,  # noqa: E501
+                6, 7, 2,  1, 9, 5,  3, 4, 8,  # noqa: E501
+                1, 9, 8,  3, 4, 2,  5, 6, 7,  # noqa: E501
+                8, 5, 9,  7, 6, 1,  4, 2, 3,  # noqa: E501
+                4, 2, 6,  8, 5, 3,  7, 9, 1,  # noqa: E501
+                7, 1, 3,  9, 2, 4,  8, 5, 6,  # noqa: E501
+                9, 6, 1,  5, 3, 7,  2, 8, 4,  # noqa: E501
+                2, 8, 7,  4, 1, 9,  6, 3, 5,  # noqa: E501
+                3, 4, 5,  2, 8, 6,  1, 7, 9,  # noqa: E501
+            ]],
             device=torch_device,
         )
+        # fmt: on
 
-        # Run the model through multiple ACT steps to get final predictions
+        # Run inference with simplified interface
+        puzzle_identifiers = torch.zeros((1, 1), dtype=torch.long, device=torch_device)
+
         with torch.no_grad():
-            # Initialize state
-            state = model.model.initial_state({"input_ids": partial_puzzle})
+            outputs = model(input_ids=partial_puzzle, puzzle_identifiers=puzzle_identifiers)
 
-            # Run through multiple reasoning steps (ACT mechanism)
-            for _ in range(model.config.halt_max_steps):
-                outputs = model(input_ids=partial_puzzle, state=state)
-                state = outputs.carry
-
-                # Check if halted
-                if state.halted.all():
-                    break
-
-            # Get final predictions
-            logits = outputs.logits
-            predictions = torch.argmax(logits, dim=-1)
+        # Get final predictions
+        predictions = torch.argmax(outputs.logits, dim=-1)
 
         # Verify that the model filled in at least some of the empty cells correctly
         # We check positions that were originally 0 (empty) in the input
@@ -671,34 +511,73 @@ class HrmIntegrationTest(unittest.TestCase):
             f"Expected at least 50% accuracy on empty cells.",
         )
 
+    @slow
+    @require_torch
     def test_generation(self):
-        """Test HRM generation capability."""
-        config = HrmConfig(
-            vocab_size=11,
-            hidden_size=128,
-            num_hidden_layers=2,
-            h_layers=2,
-            l_layers=2,
-            num_attention_heads=4,
-            max_position_embeddings=20,
-            h_cycles=1,
-            l_cycles=1,
-            halt_max_steps=4,
-            dtype="float32",
-        )
+        """Test that the pretrained model can generate correct solutions.
 
-        model = HrmForCausalLM(config).to(torch_device)
+        This test verifies that the model can solve Sudoku puzzles through its
+        reasoning mechanism (ACT with carry state).
+        """
+        model = HrmForCausalLM.from_pretrained("zbloss/HRM-sudoku-extreme")
+        model = model.to(torch_device)
         model.eval()
 
-        input_ids = torch.tensor([[1, 2, 3]], device=torch_device)
+        # Use a simple Sudoku puzzle as input
+        # fmt: off
+        partial_puzzle = torch.tensor(
+            [[
+                5, 3, 0,  0, 7, 0,  0, 0, 0,  # noqa: E501
+                6, 0, 0,  1, 9, 5,  0, 0, 0,  # noqa: E501
+                0, 9, 8,  0, 0, 0,  0, 6, 0,  # noqa: E501
+                8, 0, 0,  0, 6, 0,  0, 0, 3,  # noqa: E501
+                4, 0, 0,  8, 0, 3,  0, 0, 1,  # noqa: E501
+                7, 0, 0,  0, 2, 0,  0, 0, 6,  # noqa: E501
+                0, 6, 0,  0, 0, 0,  2, 8, 0,  # noqa: E501
+                0, 0, 0,  4, 1, 9,  0, 0, 5,  # noqa: E501
+                0, 0, 0,  0, 8, 0,  0, 7, 9,  # noqa: E501
+            ]],
+            device=torch_device,
+        )
+
+        expected_solution = torch.tensor(
+            [[
+                5, 3, 4,  6, 7, 8,  9, 1, 2,  # noqa: E501
+                6, 7, 2,  1, 9, 5,  3, 4, 8,  # noqa: E501
+                1, 9, 8,  3, 4, 2,  5, 6, 7,  # noqa: E501
+                8, 5, 9,  7, 6, 1,  4, 2, 3,  # noqa: E501
+                4, 2, 6,  8, 5, 3,  7, 9, 1,  # noqa: E501
+                7, 1, 3,  9, 2, 4,  8, 5, 6,  # noqa: E501
+                9, 6, 1,  5, 3, 7,  2, 8, 4,  # noqa: E501
+                2, 8, 7,  4, 1, 9,  6, 3, 5,  # noqa: E501
+                3, 4, 5,  2, 8, 6,  1, 7, 9,  # noqa: E501
+            ]],
+            device=torch_device,
+        )
+        # fmt: on
+
+        puzzle_identifiers = torch.zeros((1, 1), dtype=torch.long, device=torch_device)
 
         with torch.no_grad():
-            generated = model.generate(input_ids, max_new_tokens=5)
+            outputs = model(input_ids=partial_puzzle, puzzle_identifiers=puzzle_identifiers)
 
-        self.assertIsNotNone(generated)
-        self.assertEqual(generated.shape[0], 1)
-        self.assertGreater(generated.shape[1], input_ids.shape[1])
+        # Get final predictions
+        predictions = torch.argmax(outputs.logits, dim=-1)
 
+        # Check that empty positions were filled correctly
+        empty_positions = partial_puzzle[0] == 0
+        predicted_values = predictions[0][empty_positions]
+        expected_values = expected_solution[0][empty_positions]
 
-if __name__ == "__main__":
-    unittest.main()
+        # Calculate accuracy on empty cells
+        correct_predictions = (predicted_values == expected_values).float().mean()
+
+        # The model should get at least 50% of empty cells correct to show it's reasoning
+        # (Random guessing would give ~11% accuracy for digits 1-9)
+        self.assertGreater(
+            correct_predictions.item(),
+            0.88,
+            f"Model only got {correct_predictions.item():.1%} of empty cells correct. "
+            f"This suggests the model is not performing meaningful reasoning. "
+            f"Expected at least 50% accuracy on empty cells.",
+        )

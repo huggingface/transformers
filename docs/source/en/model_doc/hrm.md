@@ -64,14 +64,21 @@ The H-level and L-level modules each consist of multiple transformer blocks with
 
 ### Forward Pass
 
+HRM's hierarchical reasoning is implemented through nested loops that alternate between high-level (H) and low-level (L) processing:
+
 ```
-for h_cycle in range(H_cycles):
-    for l_cycle in range(L_cycles):
+for high_cycle in range(high_cycles):
+    for low_cycle in range(low_cycles):
         z_L = L_level(z_L, z_H + input_embeddings)
     z_H = H_level(z_H, z_L)
 ```
 
-The final cycle uses gradients for backpropagation, while earlier cycles run without gradients for efficiency.
+This loop structure implements the core hierarchical reasoning algorithm:
+- **Inner loop (L-level)**: Fast, detailed computations that process information at a granular level
+- **Outer loop (H-level)**: Slower, abstract planning that synthesizes L-level outputs
+- **Input injection**: The term `z_H + input_embeddings` enables bidirectional communication between abstraction levels, allowing the L-level to access both high-level context and raw input
+
+The final cycle uses gradients for backpropagation, while earlier cycles run without gradients for computational efficiency (1-step gradient technique).
 
 ## Usage Examples
 
@@ -86,12 +93,12 @@ config = HrmConfig(
     vocab_size=11,  # 0-9 digits + padding
     hidden_size=512,
     num_hidden_layers=4,
-    h_layers=4,  # High-level reasoning layers
-    l_layers=4,  # Low-level computation layers
+    high_layers=4,  # High-level reasoning layers
+    low_layers=4,  # Low-level computation layers
     num_attention_heads=8,
     max_position_embeddings=81,  # 9x9 Sudoku grid
-    h_cycles=2,  # High-level reasoning cycles
-    l_cycles=2,  # Low-level computation cycles per H cycle
+    high_cycles=2,  # High-level reasoning cycles
+    low_cycles=2,  # Low-level computation cycles per H cycle
     halt_max_steps=16,  # Maximum ACT steps
     halt_exploration_prob=0.1,  # Exploration during training
     pos_encodings="rope",  # Use RoPE
@@ -120,8 +127,8 @@ config = HrmConfig(
     vocab_size=11,
     hidden_size=512,
     max_position_embeddings=81,
-    h_cycles=2,
-    l_cycles=2,
+    high_cycles=2,
+    low_cycles=2,
     halt_max_steps=16,
 )
 
@@ -158,8 +165,8 @@ config = HrmConfig(
     max_position_embeddings=81,
     puzzle_emb_ndim=512,  # Enable puzzle embeddings
     num_puzzle_identifiers=100,  # Number of unique puzzles
-    h_cycles=2,
-    l_cycles=2,
+    high_cycles=2,
+    low_cycles=2,
 )
 
 model = HrmForCausalLM(config)
@@ -209,10 +216,10 @@ print(generated)
 |-----------|-------------|---------|
 | `vocab_size` | Size of token vocabulary | 11 |
 | `hidden_size` | Dimension of hidden states | 512 |
-| `h_layers` | Number of high-level transformer layers | 4 |
-| `l_layers` | Number of low-level transformer layers | 4 |
-| `h_cycles` | High-level reasoning cycles per forward pass | 2 |
-| `l_cycles` | Low-level computation cycles per H cycle | 2 |
+| `high_layers` | Number of high-level transformer layers | 4 |
+| `low_layers` | Number of low-level transformer layers | 4 |
+| `high_cycles` | High-level reasoning cycles per forward pass | 2 |
+| `low_cycles` | Low-level computation cycles per H cycle | 2 |
 | `num_attention_heads` | Number of attention heads | 8 |
 | `max_position_embeddings` | Maximum sequence length | 81 |
 | `halt_max_steps` | Maximum ACT steps before forcing halt | 16 |
@@ -249,7 +256,7 @@ Available checkpoints on the Hugging Face Hub:
 1. **Small Sample Learning**: HRM works well with 1000-10000 training examples. More data helps but isn't strictly necessary.
 
 2. **Cycle Configuration**:
-   - Start with `h_cycles=2, l_cycles=2`
+   - Start with `high_cycles=2, low_cycles=2`
    - Increase for more complex reasoning tasks
    - More cycles = deeper computation but slower
 
