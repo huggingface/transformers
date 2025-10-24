@@ -106,10 +106,6 @@ jobs:
           else
             echo "SLACKCHANNEL=${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}" >> $GITHUB_ENV
           fi
-          
-      - name: wait
-        shell: bash
-        run: sleep 15m
         
       - name: Tailscale # In order to be able to SSH when a test fails
         uses: huggingface/tailscale-action@main
