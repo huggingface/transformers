@@ -106,6 +106,7 @@ jobs:
           else
             echo "SLACKCHANNEL=${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}" >> $GITHUB_ENV
           fi
+          
       - name: wait
         shell: bash
         run: sleep 15m
@@ -119,7 +120,7 @@ jobs:
           waitForSSH: true
           sshTimeout: 15m
 
-      - name: wait
+      - name: wait2
         if: success() || failure()
         shell: bash
         run: sleep 15m
