@@ -655,7 +655,7 @@ class ProcessorMixin(PushToHubMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this processor instance.
         """
         # shallow copy to avoid deepcopy errors
-        output = self.__dict__.copy()  
+        output = self.__dict__.copy()
 
         sig = inspect.signature(self.__init__)
         attrs_to_save = list(sig.parameters) + self.__class__.attributes + ["auto_map"]
@@ -1429,7 +1429,7 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
-            # updated loading path for handling multiple tokenizers 
+            # updated loading path for handling multiple tokenizers
             attribute_path = os.path.join(pretrained_model_name_or_path, attribute_name)
             if os.path.isdir(attribute_path):
                 # load from its attribute's-specific folder
