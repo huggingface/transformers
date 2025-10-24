@@ -359,7 +359,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
 
             if pixel_values is not None:
-                pixel_values = pixel_values.type(self.vlm.visual.get_dtype())
                 image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
