@@ -22,11 +22,11 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -42,40 +42,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
 )
-from ...video_utils import VideoInput, make_batched_videos
-from .image_processing_qwen2_vl import smart_resize
+from .image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs, smart_resize
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
-
-
-class Qwen2VLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    min_pixels (`int`, *optional*, defaults to `56 * 56`):
-        The min pixels of the image to resize the image.
-    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-        The max pixels of the image to resize the image.
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 2):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
 
 
 @auto_docstring
@@ -93,10 +65,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     merge_size = 2
     min_pixels = None
     max_pixels = None
-    valid_kwargs = Qwen2VLFastImageProcessorKwargs
-    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+    valid_kwargs = Qwen2VLImageProcessorKwargs
+    model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Qwen2VLImageProcessorKwargs]):
         size = kwargs.pop("size", None)
         min_pixels = kwargs.pop("min_pixels", None)
         max_pixels = kwargs.pop("max_pixels", None)
@@ -140,19 +112,17 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        videos: Optional[VideoInput] = None,
-        **kwargs: Unpack[Qwen2VLFastImageProcessorKwargs],
+        **kwargs: Unpack[Qwen2VLImageProcessorKwargs],
     ) -> BatchFeature:
-        return super().preprocess(images, videos, **kwargs)
+        return super().preprocess(images, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        videos: VideoInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+        **kwargs: Unpack[Qwen2VLImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -161,27 +131,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         """
         # Prepare input images
         batch_feature = BatchFeature()
-        if images is not None:
-            images = self._prepare_image_like_inputs(
-                images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-            )
-            batch_feature = self._preprocess(images, **kwargs)
-        if videos is not None:
-            logger.warning(
-                "`Qwen2VLImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
-                "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `Qwen2VLVideoProcessor`. "
-            )
-            # Can't change _prepare_images_structure to work with videos because it also needs to work with images.
-            videos = make_batched_videos(videos)
-            videos = [
-                torch.stack(self._prepare_image_like_inputs(video, do_convert_rgb, input_data_format, device))
-                for video in videos
-            ]
-            video_outputs = self._preprocess(videos, **kwargs)
-            batch_feature.update(
-                {"pixel_values_videos": video_outputs.pixel_values, "video_grid_thw": video_outputs.image_grid_thw}
-            )
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        batch_feature = self._preprocess(images, **kwargs)
         return batch_feature
 
     def _preprocess(

@@ -229,8 +229,6 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = True
-    test_pruning = False
     test_missing_keys = False
 
     def setUp(self):
@@ -347,7 +345,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -804,7 +802,7 @@ class MarianStandaloneDecoderModelTester:
 @require_torch
 class MarianStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MarianDecoder, MarianForCausalLM) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(

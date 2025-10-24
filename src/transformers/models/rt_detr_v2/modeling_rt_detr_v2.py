@@ -454,6 +454,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     config: RTDetrV2Config
     base_model_prefix = "rt_detr_v2"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
 
     def _init_weights(self, module):
@@ -1107,7 +1108,7 @@ class RTDetrV2HybridEncoder(nn.Module):
     ):
         grid_w = torch.arange(torch_int(width), device=device).to(dtype)
         grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
         pos_dim = embed_dim // 4
@@ -1117,7 +1118,7 @@ class RTDetrV2HybridEncoder(nn.Module):
         out_w = grid_w.flatten()[..., None] @ omega[None]
         out_h = grid_h.flatten()[..., None] @ omega[None]
 
-        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
+        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
 
     def forward(
         self,
@@ -1217,7 +1218,7 @@ class RTDetrV2HybridEncoder(nn.Module):
             new_fpn_feature_map = fpn_block(fused_feature_map)
             fpn_feature_maps.append(new_fpn_feature_map)
 
-        fpn_feature_maps = fpn_feature_maps[::-1]
+        fpn_feature_maps.reverse()
 
         # bottom-up PAN
         pan_feature_maps = [fpn_feature_maps[0]]
@@ -1831,11 +1832,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
     @auto_docstring

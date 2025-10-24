@@ -21,7 +21,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -65,6 +65,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     config: SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
     _supports_flash_attn = True
@@ -72,7 +73,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
+        config: Optional[PreTrainedConfig] = None,
         encoder: Optional[PreTrainedModel] = None,
         decoder: Optional[PreTrainedModel] = None,
     ):

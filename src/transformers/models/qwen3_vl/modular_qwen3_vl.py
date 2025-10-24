@@ -14,7 +14,8 @@
 # limitations under the License.
 """PyTorch Qwen3-VL model."""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -23,19 +24,20 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update, rope_config_validation, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
 from ...video_utils import VideoInput
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLForConditionalGeneration,
@@ -50,7 +52,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     VisionAttention,
     VisionRotaryEmbedding,
 )
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
     Qwen3DecoderLayer,
@@ -63,7 +65,7 @@ from ..qwen3.modeling_qwen3 import (
 logger = logging.get_logger(__name__)
 
 
-class Qwen3VLVisionConfig(PretrainedConfig):
+class Qwen3VLVisionConfig(PreTrainedConfig):
     model_type = "qwen3_vl"
     base_config_key = "vision_config"
 
@@ -101,15 +103,15 @@ class Qwen3VLVisionConfig(PretrainedConfig):
         self.deepstack_visual_indexes = deepstack_visual_indexes
 
 
-class Qwen3VLTextConfig(PretrainedConfig):
+class Qwen3VLTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLTextModel`]. It is used to instantiate a
     Qwen3-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen3-VL-4B-Instruct [Qwen/Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
@@ -145,45 +147,10 @@ class Qwen3VLTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 5000000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -207,23 +174,22 @@ class Qwen3VLTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151936,
-        hidden_size=4096,
-        intermediate_size=22016,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=128000,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=5000000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
+        vocab_size: Optional[int] = 151936,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 22016,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        head_dim: Optional[int] = 128,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 128000,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -243,25 +209,29 @@ class Qwen3VLTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 5000000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self, ignore_keys={"mrope_section", "mrope_interleaved"})
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class Qwen3VLConfig(PretrainedConfig):
+class Qwen3VLConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLModel`]. It is used to instantiate a
     Qwen3-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen3-VL-4B-Instruct [Qwen/Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -385,26 +355,13 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
         self.mlp = Qwen3VLVisionMLP(config=config)
 
 
-class Qwen3VLTextRotaryEmbedding(nn.Module):
+class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Qwen3VLTextConfig, device=None):
-        super().__init__()
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", "default")
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
+        super().__init__(config, device=device)
 
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-        self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
+        self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
     def apply_interleaved_mrope(self, freqs, mrope_section):
         """Apply interleaved MRoPE to 3D rotary embeddings.
@@ -614,6 +571,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
     def fast_pos_embed_interpolate(self, grid_thw):
         grid_ts, grid_hs, grid_ws = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
+        device = grid_thw.device
 
         idx_list = [[] for _ in range(4)]
         weight_list = [[] for _ in range(4)]
@@ -651,11 +609,9 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
                 idx_list[i].extend(indices[i].tolist())
                 weight_list[i].extend(weights[i].tolist())
 
-        idx_tensor = torch.tensor(idx_list, dtype=torch.long, device=self.pos_embed.weight.device)
-        weight_tensor = torch.tensor(
-            weight_list, dtype=self.pos_embed.weight.dtype, device=self.pos_embed.weight.device
-        )
-        pos_embeds = self.pos_embed(idx_tensor) * weight_tensor[:, :, None]
+        idx_tensor = torch.tensor(idx_list, dtype=torch.long, device=device)
+        weight_tensor = torch.tensor(weight_list, dtype=self.pos_embed.weight.dtype, device=device)
+        pos_embeds = self.pos_embed(idx_tensor).to(device) * weight_tensor[:, :, None]
         patch_pos_embeds = pos_embeds[0] + pos_embeds[1] + pos_embeds[2] + pos_embeds[3]
 
         patch_pos_embeds = patch_pos_embeds.split([h * w for h, w in zip(grid_hs, grid_ws)])
@@ -745,11 +701,12 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
     ):
         visual_pos_masks = visual_pos_masks.to(hidden_states.device)
         visual_embeds = visual_embeds.to(hidden_states.device, hidden_states.dtype)
-        local_this = hidden_states[visual_pos_masks, :].clone() + visual_embeds
+        hidden_states = hidden_states.clone()
+        local_this = hidden_states[visual_pos_masks, :] + visual_embeds
         hidden_states[visual_pos_masks, :] = local_this
         return hidden_states
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -1006,7 +963,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return self.get_image_features(pixel_values_videos, video_grid_thw)
 
     @auto_docstring
-    @can_return_tuple
+    @check_model_inputs()
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1137,8 +1094,6 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return Qwen3VLModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
         )
 
@@ -1151,6 +1106,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     config: Qwen3VLConfig
     _checkpoint_conversion_mapping = {}
 
+    @check_model_inputs()
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1208,8 +1164,6 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
 
@@ -1255,17 +1209,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         return model_inputs
 
 
-class Qwen3VLVideosProcessorKwargs(VideosKwargs, total=False):
-    pass
-
-
-class Qwen3VLImagesKwargs(Qwen2VLImagesKwargs):
-    pass
-
-
 class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Qwen3VLImagesKwargs
-    videos_kwargs: Qwen3VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -1372,7 +1316,6 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
                 video_metadata = videos_inputs["video_metadata"]
-            video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
             video_grid_thw = None
@@ -1396,7 +1339,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    metadata = video_metadata[i]
+                    metadata = video_metadata[index]
                     if metadata.fps is None:
                         logger.warning_once(
                             "Qwen3VL requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "

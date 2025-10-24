@@ -30,26 +30,12 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
 
 
-class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[list[float], float]
-
-
-class Qwen2_5_VLImagesKwargs(ImagesKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Qwen2_5_VLImagesKwargs
-    videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -269,7 +255,10 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        video_processor_input_names = self.video_processor.model_input_names
+        names_from_processor = list(
+            dict.fromkeys(tokenizer_input_names + image_processor_input_names + video_processor_input_names)
+        )
         return names_from_processor + ["second_per_grid_ts"]
 
 

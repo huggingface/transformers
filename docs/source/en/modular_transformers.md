@@ -288,7 +288,7 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -488,7 +488,7 @@ class LlamaForCausalLM(nn.Module):
       input_ids: torch.LongTensor = None,
       attention_mask: Optional[torch.Tensor] = None,
       position_ids: Optional[torch.LongTensor] = None,
-      past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+      past_key_values: Optional[Cache] = None,
       inputs_embeds: Optional[torch.FloatTensor] = None,
       labels: Optional[torch.LongTensor] = None,
       use_cache: Optional[bool] = None,
@@ -514,7 +514,7 @@ class NewModelForCausalLM(LlamaForCausalLM):    |    class LlamaForCausalLM(nn.M
                                                 |         input_ids: torch.LongTensor = None,
                                                 |         attention_mask: Optional[torch.Tensor] = None,
                                                 |         position_ids: Optional[torch.LongTensor] = None,
-                                                |         past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = |None,
+                                                |         past_key_values: Optional[Cache] = |None,
                                                 |         inputs_embeds: Optional[torch.FloatTensor] = None,
                                                 |         labels: Optional[torch.LongTensor] = None,
                                                 |         use_cache: Optional[bool] = None,
