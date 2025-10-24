@@ -20,7 +20,7 @@ from fractions import Fraction
 from re import Match
 from typing import Optional, Union
 
-import regex
+from ...utils.safe import regex
 
 
 # non-ASCII letters that are not separated by "NFKD" normalization
