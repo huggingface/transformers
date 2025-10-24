@@ -479,6 +479,8 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 model(**inputs)[0]
 
     def test_input_embeddings_support_forward_hook(self):
+        # Make sure that registering hooks on the input embeddings are indeed called
+        # in forward. This is necessary for gradient checkpointing in PEFT, see also #41821.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
             model = model_class(config)
