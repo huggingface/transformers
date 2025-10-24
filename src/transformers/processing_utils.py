@@ -654,30 +654,16 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this processor instance.
         """
-        output = copy.deepcopy(self.__dict__)
+        # shallow copy to avoid deepcopy errors
+        output = self.__dict__.copy()  
 
-        # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
-        # Only save the attributes that are presented in the kwargs of `__init__`.
-        # or in the attributes
-        attrs_to_save = list(sig.parameters) + self.__class__.attributes
-        # extra attributes to be kept
-        attrs_to_save += ["auto_map"]
+        attrs_to_save = list(sig.parameters) + self.__class__.attributes + ["auto_map"]
 
-        if "tokenizer" in output:
-            del output["tokenizer"]
-        if "qformer_tokenizer" in output:
-            del output["qformer_tokenizer"]
-        if "protein_tokenizer" in output:
-            del output["protein_tokenizer"]
-        if "char_tokenizer" in output:
-            del output["char_tokenizer"]
-        if "chat_template" in output:
-            del output["chat_template"]
+        for key in ["tokenizer", "qformer_tokenizer", "protein_tokenizer", "char_tokenizer", "chat_template"]:
+            output.pop(key, None)
 
         def save_public_processor_class(dictionary):
-            # make sure private name "_processor_class" is correctly
-            # saved as "processor_class"
             _processor_class = dictionary.pop("_processor_class", None)
             if _processor_class is not None:
                 dictionary["processor_class"] = _processor_class
@@ -687,10 +673,6 @@ class ProcessorMixin(PushToHubMixin):
             return dictionary
 
         def cast_array_to_list(dictionary):
-            """
-            Numpy arrays are not serialiazable but can be in pre-processing dicts.
-            This function casts arrays to list, recusring through the nested configs as well.
-            """
             for key, value in dictionary.items():
                 if isinstance(value, np.ndarray):
                     dictionary[key] = value.tolist()
@@ -698,7 +680,6 @@ class ProcessorMixin(PushToHubMixin):
                     dictionary[key] = cast_array_to_list(value)
             return dictionary
 
-        # Special case, add `audio_tokenizer` dict which points to model weights and path
         if "audio_tokenizer" in output:
             audio_tokenizer_dict = {
                 "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
@@ -706,14 +687,10 @@ class ProcessorMixin(PushToHubMixin):
             }
             output["audio_tokenizer"] = audio_tokenizer_dict
 
-        # Serialize attributes as a dict
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
             for k, v in output.items()
-            if (
-                k in attrs_to_save  # keep all attributes that have to be serialized
-                and v.__class__.__name__ != "BeamSearchDecoderCTC"  # remove attributes with that are objects
-            )
+            if k in attrs_to_save and v.__class__.__name__ != "BeamSearchDecoderCTC"
         }
         output = cast_array_to_list(output)
         output = save_public_processor_class(output)
