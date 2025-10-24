@@ -38,7 +38,8 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
         ddpm_num_steps=1000,
         ddpm_num_inference_steps=20,
         ddpm_beta_schedule="squaredcos_cap_v2",
-        hidden_act="gelu",
+        hidden_act="silu",
+        frequency_embedding_size=256,
         **kwargs
     ):
         self.hidden_size = hidden_size
@@ -51,6 +52,7 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
         self.ddpm_num_inference_steps = ddpm_num_inference_steps
         self.ddpm_beta_schedule = ddpm_beta_schedule
         self.hidden_act = hidden_act
+        self.frequency_embedding_size = frequency_embedding_size
 
         super().__init__(**kwargs)
 

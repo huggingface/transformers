@@ -71,6 +71,13 @@ def update_state_dict_for_hf_model(state_dict):
             # Original Block1D had: mixer.conv.conv.conv.* -> VibeVoiceAcousticTokenizerConvNext1dLayer has: mixer.*
             elif "stages." in key and "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
+        
+        # Handle TimestepEmbedder MLP Sequential -> individual layers mapping
+        if "prediction_head.t_embedder.mlp." in key:
+            if "prediction_head.t_embedder.mlp.0." in key:
+                new_key = new_key.replace("prediction_head.t_embedder.mlp.0.", "prediction_head.timestep_embedder.layer_1.")
+            elif "prediction_head.t_embedder.mlp.2." in key:
+                new_key = new_key.replace("prediction_head.t_embedder.mlp.2.", "prediction_head.timestep_embedder.layer_2.")
 
         updated_state_dict[new_key] = value
     

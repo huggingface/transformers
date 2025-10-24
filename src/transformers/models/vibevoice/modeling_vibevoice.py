@@ -8,7 +8,6 @@ import torch.nn.functional as F
 
 from .configuration_vibevoice import VibeVoiceDiffusionHeadConfig
 from ...activations import ACT2FN
-import math
 
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -79,60 +78,25 @@ def modulate(x, shift, scale):
 
 
 class TimestepEmbedder(nn.Module):
-    """
-    Embeds scalar timesteps into vector representations.
-    
-    Args:
-        hidden_size (`int`): Size of the output embedding
-        frequency_embedding_size (`int`, optional): Size of the intermediate frequency embedding
-    """
-    def __init__(self, hidden_size, hidden_act, frequency_embedding_size=256):
+    def __init__(self, config):
         super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(frequency_embedding_size, hidden_size, bias=False),
-            ACT2FN[hidden_act],
-            nn.Linear(hidden_size, hidden_size, bias=False),
-        )
-        self.frequency_embedding_size = frequency_embedding_size
-
-    @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
-        """
-        Create sinusoidal timestep embeddings.
-        
-        Args:
-            t (`torch.Tensor`): A 1-D Tensor of N indices, one per batch element.
-                            These may be fractional.
-            dim (`int`): The dimension of the output.
-            max_period (`int`, optional): Controls the minimum frequency of the embeddings.
-            
-        Returns:
-            `torch.Tensor`: An [N, D] Tensor of positional embeddings.
-        """
-        half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
-        ).to(t.device)
-        args = t[:, None].float() * freqs[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding.to(t.dtype)
+        self.layer_1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
+        self.act = ACT2FN[config.hidden_act]
+        self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.frequency_embedding_size = config.frequency_embedding_size
 
     def forward(self, timesteps):
-        # TODO (ebezzam) use diffuser method like below instead of from above?
+        # TODO (ebezzam) use diffuser method like below instead of their custom method: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_diffusion_head.py#L66
         requires_backends(self, ["diffusers"])
         t_freq = diffusers.models.embeddings.get_timestep_embedding(
             timesteps=timesteps,
             embedding_dim=self.frequency_embedding_size,
-            flip_sin_to_cos=True,      # flips order to [cos, sin]
-            downscale_freq_shift=0,    # matches the "/ half" denominator
+            flip_sin_to_cos=True,
+            downscale_freq_shift=0,
             scale=1.0,
             max_period=10000,
-        )
-        # t_freq = self.timestep_embedding(timesteps, self.frequency_embedding_size)        
-        t_emb = self.mlp(t_freq)
-        return t_emb
+        )      
+        return self.layer_2(self.act(self.layer_1(t_freq)))
 
 
 class FeedForwardNetwork(nn.Module):
@@ -242,11 +206,7 @@ class VibeVoiceDiffusionHead(PreTrainedModel):
 
         self.noisy_images_proj = nn.Linear(config.latent_size, config.hidden_size, bias=False)
         self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.t_embedder = TimestepEmbedder(
-            config.hidden_size,
-            config.hidden_act
-        )
-
+        self.timestep_embedder = TimestepEmbedder(config)
         ffn_dim = int(config.hidden_size * config.head_ffn_ratio)
 
         # Create the intermediate layers
@@ -273,8 +233,8 @@ class VibeVoiceDiffusionHead(PreTrainedModel):
     def initialize_weights(self):
         """Initialize the weights of the model."""
         # Initialize timestep embedder
-        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
-        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
+        nn.init.normal_(self.timestep_embedder.layer_1.weight, std=0.02)
+        nn.init.normal_(self.timestep_embedder.layer_2.weight, std=0.02)
 
         # Zero-out adaLN modulation layers
         for layer in self.layers:
@@ -301,16 +261,16 @@ class VibeVoiceDiffusionHead(PreTrainedModel):
         Returns:
             `torch.Tensor`: The predicted noise/velocity
         """
-        x = self.noisy_images_proj(noisy_images)
-        t = self.t_embedder(timesteps)
+        hidden_states = self.noisy_images_proj(noisy_images)
+        embedded_timesteps = self.timestep_embedder(timesteps)
         condition = self.cond_proj(condition)
-        c = condition + t
+        condition = condition + embedded_timesteps
 
         for layer in self.layers:
-            x = layer(x, c)
+            hidden_states = layer(hidden_states, condition)
 
-        x = self.final_layer(x, c)
-        return x
+        hidden_states = self.final_layer(hidden_states, condition)
+        return hidden_states
 
 
 # TODO (ebezzam) modular instead of using LlamaRMSNorm
