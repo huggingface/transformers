@@ -3,6 +3,8 @@ import json
 import logging
 from typing import Any
 
+from transformers.utils.import_utils import is_flash_attn_2_available
+
 
 KERNELIZATION_AVAILABLE = False
 try:
@@ -69,6 +71,13 @@ class BenchmarkConfig:
     def check_validity(self, skip_validity_check: bool = False) -> None:
         if skip_validity_check:
             return
+        # Check FA is installed
+        if self.attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            logger.warning(
+                "Flash attention does not support compile mode. Defaulting to SDPA w/ flash attention backend."
+            )
+            self.attn_implementation = "sdpa"
+            self.sdpa_backend = "flash_attention"
         # Flash attention does not support compile mode, so we turn it off # FIXME: it would be better to support it
         is_fa = self.attn_implementation == "flash_attention_2"
         is_fa |= self.attn_implementation == "sdpa" and self.sdpa_backend == "flash_attention"
