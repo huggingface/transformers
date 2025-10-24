@@ -323,7 +323,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
 
         # First, test the default case, where we encode the whole conversation at once
-        whole_conversation_tokens = tokenizer.apply_chat_template(conversation, tokenize=True)
+        whole_conversation_tokens = tokenizer.apply_chat_template(conversation, tokenize=True, return_dict=False)
 
         # Now, test the message-by-message encoding
         tokens = []
@@ -339,4 +339,4 @@ class TokenizerUtilsTest(unittest.TestCase):
             {"role": "user", "content": "Hey there, how are you?"},
         ]
         with self.assertRaises(ValueError):
-            tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True)
+            tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True, return_dict=False)
