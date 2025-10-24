@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Bitsandbytes
 
-The [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) library provides quantization tools for LLMs through a lightweight Python wrapper around CUDA functions. It enables working with large models using limited computational resources by reducing their memory footprint.
+The [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) library provides quantization tools for LLMs through a lightweight Python wrapper around hardware accelerator functions. It enables working with large models using limited computational resources by reducing their memory footprint.
 
 At its core, bitsandbytes provides:
 
@@ -32,36 +32,39 @@ bitsandbytes offers two main quantization features:
 
 > **Note:** For a user-friendly quantization experience, you can use the `bitsandbytes` [community space](https://huggingface.co/spaces/bnb-community/bnb-my-repo).
 
-
 Run the command below to install bitsandbytes.
 
 ```bash
 pip install --upgrade transformers accelerate bitsandbytes
 ```
+
 To compile from source, follow the instructions in the [bitsandbytes installation guide](https://huggingface.co/docs/bitsandbytes/main/en/installation).
 
 ## Hardware Compatibility
-bitsandbytes is currently only supported on CUDA GPUs for CUDA versions 11.0 - 12.8. However, there's an ongoing multi-backend effort under development, which is currently in alpha. If you're interested in providing feedback or testing, check out the [bitsandbytes repository](https://github.com/bitsandbytes-foundation/bitsandbytes) for more information.
 
-### CUDA
+bitsandbytes is supported on NVIDIA GPUs for CUDA versions 11.8 - 13.0, Intel XPU, Intel Gaudi (HPU), and CPU. There is an ongoing effort to support additional platforms. If you're interested in providing feedback or testing, check out the [bitsandbytes repository](https://github.com/bitsandbytes-foundation/bitsandbytes) for more information.
+
+### NVIDIA GPUs (CUDA)
+
+This backend is supported on Linux x86-64, Linux aarch64, and Windows platforms.
 
 | Feature | Minimum Hardware Requirement |
 |---------|-------------------------------|
-| 8-bit optimizers | NVIDIA Maxwell (GTX 900 series, TITAN X, M40) or newer GPUs * |
-| LLM.int8() | NVIDIA Turing (RTX 20 series, T4) or newer GPUs |
-| NF4/FP4 quantization | NVIDIA Maxwell (GTX 900 series, TITAN X, M40) or newer GPUs * |
+| 8-bit optimizers | NVIDIA Pascal (GTX 10X0 series, P100) or newer GPUs * |
+| LLM.int8() | NVIDIA Turing (RTX 20X0 series, T4) or newer GPUs |
+| NF4/FP4 quantization | NVIDIA Pascal (GTX 10X0 series, P100) or newer GPUs * |
 
-### Multi-backend
+### Intel GPUs (XPU)
 
-| Backend | Supported Versions | Python versions | Architecture Support | Status |
-|---------|-------------------|----------------|---------------------|---------|
-| AMD ROCm | 6.1+ | 3.10+ | minimum CDNA - gfx90a, RDNA - gfx1100 | Alpha |
-| Apple Silicon (MPS) | WIP | 3.10+ | M1/M2 chips | Planned |
-| Intel CPU | v2.4.0+ (ipex) | 3.10+ | Intel CPU | Alpha |
-| Intel GPU | v2.4.0+ (ipex) | 3.10+ | Intel GPU | Experimental |
-| Ascend NPU | 2.1.0+ (torch_npu) | 3.10+ | Ascend NPU | Experimental |
+This backend is supported on Linux x86-64 and Windows x86-64 platforms.
 
-> **Note:** Bitsandbytes is moving away from the multi-backend approach towards using [Pytorch Custom Operators](https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html), as the main mechanism for supporting new hardware, and dispatching to the correct backend.
+### Intel Gaudi (HPU)
+
+This backend is supported on Linux x86-64 for Gaudi2 and Gaudi3.
+
+### CPU
+
+This backend is supported on Linux x86-64, Linux aarch64, and Windows x86-64 platforms.
 
 ## Quantization Examples
 
@@ -116,6 +119,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 model.push_to_hub("bloom-560m-8bit")
 ```
+
 </div>
 </hfoption>
 <hfoption id="4-bit">
@@ -166,6 +170,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 model.push_to_hub("bloom-560m-4bit")
 ```
+
 </div>
 </hfoption>
 </hfoptions>

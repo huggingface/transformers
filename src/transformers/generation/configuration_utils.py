@@ -17,13 +17,13 @@
 import copy
 import json
 import os
-import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from .. import __version__
-from ..configuration_utils import PretrainedConfig
+from ..configuration_utils import PreTrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
     ExplicitEnum,
@@ -89,8 +89,6 @@ class GenerationConfig(PushToHubMixin):
         - *multinomial sampling* if `num_beams=1` and `do_sample=True`
         - *beam-search decoding* if `num_beams>1` and `do_sample=False`
         - *beam-search multinomial sampling* if `num_beams>1` and `do_sample=True`
-        - *diverse beam-search decoding* if `num_beams>1` and `num_beam_groups>1`
-        - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
         - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
@@ -134,9 +132,6 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to use sampling ; use greedy decoding otherwise.
         num_beams (`int`, *optional*, defaults to 1):
             Number of beams for beam search. 1 means no beam search.
-        num_beam_groups (`int`, *optional*, defaults to 1):
-            Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
-            [this paper](https://huggingface.co/papers/1610.02424) for more details.
 
         > Parameters that control the cache
 
@@ -156,8 +151,6 @@ class GenerationConfig(PushToHubMixin):
             our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`.
-        return_legacy_cache (`bool`, *optional*, default to `True`):
-            Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
 
         > Parameters for manipulation of the model output logits
 
@@ -172,6 +165,12 @@ class GenerationConfig(PushToHubMixin):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
             value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
             the 0.99-0.8 range (use the opposite of normal `top_p` values).
+        top_h (`float`, *optional*):
+            Entropy budget scaling factor, which controls how much of the distribution’s entropy is preserved when sampling.
+            Must be a value between 0 and 1. At each step, tokens are sorted by probability, and the smallest prefix of tokens
+            is kept whose *renormalized* entropy is less than or equal to `top_h` times the entropy of the full distribution.
+            Smaller values (e.g., 0.2–0.5) lead to more focused, deterministic outputs, while values closer to 1.0 allow more
+            randomness and diversity. Typical values are in the 0.3–0.6 range.
         typical_p (`float`, *optional*, defaults to 1.0):
             Local typicality measures how similar the conditional probability of predicting a target token next is to
             the expected conditional probability of predicting a random token next, given the partial text already
@@ -190,9 +189,6 @@ class GenerationConfig(PushToHubMixin):
             probability, scaled by `sqrt(eta_cutoff)`. In the paper, suggested values range from 3e-4 to 2e-3,
             depending on the size of the model. See [Truncation Sampling as Language Model
             Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
-        diversity_penalty (`float`, *optional*, defaults to 0.0):
-            This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
-            particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
         repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://huggingface.co/papers/1909.05858) for more details.
@@ -209,18 +205,10 @@ class GenerationConfig(PushToHubMixin):
         bad_words_ids (`list[list[int]]`, *optional*):
             List of list of token ids that are not allowed to be generated. Check
             [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
-        force_words_ids (`list[list[int]]` or `list[list[list[int]]]`, *optional*):
-            List of token ids that must be generated. If given a `list[list[int]]`, this is treated as a simple list of
-            words that must be included, the opposite to `bad_words_ids`. If given `list[list[list[int]]]`, this
-            triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
-            can allow different forms of each word.
         renormalize_logits (`bool`, *optional*, defaults to `False`):
             Whether to renormalize the logits after applying all the logits processors (including the custom
             ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the score logits
             are normalized but some logit processors break the normalization.
-        constraints (`list[Constraint]`, *optional*):
-            Custom constraints that can be added to the generation to ensure that the output will contain the use of
-            certain tokens as defined by `Constraint` objects, in the most sensible way possible.
         forced_bos_token_id (`int`, *optional*, defaults to `model.config.forced_bos_token_id`):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
@@ -236,10 +224,10 @@ class GenerationConfig(PushToHubMixin):
             generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
             penalty starts and `decay_factor` represents the factor of exponential decay
         suppress_tokens (`list[int]`, *optional*):
-            A list of tokens that will be suppressed at generation. The `SupressTokens` logit processor will set their
+            A list of tokens that will be suppressed at generation. The `SuppressTokens` logit processor will set their
             log probs to `-inf` so that they are not sampled.
         begin_suppress_tokens  (`list[int]`, *optional*):
-            A list of tokens that will be suppressed at the beginning of the generation. The `SupressBeginTokens` logit
+            A list of tokens that will be suppressed at the beginning of the generation. The `SuppressBeginTokens` logit
             processor will set their log probs to `-inf` so that they are not sampled.
         sequence_bias (`dict[tuple[int], float]`, *optional*)):
             Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
@@ -359,14 +347,12 @@ class GenerationConfig(PushToHubMixin):
         # Parameters that control the generation strategy used
         self.do_sample = kwargs.pop("do_sample", False)
         self.num_beams = kwargs.pop("num_beams", 1)
-        self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
 
         # Parameters that control the cache
         self.use_cache = kwargs.pop("use_cache", True)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
 
-        self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
         # Parameters for manipulation of the model output logits
@@ -374,18 +360,16 @@ class GenerationConfig(PushToHubMixin):
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
         self.min_p = kwargs.pop("min_p", None)
+        self.top_h = kwargs.pop("top_h", None)
         self.typical_p = kwargs.pop("typical_p", 1.0)
         self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", 0.0)
         self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
-        self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.encoder_repetition_penalty = kwargs.pop("encoder_repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
-        self.force_words_ids = kwargs.pop("force_words_ids", None)
         self.renormalize_logits = kwargs.pop("renormalize_logits", False)
-        self.constraints = kwargs.pop("constraints", None)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
@@ -441,6 +425,10 @@ class GenerationConfig(PushToHubMixin):
         self.low_memory = kwargs.pop("low_memory", None)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
         self.dola_layers = kwargs.pop("dola_layers", None)
+        self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
+        self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
+        self.constraints = kwargs.pop("constraints", None)
+        self.force_words_ids = kwargs.pop("force_words_ids", None)
 
         # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the hub
         # interface.
@@ -567,10 +555,13 @@ class GenerationConfig(PushToHubMixin):
                 "`model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
             )
         # 1.2. Cache attributes
-        if self.cache_implementation is not None and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS:
+        # "paged" re-routes to continuous batching and so it is a valid cache implementation. But we do not want to test
+        # it with the `generate` as the other would be, so we we cannot add it to ALL_CACHE_IMPLEMENTATIONS
+        valid_cache_implementations = ALL_CACHE_IMPLEMENTATIONS + ("paged",)
+        if self.cache_implementation is not None and self.cache_implementation not in valid_cache_implementations:
             raise ValueError(
                 f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
-                f"{ALL_CACHE_IMPLEMENTATIONS}"
+                f"{valid_cache_implementations}"
             )
         # 1.3. Performance attributes
         if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
@@ -580,12 +571,6 @@ class GenerationConfig(PushToHubMixin):
             )
         # 1.4. Watermarking attributes
         if self.watermarking_config is not None:
-            if not (isinstance(self.watermarking_config, (WatermarkingConfig, SynthIDTextWatermarkingConfig))):
-                minor_issues["watermarking_config"] = (
-                    "`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please construct "
-                    "`watermarking_config` object with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class."
-                )
-                self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
         # 2. Validation of attribute combinations
@@ -603,6 +588,8 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
             if self.min_p is not None:
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
+            if self.top_h is not None:
+                minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)
             if self.typical_p is not None and self.typical_p != 1.0:
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
@@ -628,57 +615,10 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["early_stopping"] = single_beam_wrong_parameter_msg.format(
                     flag_name="early_stopping", flag_value=self.early_stopping
                 )
-            if self.num_beam_groups is not None and self.num_beam_groups != 1:
-                minor_issues["num_beam_groups"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="num_beam_groups", flag_value=self.num_beam_groups
-                )
-            if self.diversity_penalty is not None and self.diversity_penalty != 0.0:
-                minor_issues["diversity_penalty"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="diversity_penalty", flag_value=self.diversity_penalty
-                )
             if self.length_penalty is not None and self.length_penalty != 1.0:
                 minor_issues["length_penalty"] = single_beam_wrong_parameter_msg.format(
                     flag_name="length_penalty", flag_value=self.length_penalty
                 )
-            if self.constraints is not None:
-                minor_issues["constraints"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="constraints", flag_value=self.constraints
-                )
-
-        # 2.3. detect incorrect parameterization specific to advanced beam modes
-        else:
-            # constrained beam search
-            if self.constraints is not None or self.force_words_ids is not None:
-                constrained_wrong_parameter_msg = (
-                    "one of `constraints`, `force_words_ids` is not `None`, triggering constrained beam search. "
-                    "However, `{flag_name}` is set to `{flag_value}`, which is incompatible with this generation "
-                    "mode. Set `constraints` and `force_words_ids` to `None` or unset `{flag_name}` to continue."
-                )
-                if self.do_sample is True:
-                    raise ValueError(
-                        constrained_wrong_parameter_msg.format(flag_name="do_sample", flag_value=self.do_sample)
-                    )
-                if self.num_beam_groups is not None and self.num_beam_groups != 1:
-                    raise ValueError(
-                        constrained_wrong_parameter_msg.format(
-                            flag_name="num_beam_groups", flag_value=self.num_beam_groups
-                        )
-                    )
-            # group beam search
-            elif self.diversity_penalty != 0.0 or self.num_beam_groups != 1:
-                group_error_prefix = (
-                    "`diversity_penalty` is not 0.0 or `num_beam_groups` is not 1, triggering group beam search. In "
-                    "this generation mode, "
-                )
-                if self.do_sample is True:
-                    raise ValueError(group_error_prefix + "`do_sample` must be set to `False`")
-                if self.num_beams % self.num_beam_groups != 0:
-                    raise ValueError(group_error_prefix + "`num_beams` should be divisible by `num_beam_groups`")
-                if self.diversity_penalty == 0.0:
-                    raise ValueError(
-                        group_error_prefix
-                        + "`diversity_penalty` should be greater than `0.0`, otherwise your groups will be identical."
-                    )
 
         # 2.4. check `num_return_sequences`
         if self.num_return_sequences != 1:
@@ -703,7 +643,7 @@ class GenerationConfig(PushToHubMixin):
                 "You have set `use_cache` to `False`, but {cache_arg} is set to {cache_arg_value}. {cache_arg} will "
                 "have no effect."
             )
-            for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
+            for arg_name in ("cache_implementation", "cache_config"):
                 if getattr(self, arg_name) is not None:
                     minor_issues[arg_name] = no_cache_warning.format(
                         cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)
@@ -793,20 +733,6 @@ class GenerationConfig(PushToHubMixin):
         except ValueError as exc:
             raise ValueError(str(exc) + "\n\nFix these issues to save the configuration.")
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. "
-                "Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
         if os.path.isfile(save_directory):
@@ -865,9 +791,6 @@ class GenerationConfig(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the configuration files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -931,24 +854,11 @@ class GenerationConfig(PushToHubMixin):
         ```"""
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -975,7 +885,6 @@ class GenerationConfig(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1175,13 +1084,13 @@ class GenerationConfig(PushToHubMixin):
             writer.write(self.to_json_string(use_diff=use_diff))
 
     @classmethod
-    def from_model_config(cls, model_config: PretrainedConfig) -> "GenerationConfig":
+    def from_model_config(cls, model_config: PreTrainedConfig) -> "GenerationConfig":
         """
-        Instantiates a [`GenerationConfig`] from a [`PretrainedConfig`]. This function is useful to convert legacy
-        [`PretrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
+        Instantiates a [`GenerationConfig`] from a [`PreTrainedConfig`]. This function is useful to convert legacy
+        [`PreTrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
 
         Args:
-            model_config (`PretrainedConfig`):
+            model_config (`PreTrainedConfig`):
                 The model config that will be used to instantiate the generation config.
 
         Returns:
@@ -1351,11 +1260,11 @@ class WatermarkingConfig(BaseWatermarkingConfig):
 
     def __init__(
         self,
-        greenlist_ratio: Optional[float] = 0.25,
-        bias: Optional[float] = 2.0,
-        hashing_key: Optional[int] = 15485863,
-        seeding_scheme: Optional[str] = "lefthash",
-        context_width: Optional[int] = 1,
+        greenlist_ratio: float = 0.25,
+        bias: float = 2.0,
+        hashing_key: int = 15485863,
+        seeding_scheme: str = "lefthash",
+        context_width: int = 1,
     ):
         self.greenlist_ratio = greenlist_ratio
         self.bias = bias

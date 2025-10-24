@@ -17,7 +17,6 @@
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ....transformers.models.dinov2.modeling_dinov2 import (
@@ -28,7 +27,7 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2PatchEmbeddings,
     Dinov2PreTrainedModel,
 )
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging, torch_int
@@ -38,15 +37,15 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
+class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dinov2WithRegistersModel`]. It is used to instantiate an
     Dinov2WithRegisters model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DINOv2 with Registers
     [facebook/dinov2-with-registers-base](https://huggingface.co/facebook/dinov2-with-registers-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -318,7 +317,6 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
@@ -329,7 +327,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(pixel_values, head_mask=head_mask, **kwargs)
+        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(pixel_values, **kwargs)
         sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
 
         cls_token = sequence_output[:, 0]

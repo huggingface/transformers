@@ -66,8 +66,8 @@ class Sam2VideoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
-        segmentation_maps: ImageInput = None,
+        images: Optional[ImageInput] = None,
+        segmentation_maps: Optional[ImageInput] = None,
         input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
         input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
@@ -262,7 +262,7 @@ class Sam2VideoProcessor(ProcessorMixin):
         elif isinstance(data, (int, float)):
             return data
         else:
-            raise ValueError(f"Unsupported data type: {type(data)}")
+            raise TypeError(f"Unsupported data type: {type(data)}")
 
     def _get_nested_dimensions(self, nested_list, max_dims=None):
         """
@@ -530,9 +530,9 @@ class Sam2VideoProcessor(ProcessorMixin):
         self,
         video: Optional[VideoInput] = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Union[str, "torch.device"] = None,
-        processing_device: Union[str, "torch.device"] = None,
-        video_storage_device: Union[str, "torch.device"] = None,
+        inference_state_device: Optional[Union[str, "torch.device"]] = None,
+        processing_device: Optional[Union[str, "torch.device"]] = None,
+        video_storage_device: Optional[Union[str, "torch.device"]] = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):
@@ -721,8 +721,7 @@ class Sam2VideoProcessor(ProcessorMixin):
                     "(please use clear_old_points=True instead)"
                 )
             box_coords = input_boxes.reshape(1, -1, 2, 2)
-            box_labels = torch.tensor([2, 3], dtype=torch.int32)
-            box_labels = box_labels.reshape(1, -1, 2)
+            box_labels = torch.tensor([2, 3], dtype=torch.int32).repeat(1, box_coords.shape[1], 1)
             input_points = torch.cat([box_coords, input_points], dim=2)
             input_labels = torch.cat([box_labels, input_labels], dim=2)
 

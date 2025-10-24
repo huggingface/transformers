@@ -38,9 +38,9 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = CLIPImageProcessor.from_pretrained("ducviet00/Florence-2-base-hf")
+        image_processor = CLIPImageProcessor.from_pretrained("florence-community/Florence-2-base")
         image_processor.image_seq_length = 0
-        tokenizer = BartTokenizerFast.from_pretrained("ducviet00/Florence-2-base-hf")
+        tokenizer = BartTokenizerFast.from_pretrained("florence-community/Florence-2-base")
         tokenizer.image_token = "<image>"
         tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
         tokenizer.extra_special_tokens = {"image_token": "<image>"}

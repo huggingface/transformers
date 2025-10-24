@@ -47,7 +47,7 @@ with efficient C++ and CUDA kernels, which allows NA to run up to 40% faster tha
 memory. We further present Neighborhood Attention Transformer (NAT), a new hierarchical transformer design based on NA
 that boosts image classification and downstream vision performance. Experimental results on NAT are competitive;
 NAT-Tiny reaches 83.2% top-1 accuracy on ImageNet, 51.4% mAP on MS-COCO and 48.4% mIoU on ADE20K, which is 1.9%
-ImageNet accuracy, 1.0% COCO mAP, and 2.6% ADE20K mIoU improvement over a Swin model with similar size. *
+ImageNet accuracy, 1.0% COCO mAP, and 2.6% ADE20K mIoU improvement over a Swin model with similar size.*
 
 <img
 src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/neighborhood-attention-pattern.jpg"
@@ -68,6 +68,7 @@ The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, widt
 `(batch_size, height, width, num_channels)`.
 
 Notes:
+
 - NAT depends on [NATTEN](https://github.com/SHI-Labs/NATTEN/)'s implementation of Neighborhood Attention.
 You can install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten),
 or build on your system by running `pip install natten`.

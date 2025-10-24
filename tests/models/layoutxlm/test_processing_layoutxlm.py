@@ -17,6 +17,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
@@ -27,7 +28,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+from transformers.utils import FEATURE_EXTRACTOR_NAME, is_pytesseract_available
 
 from ...test_processing_common import ProcessorTesterMixin
 

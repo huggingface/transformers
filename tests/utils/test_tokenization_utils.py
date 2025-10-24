@@ -19,9 +19,8 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder
+import httpx
 from huggingface_hub.file_download import http_get
-from requests.exceptions import HTTPError
 
 from transformers import (
     AlbertTokenizer,
@@ -50,14 +49,16 @@ class TokenizerUtilTester(unittest.TestCase):
         response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "failed", request=mock.Mock(), response=mock.Mock()
+        )
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -68,14 +69,16 @@ class TokenizerUtilTester(unittest.TestCase):
         response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "failed", request=mock.Mock(), response=mock.Mock()
+        )
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
             _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -115,7 +118,6 @@ class TokenizerPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
@@ -128,6 +130,24 @@ class TokenizerPushToHubTester(unittest.TestCase):
             tokenizer.push_to_hub(tmp_repo.repo_id, token=self._token)
             new_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+
+    def test_push_to_hub_chat_templates(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab_file = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+            tokenizer = BertTokenizer(vocab_file)
+            tokenizer.chat_template = "test template"
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                tokenizer.save_pretrained(tmp_repo.repo_id, token=self._token, push_to_hub=True)
+                reloaded_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                tokenizer.chat_template = {"default": "a", "secondary": "b"}
+                tokenizer.save_pretrained(tmp_repo.repo_id, token=self._token, push_to_hub=True)
+                reloaded_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
 
     def test_push_to_hub_via_save_pretrained(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:

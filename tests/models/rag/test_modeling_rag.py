@@ -18,6 +18,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 from unittest.mock import patch
 
 import numpy as np
@@ -37,7 +38,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
+from transformers.utils import is_datasets_available, is_faiss_available, is_torch_available
 
 from ..bart.test_modeling_bart import BartModelTester
 from ..dpr.test_modeling_dpr import DPRModelTester
@@ -74,7 +75,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         msg = f"{a} != {b}"
         if prefix:
