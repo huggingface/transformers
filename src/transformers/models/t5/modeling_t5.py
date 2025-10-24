@@ -22,11 +22,10 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.masking_utils import create_bidirectional_mask, create_causal_mask
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (

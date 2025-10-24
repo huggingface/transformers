@@ -846,6 +846,11 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         self.lm_head = model.lm_head
         self.config = model.config
 
+        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+        ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        self.decoder.config._attn_implementation = "sdpa_without_vmap"
+
         # Detect the device of the exported models by checking a parameter
         # We'll use the model's device as the target device
         model_device = next(model.parameters()).device
