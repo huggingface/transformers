@@ -15,10 +15,10 @@
 import unittest
 from functools import cached_property
 
-from transformers import BigBirdTokenizer, BigBirdTokenizerFast
+from transformers import BigBirdTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
-
 from ...test_tokenization_common import TokenizerTesterMixin
+from transformers.tokenization_sentencepiece import SentencePieceExtractor
 
 
 SPIECE_UNDERLINE = "▁"
@@ -31,16 +31,19 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "google/bigbird-roberta-base"
     tokenizer_class = BigBirdTokenizer
-    rust_tokenizer_class = BigBirdTokenizerFast
-    test_rust_tokenizer = True
     test_sentencepiece = True
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
-        tokenizer = cls.tokenizer_class(SAMPLE_VOCAB, keep_accents=True)
+
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = cls.tokenizer_class(vocab=vocab_scores, keep_accents=True)
         tokenizer.save_pretrained(cls.tmpdirname)
+
+        cls.tokenizers = [tokenizer]
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -62,11 +65,7 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
 
     def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
-
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
 
         sequence = "I was born in 92000, and this is falsé."
 

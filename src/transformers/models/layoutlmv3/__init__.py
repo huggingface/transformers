@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from .modeling_layoutlmv3 import *
     from .processing_layoutlmv3 import *
     from .tokenization_layoutlmv3 import *
-    from .tokenization_layoutlmv3_fast import *
 else:
     import sys
 

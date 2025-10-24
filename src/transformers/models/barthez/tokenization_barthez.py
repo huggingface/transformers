@@ -147,15 +147,7 @@ class BarthezTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        # always adds BOS/EOS with "</s> </s>" separator for pairs
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{self.bos_token} $A {self.eos_token}",
-            pair=f"{self.bos_token} $A {self.eos_token} {self.eos_token} $B {self.eos_token}",
-            special_tokens=[
-                (self.bos_token, self.bos_token_id),
-                (self.eos_token, self.eos_token_id),
-            ],
-        )
+        
 
 
 __all__ = ["BarthezTokenizer"]

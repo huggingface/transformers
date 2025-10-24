@@ -17,49 +17,33 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers import AutoTokenizer, TokenizersBackend
+from transformers importTokenizersBackend
 from transformers.testing_utils import require_jinja, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-# Master input string of combined test cases
-input_string = """This is a test
-I was born in 92000, and this is falsé.
-生活的真谛是
-Hi  Hello
-Hi   Hello
-
- 
-  
- Hello
-<s>
-hi<s>there
-The following string should be properly encoded: Hello.
-But ird and ปี   ird   ด
-Hey how are you doing"""
-
-
-expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.Ċ', 'çĶŁæ´»çļĦ', 'çľŁ', 'è°', 'Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'ĠĠ', 'ĠHello', 'ĊĊ', 'ĠĊ', 'ĠĠĊ', 'ĠHello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġenc', 'od', 'ed:', 'ĠHello', '.Ċ', 'But', 'Ġir', 'd', 'Ġand', 'Ġà¸', 'Ľ', 'à¸µ', 'ĠĠ', 'Ġir', 'd', 'ĠĠ', 'Ġà¸', 'Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
-expected_token_ids = [6168, 632, 267, 4006, 189, 44, 1620, 34181, 361, 1575, 14739, 15, 530, 1119, 632, 31684, 311, 336, 71167, 4137, 1927, 239, 644, 189, 30050, 210, 86153, 189, 30050, 250, 86153, 603, 5306, 33249, 86153, 189, 1, 189, 2807, 1, 51596, 189, 2175, 6747, 5148, 3403, 722, 34975, 2681, 532, 29315, 86153, 336, 6475, 2881, 71, 530, 44381, 239, 105442, 250, 2881, 71, 250, 44381, 232, 189, 40440, 4143, 1306, 1152, 12491]
-
 
 @require_tokenizers
-class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase,
+    BloomTokenizer,
+):
     from_pretrained_id = "bigscience/tokenizer"
     slow_tokenizer_class = None
-    rust_tokenizer_class = TokenizersBackend
     tokenizer_class = TokenizersBackend
-    test_rust_tokenizer = True
     test_slow_tokenizer = False
     from_pretrained_vocab_key = "tokenizer_file"
     special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
 
+
+    # Integration test data - expected outputs for the default input string
+    integration_expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.Ċ', 'çĶŁæ´»çļĦ', 'çľŁ', 'è°', 'Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'ĠĠ', 'ĠHello', 'ĊĊ', 'ĠĊ', 'ĠĠĊ', 'ĠHello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġenc', 'od', 'ed:', 'ĠHello', '.Ċ', 'But', 'Ġir', 'd', 'Ġand', 'Ġà¸', 'Ľ', 'à¸µ', 'ĠĠ', 'Ġir', 'd', 'ĠĠ', 'Ġà¸', 'Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
+    integration_expected_token_ids = [6168, 632, 267, 4006, 189, 44, 1620, 34181, 361, 1575, 14739, 15, 530, 1119, 632, 31684, 311, 336, 71167, 4137, 1927, 239, 644, 189, 30050, 210, 86153, 189, 30050, 250, 86153, 603, 5306, 33249, 86153, 189, 1, 189, 2807, 1, 51596, 189, 2175, 6747, 5148, 3403, 722, 34975, 2681, 532, 29315, 86153, 336, 6475, 2881, 71, 530, 44381, 239, 105442, 250, 2881, 71, 250, 44381, 232, 189, 40440, 4143, 1306, 1152, 12491]
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         
-        tokenizer = AutoTokenizer.from_pretrained("bigscience/tokenizer")
+        tokenizer = BloomTokenizer.from_pretrained("bigscience/tokenizer")
         tokenizer.save_pretrained(cls.tmpdirname)
         cls.tokenizers_list = [
             (cls.rust_tokenizer_class, cls.tmpdirname, {})
@@ -178,31 +162,3 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
         tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
         self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)
-
-    def test_integration_expected_tokens(self):
-        tokenizer = self.get_rust_tokenizer()
-        self.assertEqual(tokenizer.tokenize(input_string), expected_tokens)
-
-    def test_integration_expected_token_ids(self):
-        tokenizer = self.get_rust_tokenizer()
-        self.assertEqual(tokenizer.encode(input_string), expected_token_ids)
-
-    def test_save_and_reload(self):
-        import tempfile
-        tokenizer = self.get_rust_tokenizer()
-        original_tokens = tokenizer.tokenize(input_string)
-        original_ids = tokenizer.encode(input_string)
-
-        # Save tokenizer to temporary directory
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer.save_pretrained(tmp_dir)
-
-            # Reload tokenizer from saved directory
-            reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
-
-            # Test that reloaded tokenizer produces same results
-            reloaded_tokens = reloaded_tokenizer.tokenize(input_string)
-            reloaded_ids = reloaded_tokenizer.encode(input_string)
-
-            self.assertEqual(original_tokens, reloaded_tokens)
-            self.assertEqual(original_ids, reloaded_ids)

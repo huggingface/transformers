@@ -35,7 +35,6 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = RemBertTokenizer
     rust_tokenizer_class = RemBertTokenizer
     space_between_special_tokens = True
-    test_rust_tokenizer = True
     test_sentencepiece_ignore_case = True
     pre_trained_model_path = "google/rembert"
 
@@ -117,7 +116,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 with self.subTest("Hub -> Fast: Test loading a fast tokenizer from the hub)"):
                     if self.rust_tokenizer_class is not None:
-                        tokenizer_fast = self.get_rust_tokenizer(pretrained_name, eos_token=new_eos)
+                        tokenizer_fast = self.get_tokenizer(pretrained_name, eos_token=new_eos)
                         self.assertEqual(tokenizer_fast._special_tokens_map["eos_token"], new_eos)
                         self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
                         # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright

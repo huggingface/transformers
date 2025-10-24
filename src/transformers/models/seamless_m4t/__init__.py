@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from .modeling_seamless_m4t import *
     from .processing_seamless_m4t import *
     from .tokenization_seamless_m4t import *
-    from .tokenization_seamless_m4t_fast import *
 else:
     import sys
 

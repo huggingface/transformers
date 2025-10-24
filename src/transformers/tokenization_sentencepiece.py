@@ -1014,34 +1014,23 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-        # If given is a single id, prevents splitting the string in upcoming loop
-        if isinstance(filtered_tokens, str):
-            filtered_tokens = [filtered_tokens]
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
 
-        legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
-            token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
-        }
-        # To avoid mixing byte-level and unicode for byte-level BPT
-        # we need to build string separately for added tokens and byte-level tokens
-        # cf. https://github.com/huggingface/transformers/issues/1133
         sub_texts = []
         current_sub_text = []
-        # TODO @ArthurZ in version 5, special tokens should be handled in convert_tokens_to_string, while _convert_tokens_to_string
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_tokens:
+        for token_id in token_ids:
+            if skip_special_tokens and token_id in self.all_special_ids:
                 continue
-            if token in legacy_added_tokens:
+            if token_id in self._added_tokens_decoder:
                 if current_sub_text:
-                    string = self.convert_tokens_to_string(current_sub_text)
-                    if len(string) > 0:
-                        sub_texts.append(string)
+                    sub_texts.append(self.sp_model.decode(current_sub_text))
                     current_sub_text = []
-                sub_texts.append(token)
+                sub_texts.append(self._added_tokens_decoder[token_id].content)
             else:
-                current_sub_text.append(token)
+                current_sub_text.append(token_id)
         if current_sub_text:
-            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+            sub_texts.append(self.sp_model.decode(current_sub_text))
 
         if spaces_between_special_tokens:
             text = " ".join(sub_texts)

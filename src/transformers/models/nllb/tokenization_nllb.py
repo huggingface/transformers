@@ -221,11 +221,53 @@ class NllbTokenizer(TokenizersBackend):
         src_lang: str = "eng_Latn",
         tgt_texts: Optional[list[str]] = None,
         tgt_lang: str = "fra_Latn",
+        max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
+        padding: str = "longest",
+        return_tensors: Optional[str] = None,
+        truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
+        
+        if max_length is None:
+            max_length = self.model_max_length
+        
+        model_inputs = self(
+            src_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            padding=padding,
+            truncation=truncation,
+            **kwargs,
+        )
+        
+        if tgt_texts is None:
+            return model_inputs
+            
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
+            
+        # Switch to target mode to set the right special tokens
+        self._switch_to_target_mode()
+        labels = self(
+            tgt_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            padding=padding,
+            max_length=max_target_length,
+            truncation=truncation,
+            **kwargs,
+        )
+        model_inputs["labels"] = labels["input_ids"]
+        
+        # Switch back to input mode
+        self._switch_to_input_mode()
+        
+        return model_inputs
 
     def _switch_to_input_mode(self):
         return self.set_src_lang_special_tokens(self.src_lang)

@@ -37,7 +37,9 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, eos_token="<unk>", bos_token="<unk>", pad_token="<unk>")
+        tokenizer = GPTSw3Tokenizer(
+            SAMPLE_VOCAB, eos_token="<unk>", bos_token="<unk>", pad_token="<unk>", name_or_path="test"
+        )
 
         tokenizer.save_pretrained(cls.tmpdirname)
 
@@ -66,7 +68,7 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer().vocab_size, 2_000)
 
     def test_full_tokenizer(self):
-        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, name_or_path="test")
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -96,7 +98,7 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_fast_encode_decode(self):
-        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, name_or_path="test")
         texts = ["This is a test", "I was born in 92000, and this is falsé."]
         expected_ids_list = [
             [465, 287, 265, 631, 842],
@@ -130,7 +132,7 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_jinja
     def test_tokenization_for_chat(self):
-        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, name_or_path="test")
         tokenizer.chat_template = (
             "{{ eos_token }}{{ bos_token }}"
             "{% for message in messages %}"

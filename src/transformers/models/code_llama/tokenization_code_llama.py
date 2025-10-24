@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tokenizers import Tokenizer, decoders, normalizers, processors
+from tokenizers import AddedToken, Tokenizer, decoders, normalizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_tokenizers import TokenizersBackend
@@ -220,7 +220,8 @@ class CodeLlamaTokenizer(TokenizersBackend):
             ]
         )
         self._tokenizer.pre_tokenizer = None
-        self.update_post_processor()
+        # Call parent's _post_init to handle special token addition properly
+        super()._post_init()
 
     def update_post_processor(self):
         """

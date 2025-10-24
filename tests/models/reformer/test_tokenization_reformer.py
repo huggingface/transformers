@@ -11,77 +11,32 @@ from transformers.testing_utils import (
 from transformers.tokenization_sentencepiece import SentencePieceExtractor
 
 
-# Master input string of combined test cases
-input_string = """This is a test
-I was born in 92000, and this is falsé.
-生活的真谛是
-Hi  Hello
-Hi   Hello
-
- 
-  
- Hello
-<s>
-hi<s>there
-The following string should be properly encoded: Hello.
-But ird and ปี   ird   ด
-Hey how are you doing"""
-
-expected_tokens = ['▁T', 'h', 'is', '▁is', '▁a', '▁t', 'est', '▁I', '▁was', '▁b', 'or', 'n', '▁in', '▁', '<unk>', ',', '▁and', '▁this', '▁is', '▁f', 'al', 's', '<unk>', '.', '▁', '<unk>', '▁H', 'i', '▁He', 'll', 'o', '▁H', 'i', '▁He', 'll', 'o', '▁He', 'll', 'o', '▁', '<unk>', 's', '<unk>', '▁h', 'i', '<unk>', 's', '<unk>', 't', 'he', 're', '▁The', '▁f', 'o', 'll', 'ow', 'ing', '▁st', 'r', 'ing', '▁sh', 'ould', '▁be', '▁p', 'ro', 'p', 'er', 'ly', '▁', 'en', 'c', 'od', 'ed', ':', '▁He', 'll', 'o', '.', '▁But', '▁', 'ir', 'd', '▁and', '▁', '<unk>', '▁', 'ir', 'd', '▁', '<unk>', '▁He', 'y', '▁h', 'ow', '▁are', '▁you', '▁do', 'ing']
-expected_token_ids = [108, 265, 24, 111, 4, 3, 249, 33, 59, 17, 38, 263, 39, 258, 0, 277, 27, 221, 111, 22, 94, 266, 0, 278, 258, 0, 96, 264, 126, 32, 262, 96, 264, 126, 32, 262, 126, 32, 262, 258, 0, 266, 0, 31, 264, 0, 266, 0, 260, 5, 10, 140, 22, 262, 32, 77, 20, 74, 267, 20, 168, 106, 49, 40, 186, 279, 16, 48, 258, 25, 274, 227, 19, 315, 126, 32, 262, 278, 231, 258, 91, 268, 27, 258, 0, 258, 91, 268, 258, 0, 126, 272, 31, 77, 157, 41, 137, 20]
-
 @require_sentencepiece
 @require_tokenizers
 class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # TokenizerTesterMixin configuration
     from_pretrained_id = ["google/reformer-crime-and-punishment"]
     tokenizer_class = ReformerTokenizer  # We'll set this dynamically
-    rust_tokenizer_class = ReformerTokenizer
-    test_rust_tokenizer = False # we're going to just test the fast one I'll remove this
     test_sentencepiece = True
     from_pretrained_kwargs = {}
+
+    # Integration test data - expected outputs for the default input string
+    integration_expected_tokens = ['▁T', 'h', 'is', '▁is', '▁a', '▁t', 'est', '▁I', '▁was', '▁b', 'or', 'n', '▁in', '▁', '<unk>', ',', '▁and', '▁this', '▁is', '▁f', 'al', 's', '<unk>', '.', '▁', '<unk>', '▁H', 'i', '▁He', 'll', 'o', '▁H', 'i', '▁He', 'll', 'o', '▁He', 'll', 'o', '▁', '<unk>', 's', '<unk>', '▁h', 'i', '<unk>', 's', '<unk>', 't', 'he', 're', '▁The', '▁f', 'o', 'll', 'ow', 'ing', '▁st', 'r', 'ing', '▁sh', 'ould', '▁be', '▁p', 'ro', 'p', 'er', 'ly', '▁', 'en', 'c', 'od', 'ed', ':', '▁He', 'll', 'o', '.', '▁But', '▁', 'ir', 'd', '▁and', '▁', '<unk>', '▁', 'ir', 'd', '▁', '<unk>', '▁He', 'y', '▁h', 'ow', '▁are', '▁you', '▁do', 'ing']
+    integration_expected_token_ids = [108, 265, 24, 111, 4, 3, 249, 33, 59, 17, 38, 263, 39, 258, 0, 277, 27, 221, 111, 22, 94, 266, 0, 278, 258, 0, 96, 264, 126, 32, 262, 96, 264, 126, 32, 262, 126, 32, 262, 258, 0, 266, 0, 31, 264, 0, 266, 0, 260, 5, 10, 140, 22, 262, 32, 77, 20, 74, 267, 20, 168, 106, 49, 40, 186, 279, 16, 48, 258, 25, 274, 227, 19, 315, 126, 32, 262, 278, 231, 258, 91, 268, 27, 258, 0, 258, 91, 268, 258, 0, 126, 272, 31, 77, 157, 41, 137, 20]
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
         from_pretrained_id = "google/reformer-crime-and-punishment"
 
-        tok_auto = AutoTokenizer.from_pretrained(from_pretrained_id)
-        tok_auto.save_pretrained(cls.tmpdirname)
+        tokenizer = ReformerTokenizer.from_pretrained(from_pretrained_id)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
         # Build backend for slow tokenizer from the fast tokenizer's SentencePiece model
-        vocab_file = getattr(tok_auto, "vocab_file", None)
+        vocab_file = getattr(tokenizer, "vocab_file", None)
 
         extractor = SentencePieceExtractor(vocab_file)
         vocab_ids, vocab_scores, merges = extractor.extract()
-        tok_from_vocab = ReformerTokenizer(vocab=vocab_ids, merges=merges)
+        tokenizer_from_vocab = ReformerTokenizer(vocab=vocab_ids, merges=merges)
 
-        cls.tokenizers = [tok_auto, tok_from_vocab]
-
-    def test_integration_expected_tokens(self):
-        for tok in self.tokenizers:
-            self.assertEqual(tok.tokenize(input_string), expected_tokens)
-
-    def test_integration_expected_token_ids(self):
-        for tok in self.tokenizers:
-            self.assertEqual(tok.encode(input_string), expected_token_ids)
-
-    def test_save_and_reload(self):
-        for tok in self.tokenizers:
-            with self.subTest(f"{tok.__class__.__name__}"):
-                original_tokens = tok.tokenize(input_string)
-                original_ids = tok.encode(input_string)
-                
-                # Save tokenizer to temporary directory
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    tok.save_pretrained(tmp_dir)
-                    
-                    # Reload tokenizer from saved directory
-                    reloaded_tok = tok.__class__.from_pretrained(tmp_dir)
-                    
-                    # Test that reloaded tokenizer produces same results
-                    reloaded_tokens = reloaded_tok.tokenize(input_string)
-                    reloaded_ids = reloaded_tok.encode(input_string)
-                    
-                    self.assertEqual(original_tokens, reloaded_tokens)
-                    self.assertEqual(original_ids, reloaded_ids)
+        cls.tokenizers = [tokenizer, tokenizer_from_vocab]

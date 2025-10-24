@@ -26,58 +26,33 @@ from ...test_tokenization_common import TokenizerTesterMixin
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_no_bos.model")
 
 
-input_string = """This is a test
-I was born in 92000, and this is falsé.
-生活的真谛是
-Hi  Hello
-Hi   Hello
-
- 
-  
- Hello
-<s>
-hi<s>there
-The following string should be properly encoded: Hello.
-But ird and ปี   ird   ด
-Hey how are you doing"""
-
-expected_tokens = ['▁This', '▁is', '▁a', '▁test', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '.', '▁', '生活的真谛是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '▁', '<', 's', '>', '▁hi', '<', 's', '>', 'there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '▁But', '▁i', 'rd', '▁and', '▁', 'ปี', '▁i', 'rd', '▁', 'ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
-expected_token_ids = [182, 117, 114, 804, 125, 140, 1723, 115, 950, 15337, 108, 111, 136, 117, 54154, 116, 5371, 107, 110, 105, 4451, 8087, 4451, 8087, 8087, 110, 105, 116, 2314, 9800, 105, 116, 2314, 7731, 139, 645, 4211, 246, 129, 2023, 33041, 151, 8087, 107, 343, 532, 2007, 111, 110, 105, 532, 2007, 110, 105, 10532, 199, 127, 119, 557, 1]
-
-
 @require_sentencepiece
 @require_tokenizers
 class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # TokenizerTesterMixin configuration
     from_pretrained_id = ["google/pegasus-xsum"]
     tokenizer_class = PegasusTokenizer
-    test_rust_tokenizer = False
     test_sentencepiece = True
+
+    # Integration test data - expected outputs for the default input string
+    integration_expected_tokens = ['▁This', '▁is', '▁a', '▁test', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '.', '▁', '生活的真谛是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '▁', '<', 's', '>', '▁hi', '<', 's', '>', 'there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '▁But', '▁i', 'rd', '▁and', '▁', 'ปี', '▁i', 'rd', '▁', 'ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
+    integration_expected_token_ids = [182, 117, 114, 804, 125, 140, 1723, 115, 950, 15337, 108, 111, 136, 117, 54154, 116, 5371, 107, 110, 105, 4451, 8087, 4451, 8087, 8087, 110, 105, 116, 2314, 9800, 105, 116, 2314, 7731, 139, 645, 4211, 246, 129, 2023, 33041, 151, 8087, 107, 343, 532, 2007, 111, 110, 105, 532, 2007, 110, 105, 10532, 199, 127, 119, 557, 1]
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
         from_pretrained_id = "google/pegasus-xsum"
-        tok_auto = AutoTokenizer.from_pretrained(from_pretrained_id)
-        tok_auto.save_pretrained(cls.tmpdirname)
+        tokenizer = PegasusTokenizer.from_pretrained(from_pretrained_id)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-        vocab_file = getattr(tok_auto, "vocab_file", None)
+        vocab_file = getattr(tokenizer, "vocab_file", None)
 
         extractor = SentencePieceExtractor(vocab_file)
         vocab_ids, vocab_scores, merges = extractor.extract()
-        tok_from_vocab = PegasusTokenizer(vocab=vocab_scores)
+        tokenizer_from_vocab = PegasusTokenizer(vocab=vocab_scores)
 
-        cls.tokenizers = [tok_auto, tok_from_vocab]
-
-
-    def test_integration_expected_tokens(self):
-        for tok in self.tokenizers:
-            self.assertEqual(tok.tokenize(input_string), expected_tokens)
-
-    def test_integration_expected_token_ids(self):
-        for tok in self.tokenizers:
-            self.assertEqual(tok.encode(input_string), expected_token_ids)
+        cls.tokenizers = [tokenizer, tokenizer_from_vocab]
 
     @cached_property
     def _large_tokenizer(self):
@@ -97,18 +72,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         token_id = 1
 
         self.assertEqual(self.get_tokenizer().convert_tokens_to_ids(token), token_id)
-        self.assertEqual(self.get_tokenizer().convert_ids_to_toke
-
-    def test_mask_tokens_rust_pegasus(self):
-        rust_tokenizer = self.get_rust_tokenizer(self.tmpdirname)
-        py_tokenizer = self.get_tokenizer(self.tmpdirname)
-        raw_input_str = (
-            "Let's see which <unk> is the better <unk_token_11> one <mask_1> It seems like this <mask_2> was important"
-            " </s> <pad> <pad> <pad>"
-        )
-        rust_ids = rust_tokenizer([raw_input_str], return_tensors=None, add_special_tokens=False).input_ids[0]
-        py_ids = py_tokenizer([raw_input_str], return_tensors=None, add_special_tokens=False).input_ids[0]
-        self.assertListEqual(py_ids, rust_ids)
+        self.assertEqual(self.get_tokenizer().convert_ids_to_tokens(token_id), token)
 
     @unittest.skip(reason="Test expects BigBird-Pegasus-specific vocabulary and special tokens")
     def test_large_mask_tokens(self):

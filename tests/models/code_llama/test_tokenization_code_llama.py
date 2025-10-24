@@ -29,7 +29,20 @@ from transformers.tokenization_sentencepiece import SentencePieceExtractor
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-expected_tokens = [
+
+
+@require_sentencepiece
+@require_tokenizers
+class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    # TokenizerTesterMixin configuration
+    from_pretrained_id = ["hf-internal-testing/llama-code-tokenizer"]
+    tokenizer_class = CodeLlamaTokenizer
+    test_sentencepiece = True
+    from_pretrained_kwargs = {}
+
+
+    # Integration test data - expected outputs for the default input string
+    integration_expected_tokens = [
     "▁This",
     "▁is",
     "▁a",
@@ -118,7 +131,7 @@ expected_tokens = [
     "▁you",
     "▁doing",
 ]
-expected_token_ids = [
+    integration_expected_token_ids = [
     1,
     910,
     338,
@@ -208,87 +221,29 @@ expected_token_ids = [
     366,
     2599,
 ]
-
-
-# Master input string of combined test cases
-input_string = """This is a test
-I was born in 92000, and this is falsé.
-生活的真谛是
-Hi  Hello
-Hi   Hello
-
- 
-  
- Hello
-<s>
-hi<s>there
-The following string should be properly encoded: Hello.
-But ird and ปี   ird   ด
-Hey how are you doing"""
-
-
-@require_sentencepiece
-@require_tokenizers
-class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    # TokenizerTesterMixin configuration
-    from_pretrained_id = ["hf-internal-testing/llama-code-tokenizer"]
-    tokenizer_class = CodeLlamaTokenizer
-    rust_tokenizer_class = CodeLlamaTokenizer
-    test_rust_tokenizer = False  # We only have one tokenizer now
-    test_sentencepiece = True
-    from_pretrained_kwargs = {}
-
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
         from_pretrained_id = "hf-internal-testing/llama-code-tokenizer"
 
-        tok_auto = CodeLlamaTokenizer.from_pretrained(from_pretrained_id)
-        tok_auto.pad_token = tok_auto.eos_token
-        tok_auto.save_pretrained(cls.tmpdirname)
+        tokenizer = CodeLlamaTokenizer.from_pretrained(from_pretrained_id)
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.save_pretrained(cls.tmpdirname)
 
         # Build backend for tokenizer from the fast tokenizer's SentencePiece model
-        vocab_file = getattr(tok_auto, "vocab_file", None)
+        vocab_file = getattr(tokenizer, "vocab_file", None)
 
         extractor = SentencePieceExtractor(vocab_file)
         vocab_ids, vocab_scores, merges = extractor.extract()
-        tok_from_vocab = CodeLlamaTokenizer(vocab=vocab_ids, merges=merges)
-        tok_from_vocab.pad_token = tok_from_vocab.eos_token
+        tokenizer_from_vocab = CodeLlamaTokenizer(vocab=vocab_ids, merges=merges)
+        tokenizer_from_vocab.pad_token = tokenizer_from_vocab.eos_token
 
-        cls.tokenizers = [tok_auto]
+        cls.tokenizers = [tokenizer]
 
     def get_tokenizers(self, **kwargs):
         kwargs.setdefault("pad_token", "<PAD>")
         return super().get_tokenizers(**kwargs)
-
-    def test_integration_expected_tokens(self):
-        for tok in self.tokenizers:
-            self.assertEqual(tok.tokenize(input_string), expected_tokens)
-
-    def test_integration_expected_token_ids(self):
-        for tok in self.tokenizers:
-            self.assertEqual(tok.encode(input_string), expected_token_ids)
-
-    def test_save_and_reload(self):
-        for tok in self.tokenizers:
-            with self.subTest(f"{tok.__class__.__name__}"):
-                original_tokens = tok.tokenize(input_string)
-                original_ids = tok.encode(input_string)
-
-                # Save tokenizer to temporary directory
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    tok.save_pretrained(tmp_dir)
-
-                    # Reload tokenizer from saved directory
-                    reloaded_tok = tok.__class__.from_pretrained(tmp_dir)
-
-                    # Test that reloaded tokenizer produces same results
-                    reloaded_tokens = reloaded_tok.tokenize(input_string)
-                    reloaded_ids = reloaded_tok.encode(input_string)
-
-                    self.assertEqual(original_tokens, reloaded_tokens)
-                    self.assertEqual(original_ids, reloaded_ids)
 
     def test_no_infilling_init(self):
         tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, prefix_token=None, keep_accents=True)

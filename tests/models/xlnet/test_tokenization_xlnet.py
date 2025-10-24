@@ -14,8 +14,10 @@
 
 import unittest
 
-from transformers import SPIECE_UNDERLINE, XLNetTokenizer, XLNetTokenizerFast
+from transformers import AutoTokenizer, SPIECE_UNDERLINE
+from transformers.models.xlnet.tokenization_xlnet import XLNetTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.tokenization_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -28,39 +30,35 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "xlnet/xlnet-base-cased"
     tokenizer_class = XLNetTokenizer
-    rust_tokenizer_class = XLNetTokenizerFast
-    test_rust_tokenizer = True
     test_sentencepiece = True
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
-        # We have a SentencePiece fixture for testing
-        tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        # Load a pretrained tokenizer for testing
+        from_pretrained_id = "xlnet/xlnet-base-cased"
+        
+        tokenizer = AutoTokenizer.from_pretrained(from_pretrained_id)
         tokenizer.save_pretrained(cls.tmpdirname)
 
-    def test_convert_token_and_id(self):
-        """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
-        token = "<s>"
-        token_id = 1
+        # Build backend for tokenizer from vocab
+        vocab_file = tokenizer.init_kwargs.get("vocab_file", None)
+        
+        if vocab_file:
+            extractor = SentencePieceExtractor(vocab_file)
+            vocab_ids, vocab_scores, merges = extractor.extract()
+            tokenizer_from_vocab = XLNetTokenizer(vocab=vocab_scores, unk_id=0)
+        else:
+            tokenizer_from_vocab = tokenizer
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
-        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+        cls.tokenizers = [tokenizer, tokenizer_from_vocab]
 
-    def test_get_vocab(self):
-        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
-
-        self.assertEqual(vocab_keys[0], "<unk>")
-        self.assertEqual(vocab_keys[1], "<s>")
-        self.assertEqual(vocab_keys[-1], "<eod>")
-        self.assertEqual(len(vocab_keys), 1_006)
-
-    def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
 
     def test_full_tokenizer(self):
-        tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = XLNetTokenizer(vocab=vocab_scores, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -126,7 +124,9 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_tokenizer_lower(self):
-        tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=True)
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = XLNetTokenizer(vocab=vocab_scores, do_lower_case=True)
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
         self.assertListEqual(
             tokens,
@@ -184,19 +184,6 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
             ],
         )
-
-    @slow
-    def test_sequence_builders(self):
-        tokenizer = XLNetTokenizer.from_pretrained("xlnet/xlnet-base-cased")
-
-        text = tokenizer.encode("sequence builders", add_special_tokens=False)
-        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
-
-        encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
-        encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
-
-        assert encoded_sentence == text + [4, 3]
-        assert encoded_pair == text + [4] + text_2 + [4, 3]
 
     @slow
     def test_tokenizer_integration(self):

@@ -17,12 +17,12 @@ import unittest
 from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
+    AutoTokenizer,
     BatchEncoding,
-    PreTrainedTokenizerFast,
     SeamlessM4TTokenizer,
-    SeamlessM4TTokenizerFast,
     is_torch_available,
 )
+from transformers.tokenization_sentencepiece import SentencePieceExtractor
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -54,8 +54,7 @@ SMALL_TRAINING_CORPUS = [
 class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "facebook/hf-seamless-m4t-medium"
     tokenizer_class = SeamlessM4TTokenizer
-    rust_tokenizer_class = SeamlessM4TTokenizerFast
-    test_rust_tokenizer = True
+    test_rust_tokenizer = False
     test_sentencepiece = True
     from_pretrained_kwargs = {}
 
@@ -63,12 +62,23 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-        # We have a SentencePiece fixture for testing
-        tokenizer = SeamlessM4TTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        # Extract vocab from SAMPLE_VOCAB for testing
+        from transformers.tokenization_sentencepiece import SentencePieceExtractor
+        
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        
+        # Create tokenizer from extracted vocab
+        tokenizer = SeamlessM4TTokenizer(vocab=vocab_scores, keep_accents=True)
         tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = SeamlessM4TTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        # Extract vocab from SAMPLE_VOCAB for this test
+        from transformers.tokenization_sentencepiece import SentencePieceExtractor
+        
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = SeamlessM4TTokenizer(vocab=vocab_scores, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -224,26 +234,33 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     # add_prefix_space=False,
                 )
 
-                # Overflowing tokens are handled quite differently in slow and fast tokenizers
-                if isinstance(tokenizer, PreTrainedTokenizerFast):
-                    truncated_sequence = information["input_ids"][0]
-                    overflowing_tokens = information["input_ids"][1]
-                    self.assertEqual(len(information["input_ids"]), 2)
+                # For v5 tokenizers, all use tokenizers backend
+                truncated_sequence = information["input_ids"][0]
+                overflowing_tokens = information["input_ids"][1]
+                self.assertEqual(len(information["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), total_length - 2)
-                    self.assertEqual(truncated_sequence, sequence[:-2])
+                self.assertEqual(len(truncated_sequence), total_length - 2)
+                self.assertEqual(truncated_sequence, sequence[:-2])
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
-                else:
-                    truncated_sequence = information["input_ids"]
-                    overflowing_tokens = information["overflowing_tokens"]
+                self.assertEqual(len(overflowing_tokens), 2 + stride)
+                self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
 
-                    self.assertEqual(len(truncated_sequence), total_length - 2)
-                    self.assertEqual(truncated_sequence, sequence[:-2])
+    def test_batch_encode_plus_batch_sequence_length(self):
+        # Override the parent test because SeamlessM4T uses padding=True by default
+        # Tests that all encoded values have the correct size
+        tokenizer = self.get_tokenizer(do_lower_case=False)
+        sequences = [
+            "Testing batch encode plus",
+            "Testing batch encode plus with different sequence lengths",
+            "Testing batch encode plus with different sequence lengths correctly pads",
+        ]
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
+        # For SeamlessM4T, encode with explicit padding=False for individual sequences too
+        encoded_sequences = [tokenizer(sequence, padding=False) for sequence in sequences]
+        encoded_sequences_batch = tokenizer(sequences, padding=False)
+        self.assertListEqual(
+            encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch)
+        )
 
     @unittest.skip(reason="By defaults, uses pad_to_multiple_of which breaks the test")
     def test_maximum_encoding_length_pair_input(self):
@@ -344,43 +361,18 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 4)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
-    def test_save_slow_from_fast_and_reload_fast(self):
-        pass
 
     # Copied from tests.models.nllb.test_tokenization_nllb.NllbTokenizationTest.test_special_tokens_initialization
     def test_special_tokens_initialization(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                added_tokens = [AddedToken("<special>", lstrip=True)]
+        # Adapted for v5 - test with tokenizer class directly
+        added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.get_rust_tokenizer(
-                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
-                )
-                r_output = tokenizer_r.encode("Hey this is a <special> token")
+        tokenizer = self.get_tokenizer(additional_special_tokens=added_tokens)
+        output = tokenizer.encode("Hey this is a <special> token")
 
-                special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+        special_token_id = tokenizer.encode("<special>", add_special_tokens=False)[0]
 
-                self.assertTrue(special_token_id in r_output)
-
-                if self.test_slow_tokenizer:
-                    tokenizer_cr = self.get_rust_tokenizer(
-                        pretrained_name,
-                        additional_special_tokens=added_tokens,
-                        **kwargs,  # , from_slow=True <- unfortunately too slow to convert
-                    )
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
-                    )
-
-                    p_output = tokenizer_p.encode("Hey this is a <special> token")
-
-                    cr_output = tokenizer_cr.encode("Hey this is a <special> token")
-
-                    self.assertEqual(p_output, r_output)
-                    self.assertEqual(cr_output, r_output)
-                    self.assertTrue(special_token_id in p_output)
-                    self.assertTrue(special_token_id in cr_output)
+        self.assertTrue(special_token_id in output)
 
     @unittest.skip(
         "encode_plus and batch_encode_plus are deprecated and __call__ do some processing, so we expect different results."

@@ -44,18 +44,18 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         from_pretrained_id = "FacebookAI/xlm-roberta-base"
 
-        tok_auto = AutoTokenizer.from_pretrained(from_pretrained_id)
-        tok_auto.save_pretrained(cls.tmpdirname)
+        tokenizer = XLMRobertaTokenizer.from_pretrained(from_pretrained_id)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
         
         # Build backend for slow tokenizer from the fast tokenizer's SentencePiece model
-        vocab_file = getattr(tok_auto, "vocab_file", None)
+        vocab_file = getattr(tokenizer, "vocab_file", None)
 
         extractor = SentencePieceExtractor(vocab_file)
-        vocab, merges = extractor.extract()
-        tok_from_vocab = XLMRobertaTokenizer(vocab=vocab, merges=merges)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer_from_vocab = XLMRobertaTokenizer(vocab=vocab_ids, merges=merges)
 
-        cls.tokenizers = [tok_auto, tok_from_vocab]
+        cls.tokenizers = [tokenizer, tokenizer_from_vocab]
 
     # def test_full_tokenizer(self):
     #     extractor = SentencePieceExtractor(SAMPLE_VOCAB)

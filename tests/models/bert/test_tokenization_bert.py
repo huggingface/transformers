@@ -27,15 +27,15 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 input_text = "UNwant\u00e9d,running"
 
-expected_tokens = ['unwanted', ',', 'running']
-expected_token_ids = [101, 18162, 1010, 2770, 102]
-
 @require_tokenizers
 class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "google-bert/bert-base-uncased"
     tokenizer_class = BertTokenizer
-    rust_tokenizer_class = BertTokenizer
-    test_rust_tokenizer = False
+    space_between_special_tokens = True
+    from_pretrained_filter = filter_non_english
+    # Integration test data - expected outputs for the default input string
+    integration_expected_tokens = ['unwanted', ',', 'running']
+    integration_expected_token_ids = [101, 18162, 1010, 2770, 102]
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
 
@@ -45,15 +45,8 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         from_pretrained_id = "google-bert/bert-base-uncased"
 
-        tok_auto = AutoTokenizer.from_pretrained(from_pretrained_id)
-        tok_auto.save_pretrained(cls.tmpdirname)
+        tokenizer = AutoTokenizer.from_pretrained(from_pretrained_id)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-        cls.tokenizers = [tok_auto]
+        cls.tokenizers = [tokenizer]
     
-    def test_integration_expected_tokens(self):
-        tokenizer = self.get_tokenizer()
-        self.assertEqual(tokenizer.tokenize(input_text), expected_tokens)
-
-    def test_integration_expected_token_ids(self):
-        tokenizer = self.get_tokenizer()
-        self.assertEqual(tokenizer.encode(input_text), expected_token_ids)
