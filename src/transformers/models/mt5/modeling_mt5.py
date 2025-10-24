@@ -25,7 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -742,12 +742,14 @@ class MT5Stack(MT5PreTrainedModel):
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.config.is_decoder:
-            causal_mask = create_causal_mask(
-                config=self.config,
-                input_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
+            causal_mask = self._update_causal_mask(
+                attention_mask,
+                inputs_embeds,
+                cache_position,
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values,
+                output_attentions,
             )
         else:
             causal_mask = create_bidirectional_mask(
@@ -756,9 +758,7 @@ class MT5Stack(MT5PreTrainedModel):
                 attention_mask=attention_mask,
             )
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        # Cross-attention mask using new interface
+        encoder_extended_attention_mask = None
         if self.is_decoder and encoder_hidden_states is not None:
             encoder_extended_attention_mask = create_bidirectional_mask(
                 config=self.config,
@@ -766,8 +766,6 @@ class MT5Stack(MT5PreTrainedModel):
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
-        else:
-            encoder_extended_attention_mask = None
 
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
