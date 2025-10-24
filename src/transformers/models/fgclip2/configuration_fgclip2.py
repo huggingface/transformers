@@ -71,7 +71,6 @@ class Fgclip2TextConfig(PreTrainedConfig):
         longtext_len (`int`, *optional*, defaults to 196):
             The maximum number of tokens in long texts that can be processed
 
-
     Example:
 
     ```python

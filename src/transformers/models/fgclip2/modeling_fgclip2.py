@@ -78,6 +78,140 @@ class Fgclip2TextOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class Fgclip2Attention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, seq_length, embed_dim = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class Fgclip2MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class Fgclip2EncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Union[Fgclip2VisionConfig, Fgclip2TextConfig]):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn = Fgclip2Attention(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = Fgclip2MLP(config)
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
 @dataclass
 @auto_docstring
 class Fgclip2Output(ModelOutput):
@@ -214,140 +348,6 @@ class Fgclip2VisionEmbeddings(nn.Module):
         # Add positional embeddings to patch embeddings
         embeddings = patch_embeds + resized_positional_embeddings
         return embeddings
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class Fgclip2Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-        self.is_causal = False
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, seq_length, embed_dim = hidden_states.shape
-
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
-
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
-class Fgclip2MLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-class Fgclip2EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Union[Fgclip2VisionConfig, Fgclip2TextConfig]):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.self_attn = Fgclip2Attention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = Fgclip2MLP(config)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
 
 
 class Fgclip2Encoder(nn.Module):
@@ -743,21 +743,21 @@ class Fgclip2TextTransformer(nn.Module):
         last_hidden_state = self.final_layer_norm(last_hidden_state)
         # The model uses the last token's hidden state, which may be padding.
         pooled_output = last_hidden_state[:, -1, :]
-        if walk_short == True:
-            assert walk_box == False
-            assert walk_long == False
+        if walk_short:
+            assert not walk_box
+            assert not walk_long
             temp_pool_out = []
             for i in range(pooled_output.shape[0]):
                 temp_pool_out.append(self.head(pooled_output[i : i + 1]))
             pooled_output = torch.cat(temp_pool_out, dim=0)
             # pooled_output = self.head(pooled_output)
-        if walk_box == True:
-            assert walk_short == False
-            assert walk_long == False
+        if walk_box:
+            assert not walk_short
+            assert not walk_long
             pooled_output = pooled_output
-        if walk_long == True:
-            assert walk_short == False
-            assert walk_box == False
+        if walk_long:
+            assert not walk_short
+            assert not walk_box
             pooled_output = pooled_output
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -994,7 +994,6 @@ class Fgclip2Model(Fgclip2PreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, hidden_size)` or `(batch_size, sequence_length, hidden_size)`:
                 The extracted feature tensor representing the input text. The output shape depends on
                 whether a pooled representation or per-token embeddings are returned.
-
         Examples:
 
         ```python
@@ -1241,7 +1240,6 @@ class Fgclip2Model(Fgclip2PreTrainedModel):
 
         Returns:
             `torch.FloatTensor` of shape  `(batch_size, max_num_patches, hidden_size)`:
-
         """
 
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(

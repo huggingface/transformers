@@ -17,15 +17,14 @@
 import inspect
 import tempfile
 import unittest
-import requests
 
 import numpy as np
+import requests
 from parameterized import parameterized
 from pytest import mark
 
 from transformers import Fgclip2Config, Fgclip2TextConfig, Fgclip2VisionConfig
 from transformers.testing_utils import (
-    Expectations,
     is_flaky,
     require_flash_attn,
     require_torch,
@@ -57,7 +56,7 @@ if is_torch_available():
     from transformers import Fgclip2Model, Fgclip2TextModel, Fgclip2VisionModel
 
 if is_vision_available():
-    from PIL import Image, ImageDraw
+    from PIL import Image
 
     from transformers import Fgclip2Processor
 
@@ -269,7 +268,7 @@ class Fgclip2VisionModelTester:
         }
         return config, inputs_dict
 
-    
+
 
 
 @require_torch
@@ -360,7 +359,7 @@ class Fgclip2VisionModelTest(Fgclip2ModelTesterMixin, unittest.TestCase):
         # adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
-    
+
 
 
 class Fgclip2TextModelTester:
@@ -639,10 +638,10 @@ class Fgclip2ModelTest(Fgclip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
 
 r'''
-Test performance, including 
-full-image short text retrieval (Chinese-English bilingual), 
-full-image long text retrieval (Chinese-English bilingual), 
-image local region and text retrieval, 
+Test performance, including:
+full-image short text retrieval (Chinese-English bilingual),
+full-image long text retrieval (Chinese-English bilingual),
+image local region and text retrieval,
 '''
 
 def prepare_img():
@@ -661,14 +660,14 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
         model_name = "qihoo360/fg-clip2-base"
         cls.model = Fgclip2Model.from_pretrained(model_name).to(torch_device)
         cls.processor = Fgclip2Processor.from_pretrained(model_name)
-        cls.image = prepare_img()  
+        cls.image = prepare_img()
 
     @classmethod
     def tearDownClass(cls):
 
         del cls.model
         del cls.processor
-        torch.cuda.empty_cache() 
+        torch.cuda.empty_cache()
 
     @slow
     def test_en_inference(self):
@@ -688,7 +687,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs)
 
         logits_per_image = outputs.logits_per_image
-        
+
 
         # verify shape
         self.assertEqual(
@@ -754,7 +753,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs)
 
         logits_per_image = outputs.logits_per_image
-        
+
 
         # verify shape
         self.assertEqual(
@@ -809,7 +808,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
         inputs = self.processor(images=self.image, text=text, return_tensors="pt")
         inputs = inputs.to(torch_device)
 
-        right_cat_bbox = [345, 27, 640, 372]  
+        right_cat_bbox = [345, 27, 640, 372]
         left_remote_bbox = [41, 74, 177, 118]
         image_width,image_height = self.image.size
 

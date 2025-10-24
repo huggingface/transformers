@@ -16,29 +16,31 @@ import unittest
 
 import torch
 
+
 if not hasattr(torch.compiler, "is_compiling"):
     torch.compiler.is_compiling = torch._dynamo.is_compiling
-
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
-
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-from ...test_processing_common import url_to_local_path
-from transformers.image_utils import (
-    make_flat_list_of_images,
-    to_numpy_array,
-    infer_channel_dimension_format,
-    ChannelDimension,
-    load_image,
-)
 
 from transformers.image_transforms import (
     convert_to_rgb,
     to_channel_dimension_format,
 )
+from transformers.image_utils import (
+    ChannelDimension,
+    infer_channel_dimension_format,
+    load_image,
+    make_flat_list_of_images,
+    to_numpy_array,
+)
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
+
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
+
 
 if is_vision_available():
     from PIL import Image
+
     from transformers import Fgclip2ImageProcessor
 
 

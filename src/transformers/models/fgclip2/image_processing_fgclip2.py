@@ -45,7 +45,7 @@ logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Fgclip2ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -244,7 +244,7 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_convert_rgb: Optional[bool] = None,
         patch_size: Optional[int] = None,
-        dynamic_max_patches: Optional[bool] = None,  
+        dynamic_max_patches: Optional[bool] = None,
         max_num_patches: Optional[int] = None,
     ) -> BatchFeature:
         """
@@ -355,7 +355,7 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
             candidate_values = [_determine_max_value(img, patch_size=patch_size) for img in images]
             max_num_patches = max(candidate_values)
             logger.info(f"Dynamically set max_num_patches={max_num_patches} (originally {original_max_num_patches})")
-        
+
 
         for image in images:
             if do_resize:

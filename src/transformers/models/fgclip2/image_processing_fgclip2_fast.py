@@ -150,7 +150,6 @@ class Fgclip2ImageProcessorFast(BaseImageProcessorFast):
         spatial_shapes = []
 
         if dynamic_max_patches:
-            original_max_num_patches = max_num_patches
             candidate_values = [_determine_max_value(img, patch_size=patch_size) for img in images]
             max_num_patches = max(candidate_values)
 
