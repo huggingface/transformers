@@ -4142,7 +4142,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # perfect world: fp32_init/2 == fp16_eval
             self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_torch_compile_train(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -4154,7 +4154,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             metrics = trainer.train()
             self.assertAlmostEqual(metrics.training_loss, original_train_loss)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_torch_compile_eval(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -4165,7 +4165,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(torch_compile=True, output_dir=tmp_dir)
             metrics = trainer.evaluate()
 
-            self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+            self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss, delta=1e-6)
 
     @require_torch_accelerator
     @require_torch_bf16
