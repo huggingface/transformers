@@ -78,6 +78,25 @@ def update_state_dict_for_hf_model(state_dict):
                 new_key = new_key.replace("prediction_head.t_embedder.mlp.0.", "prediction_head.timestep_embedder.layer_1.")
             elif "prediction_head.t_embedder.mlp.2." in key:
                 new_key = new_key.replace("prediction_head.t_embedder.mlp.2.", "prediction_head.timestep_embedder.layer_2.")
+        
+        # Handle FinalLayer norm_final -> norm mapping
+        if "prediction_head.final_layer.norm_final." in key:
+            print(key, value)
+            new_key = new_key.replace("prediction_head.final_layer.norm_final.", "prediction_head.final_layer.norm.")
+        
+        # Handle FinalLayer linear -> linear_2 mapping
+        if "prediction_head.final_layer.linear." in key and "adaLN_modulation" not in key:
+            new_key = new_key.replace("prediction_head.final_layer.linear.", "prediction_head.final_layer.linear_2.")
+        
+        # Handle FinalLayer adaLN_modulation Sequential -> individual layers mapping
+        if "prediction_head.final_layer.adaLN_modulation." in key:
+            if ".adaLN_modulation.1." in key:
+                new_key = new_key.replace(".adaLN_modulation.1.", ".linear_1.")
+        
+        # Handle HeadLayer adaLN_modulation Sequential -> individual layers mapping
+        if "prediction_head.layers." in key and ".adaLN_modulation." in key:
+            if ".adaLN_modulation.1." in key:
+                new_key = new_key.replace(".adaLN_modulation.1.", ".linear.")
 
         updated_state_dict[new_key] = value
     

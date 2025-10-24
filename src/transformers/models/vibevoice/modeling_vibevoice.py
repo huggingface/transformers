@@ -72,10 +72,6 @@ class RMSNorm(nn.Module):
     def extra_repr(self) -> str:
         return f'dim={self.dim}, eps={self.eps}, elementwise_affine={self.elementwise_affine}'
 
-def modulate(x, shift, scale):
-    """Apply modulation to input tensor."""
-    return x * (1 + scale) + shift
-
 
 class TimestepEmbedder(nn.Module):
     def __init__(self, config):
@@ -99,6 +95,7 @@ class TimestepEmbedder(nn.Module):
         return self.layer_2(self.act(self.layer_1(t_freq)))
 
 
+# TODO (ebezzam) modular from LlamaMLP
 class FeedForwardNetwork(nn.Module):
     def __init__(
         self,
@@ -120,8 +117,8 @@ class FeedForwardNetwork(nn.Module):
         return self.down_proj(gate * up)
 
 
-# TODO (ebezzam) very similar to FFN layer in llama, use via modular
-# TODO (ebzzam) Qwen 2.5 Omni has mode similar, but hardcoded fnn ratio: https://github.com/huggingface/transformers/blob/82451cbb30fde5ede89308ea2328f89c61d5a831/src/transformers/models/qwen2_5_omni/modeling_qwen2_5_omni.py#L2927
+# TODO (ebezzam) modular instead of using LlamaRMSNorm
+# TODO (ebezzam) Qwen 2.5 Omni has mode similar, but hardcoded fnn ratio: https://github.com/huggingface/transformers/blob/82451cbb30fde5ede89308ea2328f89c61d5a831/src/transformers/models/qwen2_5_omni/modeling_qwen2_5_omni.py#L2927
 class HeadLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -132,33 +129,30 @@ class HeadLayer(nn.Module):
             ffn_dim,
             hidden_act=config.hidden_act
         )
-        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.adaLN_modulation = nn.Sequential(
-            ACT2FN[config.hidden_act],
-            nn.Linear(config.hidden_size, ffn_dim, bias=False)
-        )
+        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.linear = nn.Linear(config.hidden_size, ffn_dim, bias=False)
 
-    def forward(self, x, c):
-        shift_ffn, scale_ffn, gate_ffn = self.adaLN_modulation(c).chunk(self.ffn_ratio, dim=-1)
-        x = x + gate_ffn * self.ffn(modulate(self.norm(x), shift_ffn, scale_ffn))
-        return x
+    def forward(self, hidden_states, condition):
+        shift_ffn, scale_ffn, gate_ffn = self.linear(self.act_fn(condition)).chunk(self.ffn_ratio, dim=-1)
+        modulated_hidden_states = self.norm(hidden_states) * (1 + scale_ffn) + shift_ffn
+        hidden_states = hidden_states + gate_ffn * self.ffn(modulated_hidden_states)
+        return hidden_states
 
 
 class FinalLayer(nn.Module):
     def __init__(self, hidden_size, output_size, cond_size, norm_eps=1e-5, hidden_act="silu"):
         super().__init__()
-        self.norm_final = RMSNorm(hidden_size, eps=norm_eps, elementwise_affine=False)
-        self.linear = nn.Linear(hidden_size, output_size, bias=False)
-        self.adaLN_modulation = nn.Sequential(
-            ACT2FN[hidden_act],
-            nn.Linear(cond_size, 2 * hidden_size, bias=False)
-        )
+        self.norm = RMSNorm(hidden_size, eps=norm_eps, elementwise_affine=False)
+        self.linear_1 = nn.Linear(cond_size, 2 * hidden_size, bias=False)
+        self.act_fn = ACT2FN[hidden_act]
+        self.linear_2 = nn.Linear(hidden_size, output_size, bias=False)
 
-    def forward(self, x, c):
-        shift, scale = self.adaLN_modulation(c).chunk(2, dim=-1)
-        x = modulate(self.norm_final(x), shift, scale)
-        x = self.linear(x)
-        return x
+    def forward(self, hidden_states, condition):
+        shift, scale = self.linear_1(self.act_fn(condition)).chunk(2, dim=-1)
+        hidden_states = self.norm(hidden_states) * (1 + scale) + shift
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 class VibeVoiceDiffusionHead(PreTrainedModel):
@@ -199,11 +193,11 @@ class VibeVoiceDiffusionHead(PreTrainedModel):
 
         # Zero-out adaLN modulation layers
         for layer in self.layers:
-            nn.init.constant_(layer.adaLN_modulation[-1].weight, 0)
+            nn.init.constant_(layer.linear.weight, 0)
 
         # Zero-out output layers
-        nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
-        nn.init.constant_(self.final_layer.linear.weight, 0)
+        nn.init.constant_(self.final_layer.linear_1.weight, 0)
+        nn.init.constant_(self.final_layer.linear_2.weight, 0)
 
     def forward(
         self,
@@ -243,7 +237,7 @@ class VibeVoiceSpeechConnector(nn.Module):
         self.norm = LlamaRMSNorm(output_dim, eps=1e-6)
         self.fc2 = nn.Linear(output_dim, output_dim)
 
-    def forward(self, features, **kwargs):
+    def forward(self, features):
         x = self.fc1(features)
         x = self.norm(x)
         x = self.fc2(x)
