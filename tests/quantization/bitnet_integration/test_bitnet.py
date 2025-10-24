@@ -25,7 +25,7 @@ from transformers import (
 from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -39,7 +39,7 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class BitNetQuantConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
@@ -53,7 +53,7 @@ class BitNetQuantConfigTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_accelerate
 class BitNetTest(unittest.TestCase):
     model_name = "HF1BitLLM/Llama3-8B-1.58-100B-tokens"
@@ -197,7 +197,7 @@ class BitNetTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_accelerate
 class BitNetSerializationTest(unittest.TestCase):
     def test_model_serialization(self):
