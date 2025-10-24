@@ -46,12 +46,13 @@ def check_diff(
 
 
 def check_LTR_mark(line: str, idx: int, fast: PreTrainedTokenizerBase) -> bool:
-    enc = fast.encode_plus(line)[0]
-    offsets = enc.offsets
-    curr, prev = offsets[idx], offsets[idx - 1]
-    if curr is not None and line[curr[0] : curr[1]] == "\u200f":
+    enc = fast.encode_plus(line, return_offsets_mapping=True)
+    offsets = enc["offset_mapping"]
+    curr = offsets[idx] if idx < len(offsets) else None
+    prev = offsets[idx - 1] if idx - 1 >= 0 else None
+    if curr and line[curr[0]:curr[1]] == "\u200f":
         return True
-    if prev is not None and line[prev[0] : prev[1]] == "\u200f":
+    if prev and line[prev[0]:prev[1]] == "\u200f":
         return True
     return False
 
@@ -152,18 +153,14 @@ def test_string(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase, te
 
 
 def test_tokenizer(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase) -> None:
-    global batch_total
-    for i in range(len(dataset)):
-        # premise, all languages
-        for text in dataset[i]["premise"].values():
-            test_string(slow, fast, text)
-
-        # hypothesis, all languages
-        for text in dataset[i]["hypothesis"]["translation"]:
-            test_string(slow, fast, text)
+    global total
+    for example in dataset:
+        test_string(slow, fast, example["premise"])
+        test_string(slow, fast, example["hypothesis"])
 
 
 if __name__ == "__main__":
+    global imperfect, perfect, wrong, total
     for name, (slow_class, fast_class) in TOKENIZER_CLASSES.items():
         checkpoint_names = list(slow_class.max_model_input_sizes.keys())
         for checkpoint in checkpoint_names:
