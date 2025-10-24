@@ -779,8 +779,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
 
                 dummy_embeds = torch.zeros(
                     (batch_size, max_seq_len, 1),
-                    dtype=self.audio_tower.conv1.weight.dtype,
-                    device=self.audio_tower.conv1.weight.device,
+                    dtype=inputs_embeds.dtype,
+                    device=inputs_embeds.device,
                 )
 
                 audio_attention_mask = create_bidirectional_mask(
