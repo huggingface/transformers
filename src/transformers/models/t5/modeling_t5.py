@@ -94,7 +94,6 @@ except ImportError:
     pass
 except Exception:
     logger.warning("discovered apex but it failed to load, falling back to T5LayerNorm")
-    pass
 
 
 class T5DenseActDense(nn.Module):
