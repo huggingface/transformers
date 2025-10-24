@@ -146,7 +146,7 @@ try:
     def has_key(d, key):
         return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
 
-    def register_kernel_mapping_transformers(mapping = None):
+    def register_kernel_mapping_transformers(mapping=None):
         if mapping is None:
             mapping = _KERNEL_MAPPING
         if has_key(mapping, "xpu") and not is_kernels_available(MIN_VERSION="0.10.2"):
