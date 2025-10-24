@@ -160,6 +160,8 @@ class HiggsHfQuantizer(HfQuantizer):
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import HiggsLinear
 
+        missing_keys = super().update_missing_keys(model, missing_keys, prefix)
+
         higgs_names = {name for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
 
         def should_update(key: str) -> bool:
