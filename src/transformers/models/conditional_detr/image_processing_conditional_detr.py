@@ -1329,7 +1329,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         # max_size parameter removed - it was deprecated
         **kwargs,
     ) -> BatchFeature:
-
+        
         # Also remove any references to max_size in the function body
         # Look for lines like:
         #   size = get_size_dict(size, max_size=max_size, default_to_square=False, size_divisor=size_divisor)
