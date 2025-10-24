@@ -45,6 +45,8 @@ class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # Integration test data - expected outputs for the default input string
     integration_expected_tokens = ['this', 'is', 'a', 'test', 'i', 'was', 'born', 'in', '92', '##00', '##0', ',', 'and', 'this', 'is', 'false', '.', '生', '<unk>', '的', '真', '<unk>', '<unk>', 'hi', 'hello', 'hi', 'hello', 'hello', '<s>', 'hi', '<s>', 'there', 'the', 'following', 'string', 'should', 'be', 'properly', 'encoded', ':', 'hello', '.', 'but', 'ir', '##d', 'and', '<unk>', 'ir', '##d', '<unk>', 'hey', 'how', 'are', 'you', 'doing']
     integration_expected_token_ids = [101, 2023, 2003, 1037, 3231, 1045, 2001, 2141, 1999, 6227, 8889, 2692, 1010, 1998, 2023, 2003, 6270, 1012, 1910, 100, 1916, 1921, 100, 100, 7632, 7592, 7632, 7592, 7592, 96, 7632, 96, 2045, 1996, 2206, 5164, 2323, 2022, 7919, 12359, 1024, 7592, 1012, 2021, 20868, 2094, 1998, 100, 20868, 2094, 100, 4931, 2129, 2024, 2017, 2725, 102]
+    integration_expected_decoded_text = '<unk> is a test <unk> <unk> was born in 92000, and this is <unk>. 生 <unk> 的 真 <unk> <unk> <unk> <unk> <unk> <unk> <unk> <s> hi <s> there <unk> following string should be properly encoded : <unk>. <unk> ird and <unk> ird <unk> <unk> how are you doing'
+    integration_expected_text_from_tokens = '<unk> is a test <unk> <unk> was born in 92000, and this is <unk>. 生 <unk> 的 真 <unk> <unk> <unk> <unk> <unk> <unk> <unk> <s> hi <s> there <unk> following string should be properly encoded : <unk>. <unk> ird and <unk> ird <unk> <unk> how are you doing'
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

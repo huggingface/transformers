@@ -132,6 +132,8 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     "▁doing",
 ]
     integration_expected_token_ids = [
+    integration_expected_decoded_text = 'This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing'
+    integration_expected_text_from_tokens = 'This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing'
     1,
     910,
     338,

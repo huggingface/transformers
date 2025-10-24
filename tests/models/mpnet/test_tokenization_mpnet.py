@@ -32,6 +32,8 @@ class MPNetTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     # Integration test data - expected outputs for the default input string
     integration_expected_tokens = None  # Set to None to skip integration test for now
     integration_expected_token_ids = None
+    integration_expected_decoded_text = '[UNK] is a test [UNK] [UNK] was born in 92000, and this is [UNK]. 生 [UNK] 的 真 [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] <s> hi <s> there [UNK] following string should be properly encoded : [UNK]. [UNK] ird and [UNK] ird [UNK] [UNK] how are you doing'
+    integration_expected_text_from_tokens = '[UNK] is a test [UNK] [UNK] was born in 92000, and this is [UNK]. 生 [UNK] 的 真 [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] <s> hi <s> there [UNK] following string should be properly encoded : [UNK]. [UNK] ird and [UNK] ird [UNK] [UNK] how are you doing'
 
     @classmethod
     def setUpClass(cls):

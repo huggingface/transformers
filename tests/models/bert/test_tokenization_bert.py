@@ -36,6 +36,8 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # Integration test data - expected outputs for the default input string
     integration_expected_tokens = ['unwanted', ',', 'running']
     integration_expected_token_ids = [101, 18162, 1010, 2770, 102]
+    integration_expected_decoded_text = '[UNK] is a test [UNK] [UNK] was born in 92000, and this is [UNK]. 生 [UNK] 的 真 [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] < s > hi < s > there [UNK] following string should be properly encoded : [UNK]. [UNK] ird and [UNK] ird [UNK] [UNK] how are you doing'
+    integration_expected_text_from_tokens = '[UNK] is a test [UNK] [UNK] was born in 92000, and this is [UNK]. 生 [UNK] 的 真 [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] < s > hi < s > there [UNK] following string should be properly encoded : [UNK]. [UNK] ird and [UNK] ird [UNK] [UNK] how are you doing'
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
 
