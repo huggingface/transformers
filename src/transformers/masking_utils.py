@@ -496,6 +496,7 @@ def eager_mask(
     # The masks for eager attention are simply boolean mask from sdpa, casted to 0 and -inf
     _ = kwargs.pop("allow_is_causal_skip", None)
     _ = kwargs.pop("allow_is_bidirectional_skip", None)
+    _ = kwargs.pop("allow_torch_fix", None)
     mask = sdpa_mask(
         batch_size=batch_size,
         cache_position=cache_position,
@@ -914,7 +915,6 @@ def create_bidirectional_mask(
         # Additional kwargs for sdpa
         allow_is_causal_skip=False,
         allow_is_bidirectional_skip=allow_is_bidirectional_skip,
-        allow_torch_fix=True,
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
         uses_vmap=uses_vmap,  # Short-circuit to non-vmap expansions for the mask
