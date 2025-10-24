@@ -229,10 +229,10 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 "Using `StaticCache` for export as `layer_types` is not specified or `sliding_window` is `null` in the config."
             )
             self.model = TorchExportableModuleWithStaticCache(model, batch_size, max_cache_len, device)
-        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+        """# This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
         ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
         ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
-        self.model.model.config._attn_implementation = "sdpa_without_vmap"
+        self.model.model.config._attn_implementation = "sdpa_without_vmap"""
 
     def forward(
         self,
@@ -768,10 +768,10 @@ def convert_and_export_with_cache(
 
     import torch.export._trace
 
-    # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
-    ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
-    ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
-    model.config._attn_implementation = "sdpa_without_vmap"
+    """# This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+        ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        self.model.model.config._attn_implementation = "sdpa_without_vmap"""
 
     with torch.no_grad():
         # TODO: The default inputs only work for text models. We need to add support for vision/audio models.
@@ -1036,10 +1036,10 @@ def export_with_dynamic_cache(
     if not is_torch_greater_or_equal_than_2_3:
         raise ImportError("torch >= 2.3 is required.")
 
-    # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
-    ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
-    ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
-    model.config._attn_implementation = "sdpa_without_vmap"
+    """# This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+        ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        self.model.model.config._attn_implementation = "sdpa_without_vmap"""
 
     register_dynamic_cache_export_support()
 
