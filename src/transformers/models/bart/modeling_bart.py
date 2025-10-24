@@ -536,15 +536,14 @@ class BartEncoder(BartPreTrainedModel):
         embed_dim = config.d_model
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
+        embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is None:
-            embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        self.embed_tokens = BartScaledWordEmbedding(
+            config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+        )
 
-            self.embed_tokens = BartScaledWordEmbedding(
-                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
-            )
-        else:
-            self.embed_tokens = embed_tokens
+        if embed_tokens is not None:
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -681,15 +680,14 @@ class BartDecoder(BartPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is None:
-            embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_tokens = BartScaledWordEmbedding(
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+        )
 
-            self.embed_tokens = BartScaledWordEmbedding(
-                config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
-            )
-        else:
-            self.embed_tokens = embed_tokens
+        if embed_tokens is not None:
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
