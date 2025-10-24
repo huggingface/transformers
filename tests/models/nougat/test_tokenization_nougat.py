@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +14,12 @@
 
 import copy
 import unittest
-from functools import lru_cache
 
 from transformers import NougatTokenizerFast
 from transformers.models.nougat.tokenization_nougat_fast import markdown_compatible, normalize_list_like_lines
 from transformers.testing_utils import require_levenshtein, require_nltk, require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
@@ -42,8 +40,6 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         _kwargs = copy.deepcopy(cls.special_tokens_map)
         _kwargs.update(kwargs)

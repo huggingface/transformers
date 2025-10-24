@@ -14,23 +14,14 @@
 # limitations under the License.
 """Chinese-CLIP model configuration"""
 
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ChineseCLIPTextConfig(PretrainedConfig):
+class ChineseCLIPTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate a
     Chinese CLIP model according to the specified arguments, defining the model architecture. Instantiating a
@@ -38,8 +29,8 @@ class ChineseCLIPTextConfig(PretrainedConfig):
     [OFA-Sys/chinese-clip-vit-base-patch16](https:
         //huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -75,12 +66,6 @@ class ChineseCLIPTextConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -119,7 +104,6 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         initializer_factor=1.0,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        position_embedding_type="absolute",
         use_cache=True,
         **kwargs,
     ):
@@ -138,19 +122,18 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
 
 
-class ChineseCLIPVisionConfig(PretrainedConfig):
+class ChineseCLIPVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate an
     ChineseCLIP model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ChineseCLIP
     [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -233,7 +216,7 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class ChineseCLIPConfig(PretrainedConfig):
+class ChineseCLIPConfig(PreTrainedConfig):
     r"""
     [`ChineseCLIPConfig`] is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used
     to instantiate Chinese-CLIP model according to the specified arguments, defining the text model and vision model
@@ -241,8 +224,8 @@ class ChineseCLIPConfig(PretrainedConfig):
     Chinese-CLIP [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -277,7 +260,7 @@ class ChineseCLIPConfig(PretrainedConfig):
     >>> config_text = ChineseCLIPTextConfig()
     >>> config_vision = ChineseCLIPVisionConfig()
 
-    >>> config = ChineseCLIPConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = ChineseCLIPConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "chinese_clip"
@@ -292,8 +275,6 @@ class ChineseCLIPConfig(PretrainedConfig):
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
@@ -306,7 +287,7 @@ class ChineseCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -338,7 +319,7 @@ class ChineseCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -357,78 +338,25 @@ class ChineseCLIPConfig(PretrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `ChineseCLIPTextConfig` with default values.")
+            text_config = ChineseCLIPTextConfig()
+            logger.info("`text_config` is `None`. initializing the `ChineseCLIPTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = ChineseCLIPTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = ChineseCLIPVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `ChineseCLIPVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = ChineseCLIPVisionConfig(**vision_config)
 
-        self.text_config = ChineseCLIPTextConfig(**text_config)
-        self.vision_config = ChineseCLIPVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
-
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: ChineseCLIPTextConfig, vision_config: ChineseCLIPVisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`ChineseCLIPConfig`] (or a derived class) from Chinese-CLIP text model configuration and
-        Chinese-CLIP vision model configuration. Returns:
-            [`ChineseCLIPConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        super().__init__(**kwargs)
 
 
-class ChineseCLIPOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits_per_image", {0: "batch"}),
-                ("logits_per_text", {0: "batch"}),
-                ("text_embeds", {0: "batch"}),
-                ("image_embeds", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    def generate_dummy_inputs(
-        self,
-        processor: "ProcessorMixin",
-        batch_size: int = -1,
-        seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
-    ) -> Mapping[str, Any]:
-        text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
-        )
-        image_input_dict = super().generate_dummy_inputs(
-            processor.image_processor, batch_size=batch_size, framework=framework
-        )
-        return {**text_input_dict, **image_input_dict}
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 14
-
-
-__all__ = ["ChineseCLIPConfig", "ChineseCLIPOnnxConfig", "ChineseCLIPTextConfig", "ChineseCLIPVisionConfig"]
+__all__ = ["ChineseCLIPConfig", "ChineseCLIPTextConfig", "ChineseCLIPVisionConfig"]

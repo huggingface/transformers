@@ -13,17 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-08-20 and added to Hugging Face Transformers on 2020-11-16.*
 
 # LXMERT
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from Transformers](https://arxiv.org/abs/1908.07490) by Hao Tan & Mohit Bansal. It is a series of bidirectional transformer encoders
+The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from Transformers](https://huggingface.co/papers/1908.07490) by Hao Tan & Mohit Bansal. It is a series of bidirectional transformer encoders
 (one for the vision modality, one for the language modality, and then one to fuse both modalities) pretrained using a
 combination of masked language modeling, visual-language text alignment, ROI-feature regression, masked
 visual-attribute modeling, masked visual-object modeling, and visual-question answering objectives. The pretraining
@@ -84,13 +84,6 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 [[autodoc]] models.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
 
-[[autodoc]] models.lxmert.modeling_tf_lxmert.TFLxmertModelOutput
-
-[[autodoc]] models.lxmert.modeling_tf_lxmert.TFLxmertForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
-
 ## LxmertModel
 
 [[autodoc]] LxmertModel
@@ -105,19 +98,3 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 [[autodoc]] LxmertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFLxmertModel
-
-[[autodoc]] TFLxmertModel
-    - call
-
-## TFLxmertForPreTraining
-
-[[autodoc]] TFLxmertForPreTraining
-    - call
-
-</tf>
-</frameworkcontent>

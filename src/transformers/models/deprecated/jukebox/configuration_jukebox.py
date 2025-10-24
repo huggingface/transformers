@@ -15,9 +15,9 @@
 """Jukebox configuration"""
 
 import os
-from typing import List, Union
+from typing import Union
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
@@ -136,7 +136,7 @@ ATTENTION_PATTERNS = {
 }
 
 
-class JukeboxPriorConfig(PretrainedConfig):
+class JukeboxPriorConfig(PreTrainedConfig):
     """
         This is the configuration class to store the configuration of a [`JukeboxPrior`]. It is used to instantiate a
         `JukeboxPrior` according to the specified arguments, defining the model architecture. Instantiating a
@@ -144,8 +144,8 @@ class JukeboxPriorConfig(PretrainedConfig):
         [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox
     -1b-lyrics) architecture.
 
-        Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-        documentation from [`PretrainedConfig`] for more information.
+        Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+        documentation from [`PreTrainedConfig`] for more information.
 
 
 
@@ -298,6 +298,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         zero_out=False,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.act_fn = act_fn
         self.alignment_head = alignment_head
         self.alignment_layer = alignment_layer
@@ -345,11 +346,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.zero_out = zero_out
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], level=0, **kwargs
-    ) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], level=0, **kwargs):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the prior config dict if we are loading from JukeboxConfig
@@ -365,15 +362,15 @@ class JukeboxPriorConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class JukeboxVQVAEConfig(PretrainedConfig):
+class JukeboxVQVAEConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`JukeboxVQVAE`]. It is used to instantiate a
     `JukeboxVQVAE` according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the VQVAE from
     [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox-1b-lyrics) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         act_fn (`str`, *optional*, defaults to `"relu"`):
@@ -394,7 +391,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
             Number of hierarchical levels that used in the VQVAE.
         lmu (`float`, *optional*, defaults to 0.99):
             Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix A.1
-            of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
+            of the original [VQVAE paper](https://huggingface.co/papers/1711.00937v2.pdf)
         multipliers (`List[int]`, *optional*, defaults to `[2, 1, 1]`):
             Depth and width multipliers used for each level. Used on the `res_conv_width` and `res_conv_depth`
         res_conv_depth (`int`, *optional*, defaults to 4):
@@ -446,6 +443,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         zero_out=False,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.hop_fraction = hop_fraction
         self.conv_input_shape = conv_input_shape
         self.sample_length = sample_length
@@ -470,9 +468,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         self.zero_out = zero_out
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from CLIPConfig
@@ -488,12 +484,12 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class JukeboxConfig(PretrainedConfig):
+class JukeboxConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`JukeboxModel`].
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Instantiating a configuration with the defaults will
     yield a similar configuration to that of
     [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox-1b-lyrics) architecture.
 
@@ -559,14 +555,16 @@ class JukeboxConfig(PretrainedConfig):
         **kwargs,
     ):
         if vqvae_config is None:
-            vqvae_config = {}
+            vqvae_config = JukeboxVQVAEConfig()
             logger.info("vqvae_config is None. initializing the JukeboxVQVAE with default values.")
+        elif isinstance(vqvae_config, dict):
+            vqvae_config = JukeboxVQVAEConfig(**vqvae_config)
+        self.vqvae_config = vqvae_config
 
-        self.vqvae_config = JukeboxVQVAEConfig(**vqvae_config)
-        if prior_config_list is not None:
-            self.prior_configs = [JukeboxPriorConfig(**prior_config) for prior_config in prior_config_list]
-        else:
-            self.prior_configs = []
+        if prior_config_list is not None and isinstance(prior_config_list[0], dict):
+            prior_configs = [JukeboxPriorConfig(**prior_config) for prior_config in prior_config_list]
+        elif prior_config_list is None:
+            prior_configs = []
             for prior_idx in range(nb_priors):
                 prior_config = kwargs.pop(f"prior_{prior_idx}", None)
                 if prior_config is None:
@@ -575,10 +573,10 @@ class JukeboxConfig(PretrainedConfig):
                         f"prior_{prior_idx}'s  config is None. Initializing the JukeboxPriorConfig list with default"
                         " values."
                     )
-                self.prior_configs.append(JukeboxPriorConfig(**prior_config))
+                prior_configs.append(JukeboxPriorConfig(**prior_config))
+        self.prior_configs = prior_configs
 
         self.hop_fraction = self.vqvae_config.hop_fraction
-
         self.nb_priors = nb_priors
 
         # Metadata conditioning
@@ -591,20 +589,11 @@ class JukeboxConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-    @classmethod
-    def from_configs(cls, prior_configs: List[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
-        r"""
-        Instantiate a [`JukeboxConfig`] (or a derived class) from clip text model configuration and clip vision model
-        configuration.
-
-        Returns:
-            [`JukeboxConfig`]: An instance of a configuration object
-        """
-        prior_config_list = [config.to_dict() for config in prior_configs]
-        return cls(prior_config_list=prior_config_list, vqvae_config_dict=vqvae_config.to_dict(), **kwargs)
-
     def to_dict(self):
         # Override the default to_dict to apply to_dict to the list of prior configs.
         result = super().to_dict()
         result["prior_config_list"] = [config.to_dict() for config in result.pop("prior_configs")]
         return result
+
+
+__all__ = ["JukeboxConfig", "JukeboxPriorConfig", "JukeboxVQVAEConfig"]

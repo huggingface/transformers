@@ -14,8 +14,7 @@
 # limitations under the License.
 """Tokenization classes for Bloom."""
 
-import pickle
-from typing import Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -110,16 +109,11 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-        # TODO @ArthurZucker this can only work one way for now, to update later-on. Tests should also properly
-        # check this as they were green before.
-        pre_tok_state = pickle.dumps(self.backend_tokenizer.pre_tokenizer)
-        decoder_state = pickle.dumps(self.backend_tokenizer.decoder)
-
-        if add_prefix_space:
-            pre_tok_state = pre_tok_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
-            decoder_state = decoder_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
-        self.backend_tokenizer.pre_tokenizer = pickle.loads(pre_tok_state)
-        self.backend_tokenizer.decoder = pickle.loads(decoder_state)
+        # This is a `tokenizers.pre_tokenizers.Sequence`
+        for pre_tokenizer in self.backend_tokenizer.pre_tokenizer:
+            if hasattr(pre_tokenizer, "add_prefix_space"):
+                pre_tokenizer.add_prefix_space = add_prefix_space
+        self.backend_tokenizer.decoder.add_prefix_space = add_prefix_space
 
         self.add_prefix_space = add_prefix_space
 
@@ -144,7 +138,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._encode_plus(*args, **kwargs)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,7 @@
 # limitations under the License.
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -62,6 +62,8 @@ class AutoImageProcessorTest(unittest.TestCase):
 
     def test_image_processor_from_local_directory_from_feature_extractor_key(self):
         # Ensure we can load the image processor from the feature extractor config
+        # Though we don't have any `CLIPFeatureExtractor` class, we can't be sure that
+        # there are no models in the hub serialized with `processor_type=CLIPFeatureExtractor`
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
@@ -74,11 +76,24 @@ class AutoImageProcessorTest(unittest.TestCase):
             config = AutoImageProcessor.from_pretrained(tmpdirname)
             self.assertIsInstance(config, CLIPImageProcessor)
 
+    def test_image_processor_from_new_filename(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            config_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {"image_processor_type": "CLIPImageProcessor", "processor_class": "CLIPProcessor"},
+                open(processor_tmpfile, "w"),
+            )
+            json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
+
+            config = AutoImageProcessor.from_pretrained(tmpdirname)
+            self.assertIsInstance(config, CLIPImageProcessor)
+
     def test_image_processor_from_local_directory_from_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model_config = CLIPConfig()
 
-            # Create a dummy config file with image_proceesor_type
+            # Create a dummy config file with image_processor_type
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
@@ -131,7 +146,7 @@ class AutoImageProcessorTest(unittest.TestCase):
     def test_image_processor_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named preprocessor_config.json.",
+            "Can't load image processor for 'hf-internal-testing/config-no-model'.",
         ):
             _ = AutoImageProcessor.from_pretrained("hf-internal-testing/config-no-model")
 
@@ -178,12 +193,11 @@ class AutoImageProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
             reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_processor.py")))  # Assert we saved custom code
+            self.assertEqual(
+                reloaded_image_processor.auto_map["AutoImageProcessor"], "image_processor.NewImageProcessor"
+            )
         self.assertEqual(reloaded_image_processor.__class__.__name__, "NewImageProcessor")
-
-        # The image processor file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(image_processor.__class__, reloaded_image_processor.__class__)
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_image_processor = AutoImageProcessor.from_pretrained(

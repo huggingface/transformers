@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +18,7 @@ import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, VptqConfig
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -75,7 +75,7 @@ class VptqTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model(self):
@@ -156,7 +156,7 @@ class VptqTest(unittest.TestCase):
         for name in names:
             shared_layer_config[name] = value
         for i in range(24):
-            modules_to_not_convert.append("model.decoder.layers.{layer_idx}.fc1".format(layer_idx=i))
+            modules_to_not_convert.append(f"model.decoder.layers.{i}.fc1")
         layer_configs = {}
         layer_configs["model.decoder.project_out"] = value
         layer_configs["model.decoder.project_in"] = value

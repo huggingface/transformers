@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,17 +16,8 @@ import unittest
 
 from transformers import MyT5Tokenizer
 from transformers.testing_utils import slow
-from transformers.utils import is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
 
 
 def bytes_to_hex(bline: bytes, sep: str = " ") -> str:
@@ -39,8 +29,9 @@ def str_to_hex(line: str, sep: str = " ") -> str:
 
 
 class TestByteRewriter(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tokenizer = MyT5Tokenizer.from_pretrained("Tomlim/myt5-base")
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.tokenizer = MyT5Tokenizer.from_pretrained("Tomlim/myt5-base")
 
     def test_simple_decompose(self):
         decompose_rewriter = self.tokenizer.decompose_rewriter

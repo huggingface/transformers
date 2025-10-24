@@ -16,22 +16,22 @@
 
 from typing import Optional
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GraphormerConfig(PretrainedConfig):
+class GraphormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~GraphormerModel`]. It is used to instantiate an
     Graphormer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Graphormer
     [graphormer-base-pcqm4mv1](https://huggingface.co/graphormer-base-pcqm4mv1) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -78,7 +78,7 @@ class GraphormerConfig(PretrainedConfig):
         activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the activation of the linear transformer layer.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         bias (`bool`, *optional*, defaults to `True`):
             Uses bias in the attention module - unsupported at the moment.
@@ -155,7 +155,7 @@ class GraphormerConfig(PretrainedConfig):
         pre_layernorm: bool = False,
         apply_graphormer_init: bool = False,
         activation_fn: str = "gelu",
-        embed_scale: float = None,
+        embed_scale: Optional[float] = None,
         freeze_embeddings: bool = False,
         num_trans_layers_to_freeze: int = 0,
         traceable: bool = False,
@@ -215,3 +215,6 @@ class GraphormerConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             **kwargs,
         )
+
+
+__all__ = ["GraphormerConfig"]

@@ -12,7 +12,7 @@ subword_len_counter = 0
 tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 max_len -= tokenizer.num_special_tokens_to_add()
 
-with open(dataset, "rt") as f_p:
+with open(dataset) as f_p:
     for line in f_p:
         line = line.rstrip()
 
@@ -31,7 +31,7 @@ with open(dataset, "rt") as f_p:
             continue
 
         if (subword_len_counter + current_subwords_len) > max_len:
-            print("")
+            print()
             print(line)
             subword_len_counter = current_subwords_len
             continue

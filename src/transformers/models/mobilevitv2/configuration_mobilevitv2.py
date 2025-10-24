@@ -14,28 +14,22 @@
 # limitations under the License.
 """MobileViTV2 model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MobileViTV2Config(PretrainedConfig):
+class MobileViTV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MobileViTV2Model`]. It is used to instantiate a
     MobileViTV2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MobileViTV2
     [apple/mobilevitv2-1.0](https://huggingface.co/apple/mobilevitv2-1.0) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):
@@ -60,15 +54,15 @@ class MobileViTV2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         aspp_out_channels (`int`, *optional*, defaults to 512):
             Number of output channels used in the ASPP layer for semantic segmentation.
-        atrous_rates (`List[int]`, *optional*, defaults to `[6, 12, 18]`):
+        atrous_rates (`list[int]`, *optional*, defaults to `[6, 12, 18]`):
             Dilation (atrous) factors used in the ASPP layer for semantic segmentation.
         aspp_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the ASPP layer for semantic segmentation.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
-        n_attn_blocks (`List[int]`, *optional*, defaults to `[2, 4, 3]`):
+        n_attn_blocks (`list[int]`, *optional*, defaults to `[2, 4, 3]`):
             The number of attention blocks in each MobileViTV2Layer
-        base_attn_unit_dims (`List[int]`, *optional*, defaults to `[128, 192, 256]`):
+        base_attn_unit_dims (`list[int]`, *optional*, defaults to `[128, 192, 256]`):
             The base multiplier for dimensions of attention blocks in each MobileViTV2Layer
         width_multiplier (`float`, *optional*, defaults to 1.0):
             The width multiplier for MobileViTV2.
@@ -146,23 +140,4 @@ class MobileViTV2Config(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
-class MobileViTV2OnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict([("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"})])
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "image-classification":
-            return OrderedDict([("logits", {0: "batch"})])
-        else:
-            return OrderedDict([("last_hidden_state", {0: "batch"}), ("pooler_output", {0: "batch"})])
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-
-__all__ = ["MobileViTV2Config", "MobileViTV2OnnxConfig"]
+__all__ = ["MobileViTV2Config"]

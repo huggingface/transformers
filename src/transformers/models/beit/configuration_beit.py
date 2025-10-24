@@ -15,17 +15,12 @@
 """BEiT model configuration"""
 
 import warnings
-from collections import OrderedDict
-from typing import Mapping
 
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
-class BeitConfig(BackboneConfigMixin, PretrainedConfig):
+class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -76,7 +71,7 @@ class BeitConfig(BackboneConfigMixin, PretrainedConfig):
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
-        pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
+        pool_scales (`tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
             Whether to use an auxiliary head during training.
@@ -90,12 +85,12 @@ class BeitConfig(BackboneConfigMixin, PretrainedConfig):
             Whether to concatenate the output of the auxiliary head with the input before the classification layer.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
-        out_features (`List[str]`, *optional*):
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the
@@ -209,21 +204,4 @@ class BeitConfig(BackboneConfigMixin, PretrainedConfig):
         self.reshape_hidden_states = reshape_hidden_states
 
 
-# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
-class BeitOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-
-__all__ = ["BeitConfig", "BeitOnnxConfig"]
+__all__ = ["BeitConfig"]

@@ -20,10 +20,10 @@ def fill_mask(masked_input, model, tokenizer, topk=5):
     topk_filled_outputs = []
     for index, predicted_token_bpe in enumerate(topk_predicted_token_bpe.split(" ")):
         predicted_token = predicted_token_bpe.replace("\u2581", " ")
-        if " {0}".format(masked_token) in masked_input:
+        if f" {masked_token}" in masked_input:
             topk_filled_outputs.append(
                 (
-                    masked_input.replace(" {0}".format(masked_token), predicted_token),
+                    masked_input.replace(f" {masked_token}", predicted_token),
                     values[index].item(),
                     predicted_token,
                 )

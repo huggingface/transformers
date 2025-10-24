@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +16,10 @@
 import json
 import os
 import unittest
+from functools import cached_property
 
 from transformers.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer
 from transformers.testing_utils import slow
-from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

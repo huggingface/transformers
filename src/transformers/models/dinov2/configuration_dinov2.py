@@ -14,13 +14,7 @@
 # limitations under the License.
 """DINOv2 model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -28,15 +22,15 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
+class Dinov2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dinov2Model`]. It is used to instantiate an
     Dinov2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Dinov2
     [google/dinov2-base-patch16-224](https://huggingface.co/google/dinov2-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -72,12 +66,12 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
         use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
             Whether to use the SwiGLU feedforward neural network.
-        out_features (`List[str]`, *optional*):
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the
@@ -160,20 +154,4 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         self.use_mask_token = use_mask_token
 
 
-class Dinov2OnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-
-__all__ = ["Dinov2Config", "Dinov2OnnxConfig"]
+__all__ = ["Dinov2Config"]

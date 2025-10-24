@@ -14,18 +14,14 @@
 # limitations under the License.
 """LayoutLM model configuration"""
 
-from collections import OrderedDict
-from typing import Any, List, Mapping, Optional
-
-from ... import PretrainedConfig, PreTrainedTokenizer
-from ...onnx import OnnxConfig, PatchingSpec
-from ...utils import TensorType, is_torch_available, logging
+from ... import PreTrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class LayoutLMConfig(PretrainedConfig):
+class LayoutLMConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMModel`]. It is used to instantiate a
     LayoutLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -66,12 +62,6 @@ class LayoutLMConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             The value used to pad input_ids.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -111,7 +101,6 @@ class LayoutLMConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        position_embedding_type="absolute",
         use_cache=True,
         max_2d_position_embeddings=1024,
         **kwargs,
@@ -129,71 +118,8 @@ class LayoutLMConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.max_2d_position_embeddings = max_2d_position_embeddings
 
 
-class LayoutLMOnnxConfig(OnnxConfig):
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
-    ):
-        super().__init__(config, task=task, patching_specs=patching_specs)
-        self.max_2d_positions = config.max_2d_position_embeddings - 1
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("bbox", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-                ("token_type_ids", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    def generate_dummy_inputs(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
-    ) -> Mapping[str, Any]:
-        """
-        Generate inputs to provide to the ONNX exporter for the specific framework
-
-        Args:
-            tokenizer: The tokenizer associated with this model configuration
-            batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
-            seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
-            is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
-            framework: The framework (optional) the tokenizer will generate tensor for
-
-        Returns:
-            Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
-        """
-
-        input_dict = super().generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
-        )
-
-        # Generate a dummy bbox
-        box = [48, 84, 73, 128]
-
-        if not framework == TensorType.PYTORCH:
-            raise NotImplementedError("Exporting LayoutLM to ONNX is currently only supported for PyTorch.")
-
-        if not is_torch_available():
-            raise ValueError("Cannot generate dummy inputs without PyTorch installed.")
-        import torch
-
-        batch_size, seq_length = input_dict["input_ids"].shape
-        input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
-        return input_dict
-
-
-__all__ = ["LayoutLMConfig", "LayoutLMOnnxConfig"]
+__all__ = ["LayoutLMConfig"]

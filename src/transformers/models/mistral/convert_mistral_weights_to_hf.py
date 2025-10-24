@@ -176,7 +176,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 32768):
     new_config_kwargs.update({k: v for k, v in original_config.items() if k in similar_keys_to_keep})
 
     # These are not always defined depending on `params.json`
-    new_config_kwargs["sliding_window"] = original_config.get("sliding_window", None)
+    new_config_kwargs["sliding_window"] = original_config.get("sliding_window")
     new_config_kwargs["num_key_value_heads"] = original_config.get(
         "n_kv_heads", new_config_kwargs["num_attention_heads"]
     )
@@ -208,7 +208,9 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     else:
         shards = [file for file in os.listdir(input_dir) if re.match(r"consolidated.\d+.pth", file)]
         shards = sorted(shards, key=lambda x: int(x.split(".")[1]))
-        loaded_shards = [torch.load(os.path.join(input_dir, file), map_location="cpu") for file in shards]
+        loaded_shards = [
+            torch.load(os.path.join(input_dir, file), map_location="cpu", weights_only=True) for file in shards
+        ]
         full_state_dict = convert_state_dict_sharded(loaded_shards, config)
 
     # Load weights into model and resave them

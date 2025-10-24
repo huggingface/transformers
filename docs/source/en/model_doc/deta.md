@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-12-12 and added to Hugging Face Transformers on 2023-06-20.*
 
 # DETA
 
@@ -30,7 +31,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The DETA model was proposed in [NMS Strikes Back](https://arxiv.org/abs/2212.06137) by Jeffrey Ouyang-Zhang, Jang Hyun Cho, Xingyi Zhou, Philipp Krähenbühl.
+The DETA model was proposed in [NMS Strikes Back](https://huggingface.co/papers/2212.06137) by Jeffrey Ouyang-Zhang, Jang Hyun Cho, Xingyi Zhou, Philipp Krähenbühl.
 DETA (short for Detection Transformers with Assignment) improves [Deformable DETR](deformable_detr) by replacing the one-to-one bipartite Hungarian matching loss
 with one-to-many label assignments used in traditional detectors with non-maximum suppression (NMS). This leads to significant gains of up to 2.5 mAP.
 
@@ -41,7 +42,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/deta_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> DETA overview. Taken from the <a href="https://arxiv.org/abs/2212.06137">original paper</a>. </small>
+<small> DETA overview. Taken from the <a href="https://huggingface.co/papers/2212.06137">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/jozhang97/DETA).

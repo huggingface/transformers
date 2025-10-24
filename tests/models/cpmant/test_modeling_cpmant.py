@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -142,10 +141,8 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"feature-extraction": CpmAntModel, "text-generation": CpmAntForCausalLM} if is_torch_available() else {}
     )
 
-    test_pruning = False
     test_missing_keys = False
     test_mismatched_shapes = False
-    test_head_masking = False
     test_resize_embeddings = False
 
     def setUp(self):
@@ -193,7 +190,7 @@ class CpmAntModelIntegrationTest(unittest.TestCase):
 @require_torch
 class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
     @tooslow
-    def test_inference_casual(self):
+    def test_inference_causal(self):
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
         model = CpmAntForCausalLM.from_pretrained(model_path)

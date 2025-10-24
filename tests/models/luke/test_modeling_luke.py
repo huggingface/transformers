@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -614,10 +613,8 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_torchscript = False
+
     test_resize_embeddings = True
-    test_head_masking = True
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -759,7 +756,8 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -897,7 +895,7 @@ class LukeModelIntegrationTests(unittest.TestCase):
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 
         # move all values to device
-        for key, value in encoding.items():
+        for key in encoding:
             encoding[key] = encoding[key].to(torch_device)
 
         outputs = model(**encoding)
@@ -932,7 +930,7 @@ class LukeModelIntegrationTests(unittest.TestCase):
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 
         # move all values to device
-        for key, value in encoding.items():
+        for key in encoding:
             encoding[key] = encoding[key].to(torch_device)
 
         outputs = model(**encoding)

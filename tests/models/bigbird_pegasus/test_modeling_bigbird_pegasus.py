@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -266,12 +265,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     )
     is_encoder_decoder = True
     test_missing_keys = False
-    test_pruning = False
-    test_head_masking = False
-
-    # torchscript tests are not passing for now.
-    # Also torchscript is not an important feature to have in the beginning.
-    test_torchscript = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -469,13 +462,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_load_save_without_tied_weights(self):
         pass
 
-    def test_generate_with_head_masking(self):
-        # overwritten to temporarily switch the attention type to `original_full`
-        original_self_attention_type = self.model_tester.attention_type
-        self.model_tester.attention_type = "original_full"
-        super().test_generate_with_head_masking()
-        self.model_tester.attention_type = original_self_attention_type
-
 
 @require_torch
 @require_sentencepiece
@@ -612,7 +598,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
-        max_position_embeddings=30,
+        max_position_embeddings=50,
         is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=1,
@@ -674,6 +660,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
+            num_hidden_layers=self.decoder_layers,
             decoder_ffn_dim=self.decoder_ffn_dim,
             encoder_attention_heads=self.encoder_attention_heads,
             decoder_attention_heads=self.decoder_attention_heads,
@@ -768,7 +755,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, use_cache=True)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -791,7 +778,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 @require_torch
 class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(

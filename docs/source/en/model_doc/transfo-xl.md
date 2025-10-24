@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-01-09 and added to Hugging Face Transformers on 2023-06-20.*
 
 # Transformer XL
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 <Tip warning={true}>
@@ -61,7 +61,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The Transformer-XL model was proposed in [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://arxiv.org/abs/1901.02860) by Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan
+The Transformer-XL model was proposed in [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://huggingface.co/papers/1901.02860) by Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan
 Salakhutdinov. It's a causal (uni-directional) transformer with relative positioning (sinusoïdal) embeddings which can
 reuse previously computed hidden-states to attend to longer context (memory). This model also uses adaptive softmax
 inputs and outputs (tied).
@@ -90,7 +90,6 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 - Basically, the hidden states of the previous segment are concatenated to the current input to compute the attention scores. This allows the model to pay attention to information that was in the previous segment as well as the current one. By stacking multiple attention layers, the receptive field can be increased to multiple previous segments.
 - This changes the positional embeddings to positional relative embeddings (as the regular positional embeddings would give the same results in the current input and the current hidden state at a given position) and needs to make some adjustments in the way attention scores are computed.
 
-
 <Tip warning={true}>
 
 TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035)
@@ -117,13 +116,6 @@ TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyT
 
 [[autodoc]] models.deprecated.transfo_xl.modeling_transfo_xl.TransfoXLLMHeadModelOutput
 
-[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLModelOutput
-
-[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLLMHeadModelOutput
-
-<frameworkcontent>
-<pt>
-
 ## TransfoXLModel
 
 [[autodoc]] TransfoXLModel
@@ -139,29 +131,6 @@ TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyT
 [[autodoc]] TransfoXLForSequenceClassification
     - forward
 
-</pt>
-<tf>
-
-## TFTransfoXLModel
-
-[[autodoc]] TFTransfoXLModel
-    - call
-
-## TFTransfoXLLMHeadModel
-
-[[autodoc]] TFTransfoXLLMHeadModel
-    - call
-
-## TFTransfoXLForSequenceClassification
-
-[[autodoc]] TFTransfoXLForSequenceClassification
-    - call
-
-</tf>
-</frameworkcontent>
-
 ## Internal Layers
 
 [[autodoc]] AdaptiveEmbedding
-
-[[autodoc]] TFAdaptiveEmbedding

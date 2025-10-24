@@ -14,7 +14,8 @@
 # limitations under the License.
 
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -34,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -41,18 +43,26 @@ logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
-    import PIL
     from PIL import Image
 
 
-def get_resize_output_image_size(image, size, input_data_format) -> Tuple[int, int]:
+class Idefics2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_image_splitting (`bool`, *optional*, defaults to `False`):
+        Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
+    """
+
+    do_image_splitting: bool
+
+
+def get_resize_output_image_size(image, size, input_data_format) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
 
     Args:
         image (`np.ndarray`):
             Image to resize.
-        size (`Dict[str, int]`):
+        size (`dict[str, int]`):
             Size of the output image containing the keys "shortest_edge" and "longest_edge".
         input_data_format (`ChannelDimension` or `str`):
             The channel dimension format of the input image.
@@ -78,7 +88,7 @@ def get_resize_output_image_size(image, size, input_data_format) -> Tuple[int, i
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
+def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
     """
@@ -86,8 +96,8 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 
 def get_max_height_width(
-    images_list: List[List[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
-) -> List[int]:
+    images_list: list[list[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
+) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -105,7 +115,7 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -113,7 +123,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = get_image_size(image, channel_dim=input_data_format)
@@ -131,7 +141,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
         image (Image):
             The image to convert.
     """
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
@@ -168,11 +178,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. If set to `True`, the image is normalized to have a mean of `image_mean` and
             a standard deviation of `image_std`.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -181,22 +191,23 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             sample in the batch, such that the returned tensor is of shape (batch_size, max_num_images, num_channels, max_height, max_width).
         do_image_splitting (`bool`, *optional*, defaults to `False`):
             Whether to split the image into a sequence 4 equal sub-images concatenated with the original image. That
-            strategy was first introduced in https://arxiv.org/abs/2311.06607.
+            strategy was first introduced in https://huggingface.co/papers/2311.06607.
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask"]
+    valid_kwargs = Idefics2ImageProcessorKwargs
 
     def __init__(
         self,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: bool = True,
         do_image_splitting: bool = False,
         **kwargs,
@@ -217,7 +228,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -230,7 +241,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
@@ -255,7 +266,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     def _pad_image(
         self,
         image: np.ndarray,
-        output_size: Tuple[int, int],
+        output_size: tuple[int, int],
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -281,7 +292,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
     def pad(
         self,
-        images: List[np.ndarray],
+        images: list[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -302,10 +313,8 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -395,13 +404,13 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         do_image_splitting: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -418,7 +427,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                 Whether to convert the image to RGB.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
@@ -430,23 +439,21 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether or not to pad the images to the largest height and width in the batch.
             do_image_splitting (`bool`, *optional*, defaults to `self.do_image_splitting`):
                 Whether to split the image into a sequence 4 equal sub-images concatenated with the original image. That
-                strategy was first introduced in https://arxiv.org/abs/2311.06607.
+                strategy was first introduced in https://huggingface.co/papers/2311.06607.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -471,13 +478,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_image_splitting = do_image_splitting if do_image_splitting is not None else self.do_image_splitting
 
+        images = self.fetch_images(images)
         images_list = make_nested_list_of_images(images)
 
         if not valid_images(images_list[0]):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -495,8 +500,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        # Search for the first image in the image list.
+        # NOTE: we can't slice the first image with images_list[0][0] if the first batch contains no images. See #36682
+        first_image_in_list = [images for images in images_list if images][0][0]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(first_image_in_list):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -504,7 +512,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
+            input_data_format = infer_channel_dimension_format(first_image_in_list)
 
         if do_image_splitting:
             new_images_list = []

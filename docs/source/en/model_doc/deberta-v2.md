@@ -13,67 +13,110 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2021-02-19.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
+    </div>
+</div>
 
 # DeBERTa-v2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-</div>
+[DeBERTa-v2](https://huggingface.co/papers/2006.03654) improves on the original [DeBERTa](./deberta) architecture by using a SentencePiece-based tokenizer and a new vocabulary size of 128K. It also adds an additional convolutional layer within the first transformer layer to better learn local dependencies of input tokens. Finally, the position projection and content projection matrices are shared in the attention layer to reduce the number of parameters.
 
-## Overview
+You can find all the original [DeBERTa-v2] checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta-v2) organization.
 
-The DeBERTa model was proposed in [DeBERTa: Decoding-enhanced BERT with Disentangled Attention](https://arxiv.org/abs/2006.03654) by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen It is based on Google's
-BERT model released in 2018 and Facebook's RoBERTa model released in 2019.
+> [!TIP]
+> This model was contributed by [Pengcheng He](https://huggingface.co/DeBERTa).
+>
+> Click on the DeBERTa-v2 models in the right sidebar for more examples of how to apply DeBERTa-v2 to different language tasks.
 
-It builds on RoBERTa with disentangled attention and enhanced mask decoder training with half of the data used in
-RoBERTa.
+The example below demonstrates how to classify text with [`Pipeline`] or the [`AutoModel`] class.
 
-The abstract from the paper is the following:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-*Recent progress in pre-trained neural language models has significantly improved the performance of many natural
-language processing (NLP) tasks. In this paper we propose a new model architecture DeBERTa (Decoding-enhanced BERT with
-disentangled attention) that improves the BERT and RoBERTa models using two novel techniques. The first is the
-disentangled attention mechanism, where each word is represented using two vectors that encode its content and
-position, respectively, and the attention weights among words are computed using disentangled matrices on their
-contents and relative positions. Second, an enhanced mask decoder is used to replace the output softmax layer to
-predict the masked tokens for model pretraining. We show that these two techniques significantly improve the efficiency
-of model pretraining and performance of downstream tasks. Compared to RoBERTa-Large, a DeBERTa model trained on half of
-the training data performs consistently better on a wide range of NLP tasks, achieving improvements on MNLI by +0.9%
-(90.2% vs. 91.1%), on SQuAD v2.0 by +2.3% (88.4% vs. 90.7%) and RACE by +3.6% (83.2% vs. 86.8%). The DeBERTa code and
-pre-trained models will be made publicly available at https://github.com/microsoft/DeBERTa.*
+```py
+import torch
+from transformers import pipeline
 
+pipeline = pipeline(
+    task="text-classification",
+    model="microsoft/deberta-v2-xlarge-mnli",
+    device=0,
+    dtype=torch.float16
+)
+result = pipeline("DeBERTa-v2 is great at understanding context!")
+print(result)
+```
 
-The following information is visible directly on the [original implementation
-repository](https://github.com/microsoft/DeBERTa). DeBERTa v2 is the second version of the DeBERTa model. It includes
-the 1.5B model used for the SuperGLUE single-model submission and achieving 89.9, versus human baseline 89.8. You can
-find more details about this submission in the authors'
-[blog](https://www.microsoft.com/en-us/research/blog/microsoft-deberta-surpasses-human-performance-on-the-superglue-benchmark/)
+</hfoption>
+<hfoption id="AutoModel">
 
-New in v2:
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-- **Vocabulary** In v2 the tokenizer is changed to use a new vocabulary of size 128K built from the training data.
-  Instead of a GPT2-based tokenizer, the tokenizer is now
-  [sentencepiece-based](https://github.com/google/sentencepiece) tokenizer.
-- **nGiE(nGram Induced Input Encoding)** The DeBERTa-v2 model uses an additional convolution layer aside with the first
-  transformer layer to better learn the local dependency of input tokens.
-- **Sharing position projection matrix with content projection matrix in attention layer** Based on previous
-  experiments, this can save parameters without affecting the performance.
-- **Apply bucket to encode relative positions** The DeBERTa-v2 model uses log bucket to encode relative positions
-  similar to T5.
-- **900M model & 1.5B model** Two additional model sizes are available: 900M and 1.5B, which significantly improves the
-  performance of downstream tasks.
+tokenizer = AutoTokenizer.from_pretrained(
+    "microsoft/deberta-v2-xlarge-mnli"
+)
+model = AutoModelForSequenceClassification.from_pretrained(
+    "microsoft/deberta-v2-xlarge-mnli",
+    dtype=torch.float16,
+    device_map="auto"
+)
 
-This model was contributed by [DeBERTa](https://huggingface.co/DeBERTa). This model TF 2.0 implementation was
-contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/microsoft/DeBERTa).
+inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to(model.device)
+outputs = model(**inputs)
 
-## Resources
+logits = outputs.logits
+predicted_class_id = logits.argmax().item()
+predicted_label = model.config.id2label[predicted_class_id]
+print(f"Predicted label: {predicted_label}")
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+```
+
+</hfoption>
+
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "DeBERTa-v2 is great at understanding context!" | transformers run --task fill-mask --model microsoft/deberta-v2-xlarge-mnli --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes quantization](../quantization/bitsandbytes) to only quantize the weights to 4-bit.
+
+```py
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
+
+model_id = "microsoft/deberta-v2-xlarge-mnli"
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype="float16",
+    bnb_4bit_use_double_quant=True,
+)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForSequenceClassification.from_pretrained(
+    model_id,
+    quantization_config=quantization_config,
+    dtype="float16"
+)
+
+inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to(model.device)
+outputs = model(**inputs)
+logits = outputs.logits
+predicted_class_id = logits.argmax().item()
+predicted_label = model.config.id2label[predicted_class_id]
+print(f"Predicted label: {predicted_label}")
+
+```
 
 ## DebertaV2Config
 
@@ -92,9 +135,6 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
 [[autodoc]] DebertaV2TokenizerFast
     - build_inputs_with_special_tokens
     - create_token_type_ids_from_sequences
-
-<frameworkcontent>
-<pt>
 
 ## DebertaV2Model
 
@@ -130,44 +170,3 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
 
 [[autodoc]] DebertaV2ForMultipleChoice
     - forward
-
-</pt>
-<tf>
-
-## TFDebertaV2Model
-
-[[autodoc]] TFDebertaV2Model
-    - call
-
-## TFDebertaV2PreTrainedModel
-
-[[autodoc]] TFDebertaV2PreTrainedModel
-    - call
-
-## TFDebertaV2ForMaskedLM
-
-[[autodoc]] TFDebertaV2ForMaskedLM
-    - call
-
-## TFDebertaV2ForSequenceClassification
-
-[[autodoc]] TFDebertaV2ForSequenceClassification
-    - call
-
-## TFDebertaV2ForTokenClassification
-
-[[autodoc]] TFDebertaV2ForTokenClassification
-    - call
-
-## TFDebertaV2ForQuestionAnswering
-
-[[autodoc]] TFDebertaV2ForQuestionAnswering
-    - call
-
-## TFDebertaV2ForMultipleChoice
-
-[[autodoc]] TFDebertaV2ForMultipleChoice
-    - call
-
-</tf>
-</frameworkcontent>

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,12 +20,13 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from huggingface_hub import HfFolder, Repository
+from huggingface_hub import snapshot_download, upload_folder
 
 import transformers
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
+    MODEL_FOR_AUDIO_TOKENIZATION_MAPPING,
     PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoConfig,
@@ -34,14 +34,21 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     BertTokenizer,
+    LlamaTokenizer,
+    LlavaProcessor,
     ProcessorMixin,
+    SiglipImageProcessor,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
 )
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
-from transformers.utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, is_tokenizers_available
+from transformers.utils import (
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    is_tokenizers_available,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -53,6 +60,7 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
 
 SAMPLE_PROCESSOR_CONFIG = get_tests_dir("fixtures/dummy_feature_extractor_config.json")
+SAMPLE_VOCAB_LLAMA = get_tests_dir("fixtures/test_sentencepiece.model")
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
 SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
 
@@ -107,38 +115,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                     json.dump(config_dict, fp)
 
             # drop `processor_class` in tokenizer config
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "r") as f:
-                config_dict = json.load(f)
-                config_dict.pop("processor_class")
-
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "w") as f:
-                f.write(json.dumps(config_dict))
-
-            processor = AutoProcessor.from_pretrained(tmpdirname)
-
-        self.assertIsInstance(processor, Wav2Vec2Processor)
-
-    def test_processor_from_feat_extr_processor_class(self):
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            feature_extractor = Wav2Vec2FeatureExtractor()
-            tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
-
-            processor = Wav2Vec2Processor(feature_extractor, tokenizer)
-
-            # save in new folder
-            processor.save_pretrained(tmpdirname)
-
-            if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
-                # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "r") as f:
-                    config_dict = json.load(f)
-                    config_dict.pop("processor_class")
-
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
-                    f.write(json.dumps(config_dict))
-
-            # drop `processor_class` in tokenizer
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "r") as f:
+            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
 
@@ -159,21 +136,11 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # save in new folder
             processor.save_pretrained(tmpdirname)
 
-            if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
-                # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "r") as f:
-                    config_dict = json.load(f)
-                    config_dict.pop("processor_class")
-
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
-                    f.write(json.dumps(config_dict))
-
-            # drop `processor_class` in feature extractor
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "r") as f:
+            # drop `processor_class` in processor
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
-
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
                 f.write(json.dumps(config_dict))
 
             processor = AutoProcessor.from_pretrained(tmpdirname)
@@ -262,6 +229,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_conflict(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -314,6 +283,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_with_extra_attributes(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -353,6 +324,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_dynamic_processor_with_specific_dynamic_subcomponents(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -387,6 +360,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_auto_processor_creates_tokenizer(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -396,6 +371,13 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
         self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
 
+    def test_auto_processor_save_load(self):
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+            second_processor = AutoProcessor.from_pretrained(tmp_dir)
+            self.assertEqual(second_processor.__class__.__name__, processor.__class__.__name__)
+
 
 @is_staging_test
 class ProcessorPushToHubTester(unittest.TestCase):
@@ -404,7 +386,6 @@ class ProcessorPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub_via_save_pretrained(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
@@ -452,7 +433,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
             processor = CustomProcessor(feature_extractor, tokenizer)
 
             with tempfile.TemporaryDirectory() as tmp_dir:
-                repo = Repository(tmp_dir, clone_from=tmp_repo, token=self._token)
+                snapshot_download(tmp_repo.repo_id, token=self._token)
                 processor.save_pretrained(tmp_dir)
 
                 # This has added the proper auto_map field to the feature extractor config
@@ -480,8 +461,34 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py")))
                 self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_processing.py")))
 
-                repo.push_to_hub()
+                upload_folder(repo_id=tmp_repo.repo_id, folder_path=tmp_dir, token=self._token)
 
                 new_processor = AutoProcessor.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
                 # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
                 self.assertEqual(new_processor.__class__.__name__, "CustomProcessor")
+
+    def test_push_to_hub_with_chat_templates(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer = LlamaTokenizer(SAMPLE_VOCAB_LLAMA, keep_accents=True)
+            image_processor = SiglipImageProcessor()
+            chat_template = "default dummy template for testing purposes only"
+            processor = LlavaProcessor(
+                tokenizer=tokenizer, image_processor=image_processor, chat_template=chat_template
+            )
+            self.assertEqual(processor.chat_template, chat_template)
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, token=self._token, push_to_hub=True)
+                reloaded_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+                # When we save as single files, tokenizers and processors share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
+
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                processor.chat_template = {"default": "a", "secondary": "b"}
+                processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, token=self._token, push_to_hub=True)
+                reloaded_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+                # When we save as single files, tokenizers and processors share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)

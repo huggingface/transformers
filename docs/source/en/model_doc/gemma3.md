@@ -14,6 +14,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-03-25 and added to Hugging Face Transformers on 2025-03-12.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -24,11 +25,11 @@ rendered properly in your Markdown viewer.
 
 # Gemma 3
 
-[Gemma 3](https://goo.gle/Gemma3Report) is a multimodal model with pretrained and instruction-tuned variants, available in 1B, 13B, and 27B parameters. The architecture is mostly the same as the previous Gemma versions. The key differences are alternating 5 local sliding window self-attention layers for every global self-attention layer, support for a longer context length of 128K tokens, and a [SigLip](./siglip) encoder that can "pan & scan" high-resolution images to prevent information from disappearing in high resolution images or images with non-square aspect ratios.
+[Gemma 3](https://huggingface.co/papers/2503.19786) is a multimodal model with pretrained and instruction-tuned variants, available in 1B, 13B, and 27B parameters. The architecture is mostly the same as the previous Gemma versions. The key differences are alternating 5 local sliding window self-attention layers for every global self-attention layer, support for a longer context length of 128K tokens, and a [SigLip](./siglip) encoder that can "pan & scan" high-resolution images to prevent information from disappearing in high resolution images or images with non-square aspect ratios.
 
 The instruction-tuned variant was post-trained with knowledge distillation and reinforcement learning.
 
-You can find all the original Gemma 3 checkpoints under the [Gemma 3](https://huggingface.co/collections/meta-llama/llama-2-family-661da1f90a9d678b6f55773b) release.
+You can find all the original Gemma 3 checkpoints under the [Gemma 3](https://huggingface.co/collections/google/gemma-3-release-67c6c6f89c4f76621268bb6d) release.
 
 > [!TIP]
 > Click on the Gemma 3 models in the right sidebar for more examples of how to apply Gemma to different vision and language tasks.
@@ -46,7 +47,7 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3-4b-pt",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -63,7 +64,7 @@ from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
 model = Gemma3ForConditionalGeneration.from_pretrained(
     "google/gemma-3-4b-it",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -92,17 +93,17 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model google/gemma-3-1b-pt --device 0
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model google/gemma-3-1b-pt --device 0
 ```
 
 </hfoption>
@@ -120,7 +121,7 @@ from transformers import TorchAoConfig, Gemma3ForConditionalGeneration, AutoProc
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Gemma3ForConditionalGeneration.from_pretrained(
     "google/gemma-3-27b-it",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -149,7 +150,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -194,6 +195,7 @@ visualizer("<img>What is shown in this image?")
         },
     ]
     ```
+
 - Text passed to the processor should have a `<start_of_image>` token wherever an image should be inserted.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 - By default, images aren't cropped and only the base image is forwarded to the model. In high resolution images or images with non-square aspect ratios, artifacts can result because the vision encoder uses a fixed resolution of 896x896. To prevent these artifacts and improve performance during inference, set `do_pan_and_scan=True` to crop the image into multiple smaller patches and concatenate them with the base image embedding. You can disable pan and scan for faster inference.
@@ -206,8 +208,9 @@ visualizer("<img>What is shown in this image?")
         return_tensors="pt",
         add_generation_prompt=True,
     +   do_pan_and_scan=True,
-        ).to("cuda")
+        ).to(model.device)
     ```
+
 - For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
 
     ```py
@@ -219,11 +222,11 @@ visualizer("<img>What is shown in this image?")
     )
     model = AutoModelForCausalLM.from_pretrained(
         "google/gemma-3-1b-pt",
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         device_map="auto",
         attn_implementation="sdpa"
     )
-    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
     output = model.generate(**input_ids, cache_implementation="static")
     print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -254,6 +257,10 @@ visualizer("<img>What is shown in this image?")
 [[autodoc]] Gemma3TextModel
     - forward
 
+## Gemma3Model
+
+[[autodoc]] Gemma3Model
+
 ## Gemma3ForCausalLM
 
 [[autodoc]] Gemma3ForCausalLM
@@ -262,4 +269,14 @@ visualizer("<img>What is shown in this image?")
 ## Gemma3ForConditionalGeneration
 
 [[autodoc]] Gemma3ForConditionalGeneration
+    - forward
+
+## Gemma3ForSequenceClassification
+
+[[autodoc]] Gemma3ForSequenceClassification
+    - forward
+
+## Gemma3TextForSequenceClassification
+
+[[autodoc]] Gemma3TextForSequenceClassification
     - forward

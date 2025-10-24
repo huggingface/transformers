@@ -651,7 +651,7 @@ class SymmetricQuantFunction(Function):
         Returns:
             `torch.Tensor`: Symmetric-quantized value of *input*.
         """
-        zero_point = torch.tensor(0.0).to(scale.device)
+        zero_point = torch.tensor(0.0, device=scale.device)
 
         n = 2 ** (k - 1) - 1
         new_quant_x = linear_quantize(x, scale, zero_point, inplace=False)
@@ -723,7 +723,7 @@ def batch_frexp(inputs, max_bit=31):
     tmp_m = []
     for m in output_m:
         int_m_shifted = int(
-            decimal.Decimal(m * (2**max_bit)).quantize(decimal.Decimal("1"), rounding=decimal.ROUND_HALF_UP)
+            decimal.Decimal(m * (2**max_bit)).quantize(decimal.Decimal(1), rounding=decimal.ROUND_HALF_UP)
         )
         tmp_m.append(int_m_shifted)
     output_m = np.array(tmp_m)
