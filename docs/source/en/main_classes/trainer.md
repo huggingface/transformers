@@ -37,6 +37,40 @@ when used with other models. When using it with your own model, make sure:
 [[autodoc]] Trainer
     - all
 
+### Using a Custom Loss Function
+
+By default, the `Trainer` uses the model's internal loss computation (if `labels` are provided). If you need to implement your own loss logic (e.g., for label smoothing, a special contrastive loss, etc.), the most robust method is to subclass `Trainer` and override the `compute_loss` method.
+
+Here is an example of a trainer that implements a custom Cross-Entropy loss with label smoothing:
+
+```python
+from transformers import Trainer
+from torch import nn
+
+class CustomLossTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # 1. Extract labels from the inputs dictionary
+        labels = inputs.pop("labels")
+        
+        # 2. Get the standard model outputs (which will contain the logits)
+        outputs = model(**inputs)
+        logits = outputs.get("logits")
+        
+        # 3. Define your custom loss function
+        # In this example, we use CrossEntropyLoss with label smoothing
+        loss_fct = nn.CrossEntropyLoss(label_smoothing=0.1)
+        
+        # 4. Compute the loss
+        loss = loss_fct(logits.view(-1, self.model.config.vocab_size), labels.view(-1))
+        
+        return (loss, outputs) if return_outputs else loss
+
+# You would then instantiate and use this trainer as usual
+# trainer = CustomLossTrainer(...)
+# trainer.train()
+```
+This approach cleanly separates your custom training logic from the model's architecture.
+
 ## Seq2SeqTrainer
 
 [[autodoc]] Seq2SeqTrainer
