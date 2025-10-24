@@ -794,10 +794,12 @@ class ProcessorMixin(PushToHubMixin):
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
 
-            # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
-            if attribute_name == "tokenizer":
-                # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
-                attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
+            # if attribute is tokenizer, then save it in its own file for avoid overwriting
+            if hasattr(attribute, "save_pretrained"):
+                # use the attribute_name as prefix to create a unique file
+                attribute_save_dir = os.path.join(save_directory, attribute_name)
+                os.makedirs(attribute_save_dir, exist_ok=True)
+                attribute.save_pretrained(attribute_save_dir, save_jinja_files=save_jinja_files)
             elif attribute._auto_class is not None:
                 custom_object_save(attribute, save_directory, config=attribute)
 
@@ -1450,7 +1452,14 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+            # updated loading path for handling multiple tokenizers 
+            attribute_path = os.path.join(pretrained_model_name_or_path, attribute_name)
+            if os.path.isdir(attribute_path):
+                # load from its attribute's-specific folder
+                args.append(attribute_class.from_pretrained(attribute_path, **kwargs))
+            else:
+                # now fallback to original path
+                args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
 
         return args
 
