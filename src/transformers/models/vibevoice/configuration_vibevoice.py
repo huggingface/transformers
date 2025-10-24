@@ -30,9 +30,10 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=768,
-        head_layers=4,
-        head_ffn_ratio=3.0,
+        num_head_layers=4,
+        head_ffn_ratio=3,
         rms_norm_eps=1e-5,
+        # TODO (ebezzam) `latent_size` same as `acoustic_tokenizer_config.hidden_size`
         latent_size=64,
         prediction_type="v_prediction",
         ddpm_num_steps=1000,
@@ -43,7 +44,7 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
         **kwargs
     ):
         self.hidden_size = hidden_size
-        self.head_layers = head_layers
+        self.num_head_layers = num_head_layers
         self.head_ffn_ratio = head_ffn_ratio
         self.rms_norm_eps = rms_norm_eps
         self.latent_size = latent_size
@@ -133,12 +134,17 @@ class VibeVoiceConfig(PretrainedConfig):
             # If an instance of the config class is provided
             self.diffusion_head_config = diffusion_head_config
 
-        # other parameters
-        self.acoustic_vae_dim = getattr(self.acoustic_tokenizer_config, 'vae_dim', 64)
-        self.semantic_vae_dim = getattr(self.semantic_tokenizer_config, 'vae_dim', 128)
-        self.num_hidden_layers = self.decoder_config.num_hidden_layers
-
+        # TODO (ebezzam) move to top?
         super().__init__(**kwargs)
+
+    @property
+    def acoustic_hidden_size(self) -> int:
+        return self.acoustic_tokenizer_config.hidden_size
+    
+    @property
+    def semantic_hidden_size(self) -> int:
+        return self.semantic_tokenizer_config.hidden_size
+
 
 __all__ = [
     "VibeVoiceDiffusionHeadConfig",

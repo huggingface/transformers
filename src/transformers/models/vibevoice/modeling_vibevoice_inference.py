@@ -651,7 +651,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
     def sample_speech_tokens(self, condition, neg_condition, cfg_scale=3.0):
         self.model.noise_scheduler.set_timesteps(self.ddpm_inference_steps)
         condition = torch.cat([condition, neg_condition], dim=0).to(self.model.prediction_head.device)
-        speech = torch.randn(condition.shape[0], self.config.acoustic_vae_dim).to(condition)
+        speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
         for t in self.model.noise_scheduler.timesteps:
             half = speech[: len(speech) // 2]
             combined = torch.cat([half, half], dim=0)

@@ -100,24 +100,18 @@ class TimestepEmbedder(nn.Module):
 
 
 class FeedForwardNetwork(nn.Module):
-    """
-    Standard feed-forward network with SwiGLU activation.
-    
-    Args:
-        embed_dim (`int`): Input dimension
-        ffn_dim (`int`): Hidden dimension
-    """
     def __init__(
         self,
         embed_dim,
         ffn_dim,
+        hidden_act="silu",
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.gate_proj = nn.Linear(self.embed_dim, ffn_dim, bias=False)
         self.up_proj = nn.Linear(self.embed_dim, ffn_dim, bias=False)
         self.down_proj = nn.Linear(ffn_dim, self.embed_dim, bias=False)
-        self.act_fn = ACT2FN['silu']  # Using SiLU as the activation function
+        self.act_fn = ACT2FN[hidden_act]  # Using SiLU as the activation function
 
     def forward(self, x):
         gate = self.gate_proj(x)
@@ -126,58 +120,37 @@ class FeedForwardNetwork(nn.Module):
         return self.down_proj(gate * up)
 
 
+# TODO (ebezzam) very similar to FFN layer in llama, use via modular
+# TODO (ebzzam) Qwen 2.5 Omni has mode similar, but hardcoded fnn ratio: https://github.com/huggingface/transformers/blob/82451cbb30fde5ede89308ea2328f89c61d5a831/src/transformers/models/qwen2_5_omni/modeling_qwen2_5_omni.py#L2927
 class HeadLayer(nn.Module):
-    """
-    A layer in the diffusion head.
-    
-    Args:
-        embed_dim (`int`): Input dimension
-        ffn_dim (`int`): Hidden dimension
-        cond_dim (`int`): Condition embedding dimension
-        norm_eps (`float`, optional): Epsilon for normalization
-    """
-    def __init__(
-        self,
-        embed_dim,
-        ffn_dim,
-        cond_dim,
-        norm_eps=1e-5,
-    ):
+    def __init__(self, config):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.ffn_dim = ffn_dim
+        self.ffn_ratio = config.head_ffn_ratio
+        ffn_dim = config.hidden_size * config.head_ffn_ratio
         self.ffn = FeedForwardNetwork(
-            self.embed_dim,
-            self.ffn_dim,
+            config.hidden_size,
+            ffn_dim,
+            hidden_act=config.hidden_act
         )
-        self.norm = RMSNorm(self.embed_dim, eps=norm_eps)
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.adaLN_modulation = nn.Sequential(
-            ACT2FN['silu'],
-            nn.Linear(cond_dim, 3 * self.embed_dim, bias=False)
+            ACT2FN[config.hidden_act],
+            nn.Linear(config.hidden_size, ffn_dim, bias=False)
         )
 
     def forward(self, x, c):
-        shift_ffn, scale_ffn, gate_ffn = self.adaLN_modulation(c).chunk(3, dim=-1)
+        shift_ffn, scale_ffn, gate_ffn = self.adaLN_modulation(c).chunk(self.ffn_ratio, dim=-1)
         x = x + gate_ffn * self.ffn(modulate(self.norm(x), shift_ffn, scale_ffn))
         return x
 
 
 class FinalLayer(nn.Module):
-    """
-    Final layer in the diffusion head.
-    
-    Args:
-        hidden_size (`int`): Input dimension
-        output_size (`int`): Output dimension
-        cond_size (`int`): Condition embedding dimension
-        norm_eps (`float`, optional): Epsilon for normalization
-    """
-    def __init__(self, hidden_size, output_size, cond_size, norm_eps=1e-5):
+    def __init__(self, hidden_size, output_size, cond_size, norm_eps=1e-5, hidden_act="silu"):
         super().__init__()
         self.norm_final = RMSNorm(hidden_size, eps=norm_eps, elementwise_affine=False)
         self.linear = nn.Linear(hidden_size, output_size, bias=False)
         self.adaLN_modulation = nn.Sequential(
-            ACT2FN['silu'],
+            ACT2FN[hidden_act],
             nn.Linear(cond_size, 2 * hidden_size, bias=False)
         )
 
@@ -207,25 +180,13 @@ class VibeVoiceDiffusionHead(PreTrainedModel):
         self.noisy_images_proj = nn.Linear(config.latent_size, config.hidden_size, bias=False)
         self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.timestep_embedder = TimestepEmbedder(config)
-        ffn_dim = int(config.hidden_size * config.head_ffn_ratio)
-
-        # Create the intermediate layers
-        self.layers = nn.ModuleList([
-            HeadLayer(
-                embed_dim=config.hidden_size,
-                ffn_dim=ffn_dim,
-                cond_dim=config.hidden_size,
-                norm_eps=config.rms_norm_eps
-            )
-            for _ in range(config.head_layers)
-        ])
-
-        # Final layer for output
+        self.layers = nn.ModuleList([HeadLayer(config) for _ in range(config.num_head_layers)])
         self.final_layer = FinalLayer(
             hidden_size=config.hidden_size,
             output_size=config.latent_size,
             cond_size=config.hidden_size,
-            norm_eps=config.rms_norm_eps
+            norm_eps=config.rms_norm_eps,
+            hidden_act=config.hidden_act
         )
 
         self.initialize_weights()
@@ -345,8 +306,8 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config).to(dtype).eval()
         self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config).to(dtype).eval()
 
-        self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_vae_dim, lm_config.hidden_size).to(dtype)
-        self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_vae_dim, lm_config.hidden_size).to(dtype)
+        self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_hidden_size, lm_config.hidden_size).to(dtype)
+        self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_hidden_size, lm_config.hidden_size).to(dtype)
 
         # Register scaling factors as buffers - use 1D tensors for FSDP compatibility
         self.register_buffer('speech_scaling_factor', torch.tensor(float('nan')))
