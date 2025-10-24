@@ -18,6 +18,16 @@ logger = logging.getLogger(__name__)
 class BenchmarkConfig:
     """Configuration for a single benchmark scenario."""
 
+    all_attn_implementations = [
+        ("flash_attention_2", None),
+        ("eager", None),
+        ("sdpa", "math"),
+        ("sdpa", "flash_attention"),
+        ("flex_attention", None),
+    ]
+
+    all_compiled_modes = [None, "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"]
+
     def __init__(
         self,
         warmup_iterations: int = 5,
@@ -161,34 +171,6 @@ def cross_generate_configs(
                 )
                 configs.append(config)
     return configs
-
-
-def generate_all_configs(
-    warmup_iterations: int = 5,
-    measurement_iterations: int = 20,
-    batch_size: int = 1,
-    sequence_length: int = 128,
-    num_tokens_to_generate: int = 128,
-    gpu_monitoring: bool = True,
-) -> list[BenchmarkConfig]:
-    all_attn_implementations = [
-        ("flash_attention_2", None),
-        ("eager", None),
-        ("sdpa", "math"),
-        ("sdpa", "flash_attention"),
-        ("flex_attention", None),
-    ]
-    return cross_generate_configs(
-        attn_impl_and_sdpa_backend=all_attn_implementations,
-        compiled_mode=[None, "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
-        kernelized=[False, KERNELIZATION_AVAILABLE],
-        warmup_iterations=warmup_iterations,
-        measurement_iterations=measurement_iterations,
-        batch_size=batch_size,
-        sequence_length=sequence_length,
-        num_tokens_to_generate=num_tokens_to_generate,
-        gpu_monitoring=gpu_monitoring,
-    )
 
 
 def generate_main_configs(
