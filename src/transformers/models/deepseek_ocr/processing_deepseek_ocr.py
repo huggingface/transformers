@@ -59,6 +59,9 @@ class DeepseekOcrProcessor(ProcessorMixin):
         **kwargs,
     ):
         self.image_token = image_token
+        # TODO this should not be here and handled in conversion script instead
+        if "chat_template" not in kwargs and getattr(tokenizer, "chat_template", None) is not None:
+            kwargs["chat_template"] = tokenizer.chat_template
         super().__init__(image_processor, tokenizer, **kwargs)
 
     def __call__(
@@ -122,23 +125,22 @@ class DeepseekOcrProcessor(ProcessorMixin):
         else:
             batch_size = input_ids.size(0)
 
-        image_attention_mask = torch.zeros_like(input_ids, dtype=torch.bool)
-
-        for batch_idx in range(batch_size):
-            if isinstance(input_ids, list):
-                ids = input_ids[batch_idx]
-            else:
-                ids = input_ids[batch_idx]
-
-            image_positions = (ids == image_token_id).nonzero(as_tuple=True)[0]
-
-            for pos in image_positions:
-                image_attention_mask[batch_idx, pos] = True
+        if isinstance(input_ids, list):
+            image_attention_mask: list[list[bool]] = []
+            for ids in input_ids:
+                mask = [token == image_token_id for token in ids]
+                image_attention_mask.append(mask)
+        else:
+            image_attention_mask = torch.zeros_like(input_ids, dtype=torch.bool)
+            for batch_idx in range(batch_size):
+                image_positions = (input_ids[batch_idx] == image_token_id).nonzero(as_tuple=True)[0]
+                image_attention_mask[batch_idx, image_positions] = True
 
         data = {
             **text_inputs,
             **image_inputs,
             "image_attention_mask": image_attention_mask,
+            "num_img_tokens": num_img_tokens,
         }
 
         return BatchFeature(data=data, tensor_type=return_tensors)

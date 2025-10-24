@@ -20,7 +20,6 @@
 
 import collections
 import math
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -48,7 +47,6 @@ from .configuration_deepseek_ocr import (
     DeepseekOcrCLIPVisionConfig,
     DeepseekOcrConfig,
     DeepseekOcrTextConfig,
-    DeepseekOcrTextStandardConfig,
     DeepseekOcrVisionConfig,
 )
 
@@ -664,8 +662,9 @@ class DeepseekOcrVisionEmbeddings(nn.Module):
         if patch_embeds is None:
             patch_embeds = self.patch_embedding(pixel_values)
         if patch_embeds.dim() == 4:
-            patch_embeds = patch_embeds.permute(0, 2, 3, 1)
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+            patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+        else:
+            patch_embeds = patch_embeds
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         if interpolate_pos_encoding:
@@ -839,7 +838,7 @@ class DeepseekOcrCLIPEncoder(nn.Module):
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,  # TODO get rid of this when we're done with the fwd pass
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -1042,10 +1041,10 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class DeepseekOcrTextStandardAttention(nn.Module):
+class DeepseekOcrTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: DeepseekOcrTextStandardConfig, layer_idx: int):
+    def __init__(self, config: DeepseekOcrTextConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -1210,175 +1209,17 @@ class DeepseekOcrTextMoe(nn.Module):
         return hidden_states
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class DeepseekOcrTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        DeepseekOcrTextRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-
-    # Broadcast to [1, 1, seq_len, dim // 2]
-    freqs_cis = freqs_cis.unsqueeze(1).to(xq_.device)
-
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3).type_as(xq)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3).type_as(xk)
-    return xq_out, xk_out
-
-
-class DeepseekOcrTextAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config: DeepseekOcrTextConfig, layer_idx: Optional[int] = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = config.head_dim
-        self.max_position_embeddings = config.max_position_embeddings
-
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-
-        self.is_causal = True
-
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = DeepseekOcrTextRMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-
-        self.kv_a_proj_with_mqa = nn.Linear(
-            self.hidden_size,
-            config.kv_lora_rank + config.qk_rope_head_dim,
-            bias=config.attention_bias,
-        )
-        self.kv_a_layernorm = DeepseekOcrTextRMSNorm(config.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            config.kv_lora_rank,
-            self.num_heads * (self.qk_head_dim - self.qk_rope_head_dim + self.v_head_dim),
-            bias=False,
-        )
-
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            self.hidden_size,
-            bias=config.attention_bias,
-        )
-
-        self.scaling = self.qk_head_dim ** (-0.5)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-        batch_size, seq_length = hidden_states.shape[:-1]
-        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-
-        if self.q_lora_rank is None:
-            q = self.q_proj(hidden_states)
-        else:
-            q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q = q.view(query_shape).transpose(1, 2)
-        q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-
-        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_nope = self.kv_b_proj(self.kv_a_layernorm(k_nope)).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-        q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
-
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        query_states = torch.cat((q_nope, q_pe), dim=-1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
-
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
 class DeepseekOcrTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
-
-        self.self_attn = DeepseekOcrTextAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = DeepseekOcrTextAttention(config, layer_idx)
         self.mlp = (
             DeepseekOcrTextMoe(config) if layer_idx >= config.first_k_dense_replace else DeepseekOcrTextMLP(config)
         )
 
         self.input_layernorm = DeepseekOcrTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekOcrTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        if not config.use_mla:
-            self.self_attn = DeepseekOcrTextStandardAttention(config, layer_idx)
 
     def forward(
         self,
@@ -1466,16 +1307,38 @@ class DeepseekOcrTextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
-            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
-            freqs_cis = freqs_cis * self.attention_scaling
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
-        return freqs_cis
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class DeepseekOcrTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        DeepseekOcrTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 @auto_docstring
@@ -1503,22 +1366,38 @@ class DeepseekOcrTextPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
+    config: DeepseekOcrTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["DeepseekOcrTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = False
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": DeepseekOcrTextDecoderLayer,
+        "attentions": DeepseekOcrTextAttention,
+    }
+
     def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+
         self.layers = nn.ModuleList(
             [DeepseekOcrTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = DeepseekOcrTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekOcrTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        if not config.use_mla:
-            self.layers = nn.ModuleList(
-                [DeepseekOcrTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-            )
+
+        for module in self.layers:
+            if isinstance(module.mlp, DeepseekOcrTextMoe):
+                module.mlp.gate.weight.data.normal_(mean=0.0, std=config.initializer_range)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1613,43 +1492,6 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
 
     height, width = select_best_resolution(image_size, grid_pinpoints)
     return height // patch_size, width // patch_size
-
-
-def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
-    """
-    Calculate the number of patches after the preprocessing for images of any resolution.
-
-    Args:
-        image_size (`torch.LongTensor` or `np.ndarray` or `tuple[int, int]`):
-            The size of the input image in the format (height, width). ?
-        grid_pinpoints (`List`):
-            A list containing possible resolutions. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
-        patch_size (`int`):
-            The size of each image patch.
-
-    Returns:
-        int: the number of patches
-    """
-    if not isinstance(grid_pinpoints, list):
-        raise TypeError("grid_pinpoints should be a list of tuples or lists")
-
-    # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
-    if not isinstance(image_size, (list, tuple)):
-        if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise TypeError(f"image_size invalid type {type(image_size)} with value {image_size}")
-        image_size = image_size.tolist()
-
-    best_resolution = select_best_resolution(image_size, grid_pinpoints)
-    height, width = best_resolution
-    num_patches = 0
-    # consider change to ceil(height/patch_size)*ceil(width/patch_size) + 1
-    for i in range(0, height, patch_size):
-        for j in range(0, width, patch_size):
-            num_patches += 1
-    # add the base patch
-    num_patches += 1
-    return num_patches
 
 
 def unpad_image(tensor, original_size):
@@ -1827,15 +1669,12 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
             image_features (list[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
-        patch = self.config.vision_config.patch_size
-        image_num_patches = [
-            image_size_to_num_patches(imsize, self.config.image_grid_pinpoints, patch) for imsize in image_sizes
-        ]
-
         if pixel_values.dim() == 5:
-            per_img = [pv[:n] for pv, n in zip(pixel_values, image_num_patches)]
-            pixel_values = torch.cat(per_img, dim=0)
-        elif pixel_values.dim() != 4:
+            image_num_patches = [pv.shape[0] for pv in pixel_values]
+            pixel_values = pixel_values.view(-1, *pixel_values.shape[2:])
+        elif pixel_values.dim() == 4:
+            image_num_patches = [pixel_values.shape[0]]
+        else:
             raise ValueError(f"pixel_values has shape {pixel_values.shape}, expected 4D or 5D")
 
         sam_features = self.sam_model(pixel_values)
@@ -1905,7 +1744,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
         r"""
@@ -1919,16 +1757,33 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         image_sizes = kwargs.pop("image_sizes", None)
+        image_attention_mask = kwargs.pop("image_attention_mask", None)
+        num_img_tokens = kwargs.pop("num_img_tokens", None)
         if image_sizes is None and image_spatial_crop is not None:
             image_sizes = image_spatial_crop
 
         image_hidden_states = None
-        if pixel_values is not None and torch.sum(pixel_values[0, 1]).item() != 0:
+        if pixel_values is not None and pixel_values.abs().sum().item() != 0:
             if image_sizes is None:
                 raise ValueError("image_sizes must be provided when pixel_values are passed to the model.")
             image_hidden_states = self.get_image_features(pixel_values, image_sizes)
 
-            special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index)
+            if image_attention_mask is not None:
+                special_image_mask = image_attention_mask.to(inputs_embeds.device)
+                if num_img_tokens is not None:
+                    num_img_tokens = torch.as_tensor(
+                        num_img_tokens, device=special_image_mask.device, dtype=torch.long
+                    )
+                    mask = torch.zeros_like(special_image_mask)
+                    for batch_idx, n_tokens in enumerate(num_img_tokens.tolist()):
+                        if n_tokens == 0:
+                            continue
+                        token_positions = special_image_mask[batch_idx].nonzero(as_tuple=True)[0][:n_tokens]
+                        mask[batch_idx, token_positions] = True
+                    special_image_mask = mask
+                special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds)
+            else:
+                special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index)
             inputs_embeds = inputs_embeds.masked_scatter(
                 special_image_mask, image_hidden_states.to(inputs_embeds.dtype)
             )
@@ -2124,13 +1979,14 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
         inputs_embeds=None,
         pixel_values=None,
         image_sizes=None,
+        image_attention_mask=None,
+        image_spatial_crop=None,
+        num_img_tokens=None,
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
         **kwargs,
     ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -2141,11 +1997,15 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_sizes"] = image_sizes
+            if image_attention_mask is not None:
+                model_inputs["image_attention_mask"] = image_attention_mask
+            if image_spatial_crop is not None:
+                model_inputs["image_spatial_crop"] = image_spatial_crop
+            if num_img_tokens is not None:
+                model_inputs["num_img_tokens"] = num_img_tokens
 
         return model_inputs
 

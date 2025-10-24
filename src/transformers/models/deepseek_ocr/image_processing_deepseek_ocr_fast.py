@@ -19,8 +19,10 @@ import numpy as np
 import torch
 
 # TODO protect this import
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2.functional import to_pil_image
+from torchvision import transforms
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -53,7 +55,7 @@ class DeepseekOcrImageProcessorKwargs(ImagesKwargs, total=False):
 @auto_docstring
 class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
-    size = {"height": 640, "width": 640}
+    size = {"height": 1024, "width": 1024}
     base_size = {"height": 1024, "width": 1024}
     patch_size = 16
     dynamic_hd = 36
@@ -92,7 +94,10 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
             processed_images: list of preprocessed image tensors
             target_aspect_ratio: tuple (width_crops, height_crops)
         """
-        orig_width, orig_height = image.shape[-1], image.shape[-2]
+        if not isinstance(image, Image.Image):
+            image = to_pil_image(image)
+
+        orig_width, orig_height = image.size
         aspect_ratio = orig_width / orig_height
 
         target_ratios = {
@@ -112,16 +117,17 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         target_height = patch_size * target_aspect_ratio[1]
         blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
 
-        resized_img = F.resize(image, [target_height, target_width])
+        resized_img = image.resize((target_width, target_height))
 
         processed_images = []
         for i in range(blocks):
-            box_x = (i % target_aspect_ratio[0]) * patch_size
-            box_y = (i // target_aspect_ratio[0]) * patch_size
-            # TODO simplify this block
-            # box = (box_x, box_y, box_x + patch_size, box_y + patch_size)
-
-            split_img = F.crop(resized_img, box_y, box_x, patch_size, patch_size)
+            box = (
+                (i % (target_width // patch_size)) * patch_size,
+                (i // (target_width // patch_size)) * patch_size,
+                ((i % (target_width // patch_size)) + 1) * patch_size,
+                ((i // (target_width // patch_size)) + 1) * patch_size,
+            )
+            split_img = resized_img.crop(box)
             processed_images.append(split_img)
 
         return processed_images, target_aspect_ratio
@@ -158,6 +164,10 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
+        if not isinstance(size, SizeDict):
+            size = SizeDict(**size)
+        if not isinstance(base_size, SizeDict):
+            base_size = SizeDict(**base_size)
         patch_image_size = size.height
         base_image_size = base_size.height
         downsample_ratio = 4
@@ -166,26 +176,29 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         images_spatial_crop = []
         images_tokens = []
 
+        to_tensor = transforms.ToTensor()
+        normalize = transforms.Normalize(mean=self.image_mean, std=self.image_std)
+        mean_fill = tuple(int(x * 255) for x in self.image_mean)
+
         for image in images:
-            orig_width, orig_height = image.shape[-1], image.shape[-2]
+            if not isinstance(image, Image.Image):
+                image = to_pil_image(image)
+
+            orig_width, orig_height = image.size
 
             if orig_width <= patch_image_size and orig_height <= patch_image_size:
                 crop_ratio = [1, 1]
                 images_crop_raw = []
             else:
                 images_crop_raw, crop_ratio = self.dynamic_preprocess(
-                    image, patch_image_size, patch_image_size, max_num=dynamic_hd
+                    image, base_image_size, patch_image_size, max_num=dynamic_hd
                 )
 
-            global_view = F.pad(
-                image,
-                [0, 0, base_image_size - orig_width, base_image_size - orig_height],
-                fill=tuple(int(x * 255) for x in image_mean),
-            )
-            global_view = F.resize(global_view, [base_image_size, base_image_size], interpolation=interpolation)
-            global_view = self.rescale_and_normalize(
-                global_view, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
+            global_view = ImageOps.pad(image, (base_image_size, base_image_size), color=mean_fill)
+            if base_image_size != patch_image_size:
+                global_view = global_view.resize((patch_image_size, patch_image_size), interpolation)
+
+            global_view = normalize(to_tensor(global_view)).to(torch.bfloat16)
 
             ratio = 1 - ((max(orig_width, orig_height) - min(orig_width, orig_height)) / max(orig_width, orig_height))
 
@@ -202,21 +215,16 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
             if width_crop_num > 1 or height_crop_num > 1:
                 processed_crops = []
                 for crop in images_crop_raw:
-                    crop = self.rescale_and_normalize(
-                        crop, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-                    )
-                    processed_crops.append(crop)
+                    crop_tensor = normalize(to_tensor(crop)).to(torch.bfloat16)
+                    processed_crops.append(crop_tensor)
 
                 if patch_image_size == 640:
                     valid_img_tokens += len(processed_crops) * 100
 
-                crops_tensor = (
-                    torch.stack(processed_crops, dim=0)
-                    if processed_crops
-                    else torch.zeros(1, 3, patch_image_size, patch_image_size)
-                )
+                crops_tensor = torch.stack(processed_crops, dim=0)
             else:
-                crops_tensor = torch.zeros(1, 3, patch_image_size, patch_image_size)
+                processed_crops = []
+                crops_tensor = torch.empty(0, dtype=torch.bfloat16)
 
             num_queries_base = math.ceil((base_image_size // 16) / downsample_ratio)
             num_queries = math.ceil((patch_image_size // 16) / downsample_ratio)
@@ -225,9 +233,13 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
             if width_crop_num > 1 or height_crop_num > 1:
                 tokenized_image_len += (num_queries * width_crop_num + 1) * (num_queries * height_crop_num) + 1
 
-            hd_images = torch.cat([crops_tensor, global_view.unsqueeze(0)], dim=0)
+            if crops_tensor.numel() > 0:
+                hd_images = torch.cat([crops_tensor, global_view.unsqueeze(0)], dim=0)
+            else:
+                hd_images = global_view.unsqueeze(0)
+
             max_crops = hd_images.size(0)
-            hd_images = self.pad_to_max_num_crops(hd_images, max_crops)
+            hd_images = self.pad_to_max_num_crops(hd_images, max_crops).to(torch.bfloat16)
 
             images_transformed.append(hd_images)
             images_spatial_crop.append([width_crop_num, height_crop_num])
