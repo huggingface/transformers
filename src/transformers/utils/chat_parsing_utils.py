@@ -173,12 +173,12 @@ def recursive_parse(
             return parsed_schema
         elif isinstance(node_content, dict):
             for key, child_node in node_schema.get("properties", {}).items():
-                if key in node_content:
+                if "const" in child_node:
+                    parsed_schema[key] = child_node["const"]
+                elif key in node_content:
                     parsed_schema[key] = recursive_parse(node_content[key], child_node)
                 elif "default" in child_node:
                     parsed_schema[key] = child_node["default"]
-                else:
-                    pass
             if "additionalProperties" in node_schema:
                 for key, value in node_content.items():
                     if key not in node_schema.get("properties", {}):
