@@ -60,7 +60,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         self.model = VibeVoiceModel(config)
 
         # LM head for text generation
-        self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.decoder_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         # inference configuration
         self.ddpm_inference_steps = config.diffusion_head_config.ddpm_num_inference_steps
@@ -73,8 +73,8 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         return self.model.noise_scheduler
 
     @property
-    def prediction_head(self):
-        return self.model.prediction_head
+    def diffusion_head(self):
+        return self.model.diffusion_head
 
     @property
     def speech_scaling_factor(self):
@@ -650,12 +650,12 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
     @torch.no_grad()
     def sample_speech_tokens(self, condition, neg_condition, cfg_scale=3.0):
         self.model.noise_scheduler.set_timesteps(self.ddpm_inference_steps)
-        condition = torch.cat([condition, neg_condition], dim=0).to(self.model.prediction_head.device)
+        condition = torch.cat([condition, neg_condition], dim=0).to(self.model.diffusion_head.device)
         speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
         for t in self.model.noise_scheduler.timesteps:
             half = speech[: len(speech) // 2]
             combined = torch.cat([half, half], dim=0)
-            eps = self.model.prediction_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
+            eps = self.model.diffusion_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
             cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
             half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
             eps = torch.cat([half_eps, half_eps], dim=0)

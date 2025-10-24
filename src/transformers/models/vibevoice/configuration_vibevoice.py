@@ -67,11 +67,12 @@ class VibeVoiceConfig(PretrainedConfig):
     sub_configs = {
         "acoustic_tokenizer_config": VibeVoiceAcousticTokenizerConfig,
         "semantic_tokenizer_config": VibeVoiceSemanticTokenizerConfig,
-        "decoder_config": Qwen2Config,
+        "text_config": Qwen2Config,
         "diffusion_head_config": VibeVoiceDiffusionHeadConfig,
     }
     # keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Qwen2`
+    # TODO (ebezzam) can be copied over with modular
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -86,7 +87,7 @@ class VibeVoiceConfig(PretrainedConfig):
         self,
         acoustic_tokenizer_config=None,
         semantic_tokenizer_config=None,
-        decoder_config=None,
+        text_config=None,
         diffusion_head_config=None,
         **kwargs
     ):
@@ -112,18 +113,18 @@ class VibeVoiceConfig(PretrainedConfig):
             # If an instance of the config class is provided
             self.semantic_tokenizer_config = semantic_tokenizer_config
 
-        if decoder_config is None:
-            self.decoder_config = self.sub_configs["decoder_config"]()
-        elif isinstance(decoder_config, dict):
+        if text_config is None:
+            self.text_config = self.sub_configs["text_config"]()
+        elif isinstance(text_config, dict):
             # If a dictionary is provided, instantiate the config class with it
-            # self.decoder_config = self.sub_configs["decoder_config"](**decoder_config)
-            if decoder_config.get("model_type", '') == "qwen2":
-                self.decoder_config = Qwen2Config(**decoder_config)
+            # self.text_config = self.sub_configs["text_config"](**text_config)
+            if text_config.get("model_type", '') == "qwen2":
+                self.text_config = Qwen2Config(**text_config)
             else:
-                raise ValueError(f"Unsupported decoder model type: {decoder_config.get('model_type', '')}")
-        elif isinstance(decoder_config, (Qwen2Config,)):
+                raise ValueError(f"Unsupported text model type: {text_config.get('model_type', '')}")
+        elif isinstance(text_config, (Qwen2Config,)):
             # If an instance of the config class is provided
-            self.decoder_config = decoder_config
+            self.text_config = text_config
 
         if diffusion_head_config is None:
             self.diffusion_head_config = self.sub_configs["diffusion_head_config"]()
@@ -134,7 +135,7 @@ class VibeVoiceConfig(PretrainedConfig):
             # If an instance of the config class is provided
             self.diffusion_head_config = diffusion_head_config
 
-        # TODO (ebezzam) move to top?
+        # TODO (ebezzam) move to top? Llava has at bottom
         super().__init__(**kwargs)
 
     @property

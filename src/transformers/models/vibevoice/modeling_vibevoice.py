@@ -12,7 +12,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoModel
-from ...utils import logging, is_diffusers_available
+from ...utils import logging, is_diffusers_available, auto_docstring
 from ...utils.import_utils import requires_backends
 from ..llama.modeling_llama import LlamaRMSNorm
 from .configuration_vibevoice import VibeVoiceConfig
@@ -49,30 +49,6 @@ class VibeVoiceGenerationOutput(ModelOutput):
     speech_outputs: Optional[list[torch.FloatTensor]] = None
 
 
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, elementwise_affine=True):
-        super().__init__()
-        self.dim = dim
-        self.eps = eps
-        self.elementwise_affine = elementwise_affine
-        if self.elementwise_affine:
-            self.weight = nn.Parameter(torch.ones(dim))
-        else:
-            self.register_parameter('weight', None)
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        output = self._norm(x.float()).type_as(x)
-        if self.weight is not None:
-            output = output * self.weight
-        return output
-
-    def extra_repr(self) -> str:
-        return f'dim={self.dim}, eps={self.eps}, elementwise_affine={self.elementwise_affine}'
-
-
 class TimestepEmbedder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -91,7 +67,7 @@ class TimestepEmbedder(nn.Module):
             downscale_freq_shift=0,
             scale=1.0,
             max_period=10000,
-        )      
+        ).to(timesteps.dtype)   
         return self.layer_2(self.act(self.layer_1(t_freq)))
 
 
@@ -108,7 +84,7 @@ class FeedForwardNetwork(nn.Module):
         self.gate_proj = nn.Linear(self.embed_dim, ffn_dim, bias=False)
         self.up_proj = nn.Linear(self.embed_dim, ffn_dim, bias=False)
         self.down_proj = nn.Linear(ffn_dim, self.embed_dim, bias=False)
-        self.act_fn = ACT2FN[hidden_act]  # Using SiLU as the activation function
+        self.act_fn = ACT2FN[hidden_act]
 
     def forward(self, x):
         gate = self.gate_proj(x)
@@ -141,32 +117,49 @@ class HeadLayer(nn.Module):
 
 
 class FinalLayer(nn.Module):
-    def __init__(self, hidden_size, output_size, cond_size, norm_eps=1e-5, hidden_act="silu"):
+    def __init__(self, config, output_size, ffn_ratio=2):
         super().__init__()
-        self.norm = RMSNorm(hidden_size, eps=norm_eps, elementwise_affine=False)
-        self.linear_1 = nn.Linear(cond_size, 2 * hidden_size, bias=False)
-        self.act_fn = ACT2FN[hidden_act]
-        self.linear_2 = nn.Linear(hidden_size, output_size, bias=False)
+        # Inline RMS normalization since there is no weight scaling
+        self.norm_eps = config.rms_norm_eps
+        self.ffn_ratio = ffn_ratio
+        self.linear_1 = nn.Linear(config.hidden_size, ffn_ratio * config.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.linear_2 = nn.Linear(config.hidden_size, output_size, bias=False)
 
     def forward(self, hidden_states, condition):
-        shift, scale = self.linear_1(self.act_fn(condition)).chunk(2, dim=-1)
-        hidden_states = self.norm(hidden_states) * (1 + scale) + shift
+        shift, scale = self.linear_1(self.act_fn(condition)).chunk(self.ffn_ratio, dim=-1)
+        hidden_states = hidden_states * torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.norm_eps)
+        hidden_states = hidden_states * (1 + scale) + shift
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
 
-class VibeVoiceDiffusionHead(PreTrainedModel):
-    """
-    Diffusion head model for vibevoice.
-    
-    Args:
-        config (`VibeVoiceDiffusionHeadConfig`): Model configuration
-    """
+@auto_docstring
+class VibeVoicePreTrainedModel(PreTrainedModel):
     # TODO (ebezzam) config or config_class?
-    config_class = VibeVoiceDiffusionHeadConfig
+    config_class = VibeVoiceConfig
+    base_model_prefix = "model"
+    # TODO (ebezzam) check below
     supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+    _supports_attention_backend = True
+
+
+# TODO (ebezzam) register in auto doc?
+@auto_docstring(
+    custom_intro="""
+    Diffusion head for VibeVoice model, for predicting acoustic tokens.
+    """
+)
+class VibeVoiceDiffusionHead(VibeVoicePreTrainedModel):
+    # TODO (ebezzam) config or config_class?
+    config_class = VibeVoiceDiffusionHeadConfig
+    main_input_name = ["noisy_images", "timesteps", "condition"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -175,29 +168,10 @@ class VibeVoiceDiffusionHead(PreTrainedModel):
         self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.timestep_embedder = TimestepEmbedder(config)
         self.layers = nn.ModuleList([HeadLayer(config) for _ in range(config.num_head_layers)])
-        self.final_layer = FinalLayer(
-            hidden_size=config.hidden_size,
-            output_size=config.latent_size,
-            cond_size=config.hidden_size,
-            norm_eps=config.rms_norm_eps,
-            hidden_act=config.hidden_act
-        )
+        self.final_layer = FinalLayer(config, output_size=config.latent_size)
 
-        self.initialize_weights()
+        self.post_init()
 
-    def initialize_weights(self):
-        """Initialize the weights of the model."""
-        # Initialize timestep embedder
-        nn.init.normal_(self.timestep_embedder.layer_1.weight, std=0.02)
-        nn.init.normal_(self.timestep_embedder.layer_2.weight, std=0.02)
-
-        # Zero-out adaLN modulation layers
-        for layer in self.layers:
-            nn.init.constant_(layer.linear.weight, 0)
-
-        # Zero-out output layers
-        nn.init.constant_(self.final_layer.linear_1.weight, 0)
-        nn.init.constant_(self.final_layer.linear_2.weight, 0)
 
     def forward(
         self,
@@ -244,71 +218,31 @@ class VibeVoiceSpeechConnector(nn.Module):
         return x
 
 
-# @auto_docstring
-class VibeVoicePreTrainedModel(PreTrainedModel):
-    config_class = VibeVoiceConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        if isinstance(module, VibeVoiceDiffusionHead):
-            module.initialize_weights()
-            return
-
-        # Use the language model's initializer_range if available
-        if hasattr(self.config, 'language_model_config') and hasattr(self.config.language_model_config, 'initializer_range'):
-            std = self.config.language_model_config.initializer_range
-        elif hasattr(self.config, 'decoder_config') and hasattr(self.config.decoder_config, 'initializer_range'):
-            std = self.config.decoder_config.initializer_range
-        else:
-            std = 0.02  # Default value
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-
-# @auto_docstring
+@auto_docstring
 class VibeVoiceModel(VibeVoicePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        if hasattr(config, 'torch_dtype') and config.torch_dtype is not None:
-            if isinstance(config.torch_dtype, str):
-                dtype = getattr(torch, config.torch_dtype)
-            else:
-                dtype = config.torch_dtype
-        else:
-            dtype = torch.float32
+        # # TODO (ebezzam) original would set dtype internally: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L107
+        # # is this something we do?
+        # dtype = config.getattr("dtype", torch.float32)
 
-        # Initialize Qwen2 model for language modeling
-        lm_config = config.decoder_config
-        self.language_model = AutoModel.from_config(lm_config)
+        self.language_model = AutoModel.from_config(config.text_config)
 
         # Initialize speech components if needed
         # TODO (ebezzam) freeze tokenizer as mentioned in paper (p3)?
-        self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config).to(dtype).eval()
-        self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config).to(dtype).eval()
+        self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config).eval()
+        self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config).eval()
 
-        self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_hidden_size, lm_config.hidden_size).to(dtype)
-        self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_hidden_size, lm_config.hidden_size).to(dtype)
+        self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_hidden_size, config.text_config.hidden_size)
+        self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_hidden_size, config.text_config.hidden_size)
 
         # Register scaling factors as buffers - use 1D tensors for FSDP compatibility
         self.register_buffer('speech_scaling_factor', torch.tensor(float('nan')))
         self.register_buffer('speech_bias_factor', torch.tensor(float('nan')))
 
         # Initialize prediction head for speech generation
-        self.prediction_head = AutoModel.from_config(config.diffusion_head_config).to(dtype)
+        self.diffusion_head = AutoModel.from_config(config.diffusion_head_config)
 
         # Initialize noise scheduler
         requires_backends(self, ["diffusers"])
@@ -317,6 +251,10 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
             beta_schedule=config.diffusion_head_config.ddpm_beta_schedule,
             prediction_type=config.diffusion_head_config.prediction_type
         )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
 
     def get_input_embeddings(self):
         if hasattr(self.language_model, 'embed_tokens'):
@@ -599,7 +537,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
                 speech_features_repeated, noise, timesteps
             )
 
-            model_output = self.model.prediction_head(
+            model_output = self.model.diffusion_head(
                 noisy_speech_features,
                 timesteps.type_as(x),
                 condition_features_repeated
@@ -624,7 +562,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
         else:
             # Dummy loss for DDP to work when there are no speech samples in a batch,
             # but we are in a speech context.
-            diffusion_loss = sum(p.sum() for p in self.model.prediction_head.parameters()) * 0.0
+            diffusion_loss = sum(p.sum() for p in self.model.diffusion_head.parameters()) * 0.0
             diffusion_loss += sum(p.sum() for p in self.model.acoustic_connector.parameters()) * 0.0
             diffusion_loss += sum(p.sum() for p in self.model.semantic_connector.parameters()) * 0.0
         # --- End Diffusion Loss Calculation ---

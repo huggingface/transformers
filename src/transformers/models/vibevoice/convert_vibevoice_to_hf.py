@@ -72,29 +72,29 @@ def update_state_dict_for_hf_model(state_dict):
             elif "stages." in key and "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
         
-        # Handle TimestepEmbedder MLP Sequential -> individual layers mapping
-        if "prediction_head.t_embedder.mlp." in key:
-            if "prediction_head.t_embedder.mlp.0." in key:
-                new_key = new_key.replace("prediction_head.t_embedder.mlp.0.", "prediction_head.timestep_embedder.layer_1.")
-            elif "prediction_head.t_embedder.mlp.2." in key:
-                new_key = new_key.replace("prediction_head.t_embedder.mlp.2.", "prediction_head.timestep_embedder.layer_2.")
+        # Handle prediction_head -> diffusion_head mapping
+        if "prediction_head." in key:
+            key = key.replace("prediction_head.", "diffusion_head.")
+            new_key = key
         
-        # Handle FinalLayer norm_final -> norm mapping
-        if "prediction_head.final_layer.norm_final." in key:
-            print(key, value)
-            new_key = new_key.replace("prediction_head.final_layer.norm_final.", "prediction_head.final_layer.norm.")
+        # Handle TimestepEmbedder MLP Sequential -> individual layers mapping
+        if "diffusion_head.t_embedder.mlp." in key:
+            if "diffusion_head.t_embedder.mlp.0." in key:
+                new_key = new_key.replace("diffusion_head.t_embedder.mlp.0.", "diffusion_head.timestep_embedder.layer_1.")
+            elif "diffusion_head.t_embedder.mlp.2." in key:
+                new_key = new_key.replace("diffusion_head.t_embedder.mlp.2.", "diffusion_head.timestep_embedder.layer_2.")
         
         # Handle FinalLayer linear -> linear_2 mapping
-        if "prediction_head.final_layer.linear." in key and "adaLN_modulation" not in key:
-            new_key = new_key.replace("prediction_head.final_layer.linear.", "prediction_head.final_layer.linear_2.")
+        if "diffusion_head.final_layer.linear." in key and "adaLN_modulation" not in key:
+            new_key = new_key.replace("diffusion_head.final_layer.linear.", "diffusion_head.final_layer.linear_2.")
         
         # Handle FinalLayer adaLN_modulation Sequential -> individual layers mapping
-        if "prediction_head.final_layer.adaLN_modulation." in key:
+        if "diffusion_head.final_layer.adaLN_modulation." in key:
             if ".adaLN_modulation.1." in key:
                 new_key = new_key.replace(".adaLN_modulation.1.", ".linear_1.")
         
         # Handle HeadLayer adaLN_modulation Sequential -> individual layers mapping
-        if "prediction_head.layers." in key and ".adaLN_modulation." in key:
+        if "diffusion_head.layers." in key and ".adaLN_modulation." in key:
             if ".adaLN_modulation.1." in key:
                 new_key = new_key.replace(".adaLN_modulation.1.", ".linear.")
 
@@ -214,6 +214,10 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     if "ddpm_batch_mul" in model_config["diffusion_head_config"]:
         del model_config["diffusion_head_config"]["ddpm_batch_mul"]
 
+    # clean up language model config
+    model_config["text_config"] = model_config.pop("decoder_config")
+    model_config["text_config"]["dtype"] = model_config["text_config"].pop("torch_dtype")
+
     # clean up main model config
     if "acoustic_vae_dim" in model_config:
         del model_config["acoustic_vae_dim"]
@@ -221,6 +225,7 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         del model_config["semantic_vae_dim"]
     if "num_hidden_layers" in model_config:
         del model_config["num_hidden_layers"]
+    model_config["dtype"] = model_config.pop("torch_dtype")
     
     # 3) Update state dict to match HF model structure
     updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
@@ -275,6 +280,15 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     model_config["semantic_tokenizer_config"] = semantic_config.to_dict()
     vibevoice_config = VibeVoiceConfig(**model_config)
     vibevoice_model = VibeVoiceModel(vibevoice_config).to(dtype)
+
+    # -- print dtypes of key components for verification, TODO remove
+    print("Acoustic connector dtype : ", vibevoice_model.acoustic_connector.fc1.weight.dtype)
+    print("Semantic connector dtype : ", vibevoice_model.semantic_connector.fc1.weight.dtype)
+    print("Language model dtype : ", vibevoice_model.language_model.embed_tokens.weight.dtype)
+    print("Acoustic tokenizer dtype : ", vibevoice_model.acoustic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype)
+    print("Semantic tokenizer dtype : ", vibevoice_model.semantic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype)
+    print("Diffusion head dtype : ", vibevoice_model.diffusion_head.noisy_images_proj.weight.dtype)
+
     # -- load into HF model
     missing, unexpected = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
     if len(unexpected) != 0:

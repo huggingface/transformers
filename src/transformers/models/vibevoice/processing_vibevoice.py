@@ -535,7 +535,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         else:
             # Single tensor or array
             if isinstance(audio, torch.Tensor):
-                audio_np = audio.detach().cpu().numpy()
+                audio_np = audio.detach().to(torch.float32).cpu().numpy()
             else:
                 audio_np = np.array(audio)
             
