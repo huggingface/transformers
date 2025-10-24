@@ -82,8 +82,10 @@ def causal_mask_function(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int)
 def bidirectional_mask_function(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
     """
     This creates a full bidirectional mask.
+
+    NOTE: It is important to keep and index-based version for non-vmap expansion.
     """
-    return q_idx.new_ones((), dtype=torch.bool)
+    return q_idx >= 0
 
 
 def sliding_window_overlay(sliding_window: int) -> Callable:
