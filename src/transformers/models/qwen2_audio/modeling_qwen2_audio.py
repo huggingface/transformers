@@ -777,8 +777,9 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 padding_mask = seq_range >= lengths_expand
                 audio_attention_mask_2d = (~padding_mask).to(dtype=torch.long, device=audio_feat_lengths.device)
 
+                # Dummy embeddings for mask creation (only shape, dtype, and device are used)
                 dummy_embeds = torch.zeros(
-                    (batch_size, max_seq_len, self.audio_tower.config.d_model),
+                    (batch_size, max_seq_len, 1),
                     dtype=self.audio_tower.conv1.weight.dtype,
                     device=self.audio_tower.conv1.weight.device,
                 )
