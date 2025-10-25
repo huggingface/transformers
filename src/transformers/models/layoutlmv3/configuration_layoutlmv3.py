@@ -105,7 +105,7 @@ class LayoutLMv3Config(PreTrainedConfig):
     ```"""
 
     model_type = "layoutlmv3"
-    
+
     # Support flags for attention implementations
     _supports_sdpa = True
     _supports_flash_attn_2 = True
