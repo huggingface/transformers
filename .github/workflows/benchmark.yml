@@ -1,7 +1,10 @@
 name: Self-hosted runner (benchmark)
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    types: [ opened, labeled, reopened, synchronize ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -9,6 +12,8 @@ concurrency:
 
 env:
   HF_HOME: /mnt/cache
+  DATASET_ID: hf-benchmarks/transformers
+  MODEL_ID: meta-llama/Llama-3.1-8B-Instruct
 
 jobs:
   benchmark:
@@ -31,26 +36,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Install libpq-dev & psql
-        run: |
-          apt update
-          apt install -y libpq-dev postgresql-client
-
       - name: Install benchmark script dependencies
-        run: python3 -m pip install -r benchmark/requirements.txt
+        run: python3 -m pip install -r benchmark_v2/requirements.txt kernels
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e ".[torch]"
-
-      - name: Run database init script
-        run: |
-          psql -f benchmark/utils/init_db.sql
-        env:
-          PGDATABASE: metrics
-          PGHOST: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGHOST }}
-          PGUSER: transformers_benchmarks
-          PGPASSWORD: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGPASSWORD }}
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e ".[torch]" && python3 -m pip uninstall -y torchvision # temp fix
 
       - name: Run benchmark
         run: |
@@ -61,13 +52,11 @@ jobs:
             commit_id=$GITHUB_SHA
           fi
           commit_msg=$(git show -s --format=%s | cut -c1-70)
-          python3 benchmark/benchmarks_entrypoint.py "huggingface/transformers" "$BRANCH_NAME" "$commit_id" "$commit_msg"
+          python3 benchmark_v2/run_benchmarks.py -b 32 -s 128 -n 256 --branch-name "$BRANCH_NAME" --commit-id "$commit_id" --commit-message "$commit_msg" --model-id "$MODEL_ID" --log-level INFO --push-result-to-dataset "$DATASET_ID"
         env:
           HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+          PUSH_TO_HUB_TOKEN: ${{ secrets.PUSH_TO_HUB_TOKEN }}
           # Enable this to see debug logs
           # HF_HUB_VERBOSITY: debug
           # TRANSFORMERS_VERBOSITY: debug
-          PGHOST: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGHOST }}
-          PGUSER: transformers_benchmarks
-          PGPASSWORD: ${{ secrets.TRANSFORMERS_BENCHMARKS_PGPASSWORD }}
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
