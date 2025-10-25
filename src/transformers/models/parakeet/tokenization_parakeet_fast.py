@@ -17,6 +17,21 @@ import itertools
 from typing import Optional, Union
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_base import PreTrainedTokenizerBase
+
+class ParakeetCTCTokenizer(PreTrainedTokenizerBase):
+    def __init__(self, vocab_file=None, **kwargs):
+        super().__init__()
+        self.vocab_file = vocab_file
+
+    def _tokenize(self, text):
+        return text.split()
+
+    def _convert_token_to_id(self, token):
+        return 0
+
+    def _convert_id_to_token(self, index):
+        return ""
 
 
 class ParakeetTokenizerFast(PreTrainedTokenizerFast):
@@ -51,4 +66,4 @@ class ParakeetTokenizerFast(PreTrainedTokenizerFast):
         )
 
 
-__all__ = ["ParakeetTokenizerFast"]
+__all__ = ["ParakeetTokenizerFast", "ParakeetCTCTokenizer"]
