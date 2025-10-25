@@ -105,6 +105,10 @@ class LayoutLMv3Config(PreTrainedConfig):
     ```"""
 
     model_type = "layoutlmv3"
+    
+    # Support flags for attention implementations
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def __init__(
         self,
@@ -138,6 +142,7 @@ class LayoutLMv3Config(PreTrainedConfig):
         num_channels=3,
         patch_size=16,
         classifier_dropout=None,
+        _attn_implementation="eager",
         **kwargs,
     ):
         super().__init__(
@@ -173,6 +178,7 @@ class LayoutLMv3Config(PreTrainedConfig):
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.classifier_dropout = classifier_dropout
+        self._attn_implementation = _attn_implementation
 
 
 __all__ = ["LayoutLMv3Config"]

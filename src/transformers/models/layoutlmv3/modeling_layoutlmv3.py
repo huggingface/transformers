@@ -38,7 +38,6 @@ from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     auto_docstring,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     torch_int,
 )
@@ -339,59 +338,70 @@ class LayoutLMv3SelfOutput(nn.Module):
 
 # Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Attention with LayoutLMv2->LayoutLMv3
 class LayoutLMv3Attention(nn.Module):
+    """
+    Unified LayoutLMv3 attention module with support for eager, SDPA, and FlashAttention-2.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.self = LayoutLMv3SelfAttention(config)
         self.output = LayoutLMv3SelfOutput(config)
 
+        # Store attention implementation config
+        self.is_causal = False
+        self._attn_implementation = config._attn_implementation if hasattr(config, "_attn_implementation") else "eager"
+
     def forward(
         self,
         hidden_states,
         attention_mask=None,
+        head_mask=None,
         output_attentions=False,
         rel_pos=None,
         rel_2d_pos=None,
     ):
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            output_attentions,
-            rel_pos=rel_pos,
-            rel_2d_pos=rel_2d_pos,
-        )
+        # Dispatch to appropriate attention implementation
+        if self._attn_implementation == "flash_attention_2":
+            # Check for unsupported features
+            if output_attentions:
+                logger.warning_once(
+                    "FlashAttention-2 does not support output_attentions, falling back to eager attention."
+                )
+                self_outputs = self.self(hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos)
+            elif self.self.has_relative_attention_bias and rel_pos is not None:
+                logger.warning_once(
+                    "FlashAttention-2 does not support relative position bias, falling back to eager attention."
+                )
+                self_outputs = self.self(hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos)
+            else:
+                self_outputs = self._flash_attention_forward(hidden_states, attention_mask)
+
+        elif self._attn_implementation == "sdpa":
+            # Check for unsupported features
+            if output_attentions:
+                logger.warning_once("SDPA does not support output_attentions, falling back to eager attention.")
+                self_outputs = self.self(hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos)
+            elif self.self.has_relative_attention_bias and rel_pos is not None:
+                # SDPA doesn't support relative position bias
+                self_outputs = self.self(hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos)
+            else:
+                self_outputs = self._sdpa_attention_forward(hidden_states, attention_mask, head_mask)
+
+        else:  # eager
+            self_outputs = self.self(hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos)
+
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
-
-class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
-    """
-    LayoutLMv3 attention using PyTorch's scaled_dot_product_attention.
-    """
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
-    ):
-        if output_attentions:
-            logger.warning_once("SDPA doesn't support output_attentions, falling back to standard attention.")
-            return super().forward(
-                hidden_states,
-                attention_mask,
-                output_attentions,
-                rel_pos,
-                rel_2d_pos,
-            )
-
+    def _sdpa_attention_forward(self, hidden_states, attention_mask=None, head_mask=None):
         batch_size, seq_len, _ = hidden_states.size()
 
+        # Get Q, K, V
         query_layer = self.self.query(hidden_states)
         key_layer = self.self.key(hidden_states)
         value_layer = self.self.value(hidden_states)
+
         query_layer = query_layer.view(
             batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size
         ).transpose(1, 2)
@@ -402,117 +412,68 @@ class LayoutLMv3SdpaAttention(LayoutLMv3Attention):
             batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size
         ).transpose(1, 2)
 
-        if self.self.has_relative_attention_bias and rel_pos is not None:
-            attention_scores = torch.matmul(
-                query_layer / math.sqrt(self.self.attention_head_size), key_layer.transpose(-1, -2)
-            )
+        # Convert attention mask to boolean format for SDPA
+        attn_mask = None
+        if attention_mask is not None:
+            attn_mask = attention_mask >= 0
 
-            if self.self.has_spatial_attention_bias and rel_2d_pos is not None:
-                attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(self.self.attention_head_size)
-            else:
-                attention_scores += rel_pos / math.sqrt(self.self.attention_head_size)
+        # SDPA doesn't support head_mask, fallback if needed
+        if head_mask is not None:
+            return self.self(hidden_states, attention_mask, output_attentions=False, rel_pos=None, rel_2d_pos=None)
 
-            if attention_mask is not None:
-                attention_scores = attention_scores + attention_mask
-
-            attention_probs = F.softmax(attention_scores, dim=-1)
-            attention_probs = self.self.dropout(attention_probs)
-            attn_output = torch.matmul(attention_probs, value_layer)
-        else:
-            attn_mask = None
-            if attention_mask is not None:
-                attn_mask = attention_mask >= 0
-
-            attn_output = torch.nn.functional.scaled_dot_product_attention(
-                query_layer,
-                key_layer,
-                value_layer,
-                attn_mask=attn_mask,
-                dropout_p=self.self.dropout.p if self.training else 0.0,
-                scale=1.0 / math.sqrt(self.self.attention_head_size),
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.self.all_head_size)
-        outputs = self.output(attn_output, hidden_states)
-        return (outputs,)
-
-
-class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
-    """
-    LayoutLMv3 attention using Flash Attention 2.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-
-    def _reshape(self, tensor, seq_len, batch_size):
-        return tensor.view(batch_size, seq_len, self.self.num_attention_heads, self.self.attention_head_size)
-
-    def _upad_input(self, query_states, key_states, value_states, attention_mask, query_length):
-        batch_size, seq_len, num_heads, head_dim = query_states.shape
-
-        query_states = query_states.view(-1, num_heads, head_dim)
-        key_states = key_states.view(-1, num_heads, head_dim)
-        value_states = value_states.view(-1, num_heads, head_dim)
-
-        query_states, indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(query_states, attention_mask)
-        key_states = key_states[indices_q]
-        value_states = value_states[indices_q]
-
-        return (
-            query_states,
-            key_states,
-            value_states,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_q),
-            (max_seqlen_q, max_seqlen_q),
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            attn_mask=attn_mask,
+            dropout_p=self.self.dropout.p if self.training else 0.0,
+            scale=1.0 / math.sqrt(self.self.attention_head_size),
         )
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
-    ):
-        if output_attentions:
-            logger.warning_once(
-                "Flash Attention 2 doesn't support output_attentions, falling back to standard attention."
-            )
-            return super().forward(hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(batch_size, seq_len, self.self.all_head_size)
 
+        return (attn_output,)
+
+    def _flash_attention_forward(self, hidden_states, attention_mask=None):
         batch_size, seq_length, _ = hidden_states.size()
 
-        query_states = self._reshape(self.self.query(hidden_states), seq_length, batch_size)
-        key_states = self._reshape(self.self.key(hidden_states), seq_length, batch_size)
-        value_states = self._reshape(self.self.value(hidden_states), seq_length, batch_size)
+        # Get Q, K, V
+        query_states = self.self.query(hidden_states)
+        key_states = self.self.key(hidden_states)
+        value_states = self.self.value(hidden_states)
 
-        if self.self.has_relative_attention_bias and rel_pos is not None:
-            logger.warning_once(
-                "Flash Attention 2 doesn't support relative position bias, falling back to standard attention."
-            )
-            return super().forward(hidden_states, attention_mask, output_attentions, rel_pos, rel_2d_pos)
+        query_states = query_states.view(
+            batch_size, seq_length, self.self.num_attention_heads, self.self.attention_head_size
+        )
+        key_states = key_states.view(
+            batch_size, seq_length, self.self.num_attention_heads, self.self.attention_head_size
+        )
+        value_states = value_states.view(
+            batch_size, seq_length, self.self.num_attention_heads, self.self.attention_head_size
+        )
 
         if attention_mask is not None:
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, seq_length
-            )
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_q, max_seqlen_k = max_seq_lens
+            # Unpad for variable length sequences
+            query_states = query_states.view(-1, self.self.num_attention_heads, self.self.attention_head_size)
+            key_states = key_states.view(-1, self.self.num_attention_heads, self.self.attention_head_size)
+            value_states = value_states.view(-1, self.self.num_attention_heads, self.self.attention_head_size)
+
+            query_states, indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(query_states, attention_mask)
+            key_states = key_states[indices_q]
+            value_states = value_states[indices_q]
 
             attn_output_unpad = flash_attn_varlen_func(
                 query_states,
                 key_states,
                 value_states,
                 cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
+                cu_seqlens_k=cu_seqlens_q,
                 max_seqlen_q=max_seqlen_q,
-                max_seqlen_k=max_seqlen_k,
+                max_seqlen_k=max_seqlen_q,
                 dropout_p=self.self.dropout.p if self.training else 0.0,
                 softmax_scale=1.0 / math.sqrt(self.self.attention_head_size),
-                causal=False,
+                causal=self.is_causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, seq_length)
@@ -523,11 +484,11 @@ class LayoutLMv3FlashAttention2(LayoutLMv3Attention):
                 value_states,
                 dropout_p=self.self.dropout.p if self.training else 0.0,
                 softmax_scale=1.0 / math.sqrt(self.self.attention_head_size),
-                causal=False,
+                causal=self.is_causal,
             )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1)
-        attn_output = self.output(attn_output, hidden_states)
+        attn_output = attn_output.reshape(batch_size, seq_length, self.self.all_head_size)
+
         return (attn_output,)
 
 
