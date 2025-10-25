@@ -51,6 +51,7 @@ else:
     # Define dummy functions for when flash_attn is not available
     def unpad_input(*args, **kwargs):
         raise ImportError("flash_attn is not available")
+
     def pad_input(*args, **kwargs):
         raise ImportError("flash_attn is not available")
 
