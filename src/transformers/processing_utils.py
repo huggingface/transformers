@@ -664,6 +664,11 @@ class ProcessorMixin(PushToHubMixin):
             output.pop(key, None)
 
         def save_public_processor_class(dictionary):
+            """
+            Numpy arrays are not serialiazable but can be in pre-processing dicts.
+            This function casts arrays to list, recusring through the nested configs as well.
+            """
+            # make sure private name "_processor_class" is correctly saved as "processor_class"
             _processor_class = dictionary.pop("_processor_class", None)
             if _processor_class is not None:
                 dictionary["processor_class"] = _processor_class
@@ -685,12 +690,15 @@ class ProcessorMixin(PushToHubMixin):
                 "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
                 "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
             }
+            # Special case, add `audio_tokenizer` dict which points to model weights and path
             output["audio_tokenizer"] = audio_tokenizer_dict
-
+       # Serialize attributes as a dict
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
             for k, v in output.items()
-            if k in attrs_to_save and v.__class__.__name__ != "BeamSearchDecoderCTC"
+            if (
+                k in attrs_to_save  # keep all attributes that have to be serialized
+            )
         }
         output = cast_array_to_list(output)
         output = save_public_processor_class(output)
