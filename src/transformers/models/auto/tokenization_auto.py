@@ -1130,24 +1130,32 @@ class AutoTokenizer:
             config = config.encoder
 
         model_type = config_class_to_model_type(type(config).__name__)
+
         if model_type is not None:
             tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
 
+        try:
             if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
                 return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            else:
-                if tokenizer_class_py is not None:
-                    return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                else:
-                    raise ValueError(
-                        "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
-                        "in order to use this tokenizer."
-                    )
 
-        raise ValueError(
-            f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING)}."
-        )
+            if tokenizer_class_py is not None:
+                return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+            raise ValueError(
+                "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
+                "in order to use this tokenizer."
+            )
+
+        except TypeError as e:
+            # Handle missing mistral-common dependency specifically for Mistral/Voxtral tokenizers
+            if tokenizer_class_py and "Mistral" in tokenizer_class_py.__name__:
+                raise ImportError(
+                    "The tokenizer for Voxtral or Mistral models requires the `mistral-common` package.\n"
+                    "Please install it with:\n\n    pip install mistral-common\n"
+                ) from e
+            raise
+
+        raise ValueError(f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n")
 
     @staticmethod
     def register(config_class, slow_tokenizer_class=None, fast_tokenizer_class=None, exist_ok=False):
