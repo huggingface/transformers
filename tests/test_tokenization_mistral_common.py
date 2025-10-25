@@ -401,6 +401,11 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertEqual(id, expected_ids[0])
         self.assertEqual(id, self.tokenizer.convert_tokens_to_ids(tokens[0]))
 
+    def test_convert_tokens_to_string(self):
+        tokens = ["Hello", "world", "!"]
+        string = self.tokenizer.convert_tokens_to_string(tokens)
+        self.assertIsInstance(string, str)
+
     def test_tokenize(self):
         string = "Hello world!"
         expected_tokens = [
