@@ -74,4 +74,3 @@ class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip
     def test_special_tokens_as_you_expect(self):
         """If you are training a seq2seq model that expects a decoder_prefix token make sure it is prepended to decoder_input_ids"""
-        pass

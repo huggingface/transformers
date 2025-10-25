@@ -371,7 +371,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
         renamed_keys.extend(rename_keys_for_conv(f"{src_prefix}.layer_4", f"{dst_prefix}.fpn.stem"))
 
         # add all the fpn layers (here we need some config parameters to know the size in advance)
-        for src_i, dst_i in zip(range(3, 0, -1), range(0, 3)):
+        for src_i, dst_i in zip(range(3, 0, -1), range(3)):
             renamed_keys.extend(
                 rename_keys_for_conv(f"{src_prefix}.adapter_{src_i}", f"{dst_prefix}.fpn.layers.{dst_i}.proj")
             )

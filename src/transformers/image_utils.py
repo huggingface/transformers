@@ -456,7 +456,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     """
     requires_backends(load_image, ["vision"])
     if isinstance(image, str):
-        if image.startswith("http://") or image.startswith("https://"):
+        if image.startswith(("http://", "https://")):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
             # like http_huggingface_co.png
             image = PIL.Image.open(BytesIO(httpx.get(image, timeout=timeout, follow_redirects=True).content))

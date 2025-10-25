@@ -104,7 +104,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
 
     def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a sound of {}."):
         if isinstance(audio, str):
-            if audio.startswith("http://") or audio.startswith("https://"):
+            if audio.startswith(("http://", "https://")):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
                 audio = httpx.get(audio, follow_redirects=True).content

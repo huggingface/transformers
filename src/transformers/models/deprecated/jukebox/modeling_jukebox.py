@@ -96,7 +96,7 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
         tokens = torch.cat(
             [torch.zeros(max_n_lyric_tokens - len(full_tokens), dtype=torch.long).to(full_tokens.device), full_tokens]
         )
-        indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
+        indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(len(full_tokens)))
     else:
         midpoint = int(len(full_tokens) * (offset + duration / 2.0) / total_length)
         midpoint = min(max(midpoint, max_n_lyric_tokens // 2), len(full_tokens) - max_n_lyric_tokens // 2)
@@ -1464,7 +1464,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             if get_preds:
                 preds = []
 
-            iter = tqdm(range(0, sample_tokens), leave=False)
+            iter = tqdm(range(sample_tokens), leave=False)
             for sample_t in iter:
                 iter.set_description(f"Ancestral sampling {sample_tokens} music tokens", refresh=True)
                 hidden_states, cond = self.get_emb(

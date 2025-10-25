@@ -163,7 +163,7 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_shape = hf_pointer.shape
 
     # strip off the kernel dimension at the end (original weights are Conv1d)
-    if key.endswith(".k_proj") or key.endswith(".v_proj") or key.endswith(".q_proj") or key.endswith(".out_proj"):
+    if key.endswith((".k_proj", ".v_proj", ".q_proj", ".out_proj")):
         value = value.squeeze(-1)
 
     if hf_shape != value.shape:
