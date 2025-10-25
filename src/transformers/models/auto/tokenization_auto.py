@@ -815,7 +815,7 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
             if getattr(tokenizer, "__name__", None) == class_name:
                 return tokenizer
 
-    # We did not fine the class, but maybe it's because a dep is missing. In that case, the class will be in the main
+    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
