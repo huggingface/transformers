@@ -1463,6 +1463,11 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         )  # thus post q_norm does not need reshape
         self.sliding_window = None
 
+        from ...integrations.hub_kernels import lazy_load_kernel
+
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = rotary_kernel.apply_rotary_transformers if rotary_kernel is not None else apply_rotary_pos_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1480,7 +1485,7 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -2316,6 +2321,11 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
         )  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
+        from ...integrations.hub_kernels import lazy_load_kernel
+
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = rotary_kernel.apply_rotary_transformers if rotary_kernel is not None else apply_rotary_pos_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -2333,7 +2343,7 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -3390,6 +3400,11 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         self.k_norm = nn.Identity()
         self.sliding_window = config.sliding_window
 
+        from ...integrations.hub_kernels import lazy_load_kernel
+
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = rotary_kernel.apply_rotary_transformers if rotary_kernel is not None else apply_rotary_pos_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -3407,7 +3422,7 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

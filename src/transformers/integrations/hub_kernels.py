@@ -164,6 +164,7 @@ except ImportError:
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
+    "rotary_emb": {"repo_id": "kernels-community/rotary"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, Optional[ModuleType]] = {}
