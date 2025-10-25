@@ -53,56 +53,45 @@ from ...utils.generic import OutputRecorder
 from .configuration_mixtral import MixtralConfig
 
 
-class MixtralMLP(nn.Module):
+class MixtralExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
     def __init__(self, config: MixtralConfig):
         super().__init__()
-        self.ffn_dim = config.intermediate_size
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-
-        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states):
-        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)
-        return current_hidden_states
-
-
-class MixtralExperts(nn.ModuleList):
-    """
-    ModuleList of experts.
-    """
-
-    def __init__(self, config: MixtralConfig):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(MixtralMLP(config))
-
     def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
-        Returns:
-            (batch_size * sequence_length, hidden_dim)
-        """
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).flatten()
+
+        for expert_idx in expert_hit.tolist():
+            expert_selection = expert_mask[expert_idx].squeeze(0)
+            top_indices, token_positions = torch.where(expert_selection)
+            if token_positions.numel() == 0:
+                continue
+
+            current_state = hidden_states.index_select(0, token_positions)
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2)
+            current_hidden_states = self.act_fn(up)
+            current_hidden_states = current_hidden_states * gate
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+
+            routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
+            current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
+            final_hidden_states.index_add_(0, token_positions, current_hidden_states.to(final_hidden_states.dtype))
+
         return final_hidden_states
 
 
@@ -359,7 +348,7 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = MixtralAttention(config, layer_idx)
 
-        self.block_sparse_moe = MixtralSparseMoeBlock(config)
+        self.mlp = MixtralSparseMoeBlock(config)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -387,7 +376,7 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -405,7 +394,7 @@ class MixtralPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="block_sparse_moe.gate", index=0),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
         "hidden_states": MixtralDecoderLayer,
         "attentions": MixtralAttention,
     }
