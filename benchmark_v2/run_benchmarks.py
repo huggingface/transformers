@@ -23,7 +23,12 @@ import logging
 import sys
 import uuid
 
-from framework.benchmark_config import BenchmarkConfig, generate_all_configs, generate_main_configs
+from framework.benchmark_config import (
+    KERNELIZATION_AVAILABLE,
+    BenchmarkConfig,
+    cross_generate_configs,
+    generate_main_configs,
+)
 from framework.benchmark_runner import BenchmarkRunner
 
 
@@ -82,7 +87,10 @@ if __name__ == "__main__":
     # If there is only one (batch_size, sequence_length, num_tokens_to_generate), we benchmark across configs
     elif len(args.batch_size) * len(args.sequence_length) * len(args.num_tokens_to_generate) == 1:
         if args.cross_generate:
-            benchmark_configs = generate_all_configs(
+            benchmark_configs = cross_generate_configs(
+                attn_impl_and_sdpa_backend=BenchmarkConfig.all_attn_implementations,
+                compiled_mode=[None, "default"],  # usually there is not much to gain by compiling with other modes
+                kernelized=[False, KERNELIZATION_AVAILABLE],
                 warmup_iterations=args.warmup,
                 measurement_iterations=args.iterations,
                 batch_size=args.batch_size[0],
