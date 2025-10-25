@@ -581,6 +581,151 @@ class TopKLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+class PLessLogitsWarper(LogitsProcessor):
+    """
+    [`LogitsProcessor`] that performs p-less sampling, a hyperparamter-free decoding method that adaptively
+    determines the minimum threshold probability for admitting tokens into the sampling set, based on the
+    information from the full token distribution.
+
+    The p-less method balances the adaptive threshold probability with the entropy of the token distribution, i.e.
+    a higher entropy results in a lower threshold and vice versa, which is a befitting relationship. The p-less
+    threshold is also bounded and valid, i.e. guaranteed to be at least the uniform token probability and at most
+    the modal probability.
+
+    Paper:
+    For details, see *p-less Sampling: A Robust Hyperparameter-free Approach for LLM Decoding*
+    https://arxiv.org/abs/2509.23234
+
+    `PLessLogitsWarper` can be used together with [`TemperatureLogitsWarper`], and is used as an alternative to
+    [`TopPLogitsWarper`] and [`TopKLogitsWarper`].
+
+    Args:
+        p_less (`bool`): Must be `True` to use p-less sampling.
+        filter_value (`float`, *optional*, defaults to -inf):
+            All filtered values will be set to this float value.
+
+    Example:
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3B")
+    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
+
+    >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
+    >>> outputs = model.generate(**inputs, do_sample=True, p_less=True)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
+    ```
+    """
+
+    def __init__(self, p_less: bool, filter_value: float = -float("Inf")):
+        if not isinstance(p_less, bool) or not p_less:
+            raise ValueError("`p_less` must be `True` to use p-less sampling for decoding.")
+        self.filter_value = filter_value
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        Filters logits using p-less sampling.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input token IDs.
+            scores (`torch.FloatTensor` of shape `(batch_size, vocab_size)`):
+                Logits from the model.
+
+        Return:
+            `torch.FloatTensor` of shape `(batch_size, vocab_size)`:
+                Processed logits where rejected tokens are masked with `-inf`.
+        """
+
+        # Convert logits to probabilities
+        probs = torch.softmax(scores, dim=-1)
+
+        # Calculate the p-less probability threshold
+        p = probs.square().sum(dim=-1, keepdim=True)
+
+        # Create the mask for tokens whose probability is less than the p-less threshold
+        mask_reject = probs < p
+
+        # Update token logits whose probability is less than the p-less threshold to `filter_value`
+        scores_processed = scores.masked_fill(mask_reject, self.filter_value)
+
+        return scores_processed
+
+
+class PLessNormLogitsWarper(LogitsProcessor):
+    """
+    [`LogitsProcessor`] that performs p-less-norm sampling, a hyperparamter-free decoding method that adaptively
+    determines the minimum threshold probability for admitting tokens into the sampling set, based on the
+    information from the full token distribution.
+
+    The p-less-norm method balances the adaptive threshold probability with the entropy of the token distribution,
+    i.e. a higher entropy results in a lower threshold and vice versa, which is a befitting relationship. The
+    p-less-norm threshold is also bounded and valid, i.e. guaranteed to be at least zero and at most the modal
+    probability.
+
+    Paper:
+    For details, see *p-less Sampling: A Robust Hyperparameter-free Approach for LLM Decoding*
+    https://arxiv.org/abs/2509.23234
+
+    `PLessLogitsWarper` can be used together with [`TemperatureLogitsWarper`], and is used as an alternative to
+    [`TopPLogitsWarper`] and [`TopKLogitsWarper`].
+
+    Args:
+        p_less_norm (`bool`): Must be `True` to use p-less-norm sampling.
+        filter_value (`float`, *optional*, defaults to -inf):
+            All filtered values will be set to this float value.
+
+    Examples:
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3B")
+    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
+
+    >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
+    >>> outputs = model.generate(**inputs, do_sample=True, p_less_norm=True)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
+    ```
+    """
+
+    def __init__(self, p_less_norm: bool, filter_value: float = -float("Inf")):
+        if not isinstance(p_less_norm, bool) or not p_less_norm:
+            raise ValueError("`p_less_norm` must be `True` to use p-less-norm sampling for decoding.")
+        self.filter_value = filter_value
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        Filters logits using p-less-norm sampling.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input token IDs.
+            scores (`torch.FloatTensor` of shape `(batch_size, vocab_size)`):
+                Logits from the model.
+
+        Return:
+            `torch.FloatTensor` of shape `(batch_size, vocab_size)`:
+                Processed logits where rejected tokens are masked with `-inf`.
+        """
+
+        # Convert logits to probabilities
+        probs = torch.softmax(scores, dim=-1)
+
+        # Calculate the p-less-norm probability threshold
+        v = probs.size(-1)
+        p = (v * probs.square().sum(dim=-1, keepdim=True) - 1.0) / (v - 1.0)
+
+        # Create the mask for tokens whose probability is less than the p-less-norm threshold
+        mask_reject = probs < p
+
+        # Update token logits whose probability is less than the p-less-norm threshold to `filter_value`
+        scores_processed = scores.masked_fill(mask_reject, self.filter_value)
+
+        return scores_processed
+
+
 class TopHLogitsWarper(LogitsProcessor):
     """
     [`LogitsProcessor`] that implements Top-H sampling, a decoding method which adaptively selects a subset of
