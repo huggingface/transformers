@@ -22,7 +22,7 @@ class BenchmarkConfig:
         self,
         warmup_iterations: int = 5,
         measurement_iterations: int = 20,
-        gpu_monitoring: bool = False,  # False by default because it slows down the benchmark by a lot
+        gpu_monitoring: bool = True,  # NOTE: you may want to disable this at times as we have obsvered it could heavily slow down benchmarks on AMD
         batch_size: int = 1,
         sequence_length: int = 128,
         num_tokens_to_generate: int = 128,
@@ -136,7 +136,7 @@ def cross_generate_configs(
     batch_size: int = 1,
     sequence_length: int = 128,
     num_tokens_to_generate: int = 128,
-    gpu_monitoring: bool = False,  # this slows down the benchmark by a lot so we disable it by default
+    gpu_monitoring: bool = True,
 ) -> list[BenchmarkConfig]:
     # Create kwargs common to all configs
     kwargs = {
@@ -169,7 +169,7 @@ def generate_all_configs(
     batch_size: int = 1,
     sequence_length: int = 128,
     num_tokens_to_generate: int = 128,
-    gpu_monitoring: bool = False,
+    gpu_monitoring: bool = True,
 ) -> list[BenchmarkConfig]:
     all_attn_implementations = [
         ("flash_attention_2", None),
@@ -197,7 +197,6 @@ def generate_main_configs(
     batch_size: int = 1,
     sequence_length: int = 128,
     num_tokens_to_generate: int = 128,
-    gpu_monitoring: bool = False,
 ) -> list[BenchmarkConfig]:
     # Create kwargs common to all configs
     kwargs = {
@@ -206,10 +205,10 @@ def generate_main_configs(
         "batch_size": batch_size,
         "sequence_length": sequence_length,
         "num_tokens_to_generate": num_tokens_to_generate,
-        "gpu_monitoring": gpu_monitoring,
     }
     return [  # TODO: test max-autotune instead of default
-        BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", **kwargs),
-        BenchmarkConfig(attn_implementation="eager", compile_mode="default", **kwargs),
-        BenchmarkConfig(attn_implementation="flash_attention_2", **kwargs),
+        BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", gpu_monitoring=False, **kwargs),
+        BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", gpu_monitoring=True, **kwargs),
+        BenchmarkConfig(attn_implementation="eager", compile_mode="default", gpu_monitoring=True, **kwargs),
+        BenchmarkConfig(attn_implementation="flash_attention_2", gpu_monitoring=True, **kwargs),
     ]
