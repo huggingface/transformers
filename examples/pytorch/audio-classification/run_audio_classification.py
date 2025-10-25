@@ -27,7 +27,6 @@
 import logging
 import os
 import sys
-import warnings
 from dataclasses import dataclass, field
 from random import randint
 from typing import Optional
@@ -180,28 +179,10 @@ class ModelArguments:
             )
         },
     )
-    freeze_feature_extractor: Optional[bool] = field(
-        default=None, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
-    )
     ignore_mismatched_sizes: bool = field(
         default=False,
         metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
     )
-
-    def __post_init__(self):
-        if not self.freeze_feature_extractor and self.freeze_feature_encoder:
-            warnings.warn(
-                "The argument `--freeze_feature_extractor` is deprecated and "
-                "will be removed in a future version. Use `--freeze_feature_encoder` "
-                "instead. Setting `freeze_feature_encoder==True`.",
-                FutureWarning,
-            )
-        if self.freeze_feature_extractor and not self.freeze_feature_encoder:
-            raise ValueError(
-                "The argument `--freeze_feature_extractor` is deprecated and "
-                "should not be used in combination with `--freeze_feature_encoder`. "
-                "Only make use of `--freeze_feature_encoder`."
-            )
 
 
 def main():

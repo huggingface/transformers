@@ -17,7 +17,6 @@
 import json
 import os
 import re
-import warnings
 from functools import lru_cache
 from typing import Optional
 
@@ -393,29 +392,13 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         text = super()._decode(*args, **kwargs)
 
         if normalize:
-            clean_text = self._normalize(text)
+            clean_text = self.normalize(text)
             return clean_text
         elif basic_normalize:
-            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
+            clean_text = self.basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
-
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._normalize
-    def _normalize(self, text):
-        warnings.warn(
-            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
-        )
-        return self.normalize(text)
-
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
-    def _basic_normalize(self, text, remove_diacritics=False):
-        warnings.warn(
-            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
-        )
-        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.normalize
     def normalize(self, text):
