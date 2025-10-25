@@ -122,7 +122,7 @@ def get_video_processor_config(
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
               huggingface.co.
             - a path to a *directory* containing a configuration file saved using the
-              [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+              [`~BaseVideoProcessor.save_pretrained`] method, e.g., `./my_model_directory/`.
 
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -313,9 +313,14 @@ class AutoVideoProcessor:
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            if "--" in video_processor_auto_map:
+                upstream_repo = video_processor_auto_map.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             class_ref = video_processor_auto_map
