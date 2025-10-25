@@ -38,6 +38,10 @@ on:
         default: ""
         required: false
         type: string
+      pytest_marker:
+        required: false
+        type: string
+
 
 env:
   HF_HOME: /mnt/cache
@@ -127,6 +131,7 @@ jobs:
       commit_sha: ${{ inputs.commit_sha || github.sha }}
       runner_type: ${{ inputs.runner_type }}
       report_repo_id: ${{ inputs.report_repo_id }}
+      pytest_marker: ${{ inputs.pytest_marker }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
