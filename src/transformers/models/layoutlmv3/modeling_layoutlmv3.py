@@ -432,7 +432,7 @@ class LayoutLMv3Attention(nn.Module):
             else:
                 # For other dimensions, try to squeeze to 2D
                 attn_mask = attention_mask.squeeze() >= 0
-            
+
             # Expand mask to be broadcastable with attention heads: (batch_size, seq_len) -> (batch_size, 1, seq_len, seq_len)
             if attn_mask.dim() == 2:
                 attn_mask = attn_mask.unsqueeze(1).unsqueeze(1)
