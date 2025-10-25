@@ -47,6 +47,12 @@ from .configuration_layoutlmv3 import LayoutLMv3Config
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import pad_input, unpad_input
+else:
+    # Define dummy functions for when flash_attn is not available
+    def unpad_input(*args, **kwargs):
+        raise ImportError("flash_attn is not available")
+    def pad_input(*args, **kwargs):
+        raise ImportError("flash_attn is not available")
 
 
 logger = logging.get_logger(__name__)
@@ -293,10 +299,11 @@ class LayoutLMv3SelfAttention(nn.Module):
         # Changing the computational order into QT(K/√d) alleviates the problem. (https://huggingface.co/papers/2105.13290)
         attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_head_size), key_layer.transpose(-1, -2))
 
-        if self.has_relative_attention_bias and self.has_spatial_attention_bias:
-            attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
-        elif self.has_relative_attention_bias:
-            attention_scores += rel_pos / math.sqrt(self.attention_head_size)
+        if self.has_relative_attention_bias and rel_pos is not None:
+            if self.has_spatial_attention_bias and rel_2d_pos is not None:
+                attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
+            else:
+                attention_scores += rel_pos / math.sqrt(self.attention_head_size)
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
@@ -416,7 +423,19 @@ class LayoutLMv3Attention(nn.Module):
         # Convert attention mask to boolean format for SDPA
         attn_mask = None
         if attention_mask is not None:
-            attn_mask = attention_mask >= 0
+            # SDPA expects 2D mask, but we might have 4D extended mask
+            if attention_mask.dim() == 4:
+                # Convert 4D extended mask to 2D: (batch_size, 1, 1, seq_len) -> (batch_size, seq_len)
+                attn_mask = attention_mask.squeeze(1).squeeze(1) >= 0
+            elif attention_mask.dim() == 2:
+                attn_mask = attention_mask >= 0
+            else:
+                # For other dimensions, try to squeeze to 2D
+                attn_mask = attention_mask.squeeze() >= 0
+            
+            # Expand mask to be broadcastable with attention heads: (batch_size, seq_len) -> (batch_size, 1, seq_len, seq_len)
+            if attn_mask.dim() == 2:
+                attn_mask = attn_mask.unsqueeze(1).unsqueeze(1)
 
         # SDPA doesn't support head_mask, fallback if needed
         if head_mask is not None:
