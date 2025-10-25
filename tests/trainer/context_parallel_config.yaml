@@ -1,0 +1,30 @@
+compute_environment: LOCAL_MACHINE
+debug: false
+distributed_type: FSDP
+downcast_bf16: 'no'
+enable_cpu_affinity: false
+fsdp_config:
+  fsdp_activation_checkpointing: false
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_cpu_ram_efficient_loading: false
+  fsdp_offload_params: false
+  fsdp_reshard_after_forward: false
+  fsdp_state_dict_type: SHARDED_STATE_DICT
+  fsdp_transformer_layer_cls_to_wrap: LlamaDecoderLayer
+  fsdp_version: 2
+machine_rank: 0
+main_training_function: main
+mixed_precision: bf16
+num_machines: 1
+num_processes: 2
+parallelism_config:
+  parallelism_config_dp_replicate_size: 1
+  parallelism_config_dp_shard_size: 1
+  parallelism_config_tp_size: 1
+  parallelism_config_cp_size: 2
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false
