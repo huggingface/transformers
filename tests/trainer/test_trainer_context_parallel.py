@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import sys
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -91,11 +92,16 @@ if is_torch_available():
                     input_ids = torch.nn.functional.pad(input_ids, (0, padding_len), value=self.tokenizer.pad_token_id)
                     shift_labels = torch.nn.functional.pad(shift_labels, (0, padding_len), value=-100)
 
+            # For causal LM, unshifted labels are the input_ids themselves
+            # Replace pad tokens with -100 in labels
+            unshifted_labels = input_ids.clone()
+            unshifted_labels[unshifted_labels == self.tokenizer.pad_token_id] = -100
+
             # Create batch dictionary
             batch = {
                 "input_ids": input_ids.clone(),  # Clone to avoid memory sharing with pin_memory
-                "shift_labels": shift_labels.clone(),  # CP trainer expects this key
-                "labels": shift_labels.clone(),  # Clone to avoid memory sharing
+                "shift_labels": shift_labels.clone(),  # CP trainer expects pre-shifted labels
+                "labels": unshifted_labels.clone(),  # Non-CP mode expects unshifted labels
             }
 
             # Add position_ids (CP needs explicit position IDs)
@@ -144,28 +150,31 @@ class TestTrainerContextParallel(TestCasePlus):
     @require_torch_multi_accelerator
     @require_accelerate
     @slow
-    def test_cp_reproducibility(self):
-        """Test that CP produces reproducible results with the same seed."""
+    def test_cp_equivalence(self):
+        """Test that CP produces the same losses as without CP."""
         import os
 
         output_dir = self.get_auto_remove_tmp_dir()
+
+        # Run with CP enabled (cp_size=2)
         config_path_cp = f"{self.test_file_dir}/context_parallel_config.yaml"
+        loss_file_cp = os.path.join(output_dir, "losses_cp.json")
 
-        # Run 1: Train with CP and seed=42
-        loss_file_1 = os.path.join(output_dir, "losses_run1.json")
-        cmd_1 = [
+        cmd_cp = [
             "accelerate",
             "launch",
             "--config_file",
             config_path_cp,
             f"{self.test_file_dir}/test_trainer_context_parallel.py",
             "--output_dir",
-            os.path.join(output_dir, "run1"),
+            os.path.join(output_dir, "with_cp"),
             "--report_to",
             "none",
             "--max_steps",
             "10",
             "--per_device_train_batch_size",
+            "1",
+            "--gradient_accumulation_steps",
             "1",
             "--logging_steps",
             "1",
@@ -174,25 +183,29 @@ class TestTrainerContextParallel(TestCasePlus):
             "--seed",
             "42",
             "--loss_output_file",
-            loss_file_1,
+            loss_file_cp,
         ]
-        execute_subprocess_async(cmd_1, env=self.get_env())
+        execute_subprocess_async(cmd_cp, env=self.get_env())
 
-        # Run 2: Train with CP and same seed=42
-        loss_file_2 = os.path.join(output_dir, "losses_run2.json")
-        cmd_2 = [
+        # Run without CP (FSDP with num_processes=1, no parallelism_config)
+        config_path_no_cp = f"{self.test_file_dir}/context_parallel_no_cp_config.yaml"
+        loss_file_no_cp = os.path.join(output_dir, "losses_no_cp.json")
+
+        cmd_no_cp = [
             "accelerate",
             "launch",
             "--config_file",
-            config_path_cp,
+            config_path_no_cp,
             f"{self.test_file_dir}/test_trainer_context_parallel.py",
             "--output_dir",
-            os.path.join(output_dir, "run2"),
+            os.path.join(output_dir, "without_cp"),
             "--report_to",
             "none",
             "--max_steps",
             "10",
             "--per_device_train_batch_size",
+            "1",
+            "--gradient_accumulation_steps",
             "1",
             "--logging_steps",
             "1",
@@ -201,30 +214,40 @@ class TestTrainerContextParallel(TestCasePlus):
             "--seed",
             "42",
             "--loss_output_file",
-            loss_file_2,
+            loss_file_no_cp,
         ]
-        execute_subprocess_async(cmd_2, env=self.get_env())
+        execute_subprocess_async(cmd_no_cp, env=self.get_env())
 
-        # Compare losses - should be identical with same seed
-        with open(loss_file_1) as f:
-            losses_1 = json.load(f)
-        with open(loss_file_2) as f:
-            losses_2 = json.load(f)
+        # Compare losses - should be very close since CP just splits sequence computation
+        with open(loss_file_cp) as f:
+            losses_cp = json.load(f)
+        with open(loss_file_no_cp) as f:
+            losses_no_cp = json.load(f)
 
-        assert len(losses_1) == len(losses_2), (
-            f"Different number of losses: Run1 has {len(losses_1)}, Run2 has {len(losses_2)}"
+        assert len(losses_cp) == len(losses_no_cp), (
+            f"Different number of losses: CP has {len(losses_cp)}, no-CP has {len(losses_no_cp)}"
         )
 
-        # Losses should be identical (or very close) with same seed
-        for i, (loss_1, loss_2) in enumerate(zip(losses_1, losses_2)):
-            assert abs(loss_1 - loss_2) < 1e-6, (
-                f"Loss mismatch at step {i + 1}: Run1={loss_1:.6f}, Run2={loss_2:.6f}, diff={abs(loss_1 - loss_2):.6e}"
-            )
+        # CP should produce very similar results (small numerical differences expected)
+        # The differences come from:
+        # - Different gradient reduction patterns in distributed training
+        # - BF16 mixed precision accumulated differences
+        # - Sequence splitting and gathering in CP mode
+        losses_cp_tensor = torch.tensor(losses_cp)
+        losses_no_cp_tensor = torch.tensor(losses_no_cp)
+
+        # Use torch.testing.assert_close with rtol=2% and atol=0.02
+        # Testing shows actual differences are typically <1.5%
+        torch.testing.assert_close(
+            losses_cp_tensor,
+            losses_no_cp_tensor,
+            rtol=2e-2,  # 2% relative tolerance
+            atol=2e-2,  # 0.02 absolute tolerance
+            msg=f"CP losses {losses_cp} do not match non-CP losses {losses_no_cp}",
+        )
 
 
 if __name__ == "__main__":
-    import sys
-
     # Parse custom arguments (not TrainingArguments parameters)
     loss_output_file = None
 
