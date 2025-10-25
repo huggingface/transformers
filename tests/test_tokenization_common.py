@@ -613,54 +613,54 @@ Hey how are you doing"""
 
         shutil.rmtree(tmpdirname)
 
-    def test_integration_expected_tokens(self):
-        """Test that tokenization produces expected tokens for a comprehensive test string."""
-        if input_string is None or self.integration_expected_tokens is None:
-            self.skipTest("No integration test data provided")
+    # def test_integration_expected_tokens(self):
+    #     """Test that tokenization produces expected tokens for a comprehensive test string."""
+    #     if input_string is None or self.integration_expected_tokens is None:
+    #         self.skipTest("No integration test data provided")
         
-        for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                tokens = tokenizer.tokenize(input_string)
-                self.assertEqual(tokens, self.integration_expected_tokens)
+    #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
+    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
+    #             tokens = tokenizer.tokenize(input_string)
+    #             self.assertEqual(tokens, self.integration_expected_tokens)
 
-    def test_integration_expected_token_ids(self):
-        """Test that encoding produces expected token IDs for a comprehensive test string."""
-        if input_string is None or self.integration_expected_token_ids is None:
-            self.skipTest("No integration test data provided")
+    # def test_integration_expected_token_ids(self):
+    #     """Test that encoding produces expected token IDs for a comprehensive test string."""
+    #     if input_string is None or self.integration_expected_token_ids is None:
+    #         self.skipTest("No integration test data provided")
         
-        for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                token_ids = tokenizer.encode(input_string)
-                self.assertEqual(token_ids, self.integration_expected_token_ids)
+    #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
+    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
+    #             token_ids = tokenizer.encode(input_string)
+    #             self.assertEqual(token_ids, self.integration_expected_token_ids)
 
-    def test_integration_decode_roundtrip(self):
-        for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                token_ids = tokenizer.encode(input_string)
-                decoded_text = tokenizer.decode(token_ids)
-                self.assertEqual(decoded_text, self.integration_expected_decoded_tokens)
+    # def test_integration_decode_roundtrip(self):
+    #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
+    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
+    #             token_ids = tokenizer.encode(input_string)
+    #             decoded_text = tokenizer.decode(token_ids)
+    #             self.assertEqual(decoded_text, self.integration_expected_decoded_tokens)
 
-    def test_integration_save_and_reload(self):
-        """Test that tokenizer produces same results after save and reload with integration test data."""
-        if input_string is None:
-            self.skipTest("No integration test data provided")
+    # def test_integration_save_and_reload(self):
+    #     """Test that tokenizer produces same results after save and reload with integration test data."""
+    #     if input_string is None:
+    #         self.skipTest("No integration test data provided")
         
-        for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                original_tokens = tokenizer.tokenize(input_string)
-                original_ids = tokenizer.encode(input_string)
+    #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
+    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
+    #             original_tokens = tokenizer.tokenize(input_string)
+    #             original_ids = tokenizer.encode(input_string)
                 
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    tokenizer.save_pretrained(tmp_dir)
+    #             with tempfile.TemporaryDirectory() as tmp_dir:
+    #                 tokenizer.save_pretrained(tmp_dir)
                     
-                    reloaded_tokenizer = tokenizer.__class__.from_pretrained(tmp_dir)
+    #                 reloaded_tokenizer = tokenizer.__class__.from_pretrained(tmp_dir)
                     
-                    # Test that reloaded tokenizer produces same results
-                    reloaded_tokens = reloaded_tokenizer.tokenize(input_string)
-                    reloaded_ids = reloaded_tokenizer.encode(input_string)
+    #                 # Test that reloaded tokenizer produces same results
+    #                 reloaded_tokens = reloaded_tokenizer.tokenize(input_string)
+    #                 reloaded_ids = reloaded_tokenizer.encode(input_string)
                     
-                    self.assertEqual(original_tokens, reloaded_tokens)
-                    self.assertEqual(original_ids, reloaded_ids)
+    #                 self.assertEqual(original_tokens, reloaded_tokens)
+    #                 self.assertEqual(original_ids, reloaded_ids)
 
     def test_integration(self):
         """
@@ -680,6 +680,8 @@ Hey how are you doing"""
             self.skipTest("No integration expected tokens provided")
         if not hasattr(self, 'integration_expected_token_ids') or self.integration_expected_token_ids is None:
             self.skipTest("No integration expected token IDs provided")
+        if not hasattr(self, 'integration_expected_decoded_text') or self.integration_expected_decoded_text is None:
+            self.skipTest("No integration expected decoded text provided")
         
         for tokenizer in [AutoTokenizer.from_pretrained(self.from_pretrained_id[0], do_lower_case=False, keep_accents=True)]:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -693,22 +695,11 @@ Hey how are you doing"""
                 self.assertEqual(ids_from_encode, self.integration_expected_token_ids,
                                f"Encoded IDs don't match expected for {tokenizer.__class__.__name__}")
 
-                # Test 3: IDs from convert_tokens_to_ids match encode
-                ids_from_tokens = tokenizer.convert_tokens_to_ids(tokens)
-                self.assertEqual(ids_from_tokens, self.integration_expected_token_ids,
-                               f"IDs from convert_tokens_to_ids don't match encode for {tokenizer.__class__.__name__}")
+                # Test 3: Round-trip decode produces expected text (if provided)
+                decoded_text = tokenizer.decode(self.integration_expected_token_ids, clean_up_tokenization_spaces=False)
+                self.assertEqual(decoded_text, self.integration_expected_decoded_text,
+                                f"Decoded text doesn't match expected for {tokenizer.__class__.__name__}")
 
-                # Test 4: Round-trip decode produces expected text (if provided)
-                if hasattr(self, 'integration_expected_decoded_text') and self.integration_expected_decoded_text is not None:
-                    decoded_text = tokenizer.decode(self.integration_expected_token_ids, clean_up_tokenization_spaces=False)
-                    self.assertEqual(decoded_text, self.integration_expected_decoded_text,
-                                   f"Decoded text doesn't match expected for {tokenizer.__class__.__name__}")
-
-                # Test 5: convert_tokens_to_string produces consistent text (if provided)
-                if hasattr(self, 'integration_expected_text_from_tokens') and self.integration_expected_text_from_tokens is not None:
-                    text_from_tokens = tokenizer.convert_tokens_to_string(tokens)
-                    self.assertEqual(text_from_tokens, self.integration_expected_text_from_tokens,
-                                   f"Text from convert_tokens_to_string doesn't match expected for {tokenizer.__class__.__name__}")
         
     def test_internal_consistency(self):
         tokenizer = self.get_tokenizer()

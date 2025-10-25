@@ -42,7 +42,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
     """
 
     feature_extractor_class = "MusicgenMelodyFeatureExtractor"
-    tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
+    tokenizer_class = ("T5Tokenizer",)
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)

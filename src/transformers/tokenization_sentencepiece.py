@@ -323,8 +323,9 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         tokenizer.Load(self.vocab_file)
         self.sp_model = tokenizer
 
-        # 6. Initialize total_vocab_size based on sp_model size
-        self.total_vocab_size = self.sp_model.get_piece_size()
+        # 6. Initialize total_vocab_size based on sp_model size and any loaded added tokens
+        # If added_tokens_decoder was loaded from a saved tokenizer, we need to account for it
+        self._update_total_vocab_size()
 
         # 7. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
@@ -1009,7 +1010,7 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         token_ids: Union[int, list[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
-        spaces_between_special_tokens: bool = True,
+        spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
@@ -1019,25 +1020,42 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
 
         sub_texts = []
         current_sub_text = []
+        
         for token_id in token_ids:
             if skip_special_tokens and token_id in self.all_special_ids:
                 continue
-            if token_id in self._added_tokens_decoder:
+                
+            # Check if this is a special token (added or base vocab)
+            is_added_token = token_id in self._added_tokens_decoder
+            is_base_special = not skip_special_tokens and token_id in self.all_special_ids
+            
+            if is_added_token or is_base_special:
+                # Decode and flush any accumulated regular tokens
                 if current_sub_text:
-                    sub_texts.append(self.sp_model.decode(current_sub_text))
+                    decoded = self.sp_model.decode(current_sub_text)
+                    # Preserve leading space from SPIECE_UNDERLINE, except for the first segment
+                    if sub_texts and self.sp_model.IdToPiece(current_sub_text[0]) == SPIECE_UNDERLINE:
+                        decoded = " " + decoded
+                    sub_texts.append(decoded)
                     current_sub_text = []
-                sub_texts.append(self._added_tokens_decoder[token_id].content)
+                
+                # Add the special token as-is
+                if is_added_token:
+                    sub_texts.append(self._added_tokens_decoder[token_id].content)
+                else:
+                    sub_texts.append(self.convert_ids_to_tokens(token_id))
             else:
                 current_sub_text.append(token_id)
+        
+        # Decode any remaining regular tokens
         if current_sub_text:
-            sub_texts.append(self.sp_model.decode(current_sub_text))
+            decoded = self.sp_model.decode(current_sub_text)
+            # Preserve leading space from SPIECE_UNDERLINE, except for the first segment
+            if sub_texts and self.sp_model.IdToPiece(current_sub_text[0]) == SPIECE_UNDERLINE:
+                decoded = " " + decoded
+            sub_texts.append(decoded)
 
-        if spaces_between_special_tokens:
-            text = " ".join(sub_texts)
-        else:
-            text = "".join(sub_texts)
-
-        return text
+        return " ".join(sub_texts) if spaces_between_special_tokens else "".join(sub_texts)
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def prepare_for_model(
