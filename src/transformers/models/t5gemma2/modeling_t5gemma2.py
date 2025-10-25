@@ -813,7 +813,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
     def __init__(
         self,
         config: T5Gemma2ModuleConfig,
-        shared_embedding: T5Gemma2TextScaledWordEmbedding,
+        eoi_token_index: int = 256_000,
         pixel2feature_preprocessor_fn: Optional[Callable] = None,
     ):
         super().__init__(config)
@@ -823,7 +823,13 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         # preprocessor for raw images pixel values: injected from outside.
         self.pixel2feature_preprocessor_fn = pixel2feature_preprocessor_fn
 
-        self.embed_tokens = shared_embedding
+        self.embed_tokens = T5Gemma2TextScaledWordEmbedding(
+            config.vocab_size,
+            config.hidden_size,
+            config.pad_token_id,
+            embed_scale=config.hidden_size**0.5,
+            eoi_token_index=eoi_token_index,
+        )
         self.norm = T5Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
@@ -1051,13 +1057,11 @@ class T5Gemma2Decoder(T5Gemma2Encoder):
 @auto_docstring
 class T5Gemma2Model(T5Gemma2PreTrainedModel):
     _tied_weights_keys = [
-        "embed_tokens.weight",
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
     ]
     _dynamic_tied_weights_keys = [
         "encoder.embed_tokens.eoi_embedding",
-        "embed_tokens.eoi_embedding",
         "decoder.embed_tokens.eoi_embedding",
     ]
 
@@ -1079,18 +1083,9 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
                 f"encoder ({config.encoder.vocab_size}) vs decoder ({config.decoder.vocab_size})."
             )
 
-        # shared embedding
-        self.embed_tokens = T5Gemma2TextScaledWordEmbedding(
-            config.encoder.vocab_size,
-            config.encoder.hidden_size,
-            config.encoder.pad_token_id,
-            embed_scale=config.encoder.hidden_size**0.5,
-            eoi_token_index=config.eoi_token_index,
-        )
-
         # setup encoder and decoder
-        self.encoder = T5Gemma2Encoder(config.encoder, self.embed_tokens, self.pixel2feature_preprocessor)
-        self.decoder = T5Gemma2Decoder(config.decoder, self.embed_tokens)
+        self.encoder = T5Gemma2Encoder(config.encoder, config.eoi_token_index, self.pixel2feature_preprocessor)
+        self.decoder = T5Gemma2Decoder(config.decoder, config.eoi_token_index)
 
         # setup vision encoder
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
@@ -1113,10 +1108,8 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
     def _tie_weights(self):
         # Decoder input and output embeddings are tied.
         if self.config.tie_word_embeddings:
-            self.encoder.embed_tokens.weight = self.embed_tokens.weight
-            self.decoder.embed_tokens.weight = self.embed_tokens.weight
-            self.encoder.embed_tokens.eoi_embedding = self.embed_tokens.eoi_embedding
-            self.decoder.embed_tokens.eoi_embedding = self.embed_tokens.eoi_embedding
+            self.decoder.embed_tokens.weight = self.encoder.embed_tokens.weight
+            self.decoder.embed_tokens.eoi_embedding = self.encoder.embed_tokens.eoi_embedding
 
     def _get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """Convert pixel image to image features via the encoder and projector."""
@@ -1234,14 +1227,12 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
 class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
-        "model.embed_tokens.weight",
         "lm_head.out_proj.weight",
         "model.encoder.embed_tokens.weight",
         "model.decoder.embed_tokens.weight",
     ]
     _dynamic_tied_weights_keys = [
         "model.encoder.embed_tokens.eoi_embedding",
-        "model.embed_tokens.eoi_embedding",
         "model.decoder.embed_tokens.eoi_embedding",
     ]
     _tp_plan = {"lm_head.out_proj": "colwise_rep"}
@@ -1273,7 +1264,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def _tie_weights(self):
         # Decoder input and output embeddings are tied.
         if self.config.tie_word_embeddings:
-            self.lm_head.out_proj.weight = self.model.embed_tokens.weight
+            self.lm_head.out_proj.weight = self.model.encoder.embed_tokens.weight
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1382,13 +1373,11 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
 @auto_docstring
 class T5Gemma2ForSequenceClassification(T5Gemma2PreTrainedModel):
     _tied_weights_keys = [
-        "model.embed_tokens.weight",
         "model.encoder.embed_tokens.weight",
         "model.decoder.embed_tokens.weight",
     ]
     _dynamic_tied_weights_keys = [
         "model.encoder.embed_tokens.eoi_embedding",
-        "model.embed_tokens.eoi_embedding",
         "model.decoder.embed_tokens.eoi_embedding",
     ]
 
@@ -1491,13 +1480,11 @@ class T5Gemma2ForSequenceClassification(T5Gemma2PreTrainedModel):
 @auto_docstring
 class T5Gemma2ForTokenClassification(T5Gemma2PreTrainedModel):
     _tied_weights_keys = [
-        "model.embed_tokens.weight",
         "model.encoder.embed_tokens.weight",
         "model.decoder.embed_tokens.weight",
     ]
     _dynamic_tied_weights_keys = [
         "model.encoder.embed_tokens.eoi_embedding",
-        "model.embed_tokens.eoi_embedding",
         "model.decoder.embed_tokens.eoi_embedding",
     ]
 
