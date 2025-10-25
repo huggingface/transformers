@@ -25,8 +25,10 @@ from tokenizers import AddedToken
 
 from transformers import (
     ParakeetCTCConfig,
+    ParakeetTDTConfig,
     ParakeetFeatureExtractor,
     ParakeetForCTC,
+    ParakeetForTDT,
     ParakeetProcessor,
     ParakeetTokenizerFast,
 )
@@ -220,8 +222,11 @@ def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_i
         "stochastic_depth_mode",
         "conv_context_size",
         "dropout_pre_encoder",
+        "reduction",
+        "reduction_position",
+        "reduction_factor",
     ]
-    enocder_config_keys_mapping = {
+    encoder_config_keys_mapping = {
         "d_model": "hidden_size",
         "n_heads": "num_attention_heads",
         "n_layers": "num_hidden_layers",
@@ -234,16 +239,65 @@ def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_i
         "dropout_emb": "dropout_positions",
         "dropout_att": "attention_dropout",
         "xscaling": "scale_input",
+        "use_bias": "attention_bias",
     }
     converted_encoder_config = {}
+
+    decoder_keys_to_ignore = [
+        "_target_",
+        "normalization_mode",
+        "random_state_sampling",
+        "blank_as_pad",
+        "prednet",
+    ]
+    decoder_config_keys_mapping = {
+        "vocab_size": "vocab_size",
+    }
+    converted_decoder_config = {}
+
+    joint_keys_to_ignore = [
+        "_target_",
+        'log_softmax',
+        'preserve_memory',
+        'fuse_loss_wer',
+        'fused_batch_size',
+        'jointnet',
+        'vocabulary'
+    ]
+    joint_config_keys_mapping = {
+        "vocab_size": "vocab_size",
+        "num_classes": "num_classes",
+        "num_extra_outputs": "num_extra_outputs",
+    }
+    converted_joint_config = {}
+
 
     for key, value in nemo_config["encoder"].items():
         if key in encoder_keys_to_ignore:
             continue
-        if key in enocder_config_keys_mapping:
-            converted_encoder_config[enocder_config_keys_mapping[key]] = value
+        if key in encoder_config_keys_mapping:
+            converted_encoder_config[encoder_config_keys_mapping[key]] = value
         else:
-            raise ValueError(f"Key {key} not found in enocder_config_keys_mapping")
+            raise ValueError(f"Key {key} not found in encoder_config_keys_mapping")
+
+    if model_type == 'tdt':
+        for key, value in nemo_config["decoder"].items():
+            if key in decoder_keys_to_ignore:
+                continue
+            if key in decoder_config_keys_mapping:
+                converted_decoder_config[decoder_config_keys_mapping[key]] = value
+            else:
+                raise ValueError(f"Key {key} not found in encoder_config_keys_mapping")
+
+        for key, value in nemo_config["joint"].items():
+            if key in joint_keys_to_ignore:
+                continue
+            if key in joint_config_keys_mapping:
+                converted_joint_config[joint_config_keys_mapping[key]] = value
+            else:
+                raise ValueError(f"Key {key} not found in encoder_config_keys_mapping")
+
+        converted_joint_config["vocab_size"] = converted_joint_config["num_classes"]
 
     state_dict = torch.load(model_files["model_weights"], map_location="cpu", weights_only=True)
     converted_state_dict = {}
@@ -280,6 +334,38 @@ def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_i
         ParakeetForCTC.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
         print("Model reloaded successfully.")
 
+    elif model_type == "tdt":
+        num_classes = converted_joint_config["num_classes"]
+        model_config = ParakeetTDTConfig(
+            pad_token_id=num_classes,
+            vocab_size=num_classes+1,
+            blank_token_id=num_classes,
+            encoder_config=converted_encoder_config,
+            decoder_config=converted_decoder_config,
+            joint_config=converted_joint_config,
+        )
+        print("Loading the checkpoint in a Parakeet TDT model.")
+        with torch.device("meta"):
+            model = ParakeetForTDT(model_config)
+        model.load_state_dict(converted_state_dict, strict=True, assign=True)
+        print("Checkpoint loaded successfully.")
+        del model.config._name_or_path
+
+        print("Saving the model.")
+        model.save_pretrained(output_dir)
+
+        if push_to_repo_id:
+            model.push_to_hub(push_to_repo_id)
+
+        del converted_state_dict, model
+
+        # Safety check: reload the converted model
+        gc.collect()
+        print("Reloading the model to check if it's saved correctly.")
+        ParakeetForTDT.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
+        print("Model reloaded successfully.")
+
+
     else:
         raise ValueError(f"Model type {model_type} not supported.")
 
@@ -303,7 +389,7 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--hf_repo_id", required=True, help="Model repo on huggingface.co")
-    parser.add_argument("--model_type", required=True, choices=["ctc"], help="Model type (`ctc`, `tdt`)")
+    parser.add_argument("--model_type", required=True, choices=["ctc","tdt"], help="Model type (`ctc`, `tdt`)")
     parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
     parser.add_argument("--push_to_repo_id", help="Repository ID to push the model to on the Hub")
     args = parser.parse_args()
