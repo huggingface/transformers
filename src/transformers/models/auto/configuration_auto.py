@@ -223,6 +223,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("layoutlm", "LayoutLMConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("layoutlmv3", "LayoutLMv3Config"),
+        ("layoutxlm", "LayoutLMv2Config"),
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
         ("lfm2", "Lfm2Config"),
@@ -960,12 +961,14 @@ DEPRECATED_MODELS = [
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
         ("openai-gpt", "openai"),
+        ("blip-2", "blip_2"),
         ("data2vec-audio", "data2vec"),
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
         ("kosmos-2", "kosmos2"),
         ("kosmos-2.5", "kosmos2_5"),
+        ("omdet-turbo", "omdet_turbo"),
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
@@ -979,6 +982,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("gemma3n_vision", "gemma3n"),
         ("glm4v_text", "glm4v"),
         ("glm4v_moe_text", "glm4v_moe"),
+        ("grounding-dino", "grounding_dino"),
         ("idefics3_vision", "idefics3"),
         ("siglip_vision_model", "siglip"),
         ("siglip2_vision_model", "siglip2"),
@@ -1003,6 +1007,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
+        ("wav2vec2-bert", "wav2vec2_bert"),
     ]
 )
 

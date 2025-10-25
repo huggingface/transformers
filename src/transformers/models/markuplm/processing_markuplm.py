@@ -43,9 +43,10 @@ class MarkupLMProcessor(ProcessorMixin):
             Whether or not to use `MarkupLMFeatureExtractor` to parse HTML strings into nodes and corresponding xpaths.
     """
 
-    feature_extractor_class = "MarkupLMFeatureExtractor"
-    tokenizer_class = ("MarkupLMTokenizer", "MarkupLMTokenizerFast")
     parse_html = True
+
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     def __call__(
         self,
