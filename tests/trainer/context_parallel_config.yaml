@@ -10,7 +10,6 @@ fsdp_config:
   fsdp_offload_params: false
   fsdp_reshard_after_forward: false
   fsdp_state_dict_type: SHARDED_STATE_DICT
-  fsdp_transformer_layer_cls_to_wrap: LlamaDecoderLayer
   fsdp_version: 2
 machine_rank: 0
 main_training_function: main
