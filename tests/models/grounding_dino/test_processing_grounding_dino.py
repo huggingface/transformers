@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
 import shutil
 import tempfile
@@ -23,7 +22,7 @@ import pytest
 from transformers import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -52,21 +51,16 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-        image_processor_map = {
-            "do_resize": True,
-            "size": None,
-            "do_normalize": True,
-            "image_mean": [0.5, 0.5, 0.5],
-            "image_std": [0.5, 0.5, 0.5],
-            "do_rescale": True,
-            "rescale_factor": 1 / 255,
-            "do_pad": True,
-        }
-        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
-
-        image_processor = GroundingDinoImageProcessor()
+        image_processor = GroundingDinoImageProcessor(
+            do_resize=True,
+            size=None,
+            do_normalize=True,
+            image_mean=[0.5, 0.5, 0.5],
+            image_std=[0.5, 0.5, 0.5],
+            do_rescale=True,
+            rescale_factor=1 / 255,
+            do_pad=True,
+        )
         tokenizer = BertTokenizer.from_pretrained(cls.from_pretrained_id)
 
         processor = GroundingDinoProcessor(image_processor, tokenizer)

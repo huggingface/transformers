@@ -64,10 +64,6 @@ class Lfm2VlProcessor(ProcessorMixin):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Lfm2VlImageProcessorFast"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor,

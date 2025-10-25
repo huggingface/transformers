@@ -62,7 +62,9 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
 
         tokenizer = cls.get_tokenizer()
+        tokenizer.save_pretrained(cls.tmpdirname)
         image_processor = cls.get_image_processor()
+        image_processor.save_pretrained(cls.tmpdirname)
         processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(cls.tmpdirname)
 

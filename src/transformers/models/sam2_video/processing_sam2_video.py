@@ -53,10 +53,6 @@ class Sam2VideoProcessor(ProcessorMixin):
             The value used for padding input points.
     """
 
-    attributes = ["image_processor", "video_processor"]
-    image_processor_class = "Sam2ImageProcessorFast"
-    video_processor_class = "Sam2VideoVideoProcessor"
-
     def __init__(
         self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
     ):
