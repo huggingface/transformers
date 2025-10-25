@@ -316,11 +316,12 @@ class Ernie4_5_MoeStatics(nn.Module):
 
 
 class Ernie4_5_MoeExperts(nn.ModuleList):
-    def __init__(self, config):
+    def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.num_experts = config.moe_num_experts
+        intermediate_size = config.moe_intermediate_size if intermediate_size is None else intermediate_size
         for _ in range(self.num_experts):
-            self.append(Ernie4_5_MoeMLP(config, config.moe_intermediate_size))
+            self.append(Ernie4_5_MoeMLP(config, intermediate_size))
 
     def forward(
         self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
@@ -368,8 +369,8 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-        routing_weights = routing_weights.to(router_logits.dtype)
-        return selected_experts, routing_weights
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return selected_experts, routing_weights, router_logits
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, _ = hidden_states.shape
@@ -378,7 +379,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states)
+        selected_experts, routing_weights, _ = self.route_tokens_to_experts(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
 
         if self.shared_experts is not None:
