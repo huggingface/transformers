@@ -32,85 +32,11 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
+        DataCollatorForLanguageModeling,
         HfArgumentParser,
-        PreTrainedTokenizerBase,
         Trainer,
         TrainingArguments,
     )
-
-    class CPDataset(torch.utils.data.Dataset):
-        """Simple dataset for context parallelism testing."""
-
-        def __init__(self, tokenizer: PreTrainedTokenizerBase, seq_length: int = 128, num_samples: int = 8):
-            self.tokenizer = tokenizer
-            self.seq_length = seq_length
-            # Create simple text samples
-            texts = [
-                "The quick brown fox jumps over the lazy dog. " * 10,
-                "Hello world, this is a test sentence for training. " * 10,
-            ] * (num_samples // 2)
-
-            self.data = []
-            for text in texts:
-                encoded = tokenizer(
-                    text,
-                    max_length=seq_length,
-                    truncation=True,
-                    padding="max_length",
-                    return_attention_mask=False,  # CP doesn't use attention_mask
-                )
-                input_ids = encoded["input_ids"]
-                # Pre-compute shift_labels for causal LM
-                shift_labels = input_ids[1:] + [tokenizer.pad_token_id]
-                shift_labels = [lbl if lbl != tokenizer.pad_token_id else -100 for lbl in shift_labels]
-
-                self.data.append({"input_ids": input_ids, "shift_labels": shift_labels})
-
-        def __len__(self):
-            return len(self.data)
-
-        def __getitem__(self, i):
-            return self.data[i]
-
-    class CPDataCollator:
-        """Data collator for context parallelism - handles special CP requirements."""
-
-        def __init__(self, tokenizer: PreTrainedTokenizerBase, pad_to_multiple_of: int | None = None):
-            self.tokenizer = tokenizer
-            self.pad_to_multiple_of = pad_to_multiple_of
-
-        def __call__(self, features):
-            # Stack input_ids and shift_labels - use clone() to avoid memory sharing issues
-            input_ids = torch.stack([torch.tensor(f["input_ids"], dtype=torch.long) for f in features])
-            shift_labels = torch.stack([torch.tensor(f["shift_labels"], dtype=torch.long) for f in features])
-
-            # Pad to multiple if needed (required for CP: sequences must be divisible by cp_size * 2)
-            if self.pad_to_multiple_of:
-                seq_len = input_ids.shape[1]
-                if seq_len % self.pad_to_multiple_of != 0:
-                    padding_len = self.pad_to_multiple_of - (seq_len % self.pad_to_multiple_of)
-                    input_ids = torch.nn.functional.pad(input_ids, (0, padding_len), value=self.tokenizer.pad_token_id)
-                    shift_labels = torch.nn.functional.pad(shift_labels, (0, padding_len), value=-100)
-
-            # For causal LM, unshifted labels are the input_ids themselves
-            # Replace pad tokens with -100 in labels
-            unshifted_labels = input_ids.clone()
-            unshifted_labels[unshifted_labels == self.tokenizer.pad_token_id] = -100
-
-            # Create batch dictionary
-            batch = {
-                "input_ids": input_ids.clone(),  # Clone to avoid memory sharing with pin_memory
-                "shift_labels": shift_labels.clone(),  # CP trainer expects pre-shifted labels
-                "labels": unshifted_labels.clone(),  # Non-CP mode expects unshifted labels
-            }
-
-            # Add position_ids (CP needs explicit position IDs)
-            # Use repeat instead of expand to avoid view/memory sharing issues
-            seq_len = batch["input_ids"].shape[1]
-            batch_size = batch["input_ids"].shape[0]
-            batch["position_ids"] = torch.arange(seq_len, dtype=torch.long).unsqueeze(0).repeat(batch_size, 1)
-
-            return batch
 
 
 class TestTrainerContextParallel(TestCasePlus):
@@ -272,10 +198,25 @@ if __name__ == "__main__":
         use_cache=False,  # Disable KV cache for CP
     )
 
-    # Create dataset and data collator
-    train_dataset = CPDataset(tokenizer, seq_length=128, num_samples=8)
-    # pad_to_multiple_of=4 for cp_size=2 (must be divisible by cp_size * 2)
-    data_collator = CPDataCollator(tokenizer, pad_to_multiple_of=4)
+    # Create simple dataset: just tokenize some text
+    texts = [
+        "The quick brown fox jumps over the lazy dog. " * 10,
+        "Hello world, this is a test sentence for training. " * 10,
+    ] * 4  # 8 samples total
+
+    def tokenize_function(examples):
+        return tokenizer(examples, max_length=128, truncation=True, padding="max_length")
+
+    train_dataset = [tokenize_function(text) for text in texts]
+
+    # Use standard DataCollatorForLanguageModeling for causal LM
+    # pad_to_multiple_of=4 ensures sequences are divisible by cp_size * 2 (for cp_size=2)
+    # Trainer will automatically generate position_ids and shift_labels as needed
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer,
+        mlm=False,  # Causal language modeling
+        pad_to_multiple_of=4,
+    )
 
     trainer = Trainer(
         model=model,
@@ -290,7 +231,7 @@ if __name__ == "__main__":
     # Verify training completed
     assert trainer.state.global_step > 0, "Training should have completed at least one step"
 
-    # Save losses to file if requested (for reproducibility testing)
+    # Save losses to file if requested (for equivalence testing)
     if loss_output_file and training_args.process_index == 0:
         losses = [log["loss"] for log in trainer.state.log_history if "loss" in log]
         with open(loss_output_file, "w") as f:
