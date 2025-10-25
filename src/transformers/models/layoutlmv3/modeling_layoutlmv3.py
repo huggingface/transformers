@@ -336,7 +336,8 @@ class LayoutLMv3SelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Attention with LayoutLMv2->LayoutLMv3
+# Adapted from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Attention with LayoutLMv2->LayoutLMv3
+# Enhanced with unified attention implementation supporting eager, SDPA, and FlashAttention-2
 class LayoutLMv3Attention(nn.Module):
     """
     Unified LayoutLMv3 attention module with support for eager, SDPA, and FlashAttention-2.
