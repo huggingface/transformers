@@ -689,7 +689,7 @@ class ProcessorMixin(PushToHubMixin):
                 elif isinstance(value, dict):
                     dictionary[key] = cast_array_to_list(value)
             return dictionary
-        
+
         # Special case, add `audio_tokenizer` dict which points to model weights and path
         if "audio_tokenizer" in output:
             audio_tokenizer_dict = {
@@ -697,7 +697,7 @@ class ProcessorMixin(PushToHubMixin):
                 "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
             }
             output["audio_tokenizer"] = audio_tokenizer_dict
-        
+
         # Serialize attributes as a dict
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
