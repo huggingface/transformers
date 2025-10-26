@@ -655,7 +655,7 @@ class ProcessorMixin(PushToHubMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this processor instance.
         """
         # shallow copy to avoid deepcopy errors
-        output = self.__dict__.copy()  
+        output = self.__dict__.copy()
 
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
@@ -740,7 +740,7 @@ class ProcessorMixin(PushToHubMixin):
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory, save_jinja_files=False, push_to_hub: bool = False, **kwargs):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -1420,7 +1420,7 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
-            # updated loading path for handling multiple tokenizers 
+            # updated loading path for handling multiple tokenizers
             attribute_path = os.path.join(pretrained_model_name_or_path, attribute_name)
             if os.path.isdir(attribute_path):
                 # load from its attribute's-specific folder
