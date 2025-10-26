@@ -657,14 +657,19 @@ class ProcessorMixin(PushToHubMixin):
         # shallow copy to avoid deepcopy errors
         output = self.__dict__.copy()  
 
+        # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
+        # Save only the attributes that are either passed as kwargs to `__init__`,
+        # defined in the class's `attributes` list, or included in "auto_map".
         attrs_to_save = list(sig.parameters) + self.__class__.attributes + ["auto_map"]
 
+        # Special attributes to handle: tokenizers and chat_template
         for key in ["tokenizer", "qformer_tokenizer", "protein_tokenizer", "char_tokenizer", "chat_template"]:
             output.pop(key, None)
 
         def save_public_processor_class(dictionary):
-            # make sure private name "_processor_class" is correctly saved as "processor_class"
+            # make sure private name "_processor_class" is correctly
+            # saved as "processor_class"
             _processor_class = dictionary.pop("_processor_class", None)
             if _processor_class is not None:
                 dictionary["processor_class"] = _processor_class
@@ -684,13 +689,12 @@ class ProcessorMixin(PushToHubMixin):
                 elif isinstance(value, dict):
                     dictionary[key] = cast_array_to_list(value)
             return dictionary
-
+        # Special case, add `audio_tokenizer` dict which points to model weights and path
         if "audio_tokenizer" in output:
             audio_tokenizer_dict = {
                 "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
                 "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
             }
-            # Special case, add `audio_tokenizer` dict which points to model weights and path
             output["audio_tokenizer"] = audio_tokenizer_dict
        # Serialize attributes as a dict
         output = {
