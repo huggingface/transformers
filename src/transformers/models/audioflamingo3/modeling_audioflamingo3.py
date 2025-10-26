@@ -659,6 +659,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,

@@ -257,7 +257,6 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         input_features: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         feature_attention_mask: Optional[torch.Tensor] = None,
-        # TODO (ebezzam) why unused? normally passed to self.language_model
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -405,6 +404,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
