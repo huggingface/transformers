@@ -3885,6 +3885,55 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             `list[str]`: The list of decoded sentences.
         """
+        # Handle empty inputs
+        if sequences is None or (hasattr(sequences, "__len__") and len(sequences) == 0):
+            return []
+
+        # Detect whether the input is a single sequence (1D) or a batch (2D)
+        is_single_sequence = False
+
+        if is_torch_available() and is_torch_tensor(sequences):
+            # For torch tensors, check dimensionality
+            if sequences.dim() == 1:
+                is_single_sequence = True
+            elif sequences.dim() > 2:
+                raise TypeError(
+                    f"batch_decode expects a 1D or 2D tensor, but got a {sequences.dim()}D tensor. "
+                    "Please provide either a single sequence (1D) or a batch of sequences (2D)."
+                )
+        elif is_numpy_array(sequences):
+            # For numpy arrays, check dimensionality
+            if sequences.ndim == 1:
+                is_single_sequence = True
+            elif sequences.ndim > 2:
+                raise TypeError(
+                    f"batch_decode expects a 1D or 2D array, but got a {sequences.ndim}D array. "
+                    "Please provide either a single sequence (1D) or a batch of sequences (2D)."
+                )
+        elif isinstance(sequences, (list, tuple)):
+            # For lists/tuples, check if elements are integers (1D) or sequences (2D)
+            if len(sequences) > 0:
+                first_element = sequences[0]
+                if isinstance(first_element, (int, np.integer)):
+                    is_single_sequence = True
+                elif not isinstance(first_element, (list, tuple, np.ndarray)) and not (
+                    is_torch_available() and is_torch_tensor(first_element)
+                ):
+                    raise TypeError(
+                        f"batch_decode expects sequences to be a list of lists of integers, "
+                        f"but got a list with elements of type {type(first_element).__name__}. "
+                        "Please provide either a list of integers (single sequence) or a list of lists of integers (batch)."
+                    )
+        else:
+            raise TypeError(
+                f"batch_decode expects sequences to be a list, tuple, numpy array, or torch tensor, "
+                f"but got {type(sequences).__name__}."
+            )
+
+        # If it's a single sequence, wrap it in a list to make it a batch of size 1
+        if is_single_sequence:
+            sequences = [sequences]
+
         return [
             self.decode(
                 seq,
