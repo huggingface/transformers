@@ -696,12 +696,14 @@ class ProcessorMixin(PushToHubMixin):
                 "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
             }
             output["audio_tokenizer"] = audio_tokenizer_dict
-       # Serialize attributes as a dict
+       
+        # Serialize attributes as a dict
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
             for k, v in output.items()
             if (
                 k in attrs_to_save  # keep all attributes that have to be serialized
+                and v.__class__.__name__ != "BeamSearchDecoderCTC"  # remove attributes with that are objects
             )
         }
         output = cast_array_to_list(output)
