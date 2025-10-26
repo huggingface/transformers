@@ -10,8 +10,10 @@ logger = logging.getLogger(__name__)
 _DTYPE_POLICY_ENV = "HF_CPU_DTYPE_POLICY"
 _THREADS_OPTIMIZED_ENV = "HF_CPU_THREADS_OPTIMIZED"
 
+
 def _get_policy() -> str:
     return os.environ.get(_DTYPE_POLICY_ENV, "warn_and_fallback").lower()
+
 
 def apply_cpu_safety_settings(model):
     import os
@@ -40,12 +42,12 @@ def apply_cpu_safety_settings(model):
             raise RuntimeError(msg)
 
         elif policy in ("warn", "warn_and_fallback", "auto"):
-                warnings.warn(
-                    f"Model loaded with {model_dtype} (fp16/bf16) on CPU — converting to float32 for safety.",
-                    UserWarning,
-                )
-                model = model.to(dtype=torch.float32)
-                logger.info("Converted model to float32 for CPU safety.")
+            warnings.warn(
+                f"Model loaded with {model_dtype} (fp16/bf16) on CPU — converting to float32 for safety.",
+                UserWarning,
+            )
+            model = model.to(dtype=torch.float32)
+            logger.info("Converted model to float32 for CPU safety.")
         else:
             # Unknown policy, just warn but don’t crash
             warnings.warn(f"Unknown HF_CPU_DTYPE_POLICY='{policy}', keeping model as-is.")

@@ -40,8 +40,10 @@ def test_apply_cpu_safety_settings_fallback(tmp_path, monkeypatch):
         # Ensure a warning was emitted
         assert any("fp16" in str(x.message).lower() or "bf16" in str(x.message).lower() for x in w)
 
+
 def test_policy_error(monkeypatch):
     import os
+
     os.environ["HF_CPU_DTYPE_POLICY"] = "error"
 
     class TinyModel(torch.nn.Module):
