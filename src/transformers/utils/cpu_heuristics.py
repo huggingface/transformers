@@ -1,9 +1,10 @@
 # src/transformers/utils/cpu_heuristics.py
-import os
 import logging
+import os
 import warnings
+
 import torch
-from typing import Optional
+
 
 logger = logging.getLogger(__name__)
 _DTYPE_POLICY_ENV = "HF_CPU_DTYPE_POLICY"
@@ -13,7 +14,8 @@ def _get_policy() -> str:
     return os.environ.get(_DTYPE_POLICY_ENV, "warn_and_fallback").lower()
 
 def apply_cpu_safety_settings(model):
-    import os, torch, warnings
+    import os
+
     from transformers.utils import logging
 
     logger = logging.get_logger(__name__)
