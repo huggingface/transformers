@@ -4679,17 +4679,17 @@ class TokenizerTesterMixin:
                 # Get a simple sequence of token IDs
                 text = "Hello world"
                 token_ids = tokenizer.encode(text, add_special_tokens=False)
-                
+
                 # batch_decode with a single flat list should return a list with one string
                 result = tokenizer.batch_decode([token_ids])
                 self.assertIsInstance(result, list)
                 self.assertEqual(len(result), 1)
-                
+
                 # Now test with just the flat list (this is the bug we're fixing)
                 result_single = tokenizer.batch_decode(token_ids)
                 self.assertIsInstance(result_single, list)
                 self.assertEqual(len(result_single), 1)
-                
+
                 # Both should produce the same result
                 self.assertEqual(result[0], result_single[0])
 
@@ -4701,7 +4701,7 @@ class TokenizerTesterMixin:
                 # Create multiple sequences
                 texts = ["Hello", "world"]
                 token_ids_batch = [tokenizer.encode(text, add_special_tokens=False) for text in texts]
-                
+
                 # batch_decode should return a list with multiple strings
                 result = tokenizer.batch_decode(token_ids_batch)
                 self.assertIsInstance(result, list)
@@ -4711,20 +4711,20 @@ class TokenizerTesterMixin:
     def test_batch_decode_torch_tensors(self):
         """Test that batch_decode handles torch tensors correctly."""
         import torch
-        
+
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 # Get a simple sequence
                 text = "Hello world"
                 token_ids = tokenizer.encode(text, add_special_tokens=False)
-                
+
                 # Test 1D tensor (single sequence)
                 tensor_1d = torch.tensor(token_ids)
                 result_1d = tokenizer.batch_decode(tensor_1d)
                 self.assertIsInstance(result_1d, list)
                 self.assertEqual(len(result_1d), 1)
-                
+
                 # Test 2D tensor (batch of sequences)
                 texts = ["Hello", "world"]
                 token_ids_batch = [tokenizer.encode(text, add_special_tokens=False) for text in texts]
@@ -4739,20 +4739,20 @@ class TokenizerTesterMixin:
     def test_batch_decode_numpy_arrays(self):
         """Test that batch_decode handles numpy arrays correctly."""
         import numpy as np
-        
+
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 # Get a simple sequence
                 text = "Hello world"
                 token_ids = tokenizer.encode(text, add_special_tokens=False)
-                
+
                 # Test 1D array (single sequence)
                 array_1d = np.array(token_ids)
                 result_1d = tokenizer.batch_decode(array_1d)
                 self.assertIsInstance(result_1d, list)
                 self.assertEqual(len(result_1d), 1)
-                
+
                 # Test 2D array (batch of sequences)
                 texts = ["Hello", "world"]
                 token_ids_batch = [tokenizer.encode(text, add_special_tokens=False) for text in texts]
@@ -4772,7 +4772,7 @@ class TokenizerTesterMixin:
                 # Empty list
                 result = tokenizer.batch_decode([])
                 self.assertEqual(result, [])
-                
+
                 # None input
                 result_none = tokenizer.batch_decode(None)
                 self.assertEqual(result_none, [])
@@ -4785,11 +4785,11 @@ class TokenizerTesterMixin:
                 # Invalid type (string)
                 with self.assertRaises(TypeError):
                     tokenizer.batch_decode("invalid input")
-                
+
                 # Invalid type (dict)
                 with self.assertRaises(TypeError):
                     tokenizer.batch_decode({"key": "value"})
-                
+
                 # List with invalid element types (strings instead of ints)
                 with self.assertRaises(TypeError):
                     tokenizer.batch_decode(["invalid", "tokens"])
