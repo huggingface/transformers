@@ -1,8 +1,11 @@
 # tests/test_utils_cpu_heuristics.py
 import os
-import torch
 import warnings
+
+import torch
+
 from transformers.utils import cpu_heuristics
+
 
 def test_apply_cpu_safety_settings_fallback(tmp_path, monkeypatch):
     # Build a tiny dummy model with float16 params on CPU
