@@ -664,10 +664,6 @@ class ProcessorMixin(PushToHubMixin):
             output.pop(key, None)
 
         def save_public_processor_class(dictionary):
-            """
-            Numpy arrays are not serialiazable but can be in pre-processing dicts.
-            This function casts arrays to list, recusring through the nested configs as well.
-            """
             # make sure private name "_processor_class" is correctly saved as "processor_class"
             _processor_class = dictionary.pop("_processor_class", None)
             if _processor_class is not None:
@@ -678,6 +674,10 @@ class ProcessorMixin(PushToHubMixin):
             return dictionary
 
         def cast_array_to_list(dictionary):
+            """
+            Numpy arrays are not serialiazable but can be in pre-processing dicts.
+            This function casts arrays to list, recusring through the nested configs as well.
+            """
             for key, value in dictionary.items():
                 if isinstance(value, np.ndarray):
                     dictionary[key] = value.tolist()
