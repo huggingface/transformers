@@ -405,7 +405,6 @@ class ElectraModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False  # won't be maintained
 
     # Overwriting to add `is_decoder` flag
     def prepare_config_and_inputs_for_generate(self, batch_size=2):

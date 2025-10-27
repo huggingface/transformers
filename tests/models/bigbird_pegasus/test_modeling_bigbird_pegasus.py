@@ -266,10 +266,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     is_encoder_decoder = True
     test_missing_keys = False
 
-    # torchscript tests are not passing for now.
-    # Also torchscript is not an important feature to have in the beginning.
-    test_torchscript = False
-
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
         self,

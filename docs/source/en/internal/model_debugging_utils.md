@@ -320,7 +320,7 @@ df.sort_values(by=['skipped_proportion'], ascending=False)
 You can focus on a specific test method using `--test_method_name`:
 
 ```bash
-$ python utils/scan_skipped_tests.py --test_method_name test_inputs_embeds --output_dir path/to/output
+python utils/scan_skipped_tests.py --test_method_name test_inputs_embeds --output_dir path/to/output
 ```
 
 - `--test_method_name`: Name of the test method to scan (e.g., `test_inputs_embeds`).

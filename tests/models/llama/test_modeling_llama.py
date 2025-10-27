@@ -51,7 +51,6 @@ class LlamaModelTester(CausalLMModelTester):
 
 @require_torch
 class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = LlamaModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`

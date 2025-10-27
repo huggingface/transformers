@@ -46,12 +46,13 @@ class CwmModelTester(CausalLMModelTester):
         config = super().get_config()
 
         config.sliding_window = 8192
-        config.rope_scaling = {
+        config.rope_parameters = {
             "factor": 16.0,
             "high_freq_factor": 4.0,
             "low_freq_factor": 1.0,
             "original_max_position_embeddings": 8192,
             "rope_type": "llama3",
+            "rope_theta": 1000000.0,
         }
 
         return config
@@ -75,7 +76,6 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
     model_tester_class = CwmModelTester
 
     model_split_percents = [0.5, 0.7, 0.8]

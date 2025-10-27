@@ -178,8 +178,6 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     all_model_classes = (HGNetV2ForImageClassification, HGNetV2Backbone) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": HGNetV2ForImageClassification} if is_torch_available() else {}
 
-    fx_compatible = False
-
     test_resize_embeddings = False
     test_torch_exportable = True
     has_attentions = False

@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Optional, Union
+from typing import Union
 
 from ..tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from ..video_utils import VideoMetadataType
@@ -11,17 +11,17 @@ if is_vision_available():
     from ..image_utils import PILImageResampling
 
 
-def positive_any_number(value: Optional[Union[int, float]] = None):
+def positive_any_number(value: int | float | None = None):
     if value is not None and (not isinstance(value, (int, float)) or not value >= 0):
         raise ValueError(f"Value must be a positive integer or floating number, got {value}")
 
 
-def positive_int(value: Optional[int] = None):
+def positive_int(value: int | None = None):
     if value is not None and (not isinstance(value, int) or not value >= 0):
         raise ValueError(f"Value must be a positive integer, got {value}")
 
 
-def padding_validator(value: Optional[Union[bool, str, PaddingStrategy]] = None):
+def padding_validator(value: bool | str | PaddingStrategy | None = None):
     possible_names = ["longest", "max_length", "do_not_pad"]
     if value is None:
         pass
@@ -31,7 +31,7 @@ def padding_validator(value: Optional[Union[bool, str, PaddingStrategy]] = None)
         raise ValueError(f"If padding is a string, the value must be one of {possible_names}")
 
 
-def truncation_validator(value: Optional[Union[bool, str, TruncationStrategy]] = None):
+def truncation_validator(value: bool | str | TruncationStrategy | None = None):
     possible_names = ["only_first", "only_second", "longest_first", "do_not_truncate"]
     if value is None:
         pass
@@ -41,7 +41,7 @@ def truncation_validator(value: Optional[Union[bool, str, TruncationStrategy]] =
         raise ValueError(f"If truncation is a string, value must be one of {possible_names}")
 
 
-def image_size_validator(value: Optional[Union[int, Sequence[int], dict[str, int]]] = None):
+def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = None):
     possible_keys = ["height", "width", "longest_edge", "shortest_edge", "max_height", "max_width"]
     if value is None:
         pass
@@ -49,7 +49,7 @@ def image_size_validator(value: Optional[Union[int, Sequence[int], dict[str, int
         raise ValueError(f"Value for size must be a dict with keys {possible_keys} but got size={value}")
 
 
-def device_validator(value: Optional[Union[str, int]] = None):
+def device_validator(value: str | int | None = None):
     possible_names = ["cpu", "cuda", "xla", "xpu", "mps", "meta"]
     if value is None:
         pass
@@ -65,7 +65,7 @@ def device_validator(value: Optional[Union[str, int]] = None):
         )
 
 
-def resampling_validator(value: Optional[Union[int, "PILImageResampling"]] = None):
+def resampling_validator(value: Union[int, "PILImageResampling"] | None = None):
     if value is None:
         pass
     elif isinstance(value, int) and value not in list(range(6)):
@@ -76,7 +76,7 @@ def resampling_validator(value: Optional[Union[int, "PILImageResampling"]] = Non
         raise ValueError(f"The resampling should an integer or `PIL.Image.Resampling`, but got resampling={value}")
 
 
-def video_metadata_validator(value: Optional[VideoMetadataType] = None):
+def video_metadata_validator(value: VideoMetadataType | None = None):
     if value is None:
         return
 
@@ -107,7 +107,7 @@ def video_metadata_validator(value: Optional[VideoMetadataType] = None):
             )
 
 
-def tensor_type_validator(value: Optional[Union[str, TensorType]] = None):
+def tensor_type_validator(value: str | TensorType | None = None):
     possible_names = ["pt", "np", "mlx"]
     if value is None:
         pass

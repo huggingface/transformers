@@ -16,6 +16,8 @@
 import copy
 import unittest
 
+import pytest
+
 from transformers import (
     AutoProcessor,
     Qwen3VLMoeConfig,
@@ -72,7 +74,7 @@ class Qwen3VLMoeVisionText2TextModelTester:
             "num_experts": 8,
             "rope_theta": 10000,
             "tie_word_embeddings": True,
-            "rope_scaling": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+            "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
         },
         vision_config={
             "depth": 2,
@@ -112,7 +114,7 @@ class Qwen3VLMoeVisionText2TextModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.num_key_value_heads = text_config["num_key_value_heads"]
         self.rope_theta = text_config["rope_theta"]
-        self.rope_scaling = text_config["rope_scaling"]
+        self.rope_parameters = text_config["rope_parameters"]
         self.hidden_act = text_config["hidden_act"]
         self.max_position_embeddings = text_config["max_position_embeddings"]
         self.model_type = text_config["model_type"]
@@ -513,6 +515,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct",
@@ -545,6 +548,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct",

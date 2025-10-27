@@ -3,7 +3,7 @@ import logging
 import time
 from collections.abc import Callable
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any
 
 from .import_utils import is_opentelemetry_available
 
@@ -81,7 +81,7 @@ def traced(
     *,
     span_name=None,
     standalone=False,
-    additional_attributes: Optional[list[tuple[str, str, Union[Any, Callable[[Any], Any]]]]] = None,
+    additional_attributes: list[tuple[str, str, Any | Callable[[Any], Any]]] | None = None,
 ):
     """
     Decorator to trace function calls with OpenTelemetry.

@@ -37,7 +37,6 @@ def model_init(trial):
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
     )
 ```
 

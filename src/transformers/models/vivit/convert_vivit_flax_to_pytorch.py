@@ -36,8 +36,7 @@ def download_checkpoint(path):
 
     with open(path, "wb") as f:
         with requests.get(url, stream=True) as req:
-            for chunk in req.iter_content(chunk_size=2048):
-                f.write(chunk)
+            f.writelines(req.iter_content(chunk_size=2048))
 
 
 def get_vivit_config() -> VivitConfig:

@@ -175,8 +175,6 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
 
-    fx_compatible = False
-
     test_resize_embeddings = False
     has_attentions = False
     test_torch_exportable = True

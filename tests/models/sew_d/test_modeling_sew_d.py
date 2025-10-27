@@ -304,8 +304,6 @@ class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_torchscript = False
-
     def setUp(self):
         self.model_tester = SEWDModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SEWDConfig, hidden_size=37)

@@ -1041,7 +1041,6 @@ class HieraMultiScaleHead(nn.Module):
         if isinstance(head, nn.Identity):
             return hidden_states
 
-        # Doing explicit to avoid problems with torch.fx
         batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size = hidden_states.shape
         # From: [batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size]
         # To: head([batch_size * num_mask_units, hidden_size, mask_unit_height, mask_unit_width])

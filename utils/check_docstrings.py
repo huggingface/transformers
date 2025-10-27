@@ -711,7 +711,11 @@ def match_docstring_with_signature(obj: Any) -> tuple[str, str] | None:
         elif re.search(r"^\s*#\s*ignore-order\s*$", line_before_docstring):
             ignore_order = True
 
-    # Read the signature
+    # Read the signature. Skip on `TypedDict` objects for now. Inspect cannot
+    # parse their signature ("no signature found for builtin type <class 'dict'>")
+    if issubclass(obj, dict) and hasattr(obj, "__annotations__"):
+        return
+
     signature = inspect.signature(obj).parameters
 
     obj_doc_lines = obj.__doc__.split("\n")

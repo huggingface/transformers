@@ -304,8 +304,6 @@ class LongformerModelTester:
 
 @require_torch
 class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torchscript = False
-
     all_model_classes = (
         (
             LongformerModel,

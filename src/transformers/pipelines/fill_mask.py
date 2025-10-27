@@ -1,4 +1,4 @@
-from typing import Any, Union, overload
+from typing import Any, overload
 
 import numpy as np
 
@@ -231,9 +231,7 @@ class FillMaskPipeline(Pipeline):
     @overload
     def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(
-        self, inputs: Union[str, list[str]], **kwargs: Any
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    def __call__(self, inputs: str | list[str], **kwargs: Any) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Fill the masked token in the text(s) given as inputs.
 

@@ -101,7 +101,7 @@ class NotebookProgressBar:
     def __init__(
         self,
         total: int,
-        prefix: Optional[str] = None,
+        prefix: str | None = None,
         leave: bool = True,
         parent: Optional["NotebookTrainingTracker"] = None,
         width: int = 300,
@@ -120,7 +120,7 @@ class NotebookProgressBar:
             self.update_every = 0.5  # Adjusted for smooth updated as html rending is slow on VS Code
             # This is the only adjustment required to optimize training html rending
 
-    def update(self, value: int, force_update: bool = False, comment: Optional[str] = None):
+    def update(self, value: int, force_update: bool = False, comment: str | None = None):
         """
         The main method to update the progress bar to `value`.
 

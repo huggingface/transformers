@@ -1,6 +1,6 @@
 import types
 import warnings
-from typing import Any, Optional, Union, overload
+from typing import Any, overload
 
 import numpy as np
 
@@ -24,7 +24,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     Handles arguments for token classification.
     """
 
-    def __call__(self, inputs: Union[str, list[str]], **kwargs):
+    def __call__(self, inputs: str | list[str], **kwargs):
         is_split_into_words = kwargs.get("is_split_into_words", False)
         delimiter = kwargs.get("delimiter")
 
@@ -147,13 +147,13 @@ class TokenClassificationPipeline(ChunkPipeline):
     def _sanitize_parameters(
         self,
         ignore_labels=None,
-        grouped_entities: Optional[bool] = None,
-        ignore_subwords: Optional[bool] = None,
-        aggregation_strategy: Optional[AggregationStrategy] = None,
-        offset_mapping: Optional[list[tuple[int, int]]] = None,
+        grouped_entities: bool | None = None,
+        ignore_subwords: bool | None = None,
+        aggregation_strategy: AggregationStrategy | None = None,
+        offset_mapping: list[tuple[int, int]] | None = None,
         is_split_into_words: bool = False,
-        stride: Optional[int] = None,
-        delimiter: Optional[str] = None,
+        stride: int | None = None,
+        delimiter: str | None = None,
     ):
         preprocess_params = {}
         preprocess_params["is_split_into_words"] = is_split_into_words
@@ -230,9 +230,7 @@ class TokenClassificationPipeline(ChunkPipeline):
     @overload
     def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, str]]]: ...
 
-    def __call__(
-        self, inputs: Union[str, list[str]], **kwargs: Any
-    ) -> Union[list[dict[str, str]], list[list[dict[str, str]]]]:
+    def __call__(self, inputs: str | list[str], **kwargs: Any) -> list[dict[str, str]] | list[list[dict[str, str]]]:
         """
         Classify each token of the text(s) given as inputs.
 
@@ -425,11 +423,11 @@ class TokenClassificationPipeline(ChunkPipeline):
         sentence: str,
         input_ids: np.ndarray,
         scores: np.ndarray,
-        offset_mapping: Optional[list[tuple[int, int]]],
+        offset_mapping: list[tuple[int, int]] | None,
         special_tokens_mask: np.ndarray,
         aggregation_strategy: AggregationStrategy,
-        word_ids: Optional[list[Optional[int]]] = None,
-        word_to_chars_map: Optional[list[tuple[int, int]]] = None,
+        word_ids: list[int | None] | None = None,
+        word_to_chars_map: list[tuple[int, int]] | None = None,
     ) -> list[dict]:
         """Fuse various numpy arrays into dicts with all the information needed for aggregation"""
         pre_entities = []

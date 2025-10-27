@@ -478,11 +478,7 @@ def nested_tensor_from_tensor_list(tensor_list: list[Tensor]):
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-@torch.jit.unused
 def _set_aux_loss(outputs_class, outputs_coord):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 

@@ -14,7 +14,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 
 
 class EfficientLoFTRConfig(PreTrainedConfig):
@@ -68,20 +68,13 @@ class EfficientLoFTRConfig(PreTrainedConfig):
             Kernel size used for the fine feature matching
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         partial_rotary_factor (`float`, *optional*, defaults to 4.0):
             Dim factor for the RoPE embeddings, in EfficientLoFTR, frequencies should be generated for
             the whole hidden_size, so this factor is used to compensate.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3', '2d'], with 'default' being the original RoPE implementation.
-                `dim` (`int`): The dimension of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         fine_matching_slice_dim (`int`, *optional*, defaults to 8):
             The size of the slice used to divide the fine features for the first and second fine matching stages.
         fine_matching_regress_temperature (`float`, *optional*, defaults to 10.0):
@@ -128,9 +121,8 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         coarse_matching_border_removal: int = 2,
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
-        rope_theta: float = 10000.0,
         partial_rotary_factor: float = 4.0,
-        rope_scaling: Optional[dict] = None,
+        rope_parameters: Optional[dict] = None,
         fine_matching_slice_dim: int = 8,
         fine_matching_regress_temperature: float = 10.0,
         initializer_range: float = 0.02,
@@ -184,14 +176,16 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         self.fine_matching_regress_temperature = fine_matching_regress_temperature
 
         self.num_key_value_heads = num_attention_heads
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling if rope_scaling is not None else {"rope_type": "default"}
-
-        # for compatibility with "default" rope type
         self.partial_rotary_factor = partial_rotary_factor
-        rope_config_validation(self)
-
         self.initializer_range = initializer_range
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         super().__init__(**kwargs)
 

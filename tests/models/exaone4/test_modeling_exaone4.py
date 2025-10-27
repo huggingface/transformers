@@ -52,7 +52,6 @@ class Exaone4ModelTester(CausalLMModelTester):
 
 @require_torch
 class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Exaone4ModelTester
     model_split_percents = [0.5, 0.6]
 
@@ -121,6 +120,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, text)
 
+    @pytest.mark.flash_attn_test
     @slow
     @require_torch_accelerator
     @require_flash_attn

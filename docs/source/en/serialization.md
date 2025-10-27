@@ -33,7 +33,7 @@ Export a Transformers model to ONNX with the Optimum CLI or the `optimum.onnxrun
 Run the command below to install Optimum and the [exporters](https://huggingface.co/docs/optimum/exporters/overview) module.
 
 ```bash
-pip install optimum[exporters]
+pip install optimum-onnx
 ```
 
 > [!TIP]

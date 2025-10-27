@@ -166,10 +166,7 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
 
-    fx_compatible = False
-
     test_resize_embeddings = False
-    test_torchscript = False
     test_torch_exportable = True
 
     def setUp(self):

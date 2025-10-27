@@ -15,7 +15,7 @@
 
 """PyTorch Phimoe model."""
 
-from typing import Optional
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -33,33 +33,40 @@ from ..mixtral.modeling_mixtral import (
     MixtralMLP,
     MixtralModel,
     MixtralPreTrainedModel,
+    MixtralRotaryEmbedding,
 )
 from .configuration_phimoe import PhimoeConfig
 
 
-class PhimoeRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Optional[PhimoeConfig] = None,
-    ):
-        super().__init__()
+class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
+    def __init__(self, config: PhimoeConfig, device=None):
+        nn.Module.__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        if config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            self.short_mscale = config.rope_scaling.get("short_mscale")
-            self.long_mscale = config.rope_scaling.get("long_mscale")
-        else:
-            self.rope_type = "default"
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-    def forward(self, x, position_ids):
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        self.rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
+
+    def forward(self, x, position_ids=None, layer_type=None):
+        if layer_type is not None:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support layer types, but got `layer_type={layer_type}`"
+            )
+
         mscale = None
         seq_len = torch.max(position_ids) + 1
-        if self.config.rope_scaling and seq_len:
+        if self.config.rope_parameters["rope_type"] != "default" and seq_len:
             mscale = (
                 self.long_mscale
-                if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
+                if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
                 else self.short_mscale
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
@@ -384,7 +391,7 @@ class PhimoeForCausalLM(MixtralForCausalLM):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_scaling
+            and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]

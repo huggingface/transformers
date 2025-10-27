@@ -299,15 +299,6 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
         model = self._get_model(config)
         torch.export.export(model, args=(torch.tensor(10),))
 
-    def test_decorator_torchscript(self):
-        """Test that the can_return_tuple decorator works with torch.jit.trace."""
-        config = PreTrainedConfig(return_dict=False)
-        model = self._get_model(config)
-        inputs = torch.tensor(10)
-        traced_module = torch.jit.trace(model, inputs)
-        output = traced_module(inputs)
-        self.assertIsInstance(output, tuple)
-
     def test_attribute_cleanup(self):
         """Test that the `_is_top_level_module` attribute is removed after the forward call."""
 

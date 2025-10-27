@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import numpy as np
@@ -59,19 +59,26 @@ class BenchmarkMetadata:
 
     model_id: str
     timestamp: str
+    branch_name: str
     commit_id: str
+    commit_message: str
     hardware_info: HardwareInfo
 
-    def __init__(self, model_id: str, commit_id: str):
+    def __init__(self, model_id: str, commit_id: str, branch_name: str = "main", commit_message: str = "") -> None:
         self.model_id = model_id
-        self.timestamp = datetime.utcnow().isoformat()
+        self.timestamp = datetime.now(timezone.utc).isoformat()
+        self.branch_name = branch_name
         self.commit_id = commit_id
+        self.commit_message = commit_message
         self.hardware_info = HardwareInfo()
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "model_id": self.model_id,
             "timestamp": self.timestamp,
+            "branch_name": self.branch_name,
             "commit_id": self.commit_id,
+            "commit_message": self.commit_message,
             "hardware_info": self.hardware_info.to_dict(),
         }
 

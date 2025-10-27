@@ -163,7 +163,6 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         else {}
     )
 
-    test_torchscript = False
     test_resize_embeddings = False
     test_torch_exportable = True
 

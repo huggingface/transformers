@@ -16,6 +16,8 @@ import gc
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -369,6 +371,7 @@ class AwqFusedTest(unittest.TestCase):
     )
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_generation_fused(self):
         """
         Test generation quality for fused models - single batch case
@@ -391,6 +394,7 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_torch_gpu
     @unittest.skipIf(
@@ -443,6 +447,7 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(outputs[0]["generated_text"], EXPECTED_OUTPUT)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_torch_multi_gpu
     @unittest.skipIf(
@@ -484,6 +489,7 @@ class AwqFusedTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_torch_multi_gpu
     @unittest.skip(reason="Not enough GPU memory on CI runners")

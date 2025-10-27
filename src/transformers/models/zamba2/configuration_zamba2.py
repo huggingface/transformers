@@ -20,7 +20,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class Zamba2Config(PreTrainedConfig):
@@ -91,8 +94,10 @@ class Zamba2Config(PreTrainedConfig):
             Rank of the adapter in the shared MLP and shared attention layers.
         use_mem_rope (`bool`, *optional*, defaults to `False`):
             If True, includes RoPE in the shared attention layers.
-        rope_theta (`float`, *optional*, defaults to `10000.0`):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -130,42 +135,42 @@ class Zamba2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        max_position_embeddings=4096,
-        hidden_size=2560,
-        num_hidden_layers=54,
-        layers_block_type=None,
-        mamba_d_state=64,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_ngroups=1,
-        time_step_min=0.001,
-        time_step_max=0.1,
-        time_step_floor=1e-4,
-        time_step_limit=None,
-        n_mamba_heads=8,
-        use_conv_bias=True,
-        chunk_size=256,
-        use_mem_eff_path=False,
-        add_bias_linear=False,
-        intermediate_size=None,
-        hidden_act="gelu",
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        attention_dropout=0.0,
-        num_mem_blocks=1,
-        use_shared_attention_adapter=False,
-        adapter_rank=128,
-        use_mem_rope=False,
-        rope_theta=10000,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        num_logits_to_keep=1,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        use_long_context=False,
+        vocab_size: Optional[int] = 32000,
+        max_position_embeddings: Optional[int] = 4096,
+        hidden_size: Optional[int] = 2560,
+        num_hidden_layers: Optional[int] = 54,
+        layers_block_type: Optional[list[str]] = None,
+        mamba_d_state: Optional[int] = 64,
+        mamba_d_conv: Optional[int] = 4,
+        mamba_expand: Optional[int] = 2,
+        mamba_ngroups: Optional[int] = 1,
+        time_step_min: Optional[float] = 0.001,
+        time_step_max: Optional[float] = 0.1,
+        time_step_floor: Optional[int] = 1e-4,
+        time_step_limit: Optional[int] = None,
+        n_mamba_heads: Optional[int] = 8,
+        use_conv_bias: Optional[bool] = True,
+        chunk_size: Optional[int] = 256,
+        use_mem_eff_path: Optional[bool] = False,
+        add_bias_linear: Optional[bool] = False,
+        intermediate_size: Optional[int] = None,
+        hidden_act: Optional[str] = "gelu",
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        attention_dropout: Optional[float] = 0.0,
+        num_mem_blocks: Optional[int] = 1,
+        use_shared_attention_adapter: Optional[bool] = False,
+        adapter_rank: Optional[int] = 128,
+        use_mem_rope: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        num_logits_to_keep: Optional[int] = 1,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        use_long_context: Optional[bool] = False,
         **kwargs,
     ):
         super().__init__(
@@ -190,10 +195,15 @@ class Zamba2Config(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.use_mem_rope = use_mem_rope
         self.use_long_context = use_long_context
-        if use_mem_rope and use_long_context:
-            a = 8
-            rope_theta = rope_theta * a ** (self.attention_head_dim / (self.attention_head_dim - 2))
-        self.rope_theta = rope_theta
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
+
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand

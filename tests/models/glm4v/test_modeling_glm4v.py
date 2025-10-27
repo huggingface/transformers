@@ -71,7 +71,7 @@ class Glm4vVisionText2TextModelTester:
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
-            "rope_scaling": {"type": "default", "mrope_section": [2, 1, 1]},
+            "rope_parameters": {"type": "default", "mrope_section": [2, 1, 1]},
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
@@ -172,7 +172,6 @@ class Glm4vVisionText2TextModelTester:
 class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Glm4vModel, Glm4vForConditionalGeneration) if is_torch_available() else ()
 
-    test_torchscript = False
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     _is_composite = True
 

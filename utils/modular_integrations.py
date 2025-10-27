@@ -34,7 +34,7 @@ def convert_relative_import_to_absolute(
     rel_level = len(import_node.relative)
 
     # Strip file extension and split into parts
-    file_path_no_ext = file_path[:-3] if file_path.endswith(".py") else file_path
+    file_path_no_ext = file_path.removesuffix(".py")
     file_parts = file_path_no_ext.split(os.path.sep)
 
     # Ensure the file path includes the package name

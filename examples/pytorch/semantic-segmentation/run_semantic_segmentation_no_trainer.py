@@ -120,11 +120,6 @@ def parse_args():
         help="Path to a folder in which the model and dataset will be cached.",
     )
     parser.add_argument(
-        "--use_auth_token",
-        action="store_true",
-        help="Whether to use an authentication token to access the model repository.",
-    )
-    parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
         default=8,

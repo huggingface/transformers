@@ -118,7 +118,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         """
         Empty init weights function to ensure compatibility of the class in the library.
         """
-        pass
 
     def forward(
         self,

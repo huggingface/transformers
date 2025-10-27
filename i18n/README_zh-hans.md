@@ -21,12 +21,12 @@ A useful guide for English-Chinese translation of Hugging Face documentation
 
 Dictionary
 
-Hugging Face: 抱抱脸
+Hugging Face: Hugging Face（不翻译）
 token: 词符（并用括号标注原英文）
 tokenize: 词符化（并用括号标注原英文）
 tokenizer: 词符化器（并用括号标注原英文）
 transformer: transformer（不翻译）
-pipeline: 流水线
+pipeline: pipeline（不翻译）
 API: API (不翻译）
 inference: 推理
 Trainer: 训练器。当作为类名出现时不翻译。
@@ -107,9 +107,9 @@ checkpoint: 检查点
 - [用 DistilBERT 做问答](https://huggingface.co/distilbert/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
 - [用 T5 做翻译](https://huggingface.co/google-t5/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
 
-**[Write With Transformer](https://transformer.huggingface.co)**，由抱抱脸团队打造，是一个文本生成的官方 demo。
+**[Write With Transformer](https://transformer.huggingface.co)**，由 Hugging Face 团队打造，是一个文本生成的官方 demo。
 
-## 如果你在寻找由抱抱脸团队提供的定制化支持服务
+## 如果你在寻找由 Hugging Face 团队提供的定制化支持服务
 
 <a target="_blank" href="https://huggingface.co/support">
     <img alt="HuggingFace Expert Acceleration Program" src="https://huggingface.co/front/thumbnails/support.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
@@ -117,25 +117,25 @@ checkpoint: 检查点
 
 ## 快速上手
 
-我们为快速使用模型提供了 `pipeline` （流水线）API。流水线聚合了预训练模型和对应的文本预处理。下面是一个快速使用流水线去判断正负面情绪的例子：
+我们为快速使用模型提供了 `pipeline` API。Pipeline 聚合了预训练模型和对应的文本预处理。下面是一个快速使用 pipeline 去判断正负面情绪的例子：
 
 ```python
 >>> from transformers import pipeline
 
-# 使用情绪分析流水线
+# 使用情绪分析 pipeline
 >>> classifier = pipeline('sentiment-analysis')
 >>> classifier('We are very happy to introduce pipeline to the transformers repository.')
 [{'label': 'POSITIVE', 'score': 0.9996980428695679}]
 ```
 
-第二行代码下载并缓存了流水线使用的预训练模型，而第三行代码则在给定的文本上进行了评估。这里的答案“正面” (positive) 具有 99 的置信度。
+第二行代码下载并缓存了 pipeline 使用的预训练模型，而第三行代码则在给定的文本上进行了评估。这里的答案"正面" (positive) 具有 99 的置信度。
 
-许多的 NLP 任务都有开箱即用的预训练流水线。比如说，我们可以轻松的从给定文本中抽取问题答案：
+许多的 NLP 任务都有开箱即用的预训练 `pipeline`。比如说，我们可以轻松的从给定文本中抽取问题答案：
 
 ``` python
 >>> from transformers import pipeline
 
-# 使用问答流水线
+# 使用问答 pipeline
 >>> question_answerer = pipeline('question-answering')
 >>> question_answerer({
 ...     'question': 'What is the name of the repository ?',
@@ -145,7 +145,7 @@ checkpoint: 检查点
 
 ```
 
-除了给出答案，预训练模型还给出了对应的置信度分数、答案在词符化 (tokenized) 后的文本中开始和结束的位置。你可以从[这个教程](https://huggingface.co/docs/transformers/task_summary)了解更多流水线API支持的任务。
+除了给出答案，预训练模型还给出了对应的置信度分数、答案在词符化 (tokenized) 后的文本中开始和结束的位置。你可以从[这个教程](https://huggingface.co/docs/transformers/task_summary)了解更多 `pipeline` API 支持的任务。
 
 要在你的任务上下载和使用任意预训练模型也很简单，只需三行代码。这里是 PyTorch 版的示例：
 ```python
@@ -193,11 +193,11 @@ checkpoint: 检查点
 1. 为你的需求轻松定制专属模型和用例：
     - 我们为每种模型架构提供了多个用例来复现原论文结果
     - 模型内部结构保持透明一致
-    - 模型文件可单独使用，方便魔改和快速实验
+    - 模型文件可单独使用，方便修改和快速实验
 
 ## 什么情况下我不该用 transformers？
 
-- 本库并不是模块化的神经网络工具箱。模型文件中的代码特意呈若璞玉，未经额外抽象封装，以便研究人员快速迭代魔改而不致溺于抽象和文件跳转之中。
+- 本库并不是模块化的神经网络工具箱。模型文件中的代码特意呈若璞玉，未经额外抽象封装，以便研究人员快速迭代修改而不致溺于抽象和文件跳转之中。
 - `Trainer` API 并非兼容任何模型，只为本库之模型优化。若是在寻找适用于通用机器学习的训练循环实现，请另觅他库。
 - 尽管我们已尽力而为，[examples 目录](https://github.com/huggingface/transformers/tree/main/examples)中的脚本也仅为用例而已。对于你的特定问题，它们并不一定开箱即用，可能需要改几行代码以适之。
 

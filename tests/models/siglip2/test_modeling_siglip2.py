@@ -267,7 +267,6 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Siglip2VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["pixel_attention_mask", "spatial_shapes"]
-    fx_compatible = False
 
     test_resize_embeddings = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -432,7 +431,6 @@ class Siglip2TextModelTester:
 @require_torch
 class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Siglip2TextModel,) if is_torch_available() else ()
-    fx_compatible = False
     test_resize_embeddings = False
 
     model_split_percents = [0.5, 0.8, 0.9]
@@ -541,7 +539,6 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         "pixel_attention_mask",
         "spatial_shapes",
     ]
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -638,7 +635,6 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     all_model_classes = (Siglip2ForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": Siglip2ForImageClassification} if is_torch_available() else {}
     additional_model_inputs = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
-    fx_compatible = False
 
     test_resize_embeddings = False
     test_attention_outputs = False
