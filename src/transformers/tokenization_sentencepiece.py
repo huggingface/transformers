@@ -315,7 +315,16 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         self._added_tokens_decoder.update(kwargs.pop("added_tokens_decoder", {}))
         self._added_tokens_encoder: dict[str, int] = {k.content: v for v, k in self._added_tokens_decoder.items()}
 
-        # 4. init the parent class
+        # 4. Token type ID configuration for dynamic mask building
+        # These can be overridden by subclasses to avoid overriding create_token_type_ids_from_sequences
+        self.token_type_ids_pattern = kwargs.pop("token_type_ids_pattern", "bert_style")  # "all_zeros" or "bert_style"
+        self.token_type_ids_include_special_tokens = kwargs.pop("token_type_ids_include_special_tokens", True)
+        
+        # 5. Special tokens mask configuration
+        # Patterns: "none", "cls_sep", "eos", "bos", "cls_double_sep"
+        self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", "cls_sep")
+
+        # 5. init the parent class
         super().__init__(**kwargs)
 
         # 5. Load the SentencePiece model
@@ -337,8 +346,6 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
 
         # 8. Ensure the trie is populated with added tokens (important when loading from pretrained)
         self._update_trie()
-
-        self._decode_use_source_tokenizer = False
 
     @property
     def vocab_size(self) -> int:
@@ -801,6 +808,12 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 for key, value in outputs.items():
                     batch_outputs.setdefault(key, []).append(value)
 
+            # Remove overflow-related keys before tensor conversion if return_tensors is set
+            # Slow tokenizers don't support returning these as tensors
+            if return_tensors and return_overflowing_tokens:
+                batch_outputs.pop("overflowing_tokens", None)
+                batch_outputs.pop("num_truncated_tokens", None)
+
             batch_outputs = self.pad(
                 batch_outputs,
                 padding=padding_strategy.value,
@@ -865,6 +878,13 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
+        
+        This method dynamically builds the special tokens mask based on the tokenizer's `special_tokens_pattern`:
+        - `"none"`: No special tokens (default, returns all 0s)
+        - `"cls_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
+        - `"eos"`: seq0 [EOS] or seq0 [EOS] seq1 [EOS]
+        - `"bos"`: [BOS] seq0 or [BOS] seq0 [BOS] seq1
+        - `"cls_double_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
 
         Args:
             token_ids_0 (`list[int]`):
@@ -885,8 +905,35 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 )
 
             return [1 if token in self.all_special_ids else 0 for token in token_ids_0]
-
-        return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
+        
+        # Build mask based on pattern
+        if self.special_tokens_pattern == "cls_sep":
+            # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
+            if token_ids_1 is None:
+                return [1] + ([0] * len(token_ids_0)) + [1]
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+        
+        elif self.special_tokens_pattern == "eos":
+            # seq0 [EOS] or seq0 [EOS] seq1 [EOS]
+            if token_ids_1 is None:
+                return ([0] * len(token_ids_0)) + [1]
+            return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+        
+        elif self.special_tokens_pattern == "bos":
+            # [BOS] seq0 or [BOS] seq0 [BOS] seq1
+            if token_ids_1 is None:
+                return [1] + ([0] * len(token_ids_0))
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
+        
+        elif self.special_tokens_pattern == "cls_double_sep":
+            # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
+            if token_ids_1 is None:
+                return [1] + ([0] * len(token_ids_0)) + [1]
+            return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+        
+        else:  # "none" or any other value
+            # No special tokens
+            return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
     @overload
     def convert_ids_to_tokens(self, ids: int, skip_special_tokens: bool = False) -> str: ...
@@ -969,8 +1016,14 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
     ) -> list[int]:
         """
-        Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating and
-        adding special tokens. This implementation does not add special tokens and should be overridden in a subclass.
+        Build model inputs from a sequence or a pair of sequences by adding special tokens.
+        
+        This method dynamically builds inputs based on the tokenizer's `special_tokens_pattern`:
+        - `"none"`: No special tokens
+        - `"cls_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
+        - `"eos"`: seq0 [EOS] or seq0 [EOS] seq1 [EOS]
+        - `"bos"`: [BOS] seq0 or [BOS] seq0 [BOS] seq1
+        - `"cls_double_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
 
         Args:
             token_ids_0 (`list[int]`):
@@ -981,16 +1034,45 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         Returns:
             `list[int]`: List of input IDs with the appropriate special tokens.
         """
-        if token_ids_1 is None:
-            return token_ids_0
-        return token_ids_0 + token_ids_1
+        if self.special_tokens_pattern == "cls_sep":
+            # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
+            if token_ids_1 is None:
+                return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id] + token_ids_1 + [self.sep_token_id]
+        
+        elif self.special_tokens_pattern == "eos":
+            # seq0 [EOS] or seq0 [EOS] seq1 [EOS]
+            if token_ids_1 is None:
+                return token_ids_0 + [self.eos_token_id]
+            return token_ids_0 + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
+        
+        elif self.special_tokens_pattern == "bos":
+            # [BOS] seq0 or [BOS] seq0 [BOS] seq1
+            if token_ids_1 is None:
+                return [self.bos_token_id] + token_ids_0
+            return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
+        
+        elif self.special_tokens_pattern == "cls_double_sep":
+            # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
+            if token_ids_1 is None:
+                return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id, self.sep_token_id] + token_ids_1 + [self.sep_token_id]
+        
+        else:  # "none" or any other value
+            # No special tokens
+            if token_ids_1 is None:
+                return token_ids_0
+            return token_ids_0 + token_ids_1
 
     def create_token_type_ids_from_sequences(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
     ) -> list[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. This
-        implementation does not add special tokens and should be overridden in a subclass.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
+        
+        This method dynamically builds the token type IDs based on the tokenizer's configuration attributes:
+        - `token_type_ids_pattern`: Pattern to use ("all_zeros" or "bert_style")
+        - `token_type_ids_include_special_tokens`: Whether to account for special tokens in length calculation
 
         Args:
             token_ids_0 (`list[int]`):
@@ -999,11 +1081,45 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `list[int]`: List of zeros.
+            `list[int]`: Token type IDs according to the configured pattern.
+            
+        Examples:
+            ```python
+            # All zeros pattern (default, used by RoBERTa, BART, etc.)
+            tokenizer.token_type_ids_pattern = "all_zeros"
+            # Returns: [0, 0, 0, ...] for both sequences
+            
+            # BERT-style pattern (first sequence gets 0s, second gets 1s)
+            tokenizer.token_type_ids_pattern = "bert_style"
+            # Returns: [0, 0, 0, ..., 1, 1, 1, ...] for sequence pairs
+            ```
         """
-        if token_ids_1 is None:
-            return [0] * len(token_ids_0)
-        return [0] * (len(token_ids_0) + len(token_ids_1))
+        # Calculate lengths - account for special tokens if configured
+        if self.token_type_ids_include_special_tokens:
+            # Build the full sequence to get accurate length
+            if token_ids_1 is None:
+                sequence = self.build_inputs_with_special_tokens(token_ids_0)
+                seq0_len = len(sequence)
+                seq1_len = 0
+            else:
+                full_sequence = self.build_inputs_with_special_tokens(token_ids_0, token_ids_1)
+                # Approximate split - this works for most tokenizers
+                # For more complex cases, subclasses should still override
+                seq0_with_special = self.build_inputs_with_special_tokens(token_ids_0)
+                seq0_len = len(seq0_with_special)
+                seq1_len = len(full_sequence) - seq0_len
+        else:
+            # Use raw token lengths
+            seq0_len = len(token_ids_0)
+            seq1_len = len(token_ids_1) if token_ids_1 is not None else 0
+        
+        # Build token type IDs based on pattern
+        if self.token_type_ids_pattern == "bert_style" and token_ids_1 is not None:
+            # BERT-style: first sequence gets 0s, second sequence gets 1s
+            return [0] * seq0_len + [1] * seq1_len
+        else:
+            # All zeros pattern (default): everything gets 0s
+            return [0] * (seq0_len + seq1_len)
 
     def _decode(
         self,
@@ -1013,8 +1129,6 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
-        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
         if isinstance(token_ids, int):
             token_ids = [token_ids]
 
@@ -1163,8 +1277,11 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
             )
 
         if return_overflowing_tokens:
-            encoded_inputs["overflowing_tokens"] = overflowing_tokens
-            encoded_inputs["num_truncated_tokens"] = total_len - max_length if max_length else 0
+            # Slow tokenizers don't support returning overflowing tokens as tensors.
+            # Only return these fields when not converting to tensors.
+            if not return_tensors:
+                encoded_inputs["overflowing_tokens"] = overflowing_tokens
+                encoded_inputs["num_truncated_tokens"] = total_len - max_length if max_length else 0
 
         # Check sequence length
         self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)

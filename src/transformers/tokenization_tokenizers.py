@@ -150,8 +150,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if slow_tokenizer is not None:
             kwargs.update(slow_tokenizer.init_kwargs)
 
-        self._decode_use_source_tokenizer = False
-
         _truncation = self._tokenizer.truncation
 
         if _truncation is not None:
@@ -760,8 +758,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
     ) -> str:
-        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
+        # Removed: use_source_tokenizer parameter (unused)
+        kwargs.pop("use_source_tokenizer", None)  # Pop if present to avoid errors
+        
         if isinstance(token_ids, int):
             token_ids = [token_ids]
         return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)

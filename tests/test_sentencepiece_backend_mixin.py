@@ -1,13 +1,12 @@
 # Sentencepiece backend layer tests
 
-import pickle
 import shutil
 import tempfile
-import unittest
 from typing import TYPE_CHECKING
 
 from transformers import AutoTokenizer, PreTrainedTokenizer, TokenizersBackend
 from transformers.tokenization_utils import AddedToken
+
 
 if TYPE_CHECKING:
     pass
@@ -285,9 +284,7 @@ class SentencePieceBackendTesterMixin:
             # tokenize()
             no_special_tokens = tokenizer_r.tokenize(text, add_special_tokens=False)
             with_special_tokens = tokenizer_r.tokenize(text, add_special_tokens=True)
-            self.assertEqual(
-                len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add
-            )
+            self.assertEqual(len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add)
 
             # Single input
             no_special_tokens = tokenizer_r(text, add_special_tokens=False)
@@ -382,9 +379,7 @@ class SentencePieceBackendTesterMixin:
         self.assertEqual(encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
         self.assertEqual(batch_encoding.word_to_tokens(1, 0).start, 0)
         self.assertEqual(batch_encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
-        self.assertEqual(
-            batch_encoding.word_to_tokens(last_batch_index, last_word_index).end, last_token_index + 1
-        )
+        self.assertEqual(batch_encoding.word_to_tokens(last_batch_index, last_word_index).end, last_token_index + 1)
 
         # Assert token_to_chars
         self.assertEqual(encoding.token_to_chars(0).start, 0)
@@ -393,7 +388,4 @@ class SentencePieceBackendTesterMixin:
         self.assertEqual(encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
         self.assertEqual(batch_encoding.token_to_chars(1, 0).start, 0)
         self.assertEqual(batch_encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
-        self.assertEqual(
-            batch_encoding.token_to_chars(last_batch_index, last_token_index).end, last_char_index + 1
-        )
-    
+        self.assertEqual(batch_encoding.token_to_chars(last_batch_index, last_token_index).end, last_char_index + 1)

@@ -50,6 +50,7 @@ from transformers.tokenization_utils import AddedToken
 from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
 from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
 
+
 input_string = """This is a test 😊
 I was born in 92000, and this is falsé.
 生活的真谛是
@@ -284,7 +285,7 @@ Hey how are you doing"""
         If cls.tokenizers is set (e.g., for vocab-based tokenizers like Llama), returns that list.
         Otherwise, returns a single tokenizer from get_tokenizer().
         """
-        tokenizers = getattr(self, 'tokenizers', None)
+        tokenizers = getattr(self, "tokenizers", None)
         if tokenizers is not None:
             return tokenizers
         return [self.get_tokenizer(**kwargs)]
@@ -414,7 +415,7 @@ Hey how are you doing"""
     def test_tokenize_special_tokens(self):
         """Test `tokenize` with special tokens."""
         tokenizer = self.get_tokenizer(do_lower_case=True)
-        
+
         SPECIAL_TOKEN_1 = "[SPECIAL_TOKEN_1]"
         SPECIAL_TOKEN_2 = "[SPECIAL_TOKEN_2]"
 
@@ -433,7 +434,6 @@ Hey how are you doing"""
         # next is failing for almost all the Fast tokenizers now.
         # self.assertEqual(token_2[0], SPECIAL_TOKEN_2)
 
-
     def test_model_input_names_signature(self):
         accepted_model_main_input_names = [
             "input_ids",  # nlp models
@@ -444,7 +444,6 @@ Hey how are you doing"""
         # first name of model_input_names has to correspond to main model input name
         # to make sure `tokenizer.pad(...)` works correctly
         self.assertTrue(tokenizer.model_input_names[0] in accepted_model_main_input_names)
-
 
     def test_tokenizer_store_full_signature(self):
         signature = inspect.signature(self.tokenizer_class.__init__)
@@ -463,7 +462,7 @@ Hey how are you doing"""
 
     def test_tokenizers_common_properties(self):
         tokenizer = self.get_tokenizer()
-        
+
         attributes_list = [
             "bos_token",
             "eos_token",
@@ -507,9 +506,7 @@ Hey how are you doing"""
 
         vocab = tokenizer.get_vocab()
         token_id_to_test_setters = next(iter(vocab.values()))
-        token_to_test_setters = tokenizer.convert_ids_to_tokens(
-            token_id_to_test_setters, skip_special_tokens=False
-        )
+        token_to_test_setters = tokenizer.convert_ids_to_tokens(token_id_to_test_setters, skip_special_tokens=False)
 
         for attr in attributes_list:
             setattr(tokenizer, attr + "_id", None)
@@ -617,7 +614,7 @@ Hey how are you doing"""
     #     """Test that tokenization produces expected tokens for a comprehensive test string."""
     #     if input_string is None or self.integration_expected_tokens is None:
     #         self.skipTest("No integration test data provided")
-        
+
     #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
     #         with self.subTest(f"{tokenizer.__class__.__name__}"):
     #             tokens = tokenizer.tokenize(input_string)
@@ -627,7 +624,7 @@ Hey how are you doing"""
     #     """Test that encoding produces expected token IDs for a comprehensive test string."""
     #     if input_string is None or self.integration_expected_token_ids is None:
     #         self.skipTest("No integration test data provided")
-        
+
     #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
     #         with self.subTest(f"{tokenizer.__class__.__name__}"):
     #             token_ids = tokenizer.encode(input_string)
@@ -644,21 +641,21 @@ Hey how are you doing"""
     #     """Test that tokenizer produces same results after save and reload with integration test data."""
     #     if input_string is None:
     #         self.skipTest("No integration test data provided")
-        
+
     #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
     #         with self.subTest(f"{tokenizer.__class__.__name__}"):
     #             original_tokens = tokenizer.tokenize(input_string)
     #             original_ids = tokenizer.encode(input_string)
-                
+
     #             with tempfile.TemporaryDirectory() as tmp_dir:
     #                 tokenizer.save_pretrained(tmp_dir)
-                    
+
     #                 reloaded_tokenizer = tokenizer.__class__.from_pretrained(tmp_dir)
-                    
+
     #                 # Test that reloaded tokenizer produces same results
     #                 reloaded_tokens = reloaded_tokenizer.tokenize(input_string)
     #                 reloaded_ids = reloaded_tokenizer.encode(input_string)
-                    
+
     #                 self.assertEqual(original_tokens, reloaded_tokens)
     #                 self.assertEqual(original_ids, reloaded_ids)
 
@@ -674,33 +671,45 @@ Hey how are you doing"""
         This test uses the integration test data defined in subclasses.
         """
         # Skip if no integration test data is provided
-        if not hasattr(self, 'integration_test_input_string') or self.integration_test_input_string is None:
+        if not hasattr(self, "integration_test_input_string") or self.integration_test_input_string is None:
             self.skipTest("No integration test input string provided")
-        if not hasattr(self, 'integration_expected_tokens') or self.integration_expected_tokens is None:
+        if not hasattr(self, "integration_expected_tokens") or self.integration_expected_tokens is None:
             self.skipTest("No integration expected tokens provided")
-        if not hasattr(self, 'integration_expected_token_ids') or self.integration_expected_token_ids is None:
+        if not hasattr(self, "integration_expected_token_ids") or self.integration_expected_token_ids is None:
             self.skipTest("No integration expected token IDs provided")
-        if not hasattr(self, 'integration_expected_decoded_text') or self.integration_expected_decoded_text is None:
+        if not hasattr(self, "integration_expected_decoded_text") or self.integration_expected_decoded_text is None:
             self.skipTest("No integration expected decoded text provided")
-        
-        for tokenizer in [AutoTokenizer.from_pretrained(self.from_pretrained_id[0], do_lower_case=False, keep_accents=True)]:
+
+        for tokenizer in [
+            AutoTokenizer.from_pretrained(self.from_pretrained_id[0], do_lower_case=False, keep_accents=True)
+        ]:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 # Test 1: Tokens match expected
                 tokens = tokenizer.tokenize(self.integration_test_input_string)
-                self.assertEqual(tokens, self.integration_expected_tokens,
-                               f"Tokenized tokens don't match expected for {tokenizer.__class__.__name__}")
+                self.assertEqual(
+                    tokens,
+                    self.integration_expected_tokens,
+                    f"Tokenized tokens don't match expected for {tokenizer.__class__.__name__}",
+                )
 
                 # Test 2: IDs from encode match expected (without special tokens)
                 ids_from_encode = tokenizer.encode(self.integration_test_input_string, add_special_tokens=False)
-                self.assertEqual(ids_from_encode, self.integration_expected_token_ids,
-                               f"Encoded IDs don't match expected for {tokenizer.__class__.__name__}")
+                self.assertEqual(
+                    ids_from_encode,
+                    self.integration_expected_token_ids,
+                    f"Encoded IDs don't match expected for {tokenizer.__class__.__name__}",
+                )
 
                 # Test 3: Round-trip decode produces expected text (if provided)
-                decoded_text = tokenizer.decode(self.integration_expected_token_ids, clean_up_tokenization_spaces=False)
-                self.assertEqual(decoded_text, self.integration_expected_decoded_text,
-                                f"Decoded text doesn't match expected for {tokenizer.__class__.__name__}")
+                decoded_text = tokenizer.decode(
+                    self.integration_expected_token_ids, clean_up_tokenization_spaces=False
+                )
+                self.assertEqual(
+                    decoded_text,
+                    self.integration_expected_decoded_text,
+                    f"Decoded text doesn't match expected for {tokenizer.__class__.__name__}",
+                )
 
-        
     def test_internal_consistency(self):
         tokenizer = self.get_tokenizer()
         input_text, output_text = self.get_input_output_texts(tokenizer)
@@ -738,6 +747,10 @@ Hey how are you doing"""
 
     def test_sequence_ids(self):
         tokenizer = self.get_tokenizer()
+
+        if not tokenizer.is_fast:
+            self.skipTest(reason="No fast tokenizer defined")
+
         seq_0 = "Test this method."
         seq_1 = "With these inputs."
 
@@ -874,9 +887,7 @@ Hey how are you doing"""
             ],
         ]
         tokenizer = self.get_tokenizer()
-        output = tokenizer.apply_chat_template(
-            dummy_conversations, chat_template=dummy_template, tokenize=False
-        )
+        output = tokenizer.apply_chat_template(dummy_conversations, chat_template=dummy_template, tokenize=False)
         self.assertEqual(
             output,
             [
@@ -911,9 +922,7 @@ Hey how are you doing"""
         ]
 
         tokenizer = self.get_tokenizer()
-        break_output = tokenizer.apply_chat_template(
-            dummy_conversation, chat_template=break_template, tokenize=False
-        )
+        break_output = tokenizer.apply_chat_template(dummy_conversation, chat_template=break_template, tokenize=False)
         self.assertEqual(break_output, "system 1")  # Loop should break after first iter
 
     @require_jinja
@@ -976,7 +985,10 @@ Hey how are you doing"""
         ]
         for tokenizer, pretrained_name, _ in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_tokenizer(pretrained_name)
+                if not self.test_rust_tokenizer:
+                    self.skipTest(reason="No fast tokenizer defined")
+
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name)
                 self._check_no_pad_token_padding(tokenizer_r, conversations)
 
                 tokenizer_r.padding_side = "right"
@@ -1154,7 +1166,10 @@ Hey how are you doing"""
 
         for tokenizer, pretrained_name, _ in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_tokenizer(pretrained_name)
+                if not self.is_fast:
+                    self.skipTest(reason="No fast tokenizer defined")
+
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name)
 
                 # Find where to truncate, as the amount of tokens is different for different tokenizers and I want the
                 # truncation to happen in the middle of the assistant content.
@@ -1303,19 +1318,11 @@ Hey how are you doing"""
         ]
         tokenizer = self.get_tokenizer()
         tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
-        output1 = tokenizer.apply_chat_template(
-            dummy_conversation, chat_template=dummy_template_1, tokenize=False
-        )
-        output1_via_dict = tokenizer.apply_chat_template(
-            dummy_conversation, chat_template="template1", tokenize=False
-        )
+        output1 = tokenizer.apply_chat_template(dummy_conversation, chat_template=dummy_template_1, tokenize=False)
+        output1_via_dict = tokenizer.apply_chat_template(dummy_conversation, chat_template="template1", tokenize=False)
         self.assertEqual(output1, output1_via_dict)
-        output2 = tokenizer.apply_chat_template(
-            dummy_conversation, chat_template=dummy_template_2, tokenize=False
-        )
-        output2_via_dict = tokenizer.apply_chat_template(
-            dummy_conversation, chat_template="template2", tokenize=False
-        )
+        output2 = tokenizer.apply_chat_template(dummy_conversation, chat_template=dummy_template_2, tokenize=False)
+        output2_via_dict = tokenizer.apply_chat_template(dummy_conversation, chat_template="template2", tokenize=False)
         self.assertEqual(output2, output2_via_dict)
 
     @require_jinja
@@ -1374,9 +1381,7 @@ Hey how are you doing"""
 
         # Method is implemented (e.g. not GPT-2)
         if len(attached_sequences) != 2:
-            self.assertEqual(
-                tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences)
-            )
+            self.assertEqual(tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences))
 
     def test_maximum_encoding_length_single_input(self):
         tokenizer = self.get_tokenizer(do_lower_case=False, model_max_length=100)
@@ -1385,9 +1390,7 @@ Hey how are you doing"""
         sequence = tokenizer.encode(seq_0, add_special_tokens=False)
         total_length = len(sequence)
 
-        self.assertGreater(
-            total_length, 4, "Issue with the testing sequence, please update it, it's too short"
-        )
+        self.assertGreater(total_length, 4, "Issue with the testing sequence, please update it, it's too short")
 
         # Test with max model input length
         model_max_length = tokenizer.model_max_length
@@ -1512,12 +1515,8 @@ Hey how are you doing"""
         total_length1 = len(sequence1["input_ids"])
         sequence2 = tokenizer(seq_2, seq_1, add_special_tokens=False)
         total_length2 = len(sequence2["input_ids"])
-        self.assertLess(
-            total_length1, model_max_length - 10, "Issue with the testing sequence, please update it."
-        )
-        self.assertGreater(
-            total_length2, model_max_length, "Issue with the testing sequence, please update it."
-        )
+        self.assertLess(total_length1, model_max_length - 10, "Issue with the testing sequence, please update it.")
+        self.assertGreater(total_length2, model_max_length, "Issue with the testing sequence, please update it.")
 
         # Simple
         padding_strategies = (
@@ -1530,9 +1529,7 @@ Hey how are you doing"""
                         output = tokenizer(seq_2, seq_1, padding=padding_state, truncation=truncation_state)
                         self.assertEqual(len(output["input_ids"]), model_max_length)
 
-                        output = tokenizer(
-                            [seq_2], [seq_1], padding=padding_state, truncation=truncation_state
-                        )
+                        output = tokenizer([seq_2], [seq_1], padding=padding_state, truncation=truncation_state)
                         self.assertEqual(len(output["input_ids"][0]), model_max_length)
 
                 # Simple
@@ -1572,8 +1569,7 @@ Hey how are you doing"""
             seq_1, add_special_tokens=False
         )
         truncated_second_sequence = (
-            tokenizer.encode(seq_0, add_special_tokens=False)
-            + tokenizer.encode(seq_1, add_special_tokens=False)[:-2]
+            tokenizer.encode(seq_0, add_special_tokens=False) + tokenizer.encode(seq_1, add_special_tokens=False)[:-2]
         )
         truncated_longest_sequence = (
             truncated_first_sequence if len(seq0_tokens) > len(seq1_tokens) else truncated_second_sequence
@@ -1827,9 +1823,7 @@ Hey how are you doing"""
         tokenizer.padding_side = "right"
         encoded_sequence = tokenizer.encode(sequence)
         sequence_length = len(encoded_sequence)
-        padded_sequence = tokenizer.encode(
-            sequence, max_length=sequence_length + padding_size, padding="max_length"
-        )
+        padded_sequence = tokenizer.encode(sequence, max_length=sequence_length + padding_size, padding="max_length")
         padded_sequence_length = len(padded_sequence)
         self.assertEqual(sequence_length + padding_size, padded_sequence_length)
         self.assertEqual(encoded_sequence + [padding_idx] * padding_size, padded_sequence)
@@ -1838,9 +1832,7 @@ Hey how are you doing"""
         tokenizer.padding_side = "left"
         encoded_sequence = tokenizer.encode(sequence)
         sequence_length = len(encoded_sequence)
-        padded_sequence = tokenizer.encode(
-            sequence, max_length=sequence_length + padding_size, padding="max_length"
-        )
+        padded_sequence = tokenizer.encode(sequence, max_length=sequence_length + padding_size, padding="max_length")
         padded_sequence_length = len(padded_sequence)
         self.assertEqual(sequence_length + padding_size, padded_sequence_length)
         self.assertEqual([padding_idx] * padding_size + encoded_sequence, padded_sequence)
@@ -1882,9 +1874,7 @@ Hey how are you doing"""
         self.assertEqual(encoded_sequence, truncated_sequence_right)
 
         tokenizer.truncation_side = "left"
-        truncated_sequence_left = tokenizer.encode(
-            sequence, truncation="longest_first", add_special_tokens=False
-        )
+        truncated_sequence_left = tokenizer.encode(sequence, truncation="longest_first", add_special_tokens=False)
         truncated_sequence_left_length = len(truncated_sequence_left)
         self.assertEqual(sequence_length, truncated_sequence_left_length)
         self.assertEqual(encoded_sequence, truncated_sequence_left)
@@ -2051,12 +2041,8 @@ Hey how are you doing"""
             left_padded_token_type_ids = left_padded_sequence["token_type_ids"]
             right_padded_token_type_ids = right_padded_sequence["token_type_ids"]
 
-            self.assertEqual(
-                token_type_ids + [token_type_padding_idx] * padding_size, right_padded_token_type_ids
-            )
-            self.assertEqual(
-                [token_type_padding_idx] * padding_size + token_type_ids, left_padded_token_type_ids
-            )
+            self.assertEqual(token_type_ids + [token_type_padding_idx] * padding_size, right_padded_token_type_ids)
+            self.assertEqual([token_type_padding_idx] * padding_size + token_type_ids, left_padded_token_type_ids)
 
         if "attention_mask" in tokenizer.model_input_names:
             attention_mask = encoded_sequence["attention_mask"]
@@ -2128,20 +2114,15 @@ Hey how are you doing"""
 
         encoded_sequences = [tokenizer(sequence) for sequence in sequences]
         encoded_sequences_batch = tokenizer(sequences, padding=False)
-        self.assertListEqual(
-            encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch)
-        )
+        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
 
-        maximum_length = len(
-            max([encoded_sequence["input_ids"] for encoded_sequence in encoded_sequences], key=len)
-        )
+        maximum_length = len(max([encoded_sequence["input_ids"] for encoded_sequence in encoded_sequences], key=len))
 
         # check correct behaviour if no pad_token_id exists and add it eventually
         self._check_no_pad_token_padding(tokenizer, sequences)
 
         encoded_sequences_padded = [
-            tokenizer(sequence, max_length=maximum_length, padding="max_length")
-            for sequence in sequences
+            tokenizer(sequence, max_length=maximum_length, padding="max_length") for sequence in sequences
         ]
 
         encoded_sequences_batch_padded = tokenizer(sequences, padding=True)
@@ -2152,9 +2133,7 @@ Hey how are you doing"""
 
         # check 'longest' is unsensitive to a max length
         encoded_sequences_batch_padded_1 = tokenizer(sequences, padding=True)
-        encoded_sequences_batch_padded_2 = tokenizer(
-            sequences, max_length=maximum_length + 10, padding="longest"
-        )
+        encoded_sequences_batch_padded_2 = tokenizer(sequences, max_length=maximum_length + 10, padding="longest")
         for key in encoded_sequences_batch_padded_1:
             self.assertListEqual(
                 encoded_sequences_batch_padded_1[key],
@@ -2163,15 +2142,12 @@ Hey how are you doing"""
 
         # check 'no_padding' is unsensitive to a max length
         encoded_sequences_batch_padded_1 = tokenizer(sequences, padding=False)
-        encoded_sequences_batch_padded_2 = tokenizer(
-            sequences, max_length=maximum_length + 10, padding=False
-        )
+        encoded_sequences_batch_padded_2 = tokenizer(sequences, max_length=maximum_length + 10, padding=False)
         for key in encoded_sequences_batch_padded_1:
             self.assertListEqual(
                 encoded_sequences_batch_padded_1[key],
                 encoded_sequences_batch_padded_2[key],
             )
-
 
     def test_batch_encode_plus_padding(self):
         # Test that padded sequences are equivalent between batch and individual encoding
@@ -2190,15 +2166,10 @@ Hey how are you doing"""
         self._check_no_pad_token_padding(tokenizer, sequences)
 
         encoded_sequences = [
-            tokenizer(sequence, max_length=max_length, padding="max_length")
-            for sequence in sequences
+            tokenizer(sequence, max_length=max_length, padding="max_length") for sequence in sequences
         ]
-        encoded_sequences_batch = tokenizer(
-            sequences, max_length=max_length, padding="max_length"
-        )
-        self.assertListEqual(
-            encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch)
-        )
+        encoded_sequences_batch = tokenizer(sequences, max_length=max_length, padding="max_length")
+        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
 
         # Left padding tests
         tokenizer = self.get_tokenizer(do_lower_case=False)
@@ -2215,15 +2186,10 @@ Hey how are you doing"""
         self._check_no_pad_token_padding(tokenizer, sequences)
 
         encoded_sequences = [
-            tokenizer(sequence, max_length=max_length, padding="max_length")
-            for sequence in sequences
+            tokenizer(sequence, max_length=max_length, padding="max_length") for sequence in sequences
         ]
-        encoded_sequences_batch = tokenizer(
-            sequences, max_length=max_length, padding="max_length"
-        )
-        self.assertListEqual(
-            encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch)
-        )
+        encoded_sequences_batch = tokenizer(sequences, max_length=max_length, padding="max_length")
+        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
 
     def test_pretokenized_inputs(self):
         # Test when inputs are pretokenized
@@ -2250,16 +2216,12 @@ Hey how are you doing"""
             self.assertEqual(output[key], output_sequence[key])
 
         # Test sequence pairs
-        output = tokenizer(
-            token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=False
-        )
+        output = tokenizer(token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=False)
         output_sequence = tokenizer(sequence, sequence, add_special_tokens=False)
         for key in output:
             self.assertEqual(output[key], output_sequence[key])
 
-        output = tokenizer(
-            token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=True
-        )
+        output = tokenizer(token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=True)
         output_sequence = tokenizer(sequence, sequence, add_special_tokens=True)
         for key in output:
             self.assertEqual(output[key], output_sequence[key])
@@ -2269,21 +2231,13 @@ Hey how are you doing"""
         token_sequence_batch = [s.split() for s in sequence_batch]
         sequence_batch_cleaned_up_spaces = [" " + " ".join(s) for s in token_sequence_batch]
 
-        output = tokenizer(
-            token_sequence_batch, is_split_into_words=True, add_special_tokens=False
-        )
-        output_sequence = tokenizer(
-            sequence_batch_cleaned_up_spaces, add_special_tokens=False
-        )
+        output = tokenizer(token_sequence_batch, is_split_into_words=True, add_special_tokens=False)
+        output_sequence = tokenizer(sequence_batch_cleaned_up_spaces, add_special_tokens=False)
         for key in output:
             self.assertEqual(output[key], output_sequence[key])
 
-        output = tokenizer(
-            token_sequence_batch, is_split_into_words=True, add_special_tokens=True
-        )
-        output_sequence = tokenizer(
-            sequence_batch_cleaned_up_spaces, add_special_tokens=True
-        )
+        output = tokenizer(token_sequence_batch, is_split_into_words=True, add_special_tokens=True)
+        output_sequence = tokenizer(sequence_batch_cleaned_up_spaces, add_special_tokens=True)
         for key in output:
             self.assertEqual(output[key], output_sequence[key])
 
@@ -2296,20 +2250,12 @@ Hey how are you doing"""
             tuple(" " + " ".join(s) for s in pair) for pair in token_sequence_pair_batch
         ]
 
-        output = tokenizer(
-            token_sequence_pair_batch, is_split_into_words=True, add_special_tokens=False
-        )
-        output_sequence = tokenizer(
-            sequence_pair_batch_cleaned_up_spaces, add_special_tokens=False
-        )
+        output = tokenizer(token_sequence_pair_batch, is_split_into_words=True, add_special_tokens=False)
+        output_sequence = tokenizer(sequence_pair_batch_cleaned_up_spaces, add_special_tokens=False)
         for key in output:
             self.assertEqual(output[key], output_sequence[key])
-        output = tokenizer(
-            token_sequence_pair_batch, is_split_into_words=True, add_special_tokens=True
-        )
-        output_sequence = tokenizer(
-            sequence_pair_batch_cleaned_up_spaces, add_special_tokens=True
-        )
+        output = tokenizer(token_sequence_pair_batch, is_split_into_words=True, add_special_tokens=True)
+        output_sequence = tokenizer(sequence_pair_batch_cleaned_up_spaces, add_special_tokens=True)
         for key in output:
             self.assertEqual(output[key], output_sequence[key])
 
@@ -2358,15 +2304,11 @@ Hey how are you doing"""
         self.assertEqual(batch.input_ids.shape[1], 3)
         self.assertEqual(batch.labels.shape[1], 10)
         # max_target_length will default to max_length if not specified
-        batch = tokenizer(
-            src_text, text_target=tgt_text, max_length=3, return_tensors="pt"
-        )
+        batch = tokenizer(src_text, text_target=tgt_text, max_length=3, return_tensors="pt")
         self.assertEqual(batch.input_ids.shape[1], 3)
         self.assertEqual(batch.labels.shape[1], 3)
 
-        batch_encoder_only = tokenizer(
-           src_text, max_length=3, max_target_length=10, return_tensors="pt"
-        )
+        batch_encoder_only = tokenizer(src_text, max_length=3, max_target_length=10, return_tensors="pt")
         self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
         self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
         self.assertNotIn("decoder_input_ids", batch_encoder_only)
@@ -2445,11 +2387,11 @@ Hey how are you doing"""
                 self.assertIn(str(new_eos), [str(t) for t in tokenizer_r.added_tokens_decoder.values()])
 
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer_r.added_tokens_decoder
-                
+
                 # Test saving and reloading the tokenizer
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     tokenizer_r.save_pretrained(tmp_dir)
-                    
+
                     with self.subTest("Saving tokenizer locally and reloading"):
                         tokenizer = self.tokenizer_class.from_pretrained(tmp_dir)
                         self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
@@ -2524,7 +2466,7 @@ Hey how are you doing"""
         # Find the shorter sequence
         unpadded_lengths = [
             len(tokenizer(seq_0, add_special_tokens=True)["input_ids"]),
-            len(tokenizer(seq_1, add_special_tokens=True)["input_ids"])
+            len(tokenizer(seq_1, add_special_tokens=True)["input_ids"]),
         ]
         shorter_idx = 0 if unpadded_lengths[0] < unpadded_lengths[1] else 1
         self.assertIn(0, output_with_padding["attention_mask"][shorter_idx])
