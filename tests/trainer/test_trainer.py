@@ -6171,7 +6171,7 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
                 self.assertEqual(name, "weight")
                 self.assertDictEqual(config, {"optim_bits": 32})
 
-    def test_separate_checkpoint_limits(tmp_path):
+    def test_separate_checkpoint_limits(self, tmp_path):
         """Test that separate checkpoint and model weight limits work correctly."""
         import glob
         import os
