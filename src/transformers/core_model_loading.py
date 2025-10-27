@@ -558,7 +558,7 @@ class WeightConverter:
     """
 
     source_keys: Union[str, list[str]]
-    target_keys: Optional[Union[str, list[str]]] = []
+    target_keys: Optional[Union[str, list[str]]] = None
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
     distributed_operation: dict[str, ConversionOps] = field(default_factory=dict, compare=False, repr=False)
@@ -626,6 +626,7 @@ def convert_and_load_state_dict_in_model(
     source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
     weight_pattern_alt, weight_pattern_by_group_name = build_glob_alt(_patterns)
     tp_plan_alt, tp_plan_by_group_name = build_glob_alt(list(tp_plan.keys()))
+    device_map_alt, device_map_group_name = build_glob_alt(list(device_map.keys()))
     dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(keep_in_dtype.keys()))
 
     # 1. Create the conversion entries
@@ -673,7 +674,11 @@ def convert_and_load_state_dict_in_model(
                         misc[target_key] = f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
                         continue
                 elif device_map is not None:
-                    op = To(device_map[layer_name]) if layer_name in device_map else To(device_map[""])
+                    if key:=match_glob(layer_name, device_map_alt, device_map_group_name):
+                        device = device_map[key]
+                    else:
+                        device = device_map[""]
+                    op = To(device)
                     values = op.convert(tensors_for_this_layer.values())
 
                 for op in converter.operations:

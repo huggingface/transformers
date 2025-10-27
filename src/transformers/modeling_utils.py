@@ -4707,7 +4707,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for k, v in sharded_metadata["weight_map"].items():
             if v not in all_pointer:
                 file_pointer = safe_open(
-                    os.path.join(checkpoint_files[0].rsplit("/")[0], v), framework="pt", device="cpu"
+                    os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", # device="cpu"
                 )
                 all_pointer[v] = file_pointer
             merged_state_dict[k] = all_pointer[v].get_slice(k)  # don't meterialize yet
