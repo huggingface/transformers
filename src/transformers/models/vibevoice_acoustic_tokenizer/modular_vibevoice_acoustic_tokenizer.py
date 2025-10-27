@@ -176,7 +176,8 @@ class VibeVoiceStreamingConvTranspose1d(nn.Module):
         out_channels: int,
         kernel_size: int, 
         stride: int = 1, 
-        bias: bool = True
+        bias: bool = True,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.convtr = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, bias=bias)
@@ -185,12 +186,12 @@ class VibeVoiceStreamingConvTranspose1d(nn.Module):
         # Transposed conv needs to see multiple input samples to produce correct output
         self.context_size = kernel_size - stride
         self.stride = stride
+        self.layer_idx = layer_idx
 
     def forward(self, 
         hidden_states: torch.Tensor,
         past_conv_values: Optional[VibeVoiceTokenizerCache] = None,
         sample_indices: Optional[torch.Tensor] = None,
-        layer_idx: Optional[int] = None,
     ) -> torch.Tensor:
         """
         Forward pass with optional streaming support via cache.
@@ -199,8 +200,8 @@ class VibeVoiceStreamingConvTranspose1d(nn.Module):
 
         # Validate cache parameters if provided
         if past_conv_values is not None:
-            if layer_idx is None:
-                raise ValueError("layer_idx must be provided when past_conv_values is used.")
+            if self.layer_idx is None:
+                raise ValueError("layer_idx must be provided during initialization when past_conv_values is used.")
             if sample_indices is None:
                 raise ValueError("sample_indices must be provided when past_conv_values is used.")
             if len(sample_indices) != batch_size:
@@ -211,7 +212,7 @@ class VibeVoiceStreamingConvTranspose1d(nn.Module):
             conv_input = hidden_states
             is_first_chunk = True
         else:
-            cached_input = past_conv_values.get(layer_idx, sample_indices)
+            cached_input = past_conv_values.get(self.layer_idx, sample_indices)
             if cached_input is None:
                 cached_input = torch.zeros(batch_size, channels, 0, device=hidden_states.device, dtype=hidden_states.dtype)
             conv_input = torch.cat([cached_input, hidden_states], dim=2)
@@ -232,7 +233,7 @@ class VibeVoiceStreamingConvTranspose1d(nn.Module):
             # Update cache with last context_size samples
             if self.context_size > 0:
                 new_cache = conv_input[:, :, -self.context_size:]
-                past_conv_values.update(layer_idx, sample_indices, new_cache)
+                past_conv_values.update(self.layer_idx, sample_indices, new_cache)
 
         return output
 
@@ -250,15 +251,25 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
         # stem and upsampling layers
         self.upsample_layers = nn.ModuleList()
         self.upsample_layers.append(
-            VibeVoiceStreamingConv1d(config.hidden_size, config.n_filters * 2 ** (len(config.decoder_depths) - 1), config.kernel_size,
-                    bias=config.bias)
+            VibeVoiceStreamingConv1d(
+                in_channels=config.hidden_size, 
+                out_channels=config.n_filters * 2 ** (len(config.decoder_depths) - 1), 
+                kernel_size=config.kernel_size,
+                bias=config.bias,
+                layer_idx=0,
+            )
         )
         for stage_idx in range(len(config.upsampling_ratios)):
             input_channels = config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx))
             output_channels = config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx - 1))
-            upsample_layer = VibeVoiceStreamingConvTranspose1d(input_channels, output_channels,
-                            kernel_size=config.upsampling_ratios[stage_idx] * 2, stride=config.upsampling_ratios[stage_idx],
-                            bias=config.bias)
+            upsample_layer = VibeVoiceStreamingConvTranspose1d(
+                input_channels, 
+                output_channels,
+                kernel_size=config.upsampling_ratios[stage_idx] * 2,
+                stride=config.upsampling_ratios[stage_idx],
+                bias=config.bias,
+                layer_idx=stage_idx + 1
+            )
             self.upsample_layers.append(upsample_layer)
 
         # configure ConvNext1D blocks
@@ -270,16 +281,22 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
             )
             self.stages.append(stage)
 
-        self.head = VibeVoiceStreamingConv1d(input_channels, config.channels, kernel_size=config.kernel_size, bias=config.bias)
+        self.head = VibeVoiceStreamingConv1d(
+            in_channels=input_channels, 
+            out_channels=config.channels, 
+            kernel_size=config.kernel_size, 
+            bias=config.bias,
+            layer_idx=len(config.upsampling_ratios) + 1
+        )
 
     def forward(self, hidden_states, past_conv_values=None, sample_indices=None):
         for layer_idx, upsample_layer in enumerate(self.upsample_layers):
             hidden_states = upsample_layer(
-                hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx
+                hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices
             )
             for block in self.stages[layer_idx]:
                 hidden_states = block(hidden_states)
-        hidden_states = self.head(hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx + 1)
+        hidden_states = self.head(hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices)
         return hidden_states
 
 

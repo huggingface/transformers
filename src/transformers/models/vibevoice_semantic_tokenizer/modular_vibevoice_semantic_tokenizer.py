@@ -134,6 +134,7 @@ class VibeVoiceStreamingConv1d(nn.Module):
         dilation: int = 1,
         groups: int = 1,
         bias: bool = True,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.conv = nn.Conv1d(
@@ -141,13 +142,13 @@ class VibeVoiceStreamingConv1d(nn.Module):
         )
         # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L263C28-L263C72
         self.causal_padding = (kernel_size - 1) * dilation - (stride - 1)
+        self.layer_idx = layer_idx
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         past_conv_values: Optional[VibeVoiceTokenizerCache] = None,
         sample_indices: Optional[torch.Tensor] = None,
-        layer_idx: Optional[int] = None,
     ) -> torch.Tensor:
         """
         Forward pass with optional streaming support via cache.
@@ -158,7 +159,6 @@ class VibeVoiceStreamingConv1d(nn.Module):
             hidden_states: Input tensor [batch_size, channels, time]
             past_conv_values: `VibeVoiceTokenizerCache` object for maintaining convolution states
             sample_indices: Indices identifying each sample for cache management
-            layer_idx: Layer index for cache management
 
         Returns:
             Output tensor
@@ -169,23 +169,22 @@ class VibeVoiceStreamingConv1d(nn.Module):
 
         batch_size, channels, _ = hidden_states.shape
 
-        # Validate cache parameters
+        # Get cached context
+        cached_states = None
         if past_conv_values is not None:
-            if layer_idx is None:
-                raise ValueError("layer_idx must be provided when past_conv_values is used.")
+            if self.layer_idx is None:
+                raise ValueError("layer_idx must be provided during initialization when past_conv_values is used.")
             if sample_indices is None:
                 raise ValueError("sample_indices must be provided when past_conv_values is used.")
             if len(sample_indices) != batch_size:
                 raise ValueError("sample_indices length must match batch size")
-
-        # Get cached context
-        cached_states = None
-        if past_conv_values is not None:
-            cached_states = past_conv_values.get(layer_idx, sample_indices)
+            cached_states = past_conv_values.get(self.layer_idx, sample_indices)
 
         # Initialize with zeros if no cache exists
         if cached_states is None:
-            cached_states = torch.zeros(batch_size, channels, self.causal_padding, device=hidden_states.device, dtype=hidden_states.dtype)
+            cached_states = torch.zeros(
+                batch_size, channels, self.causal_padding, device=hidden_states.device, dtype=hidden_states.dtype
+            )
 
         # Concatenate context with input
         input_with_context = torch.cat([cached_states, hidden_states], dim=2)
@@ -194,7 +193,7 @@ class VibeVoiceStreamingConv1d(nn.Module):
         if past_conv_values is not None:
             # Use the combined input for cache update to maintain continuity
             new_cache = input_with_context[:, :, -self.causal_padding :]
-            past_conv_values.update(layer_idx, sample_indices, new_cache)
+            past_conv_values.update(self.layer_idx, sample_indices, new_cache)
 
         return self.conv(input_with_context)
 
@@ -289,6 +288,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
                 out_channels=config.n_filters,
                 kernel_size=config.kernel_size,
                 bias=config.bias,
+                layer_idx=0,
             )
         )
         for stage_idx in range(len(config.downsampling_ratios)):
@@ -298,6 +298,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
                 kernel_size=config.downsampling_ratios[stage_idx] * 2,
                 stride=config.downsampling_ratios[stage_idx],
                 bias=config.bias,
+                layer_idx=stage_idx + 1,
             )
             self.downsample_layers.append(downsample_layer)
 
@@ -315,16 +316,19 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
             out_channels=config.hidden_size,
             kernel_size=config.kernel_size,
             bias=config.bias,
+            layer_idx=len(config.downsampling_ratios) + 1,
         )
 
     def forward(self, hidden_states, past_conv_values=None, sample_indices=None):
         for layer_idx, downsample_layer in enumerate(self.downsample_layers):
             hidden_states = downsample_layer(
-                hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx
+                hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices
             )
             for block in self.stages[layer_idx]:
                 hidden_states = block(hidden_states)
-        hidden_states = self.head(hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices, layer_idx=layer_idx + 1)
+        hidden_states = self.head(
+            hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices
+        )
         return hidden_states.permute(0, 2, 1)
 
 

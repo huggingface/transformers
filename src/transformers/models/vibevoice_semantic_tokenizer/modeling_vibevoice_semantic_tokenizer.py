@@ -348,9 +348,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
             )
             for block in self.stages[layer_idx]:
                 hidden_states = block(hidden_states)
-        hidden_states = self.head(
-            hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices
-        )
+        hidden_states = self.head(hidden_states, past_conv_values=past_conv_values, sample_indices=sample_indices)
         return hidden_states.permute(0, 2, 1)
 
 
