@@ -95,9 +95,12 @@ print(tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):]))
 
 The chat model called the `get_current_temperature` tool with the correct parameters from the docstring. It inferred France as the location based on Paris, and that it should use Celsius for the units of temperature.
 
-A model **cannot actually call the tool itself**. It requests a tool call, and it's your job to handle the call and append it and the result to the chat history.
+A model **cannot actually call the tool itself**. It requests a tool call, and it's your job to handle the call and append it and the result to the chat history. For
+models that support [response parsing](./chat_response_parsing), the response parsing will be handled automatically, and you can just use
+[`~PreTrainedTokenizer.parse_response] to extract the tool call. For other models, you'll need to manually translate the output
+string into a tool call dict.
 
-Hold the call in the `tool_calls` key of an `assistant` message. This is the recommended API, and should be supported by the chat template of most tool-using models.
+Regardless of the approach you use, the tool call should go in the `tool_calls` key of an `assistant` message. This is the recommended API, and should be supported by the chat template of most tool-using models.
 
 > [!WARNING]
 > Although `tool_calls` is similar to the OpenAI API, the OpenAI API uses a JSON string as its `tool_calls` format. This may cause errors or strange model behavior if used in Transformers, which expects a dict.

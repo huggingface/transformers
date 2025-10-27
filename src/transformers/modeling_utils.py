@@ -4353,7 +4353,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if adapter_kwargs is None:
             adapter_kwargs = {}
 
-        _adapter_model_path, pretrained_model_name_or_path = maybe_load_adapters(
+        _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs = maybe_load_adapters(
             pretrained_model_name_or_path,
             download_kwargs_with_commit,
             **adapter_kwargs,
@@ -5413,9 +5413,7 @@ class PreTrainedAudioTokenizerBase(PreTrainedModel):
         """
         Encode raw audio retrieved from a respective `FeatureExtractor` into discrete audio codebooks (with x channels)
         """
-        pass
 
     @abstractmethod
     def decode(self, audio_codes: torch.Tensor, *args, **kwargs):
         """Decode from discrete audio codebooks back to raw audio"""
-        pass

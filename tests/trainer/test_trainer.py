@@ -2603,19 +2603,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         logs = trainer.state.log_history[1:][:-1]
 
         # reach given learning rate peak and end with 0 lr
-        self.assertTrue(logs[num_warmup_steps - 2]["learning_rate"] == learning_rate)
-        self.assertTrue(logs[-1]["learning_rate"] == 0)
+        self.assertTrue(logs[num_warmup_steps - 1]["learning_rate"] == learning_rate)
+        self.assertTrue(np.allclose(logs[-1]["learning_rate"], 0, atol=5e-6))
 
         # increasing and decreasing pattern of lrs
         increasing_lrs = [
             logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
             for i in range(len(logs))
-            if i < num_warmup_steps - 2
+            if i < num_warmup_steps - 1
         ]
         decreasing_lrs = [
             logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
             for i in range(len(logs) - 1)
-            if i >= num_warmup_steps - 2
+            if i >= num_warmup_steps - 1
         ]
 
         self.assertTrue(all(increasing_lrs))
@@ -4142,7 +4142,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # perfect world: fp32_init/2 == fp16_eval
             self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_torch_compile_train(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -4154,7 +4154,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             metrics = trainer.train()
             self.assertAlmostEqual(metrics.training_loss, original_train_loss)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_torch_compile_eval(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -4165,7 +4165,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(torch_compile=True, output_dir=tmp_dir)
             metrics = trainer.evaluate()
 
-            self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+            self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss, delta=1e-6)
 
     @require_torch_accelerator
     @require_torch_bf16

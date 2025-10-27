@@ -117,6 +117,7 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
+    "jmespath>=1.0.1",
     "kenlm",
     "kernels>=0.10.2,<0.11",
     "librosa",
@@ -128,7 +129,7 @@ _deps = [
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
-    "pandas!=2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
+    "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
     "phonemizer",
@@ -169,7 +170,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.19,!=1.0.18",
     "tokenizers>=0.22.0,<=0.23.0",
-    "torch>=2.2,<2.9",
+    "torch>=2.2",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -294,7 +295,7 @@ extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[opencv]")
-extras["chat_template"] = deps_list("jinja2")
+extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["testing"] = (
     deps_list(
         "pytest",
