@@ -5,7 +5,7 @@
 #                          modular_vibevoice.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ VOCAB_FILES_NAMES = {
 
 @auto_docstring(
     custom_intro="""
-    VibeVoice tokenizer, which is based on the Qwen2's fast tokenizer with additional special tokens for speech.
+    VibeVoice fast tokenizer, which is based on the Qwen2's fast tokenizer with additional special tokens for speech.
     """
 )
 class VibeVoiceTokenizer(PreTrainedTokenizerFast):
@@ -98,16 +98,6 @@ class VibeVoiceTokenizer(PreTrainedTokenizerFast):
         speech_diffusion_token="<|vision_pad|>",
         **kwargs,
     ):
-        super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            tokenizer_file=tokenizer_file,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            **kwargs,
-        )
         # We need to at least pass vocab_file and merges_file to base class
         # in case a slow tokenizer needs to be initialized; other can be
         # configured through files.
@@ -132,6 +122,17 @@ class VibeVoiceTokenizer(PreTrainedTokenizerFast):
             AddedToken(pad_token, lstrip=False, rstrip=False, special=True, normalized=False)
             if isinstance(pad_token, str)
             else pad_token
+        )
+
+        super().__init__(
+            vocab_file=vocab_file,
+            merges_file=merges_file,
+            tokenizer_file=tokenizer_file,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            **kwargs,
         )
 
         # Add VibeVoice-specific special tokens (using vision tokens as model was trained on them)
