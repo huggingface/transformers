@@ -237,8 +237,15 @@ class TorchAoHfQuantizer(HfQuantizer):
         return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.full_ao_keys)]
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
+        from torchao.quantization import FqnToConfig
+        from torchao.quantization.quant_api import _filter_fn_and_param_in_fqn_config
         if self.quantization_config.quant_type == "autoquant":
             return False
+        elif isinstance(self.quantization_config.quant_type, FqnToConfig):
+            module, tensor_name = get_module_from_name(model, param_name)
+            result = _filter_fn_and_param_in_fqn_config(module, param_name.rsplit(".", 1)[0], self.quantization_config.quant_type, None)
+            if result:
+                return result
 
         # check if the param_name is not in self.modules_to_not_convert
         if any(key + "." in param_name or key == param_name for key in self.modules_to_not_convert):
@@ -321,31 +328,44 @@ class TorchAoHfQuantizer(HfQuantizer):
 
             # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
             if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
-                from torchao.quantization import ModuleFqnToConfig
+                from torchao.quantization import FqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
-                if isinstance(config, ModuleFqnToConfig):
-                    module_fqn, _ = param_name.rsplit(".", 1)
+                if isinstance(config, FqnToConfig):
+                    module_fqn, param_val = param_name.rsplit(".", 1)
                     c = None
-                    if module_fqn in config.module_fqn_to_config:
+                    if param_name in config.module_fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "param fqn should not start with`re:`, which is used for specifying regex"
+                        )
+                        c = config.module_fqn_to_config[param_name]
+                    elif module_fqn in config.module_fqn_to_config:
                         assert not module_fqn.startswith("re:"), (
                             "module fqn should not start with`re:`, which is used for specifying regex"
                         )
                         c = config.module_fqn_to_config[module_fqn]
+                    # regx match module and param
                     else:
                         for maybe_module_fqn_pattern in config.module_fqn_to_config:
                             if not maybe_module_fqn_pattern.startswith("re:"):
                                 continue
+                            # see if param matches first
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], param_name):
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
                             elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
                                 # we'll apply the config for first fully matched pattern
                                 c = config.module_fqn_to_config[maybe_module_fqn_pattern]
                                 break
                         else:
                             c = config.module_fqn_to_config.get("_default", None)
-
+                    
                     if c is not None:
                         # filter_fn: not filtering out any modules
-                        quantize_(module, c, filter_fn=lambda x, fqn: True)
+                        custom_fqn_config = FqnToConfig({
+                            param_val: c
+                        })
+                        quantize_(module, custom_fqn_config, filter_fn=None)
                     return
 
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
