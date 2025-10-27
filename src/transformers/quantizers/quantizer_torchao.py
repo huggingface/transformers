@@ -326,8 +326,8 @@ class TorchAoHfQuantizer(HfQuantizer):
                 model.tie_weights()
                 setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
 
-            # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
-            if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
+            # handle FqnToConfig, introduced in torchao 0.15.0+
+            if self.quantization_config._get_ao_version() >= version.Version("0.15.0"):
                 from torchao.quantization import FqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
@@ -366,6 +366,37 @@ class TorchAoHfQuantizer(HfQuantizer):
                             param_val: c
                         })
                         quantize_(module, custom_fqn_config, filter_fn=None)
+                    return
+
+            # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
+            elif self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
+                from torchao.quantization import ModuleFqnToConfig
+
+                config = self.quantization_config.get_apply_tensor_subclass()
+                if isinstance(config, FqnToConfig):
+                    module_fqn, _ = param_name.rsplit(".", 1)
+                    c = None
+                    if module_fqn in config.module_fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "module fqn should not start with`re:`, which is used for specifying regex"
+                        )
+                        c = config.module_fqn_to_config[module_fqn]
+                    # regx match module and param
+                    else:
+                        for maybe_module_fqn_pattern in config.module_fqn_to_config:
+                            if not maybe_module_fqn_pattern.startswith("re:"):
+                                continue
+                            # see if param matches first
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
+                                # we'll apply the config for first fully matched pattern
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                        else:
+                            c = config.module_fqn_to_config.get("_default", None)
+                    
+                    if c is not None:
+                        # filter_fn: not filtering out any modules
+                        quantize_(module, c, filter_fn=lambda fqn, mod: True)
                     return
 
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
