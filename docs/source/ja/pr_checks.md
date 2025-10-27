@@ -40,7 +40,7 @@ pip install transformers[dev]
 
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 トランスフォーマーズのリポジトリ内で作業しています。トランスフォーマーズのオプションの依存関係の数が増えたため、すべてを取得できない可能性があります。開発用インストールが失敗した場合、作業しているディープラーニングフレームワーク（PyTorch、TensorFlow、および/またはFlax）をインストールし、次の手順を実行してください。
@@ -53,7 +53,7 @@ pip install transformers[quality]
 または編集可能なインストールの場合：
 
 ```bash
-pip install -e .[quality]
+pip install -e ".[quality]"
 ```
 
 ## Tests

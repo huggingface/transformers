@@ -38,7 +38,7 @@ pip install transformers[dev]
 or for an editable install:
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 inside the Transformers repo. Since the number of optional dependencies of Transformers has grown a lot, it's possible you don't manage to get all of them. If the dev install fails, make sure to install PyTorch then do
@@ -50,7 +50,7 @@ pip install transformers[quality]
 or for an editable install:
 
 ```bash
-pip install -e .[quality]
+pip install -e ".[quality]"
 ```
 
 ## Tests
