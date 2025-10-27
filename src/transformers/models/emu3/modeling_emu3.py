@@ -1392,7 +1392,7 @@ class Emu3Model(Emu3PreTrainedModel):
         image_features = torch.split(image_features, split_sizes)
         return image_features
 
-    @torch.no_grad
+    @torch.no_grad()
     def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
         """
         Decodes generated image tokens from language model to continuous pixel values
