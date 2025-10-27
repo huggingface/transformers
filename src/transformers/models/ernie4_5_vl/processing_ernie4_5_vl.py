@@ -151,7 +151,9 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         if videos is not None:
-            merge_length = self.video_processor.merge_size**2
+            merge_length = (
+                self.video_processor.merge_size**2 * self.video_processor.temporal_patch_size
+            )  # TODO: this will break modular
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
@@ -202,11 +204,18 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
         if video_sizes is not None:
             videos_kwargs = Ernie4_5_VLProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
+            # TODO: this will break modular
+            temporal_merge_size = (
+                videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size
+            )
+
             num_video_patches = [
                 self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
                 for video_size in video_sizes
             ]
-            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            num_video_tokens = [
+                (num_patches // merge_size**2 // temporal_merge_size) for num_patches in num_video_patches
+            ]
             vision_data["num_video_tokens"] = num_video_tokens
 
         return MultiModalData(**vision_data)

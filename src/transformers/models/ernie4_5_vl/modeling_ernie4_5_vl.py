@@ -1094,8 +1094,10 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
+        # TODO: still check for correctness
 
         image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
         video_start_token_id = self.config.video_start_token_id
         video_end_token_id = self.config.video_end_token_id
         temporal_merge_size = self.config.vision_config.temporal_merge_size
@@ -1114,7 +1116,6 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
                 device=input_ids.device,
             )
             image_index, video_index = 0, 0
-            video_group_index = 0
             attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
                 input_ids = input_ids[attention_mask[i] == 1]
@@ -1130,7 +1131,7 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
 
                     if token == image_token_id and not video_check_flg:
                         input_token_type.append("image")
-                    elif token == image_token_id and video_check_flg:
+                    elif token == video_token_id and video_check_flg:
                         input_token_type.append("video")
                     else:
                         input_token_type.append("text")
@@ -1143,7 +1144,6 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
                     input_type_group.append((key, start_index, end_index))
 
                 llm_pos_ids_list = []
-                video_frame_num = 1
                 for modality_type, start_idx, end_idx in input_type_group:
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
 
@@ -1165,11 +1165,10 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
                         llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
                         image_index += 1
-                        video_frame_num = 1
 
                     elif modality_type == "video":
                         t, h, w = (
-                            video_frame_num,  # TODO: check for correctness, og uses video idx here as well
+                            video_grid_thw[video_index][0],
                             video_grid_thw[video_index][1],
                             video_grid_thw[video_index][2],
                         )
@@ -1186,19 +1185,11 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
                             w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
                             llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
-                        video_group_index += 1
-
-                        if video_group_index >= video_grid_thw[video_index][0]:
-                            video_index += 1
-                            video_group_index = 0
-
-                        video_frame_num += 1
+                        video_index += 1
 
                     else:
                         text_len = end_idx - start_idx
                         llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
-
-                        video_frame_num = 1
 
                 llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
                 position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
@@ -1241,7 +1232,11 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         pixel_values_videos = pixel_values_videos.to(self.vision_tower.device)
         video_embeds = self.vision_tower(pixel_values_videos, video_grid_thw)
         video_embeds = self.resampler_model(video_embeds, video_grid_thw)
-        split_sizes = (video_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
+        split_sizes = (
+            video_grid_thw.prod(-1)
+            // self.vision_tower.spatial_merge_size**2
+            // self.resampler_model.temporal_merge_size
+        ).tolist()
         video_embeds = torch.split(video_embeds, split_sizes)
         return video_embeds
 

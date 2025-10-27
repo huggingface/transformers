@@ -172,10 +172,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
 
         if num_frames is not None:
             if num_frames < min_frames or num_frames > max_frames:
-                raise ValueError(
-                    f"`num_frames` must be {min_frames} <= x <= {max_frames}. "
-                    f"Got {num_frames} instead."
-                )
+                raise ValueError(f"`num_frames` must be {min_frames} <= x <= {max_frames}. Got {num_frames} instead.")
         else:
             if fps is not None and (metadata is None or metadata.fps is None):
                 raise ValueError(
@@ -263,8 +260,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             if input_data_format == ChannelDimension.LAST:
                 video = video.permute(0, 3, 1, 2).contiguous()
 
-            # TODO: check for correctness
-            # See `timestamp_converting` and `render_single_image_with_timestamp` in og
+            # specific to ernie, draws timestamps on each frame
             for idx, frame in enumerate(video):
                 video[idx] = self._render_image_with_timestamp(
                     frame, self._convert_timestamp(metadata.timestamps[idx])
@@ -424,36 +420,6 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         if return_metadata:
             preprocessed_videos["video_metadata"] = video_metadata
         return preprocessed_videos
-
-    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
-        """
-        A utility that returns number of video patches a given video size.
-
-        Args:
-            num_frames (`int`):
-                Number of frames in the input video.
-            height (`int`):
-                Height of the input video.
-            width (`int`):
-                Width of the input video.
-            videos_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the video processor.
-        Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
-        """
-        min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
-
-        factor = patch_size * merge_size
-        resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
-        )
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        grid_t = num_frames // temporal_patch_size
-        return grid_t * grid_h * grid_w
 
 
 __all__ = ["Ernie4_5_VLVideoProcessor"]
