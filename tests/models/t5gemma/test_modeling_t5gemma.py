@@ -1281,9 +1281,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.set_attn_implementation("flash_attention_2")
 
         # Only generate beyond prefill, we don't care about the output as it only checks for crashes
-        _ = model.generate(
-            input_ids, attention_mask=attention_mask, max_new_tokens=2, use_cache=True
-        )
+        _ = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=2, use_cache=True)
 
 
 class T5GemmaEncoderOnlyModelTester:
