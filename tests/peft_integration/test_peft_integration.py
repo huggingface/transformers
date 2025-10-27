@@ -626,7 +626,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
                 )
 
-                # if supported, this should not raise an error
                 model.load_adapter(
                     adapter_state_dict=dummy_state_dict,
                     adapter_name="other",
