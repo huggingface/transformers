@@ -142,6 +142,10 @@ from transformers.generation.continuous_batching import ContinuousBatchingManage
 
 ### Supported Features
 
+- Dynamic scheduling of variable-length requests
+- Chunked prefill
+- Paged Attention Cache
+- Sliding window attention
 
 ### Unsupported Features
 
@@ -163,5 +167,4 @@ pip install transformers[open-telemetry]
 ```
 
 This will enable traces and metrics collection in CB. You will then have to setup the backend to collect and visualize the traces and metrics.
-
 
