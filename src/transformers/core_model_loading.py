@@ -687,10 +687,7 @@ def convert_and_load_state_dict_in_model(
         for layer_name, tensors_for_this_layer in iterator: # TODO I need a global TQDM :)
             concrete_target_keys = layer_name.split("|")
             if bool(set(concrete_target_keys) - unexpected_keys):
-                import time
-                s = time.time()
                 values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
-
                 if op := converter.distributed_operation:
                     try:
                         values = op(values)
@@ -715,15 +712,13 @@ def convert_and_load_state_dict_in_model(
                             realized_value.update(op(realized_value[k]))
                         except Exception as e:
                             misc[layer_name] += f"Failed to quantize with {op.__class__.__name__}: {e}"
-                            continue
-                e = time.time()
+
                 for k, output_value in realized_value.items():
                     matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
                     if matched_dtype_pattern is not None:
                         op = Cast(keep_in_dtype[matched_dtype_pattern])
                         output_value = op(output_value)
 
-                    print(layer_name, e-s, output_value.device if not isinstance(output_value, list) else output_value[0].device)
                     set_param_for_module(
                         model,
                         k,
