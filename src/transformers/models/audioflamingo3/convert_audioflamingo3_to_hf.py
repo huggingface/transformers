@@ -204,13 +204,9 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path):
 def write_generation_config(dst_root: Path) -> GenerationConfig:
     generation_config = GenerationConfig(
         bos_token_id=151643,
-        do_sample=True,
         eos_token_id=[151645, 151643],
         pad_token_id=151643,
         repetition_penalty=1.05,
-        temperature=0.7,
-        top_k=20,
-        top_p=0.8,
     )
     generation_config.save_pretrained(dst_root)
     logger.info("generation_config.json")
