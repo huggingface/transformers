@@ -34,7 +34,6 @@ python run_audio_classification.py \
     --dataset_name superb \
     --dataset_config_name ks \
     --output_dir wav2vec2-base-ft-keyword-spotting \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
@@ -42,7 +41,7 @@ python run_audio_classification.py \
     --learning_rate 3e-5 \
     --max_length_seconds 1 \
     --attention_mask False \
-    --warmup_ratio 0.1 \
+    --warmup_steps 0.1 \
     --num_train_epochs 5 \
     --per_device_train_batch_size 32 \
     --gradient_accumulation_steps 4 \
@@ -76,7 +75,6 @@ python run_audio_classification.py \
     --audio_column_name audio \
     --label_column_name language \
     --output_dir wav2vec2-base-lang-id \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
@@ -84,7 +82,7 @@ python run_audio_classification.py \
     --learning_rate 3e-4 \
     --max_length_seconds 16 \
     --attention_mask False \
-    --warmup_ratio 0.1 \
+    --warmup_steps 0.1 \
     --num_train_epochs 10 \
     --per_device_train_batch_size 8 \
     --gradient_accumulation_steps 4 \

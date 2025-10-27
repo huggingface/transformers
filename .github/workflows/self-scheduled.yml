@@ -38,6 +38,10 @@ on:
         default: ""
         required: false
         type: string
+      pytest_marker:
+        required: false
+        type: string
+
 
 env:
   HF_HOME: /mnt/cache
@@ -48,7 +52,6 @@ env:
   # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
   # This token is created under the bot `hf-transformers-bot`.
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
   NUM_SLICES: 2
@@ -128,6 +131,7 @@ jobs:
       commit_sha: ${{ inputs.commit_sha || github.sha }}
       runner_type: ${{ inputs.runner_type }}
       report_repo_id: ${{ inputs.report_repo_id }}
+      pytest_marker: ${{ inputs.pytest_marker }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:

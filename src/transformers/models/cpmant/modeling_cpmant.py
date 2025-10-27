@@ -637,13 +637,6 @@ class CpmAntModel(CpmAntPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         input_ids = input_ids.contiguous()
@@ -729,6 +722,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
@@ -770,8 +764,9 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
             cache_position,
         )
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
-
-        logits = self.lm_head(hidden_states)
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -795,13 +790,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, embeddings):
         self.cpmant.input_embedding = embeddings
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        past_key_values = [list(each) if each is not None else each for each in past_key_values]
-        for key_value_layer in past_key_values:
-            key_value_layer[0] = key_value_layer[0][beam_idx]
-            key_value_layer[1] = key_value_layer[1][beam_idx]
-        return past_key_values
 
 
 __all__ = ["CpmAntForCausalLM", "CpmAntModel", "CpmAntPreTrainedModel"]

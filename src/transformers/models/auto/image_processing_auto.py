@@ -22,7 +22,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Optional, Union
 
 # Build the list of all image processors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...image_processing_utils import ImageProcessingMixin
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -114,7 +114,6 @@ else:
             ("ijepa", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("imagegpt", ("ImageGPTImageProcessor", "ImageGPTImageProcessorFast")),
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
-            ("instructblipvideo", ("InstructBlipVideoImageProcessor", None)),
             ("janus", ("JanusImageProcessor", "JanusImageProcessorFast")),
             ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("kosmos-2.5", ("Kosmos2_5ImageProcessor", "Kosmos2_5ImageProcessorFast")),
@@ -122,11 +121,11 @@ else:
             ("layoutlmv3", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
             ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
-            ("lightglue", ("LightGlueImageProcessor", None)),
+            ("lightglue", ("LightGlueImageProcessor", "LightGlueImageProcessorFast")),
             ("llama4", ("Llama4ImageProcessor", "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
-            ("llava_next_video", ("LlavaNextVideoImageProcessor", None)),
+            ("llava_next_video", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_onevision", ("LlavaOnevisionImageProcessor", "LlavaOnevisionImageProcessorFast")),
             ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
             ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
@@ -134,7 +133,7 @@ else:
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
-            ("mllama", ("MllamaImageProcessor", None)),
+            ("mllama", ("MllamaImageProcessor", "MllamaImageProcessorFast")),
             ("mm-grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor", "MobileNetV1ImageProcessorFast")),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
@@ -171,7 +170,7 @@ else:
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
             ("smolvlm", ("SmolVLMImageProcessor", "SmolVLMImageProcessorFast")),
-            ("superglue", ("SuperGlueImageProcessor", None)),
+            ("superglue", ("SuperGlueImageProcessor", "SuperGlueImageProcessorFast")),
             ("superpoint", ("SuperPointImageProcessor", "SuperPointImageProcessorFast")),
             ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
@@ -186,6 +185,7 @@ else:
             ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
             ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
+            ("video_llama_3", ("VideoLlama3ImageProcessor", "VideoLlama3ImageProcessorFast")),
             ("videomae", ("VideoMAEImageProcessor", None)),
             ("vilt", ("ViltImageProcessor", "ViltImageProcessorFast")),
             ("vipllava", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -305,16 +305,6 @@ def get_image_processor_config(
     image_processor.save_pretrained("image-processor-test")
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         IMAGE_PROCESSOR_NAME,
@@ -436,18 +426,6 @@ class AutoImageProcessor:
         >>> # If image processor files are in a directory (e.g. image processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         # TODO: @yoni, change in v4.48 (use_fast set to True by default)
         use_fast = kwargs.pop("use_fast", None)
@@ -502,7 +480,7 @@ class AutoImageProcessor:
 
         # If we don't find the image processor class in the image processor config, let's try the model config.
         if image_processor_type is None and image_processor_auto_map is None:
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path,
                     trust_remote_code=trust_remote_code,
@@ -629,7 +607,7 @@ class AutoImageProcessor:
         Register a new image processor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             image_processor_class ([`ImageProcessingMixin`]): The image processor to register.
         """

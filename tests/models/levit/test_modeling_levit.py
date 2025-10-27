@@ -182,8 +182,6 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
     has_attentions = False
 

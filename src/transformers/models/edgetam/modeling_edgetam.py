@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -302,6 +303,7 @@ class EdgeTamPreTrainedModel(PreTrainedModel):
     config_class = EdgeTamConfig
     base_model_prefix = "edgetam"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
@@ -444,7 +446,7 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -918,6 +920,7 @@ class EdgeTamMaskDecoder(nn.Module):
     """
 )
 class EdgeTamModel(EdgeTamPreTrainedModel):
+    input_modalities = ["image", "text"]
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
@@ -1028,7 +1031,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

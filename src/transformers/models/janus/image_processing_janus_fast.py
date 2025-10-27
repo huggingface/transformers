@@ -54,11 +54,11 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = JanusImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[JanusImageProcessorKwargs]):
+        super().__init__(**kwargs)
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
             background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
-        super().__init__(**kwargs)
         self.background_color = tuple(background_color)
 
     def resize(

@@ -15,8 +15,9 @@
 # limitations under the License.
 import math
 import re
+from collections.abc import Callable
 from itertools import cycle
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -26,10 +27,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    logging,
-)
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import logging
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
@@ -227,7 +225,6 @@ class Zamba2Attention(ZambaAttention):
 
         self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -235,6 +232,7 @@ class Zamba2Attention(ZambaAttention):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Zamba2HybridDynamicCache] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -758,7 +756,6 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         self.self_attn = Zamba2Attention(config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id)
         self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -828,7 +825,6 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         del self.shared_transf
         self.shared_transformer = shared_transformer
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -840,6 +836,7 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         position_embeddings: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -869,6 +866,7 @@ class Zamba2HybridLayer(ZambaHybridLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             position_embeddings=position_embeddings,
+            position_ids=position_ids,
         )
 
         transformer_hidden_states = layer_outputs[0]
@@ -1072,12 +1070,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
-
-        # create position embeddings to be shared across the decoder layers
-        if self.config.use_mem_rope:
-            position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        else:
-            position_embeddings = None
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1098,6 +1091,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                     output_attentions,
                     use_cache,
                     position_embeddings,
+                    position_ids,
                 )
             else:
                 layer_outputs = layer(
@@ -1110,6 +1104,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     position_embeddings=position_embeddings,
+                    position_ids=position_ids,
                 )
             hidden_states = layer_outputs[0]
 

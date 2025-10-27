@@ -21,8 +21,9 @@
 
 import collections.abc
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 import numpy as np
 import torch
@@ -986,6 +987,7 @@ class EomtPreTrainedModel(PreTrainedModel):
     config: EomtConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
@@ -1082,7 +1084,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
     def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

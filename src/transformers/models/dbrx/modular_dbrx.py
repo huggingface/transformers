@@ -14,7 +14,8 @@
 # limitations under the License.
 """Modular components for DBRX model."""
 
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -31,7 +32,6 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
@@ -254,7 +254,6 @@ class DbrxNormAttentionNorm(nn.Module):
         )
         self.norm_2 = nn.LayerNorm(config.d_model, bias=False)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -297,7 +296,6 @@ class DbrxBlock(GradientCheckpointingLayer):
         )
         self.ffn = DbrxFFN(config=config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -388,7 +386,7 @@ class DbrxModel(DbrxPreTrainedModel):
     def set_input_embeddings(self, value: nn.Embedding):
         self.wte = value
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
