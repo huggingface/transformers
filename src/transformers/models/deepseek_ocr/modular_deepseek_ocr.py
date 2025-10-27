@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import os
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -244,7 +245,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
         tile_tag="2D",
         image_token_index=100015,
         image_grid_pinpoints=None,
-        vision_feature_layer=-2,
+        vision_feature_layer=None,
         vision_feature_select_strategy="default",
         **kwargs,
     ):
@@ -409,10 +410,23 @@ class DeepseekOcrVisionEmbeddings(CLIPVisionEmbeddings):
             patch_embeds = patch_embeds
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embedding(self.position_ids)
+        position_embeddings = self.position_embedding(self.position_ids)
+        if position_embeddings.shape[1] != embeddings.shape[1]:
+            class_pos_embed = position_embeddings[:, :1]
+            patch_pos_embed = position_embeddings[:, 1:]
+            src_size = int(math.sqrt(patch_pos_embed.shape[1]))
+            patch_pos_embed = patch_pos_embed.reshape(1, src_size, src_size, -1).permute(0, 3, 1, 2)
+            patch_pos_embed = patch_pos_embed.to(torch.float32)
+            patch_pos_embed = nn.functional.interpolate(
+                patch_pos_embed,
+                size=(height, width),
+                mode="bicubic",
+                align_corners=False,
+                antialias=True,
+            )
+            patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).reshape(1, height * width, -1)
+            position_embeddings = torch.cat([class_pos_embed, patch_pos_embed.to(position_embeddings.dtype)], dim=1)
+        embeddings = embeddings + position_embeddings
         return embeddings
 
 
@@ -786,6 +800,7 @@ class DeepseekOcrModel(LlavaNextModel):
             patch_embeds=sam_features,
             output_hidden_states=True,
             return_dict=True,
+            interpolate_pos_encoding=True,
         )
 
         clip_seq = clip_out.last_hidden_state

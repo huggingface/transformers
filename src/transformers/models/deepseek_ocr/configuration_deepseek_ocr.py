@@ -418,7 +418,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
         tile_tag="2D",
         image_token_index=100015,
         image_grid_pinpoints=None,
-        vision_feature_layer=-2,
+        vision_feature_layer=None,
         vision_feature_select_strategy="default",
         **kwargs,
     ):

@@ -665,10 +665,23 @@ class DeepseekOcrVisionEmbeddings(nn.Module):
             patch_embeds = patch_embeds
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embedding(self.position_ids)
+        position_embeddings = self.position_embedding(self.position_ids)
+        if position_embeddings.shape[1] != embeddings.shape[1]:
+            class_pos_embed = position_embeddings[:, :1]
+            patch_pos_embed = position_embeddings[:, 1:]
+            src_size = int(math.sqrt(patch_pos_embed.shape[1]))
+            patch_pos_embed = patch_pos_embed.reshape(1, src_size, src_size, -1).permute(0, 3, 1, 2)
+            patch_pos_embed = patch_pos_embed.to(torch.float32)
+            patch_pos_embed = nn.functional.interpolate(
+                patch_pos_embed,
+                size=(height, width),
+                mode="bicubic",
+                align_corners=False,
+                antialias=True,
+            )
+            patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).reshape(1, height * width, -1)
+            position_embeddings = torch.cat([class_pos_embed, patch_pos_embed.to(position_embeddings.dtype)], dim=1)
+        embeddings = embeddings + position_embeddings
         return embeddings
 
 
@@ -785,14 +798,13 @@ class DeepseekOcrEncoderLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -1422,13 +1434,8 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
-        is_loaded = False
-        for index__, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            if index__ == 0 and not is_loaded and hidden_states.shape[1] > 1:
-                loaded_states = torch.load("deepseekocr/input_hidden_states")
-                hidden_states = loaded_states.to(hidden_states.device, dtype=hidden_states.dtype)
-                position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
-                is_loaded = True
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
@@ -1523,7 +1530,6 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
                 crop_shape = image_spatial_crops[image_idx]
                 if isinstance(crop_shape, torch.Tensor):
                     crop_shape = crop_shape.tolist()
-
             width_crop_num = int(crop_shape[0]) if crop_shape is not None else 1
             height_crop_num = int(crop_shape[1]) if crop_shape is not None else 1
             has_local_crops = width_crop_num > 1 or height_crop_num > 1
@@ -1657,6 +1663,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
             patch_embeds=sam_features,
             output_hidden_states=True,
             return_dict=True,
+            interpolate_pos_encoding=True,
         )
 
         clip_seq = clip_out.last_hidden_state
