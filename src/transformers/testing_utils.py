@@ -616,7 +616,9 @@ def require_flash_dmattn(test_case):
     except Exception as _:
         kernels_available = False
 
-    return unittest.skipUnless(kernels_available | flash_dmattn_available, "test requires Flash Dynamic Mask Attention")(test_case)
+    return unittest.skipUnless(
+        kernels_available | flash_dmattn_available, "test requires Flash Dynamic Mask Attention"
+    )(test_case)
 
 
 def require_kernels(test_case):
