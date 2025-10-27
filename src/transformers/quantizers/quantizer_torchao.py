@@ -373,7 +373,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                 from torchao.quantization import ModuleFqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
-                if isinstance(config, FqnToConfig):
+                if isinstance(config, ModuleFqnToConfig):
                     module_fqn, _ = param_name.rsplit(".", 1)
                     c = None
                     if module_fqn in config.module_fqn_to_config:
@@ -381,12 +381,10 @@ class TorchAoHfQuantizer(HfQuantizer):
                             "module fqn should not start with`re:`, which is used for specifying regex"
                         )
                         c = config.module_fqn_to_config[module_fqn]
-                    # regx match module and param
                     else:
                         for maybe_module_fqn_pattern in config.module_fqn_to_config:
                             if not maybe_module_fqn_pattern.startswith("re:"):
                                 continue
-                            # see if param matches first
                             elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
                                 # we'll apply the config for first fully matched pattern
                                 c = config.module_fqn_to_config[maybe_module_fqn_pattern]
