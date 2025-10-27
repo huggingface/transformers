@@ -424,16 +424,10 @@ class Fp8Quantize(QuantizationOp):
         self.block_size = block_size
         self._inverse_op = Fp8Dequantize
 
-    def convert(self, value: torch.Tensor, *, context: dict[str, Any]) -> dict[str, torch.Tensor]:
-        if not isinstance(value, torch.Tensor):
-            raise TypeError("Fp8Quantize expects a tensor as input.")
-
-        target_keys = context.get("target_keys")
-        if not isinstance(target_keys, str):
-            raise ValueError("Fp8Quantize requires a single string target key.")
-
-        quant_config = context.get("quantization_config")
-        block_size = self.block_size
+    def convert(self, input_dict: torch.Tensor, *, quant_config: dict[str, Any]) -> dict[str, torch.Tensor]:
+        target_keys, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+        block_size = quant_config.weight_block_size
         if block_size is None and quant_config is not None:
             block_size = getattr(quant_config, "weight_block_size", None)
         if block_size is None:
@@ -443,27 +437,27 @@ class Fp8Quantize(QuantizationOp):
         rows, cols = value.shape[-2:]
         if rows % block_m != 0 or cols % block_n != 0:
             raise ValueError(
-                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
+                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n}). for {target_keys}"
             )
-
-        original_shape = value.shape
-        value_fp32 = value.to(torch.float32)
-        reshaped = value_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
-        max_abs = reshaped.abs().amax(dim=(2, 4))
-        safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
-        scales = _FP8_MAX / safe_max_abs
-        scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))
-        scales_reshaped = scales.unsqueeze(-1).unsqueeze(2)
-        scaled = reshaped * scales_reshaped
-        if _FP8_IS_INT:
-            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         else:
-            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-        quantized = quantized.reshape(original_shape)
-        inv_scales = (1.0 / scales).reshape(-1, rows // block_m, cols // block_n).to(torch.float32)
+            original_shape = value.shape
+            value_fp32 = value.to(torch.float32)
+            reshaped = value_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
+            max_abs = reshaped.abs().amax(dim=(2, 4))
+            safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
+            scales = _FP8_MAX / safe_max_abs
+            scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))
+            scales_reshaped = scales.unsqueeze(-1).unsqueeze(2)
+            scaled = reshaped * scales_reshaped
+            if _FP8_IS_INT:
+                quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+            else:
+                quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+            quantized = quantized.reshape(original_shape)
+            inv_scales = (1.0 / scales).reshape(-1, rows // block_m, cols // block_n).to(torch.float32)
 
-        scale_key = target_keys.rsplit(".", 1)[0] + ".scale"
-        return {target_keys: quantized, scale_key: inv_scales}
+            scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
+            return {target_keys: quantized, scale_key: inv_scales[0]}
 
 
 class Fp8Dequantize(QuantizationOp):
@@ -679,7 +673,7 @@ def convert_and_load_state_dict_in_model(
             if empty_tensor is None:
                 unexpected_keys.add(t)
                 continue
-            if quantizer is not None and quantizer.param_needs_quantization(t):
+            if quantizer is not None and quantizer.param_needs_quantization(model, t):
                 # converter.quantization_operation[target_key] = quantizer.quantize_tensor
                 converter.quantization_operation[t] = Fp8Quantize()
 
@@ -706,19 +700,19 @@ def convert_and_load_state_dict_in_model(
                     try:
                         values = op(values)
                     except Exception as e:
-                        misc[f"conversion: {layer_name}"] = (
+                        misc[layer_name] = (
                             f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {values}"
                         )
 
                 values = [values] if not isinstance(values, list) else values
                 realized_value = {k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys}
 
-                for k in realized_value.keys():
+                for k in list(realized_value.keys()).copy():
                     if op := converter.quantization_operation.get(k):
                         try:
-                            realized_value.update(op(realized_value[k]))
+                            realized_value.update(op.convert({k:realized_value.pop(k)}, quant_config=quantizer.quantization_config))
                         except Exception as e:
-                            misc[layer_name] += f"Failed to quantize with {op.__class__.__name__}: {e}"
+                            misc[layer_name] = f"Failed to quantize with {op.__class__.__name__}: {e}"
 
                 for k, output_value in realized_value.items():
                     matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)

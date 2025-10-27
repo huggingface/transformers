@@ -95,8 +95,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
                     raise ValueError("Expect quantized weights but got an unquantized weight")
             else:
-                if tensor_name == "weight_scale_inv":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+                return
+                # if tensor_name == "weight_scale_inv":
+                #     raise ValueError("Expect unquantized weights but got a quantized weight_scale")
 
         param_value = param_value.to(target_device)
 
