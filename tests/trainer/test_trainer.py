@@ -6191,7 +6191,7 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
             save_checkpoint_limit=2,  # Keep only 2 full checkpoints
             save_model_limit=4,  # Keep 4 model weight files
             logging_steps=10,
-            evaluation_strategy="no",  # Disable eval to speed up test
+            eval_strategy="no",  # Disable eval to speed up test
             report_to="none",  # Disable reporting
         )
 
