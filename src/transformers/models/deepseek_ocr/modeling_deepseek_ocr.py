@@ -24,7 +24,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -32,7 +31,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...image_processing_utils import select_best_resolution
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -59,13 +57,13 @@ class DeepseekOcrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
 
 
-class DeepseekOcrProjector(nn.Module):
+class DeepseekOcrProjector(PreTrainedModel):
     """
     Projector that maps concatenated SAM + CLIP features to language model space.
     """
 
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.layers = nn.Linear(config.input_dim, config.n_embed)
 
     def forward(self, x):
@@ -893,9 +891,8 @@ class DeepseekOcrCLIPVisionTransformer(nn.Module):
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = DeepseekOcrVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = DeepseekOcrCLIPEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @auto_docstring
     def forward(
@@ -922,7 +919,6 @@ class DeepseekOcrCLIPVisionTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
@@ -1463,76 +1459,6 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
         )
 
 
-def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
-    """
-    Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
-
-    Args:
-        image_size (`tuple`):
-            The size of the input image in the format (width, height).
-        grid_pinpoints (`List`):
-            A list containing possible resolutions. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
-        patch_size (`int`):
-            The size of each image patch.
-
-    Returns:
-        tuple: The shape of the image patch grid in the format (width, height).
-    """
-    if not isinstance(grid_pinpoints, list):
-        raise TypeError("grid_pinpoints should be a list of tuples or lists")
-
-    # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
-    if not isinstance(image_size, (list, tuple)):
-        if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise TypeError(
-                f"image_size invalid type: {type(image_size)} not valid, should be either list, tuple, np.ndarray or tensor"
-            )
-        image_size = image_size.tolist()
-
-    height, width = select_best_resolution(image_size, grid_pinpoints)
-    return height // patch_size, width // patch_size
-
-
-def unpad_image(tensor, original_size):
-    """
-    Unpads a PyTorch tensor of a padded and resized image.
-
-    Args:
-        tensor (`torch.Tensor`):
-            The image tensor, assumed to be of shape (num_channels, height, width).
-        original_size (`tuple`):
-            The original size of the image (height, width).
-
-    Returns:
-        `torch.Tensor`: The unpadded image tensor.
-    """
-    if not isinstance(original_size, (list, tuple)):
-        if not isinstance(original_size, (torch.Tensor, np.ndarray)):
-            raise TypeError(
-                f"image_size invalid type: {type(original_size)} not valid, should be either list, tuple, np.ndarray or tensor"
-            )
-        original_size = original_size.tolist()
-    original_height, original_width = original_size
-    current_height, current_width = tensor.shape[1:]
-
-    original_aspect_ratio = original_width / original_height
-    current_aspect_ratio = current_width / current_height
-
-    if original_aspect_ratio > current_aspect_ratio:
-        scale_factor = current_width / original_width
-        new_height = int(round(original_height * scale_factor, 7))
-        padding = (current_height - new_height) // 2
-        unpadded_tensor = tensor[:, padding : current_height - padding, :]
-    else:
-        scale_factor = current_height / original_height
-        new_width = int(round(original_width * scale_factor, 7))
-        padding = (current_width - new_width) // 2
-        unpadded_tensor = tensor[:, :, padding : current_width - padding]
-
-    return unpadded_tensor
-
-
 @auto_docstring(
     custom_intro="""
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
@@ -1552,13 +1478,13 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         self.image_newline = nn.Parameter(torch.randn(config.hidden_size) * embed_std)
 
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = DeepseekOcrTextModel(config.text_config)
+        self.language_model = DeepseekOcrTextModel._from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
 
-        self.sam_model = DeepseekOcrSamVisionEncoder(config.vision_config.sam_config)
-        self.clip_model = DeepseekOcrCLIPVisionModel(config.vision_config.clip_config)
+        self.sam_model = DeepseekOcrSamVisionEncoder._from_config(config.vision_config.sam_config)
+        self.clip_model = DeepseekOcrCLIPVisionModel._from_config(config.vision_config.clip_config)
 
-        self.multi_modal_projector = DeepseekOcrProjector(config.projector_config)
+        self.multi_modal_projector = DeepseekOcrProjector._from_config(config.projector_config)
         self.view_seperator = nn.Parameter(
             torch.randn(config.hidden_size) * embed_std
         )  # TODO the typo is in the checkpoint
@@ -1576,7 +1502,14 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
     def get_decoder(self):
         return self.language_model
 
-    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
+    def pack_image_features(
+        self,
+        image_features,
+        image_sizes,
+        vision_feature_select_strategy,
+        image_newline=None,
+        image_spatial_crops=None,
+    ):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
@@ -1596,50 +1529,100 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         """
         new_image_features = []
         feature_lens = []
-        for image_idx, image_feature in enumerate(image_features):
-            if image_feature.shape[0] > 1:
-                base_image_feature = image_feature[0]
-                image_feature = image_feature[1:]
-                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
 
-                num_patch_height, num_patch_width = get_anyres_image_grid_shape(
-                    image_sizes[image_idx],
-                    self.config.image_grid_pinpoints,
-                    self.config.vision_config.image_size,
-                )
+        for image_idx, features in enumerate(image_features):
+            crop_shape = None
+            if image_spatial_crops is not None:
+                crop_shape = image_spatial_crops[image_idx]
+                if isinstance(crop_shape, torch.Tensor):
+                    crop_shape = crop_shape.tolist()
+            width_crop_num = int(crop_shape[0]) if crop_shape is not None else 1
+            height_crop_num = int(crop_shape[1]) if crop_shape is not None else 1
+            has_local_crops = width_crop_num > 1 or height_crop_num > 1
 
-                if (
-                    np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0
-                    and vision_feature_select_strategy == "default"
-                ):
-                    logger.warning_once(
-                        "Image feature shape does not line up with the provided patch size. "
-                        "You may be using the `default` vision_feature_select_strategy with a"
-                        " visual encoder that does not have CLS."
-                    )
-
-                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
-                image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
-                image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-                image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                if image_newline is not None:
-                    image_feature = torch.cat(
-                        (
-                            image_feature,
-                            image_newline[:, None, None]
-                            .expand(*image_feature.shape[:-1], 1)
-                            .to(image_feature.device, image_feature.dtype),
-                        ),
-                        dim=-1,
-                    )
-                image_feature = image_feature.flatten(1, 2).transpose(0, 1)
-                image_feature = torch.cat((base_image_feature, image_feature), dim=0)
+            if has_local_crops and features.shape[0] >= width_crop_num * height_crop_num + 1:
+                valid_patch_count = width_crop_num * height_crop_num + 1
             else:
-                image_feature = image_feature[0]
+                valid_patch_count = 1 if features.shape[0] > 0 else 0
+                has_local_crops = False
+
+            features = features[:valid_patch_count]
+            if features.shape[0] == 0:
+                new_image_features.append(features)
+                feature_lens.append(0)
+                continue
+
+            global_feature = features[-1]
+            local_features = features[:-1] if has_local_crops else features[:0]
+
+            processed_parts = []
+
+            if local_features.numel() > 0:
+                local_tokens = local_features.shape[1]
+                local_grid = int(math.isqrt(local_tokens))
+
+                if local_grid * local_grid == local_tokens:
+                    local_features = local_features.view(
+                        height_crop_num,
+                        width_crop_num,
+                        local_grid,
+                        local_grid,
+                        -1,
+                    )
+                    local_features = local_features.permute(0, 2, 1, 3, 4).contiguous()
+                    local_features = local_features.view(
+                        height_crop_num * local_grid,
+                        width_crop_num * local_grid,
+                        -1,
+                    )
+                    if image_newline is not None:
+                        newline = (
+                            image_newline.unsqueeze(0)
+                            .unsqueeze(0)
+                            .to(local_features.device, dtype=local_features.dtype)
+                            .expand(local_features.shape[0], 1, -1)
+                        )
+                        local_features = torch.cat((local_features, newline), dim=1)
+                    local_features = local_features.view(-1, local_features.shape[-1])
+                else:
+                    local_features = local_features.view(-1, local_features.shape[-1])
+                    if image_newline is not None:
+                        newline = image_newline.unsqueeze(0).to(local_features.device, dtype=local_features.dtype)
+                        local_features = torch.cat((local_features, newline), dim=0)
+
+                processed_parts.append(local_features)
+
+            global_tokens = global_feature.shape[0]
+            global_grid = int(math.isqrt(global_tokens))
+
+            if global_grid * global_grid == global_tokens:
+                global_features = global_feature.view(global_grid, global_grid, -1)
                 if image_newline is not None:
-                    image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
-            new_image_features.append(image_feature)
-            feature_lens.append(image_feature.size(0))
+                    newline = (
+                        image_newline.unsqueeze(0)
+                        .unsqueeze(0)
+                        .to(global_features.device, dtype=global_features.dtype)
+                        .expand(global_grid, 1, -1)
+                    )
+                    global_features = torch.cat((global_features, newline), dim=1)
+                global_features = global_features.view(-1, global_features.shape[-1])
+            else:
+                global_features = global_feature
+                if image_newline is not None:
+                    global_features = torch.cat(
+                        (
+                            global_features,
+                            image_newline.unsqueeze(0).to(global_features.device, dtype=global_features.dtype),
+                        ),
+                        dim=0,
+                    )
+
+            processed_parts.append(global_features)
+
+            combined = torch.cat(processed_parts, dim=0)
+            new_image_features.append(combined)
+            feature_lens.append(combined.size(0))
+
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
         return new_image_features, feature_lens
 
@@ -1647,6 +1630,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,  # (B, num_patches, 3, H, W) or (sum_patches, 3, H, W)
         image_sizes: torch.Tensor,  # (num_images, 2) actual (H, W)
+        image_spatial_crops: Optional[torch.Tensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
     ):
@@ -1687,15 +1671,17 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
             return_dict=True,
         )
 
+        clip_seq = clip_out.last_hidden_state
         vision_feature_layer_index = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
 
-        if isinstance(vision_feature_layer_index, int):
-            clip_seq = clip_out.hidden_states[vision_feature_layer_index]
-        else:
-            pool = [clip_out.hidden_states[i] for i in vision_feature_layer_index]
-            clip_seq = torch.cat(pool, dim=-1)
+        if vision_feature_layer_index is not None:
+            if isinstance(vision_feature_layer_index, int):
+                clip_seq = clip_out.hidden_states[vision_feature_layer_index]
+            else:
+                pool = [clip_out.hidden_states[i] for i in vision_feature_layer_index]
+                clip_seq = torch.cat(pool, dim=-1)
 
         vision_feature_select_strategy = (
             vision_feature_select_strategy
@@ -1712,15 +1698,18 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
         proj_list = torch.split(proj, image_num_patches, dim=0)
 
-        new_image_features, _ = self.pack_image_features(
+        new_image_features, feature_lens = self.pack_image_features(
             image_features=proj_list,
             image_sizes=image_sizes,
             vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=self.image_newline,
+            image_spatial_crops=image_spatial_crops,
         )
 
         new_image_features = [torch.cat([pf, self.view_seperator[None].to(pf)], dim=0) for pf in new_image_features]
-        return torch.cat(new_image_features, dim=0)
+        feature_lens = feature_lens + 1  # account for view separator
+        concatenated_features = torch.cat(new_image_features, dim=0)
+        return concatenated_features, feature_lens
 
     def get_placeholder_mask(self, input_ids, inputs_embeds, image_token_id):
         """
@@ -1766,27 +1755,41 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         if pixel_values is not None and pixel_values.abs().sum().item() != 0:
             if image_sizes is None:
                 raise ValueError("image_sizes must be provided when pixel_values are passed to the model.")
-            image_hidden_states = self.get_image_features(pixel_values, image_sizes)
+            image_hidden_states, feature_lens = self.get_image_features(
+                pixel_values,
+                image_sizes,
+                image_spatial_crops=image_spatial_crop,
+            )
 
             if image_attention_mask is not None:
-                special_image_mask = image_attention_mask.to(inputs_embeds.device)
-                if num_img_tokens is not None:
-                    num_img_tokens = torch.as_tensor(
-                        num_img_tokens, device=special_image_mask.device, dtype=torch.long
-                    )
-                    mask = torch.zeros_like(special_image_mask)
-                    for batch_idx, n_tokens in enumerate(num_img_tokens.tolist()):
-                        if n_tokens == 0:
-                            continue
-                        token_positions = special_image_mask[batch_idx].nonzero(as_tuple=True)[0][:n_tokens]
-                        mask[batch_idx, token_positions] = True
-                    special_image_mask = mask
-                special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds)
+                token_mask = image_attention_mask.to(inputs_embeds.device)
             else:
-                special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, self.config.image_token_index)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                special_image_mask, image_hidden_states.to(inputs_embeds.dtype)
-            )
+                token_mask = self.get_placeholder_mask(
+                    input_ids, inputs_embeds, self.config.image_token_index
+                ).squeeze(-1)
+
+            batch_size = token_mask.shape[0]
+            start_idx = 0
+            for batch_idx in range(batch_size):
+                valid_len = feature_lens[batch_idx].item()
+                if valid_len == 0:
+                    continue
+                mask_positions = token_mask[batch_idx].nonzero(as_tuple=True)[0]
+                if mask_positions.numel() == 0:
+                    continue
+                if mask_positions.numel() > valid_len:
+                    # deactivate surplus placeholders so they won't interfere with autoregressive decoding
+                    extra_positions = mask_positions[valid_len:]
+                    token_mask[batch_idx, extra_positions] = False
+                    mask_positions = mask_positions[:valid_len]
+                scatter_mask = torch.zeros_like(token_mask[batch_idx], dtype=torch.bool)
+                scatter_mask[mask_positions] = True
+                scatter_mask_expanded = scatter_mask.unsqueeze(-1).expand(-1, inputs_embeds.shape[-1])
+                slice_features = image_hidden_states[start_idx : start_idx + valid_len].to(inputs_embeds.dtype)
+                inputs_embeds[batch_idx] = inputs_embeds[batch_idx].masked_scatter(
+                    scatter_mask_expanded, slice_features
+                )
+                start_idx += valid_len
 
         outputs = self.language_model(
             input_ids=None,

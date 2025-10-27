@@ -20,9 +20,9 @@ import torch
 
 # TODO protect this import
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+from torchvision import transforms
 from torchvision.transforms.v2 import functional as F
 from torchvision.transforms.v2.functional import to_pil_image
-from torchvision import transforms
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,

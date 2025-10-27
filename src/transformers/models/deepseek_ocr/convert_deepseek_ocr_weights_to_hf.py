@@ -152,8 +152,6 @@ def convert_state_dict(original_state_dict, config):
     return new_state_dict
 
 
-
-
 def main():
     parser = argparse.ArgumentParser(description="Convert DeepSeek OCR weights to HuggingFace format")
     parser.add_argument(
@@ -197,6 +195,16 @@ def main():
         print("Config not found, using default config")
         config = DeepseekOcrConfig()
 
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint_path.parent)
+    image_token_id = tokenizer.convert_tokens_to_ids("<image>")
+    if image_token_id is None:
+        raise ValueError("Tokenizer does not contain the <image> token required for DeepSeek OCR.")
+    config.image_token_index = image_token_id
+    config.image_token_id = image_token_id
+    text_config = getattr(config, "text_config", None)
+    if text_config is not None and hasattr(text_config, "image_token_id"):
+        text_config.image_token_id = image_token_id
+
     print("Converting state dict...")
     converted_state_dict = convert_state_dict(original_state_dict, config)
     reference_dtype = next(iter(original_state_dict.values())).dtype
@@ -206,7 +214,7 @@ def main():
     model.to(dtype=reference_dtype)
 
     print("Loading converted state dict into model...")
-    missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
+    missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=True)
 
     if missing_keys:
         print(f"Missing keys: {missing_keys}")
@@ -218,7 +226,6 @@ def main():
     config.save_pretrained(output_path)
 
     print("Creating and saving processor...")
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint_path.parent)
     image_processor = DeepseekOcrImageProcessorFast()
     processor = DeepseekOcrProcessor(
         image_processor=image_processor,
