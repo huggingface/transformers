@@ -14,42 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
----
-# Brainstorm
-
-## Persona
-
-Model developer that wants to evaluate his model implementation on a dataset or a model "trainer" that wants to run inference for his GRPO policy.
-Pre reqs to understand the docs:
-- knows what KV Cache is
-- familiarity with transformers and infernece
-
-## what we want do include in the doc
-
-- [ ] CB usage examples
-- [ ] CB API reference
-- [x] light refresher on what is CB + links to blog post
-
-- [ ] installation / setup instructions
-
-- [x] open telemetry support
-
-- [ ] subsection in Transformers > Inference
-
-- [ ] supported & unsupported features
-
-- [ ] performance considerations
-  - [ ] note on benchmarks (CI + space)
-  - [ ] cuda graphs
-  - [ ] compile
-  - [ ] attn impl
-
-- [x] explicit intended use cases, the why of CB in transformers
-
-- [x] integration with serving
----
-
-
 # Continuous Batching
 
 Continuous Batching (CB) is an advanced technique to optimize the inference of transformer models by dynamically grouping multiple requests into batches. This approach maximizes GPU utilization and throughput, specifically for workloads with many variable-length inputs.
@@ -61,10 +25,6 @@ We are particularly interested in having Continuous Batching in transformers for
 CB is what makes inference engines like vLLM or SGLang efficient. That being said, transformers does not aim to be a production-ready inference engine, but a complete framework for model development. For this reason, CB is available in `transformers serve`.
 
 If you are not familiar with some of the core concepts CB is built upon, we invite you to read the associated blog post: [Continuous Batching: Efficient Inference for Large Language Models](https://huggingface.co/blog/continuous-batching). _broken link for now_
-
-## Installation
-
-Nothing to do, it comes built-in with `transformers`! :nice:
 
 ## API Reference
 
@@ -132,10 +92,63 @@ This is what we use in `transformers serve` because requests arrive asynchronous
 
 Under the hood, the `ContinuousBatchingManager` creates a background thread that receives inputs from a python `queue.Queue` which it uses to get requests to batch in each forward pass.
 
-```py
-from transformers.generation.continuous_batching import ContinuousBatchingManager
+Note that the manager is thread safe!
 
-# TODO:
+```py
+import datasets
+import torch
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.generation import GenerationConfig
+from transformers.generation.continuous_batching import RequestStatus
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-4B-Instruct-2507",
+    attn_implementation="spda_paged",
+    device_map="cuda",  # if you need cuda
+    dtype=torch.bfloat16,
+)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
+
+# prepare a batch of inputs
+dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
+dataset = dataset.select(range(args.samples))
+tokenized_datasets = dataset.map(lambda x: tokenizer(x["question"]), batched=True)
+simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
+
+# initialize the manager, available method thanks to the `ContinuousMixin`
+manager = model.init_continuous_batching(generation_config=generation_config)
+
+# start the background thread
+manager.start()
+
+# this is for demonstration purposes only, in practice this is most useful to do concurrently
+for i, input in enumerate(simple_batch_inputs):
+    request_id = manager.add_request(input_ids=input, request_id=f"request_{i}")  # if you do not specify a request_id, one will be generated for you
+
+# Can be done in an other thread
+for id, request in manager.get_result():
+    generated_text = tokenizer.decode(request.generated_tokens, skip_special_tokens=True)
+    print(f"Request {id} output: {generated_text}")
+
+# you can also get results for a specific request id
+result = manager.get_result(request_id="request_5")  # this is blocking and will wait for the result to be ready
+
+# or get results for a request that is streaming
+manager.add_request(
+    input_ids=input,
+    request_id="streaming_request",
+    stream=True,
+)
+for chunk in manager.request_id_iter(request_id="streaming_request"):
+    generated_text = tokenizer.decode(chunk.generated_tokens, skip_special_tokens=True)
+    print(generated_text)
+    # FIXME: stop iteration in `request_id_iter` when finished instead of doing it externally
+    if chunk.status == RequestStatus.FINISHED:
+        break
+
+# stop the background thread before exiting the process
+manager.stop()
 ```
 
 ## Supported & Unsupported Features
@@ -146,20 +159,20 @@ from transformers.generation.continuous_batching import ContinuousBatchingManage
 - Chunked prefill
 - Paged Attention Cache
 - Sliding window attention
+- Chat templates
 
 ### Unsupported Features
 
+At the moment, the following features are not supported with CB. We plan to add support to the following:
+
 - Prefix caching
 - Beam search
-- speculative (including assisted) decoding
 - tool calling
+
+The others are unplanned, but depending on community requests we might consider adding them:
+
 - MTP (multi token prediction)
 - Medusa
-- anything related to `do_sample`
-
-Note that these aren't supported, at the moment. Some features like prefix caching, beam search or tool calling are on our roadmap and others will be best effort!
-
-Please do let us know if you'd like to see support for any of these features!
 
 ## Performance Considerations
 
