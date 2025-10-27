@@ -16,12 +16,11 @@
 
 """Testing suite for the PyTorch AudioFlamingo3 model."""
 
+import json
 import tempfile
 import unittest
-from io import BytesIO
-from urllib.request import urlopen
+from pathlib import Path
 
-import librosa
 import pytest
 
 from transformers import (
@@ -153,7 +152,6 @@ class AudioFlamingo3ModelTester:
         return config, inputs_dict
 
 
-@require_torch
 class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `AudioFlamingo3ForConditionalGeneration`.
@@ -164,23 +162,28 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
     test_head_masking = False
     _is_composite = True
 
+    @require_torch
     def setUp(self):
         self.model_tester = AudioFlamingo3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AudioFlamingo3Config, has_text_modality=False)
 
+    @require_torch
     @unittest.skip(reason="Compile not yet supported for AudioFlamingo3 models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    @require_torch
     @unittest.skip(reason="Compile not yet supported for AudioFlamingo3 models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @require_torch
     @unittest.skip(reason="AudioFlamingo3 tests avoid right-padding equivalence; fusion is in-place.")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    @require_torch
     def test_sdpa_can_dispatch_composite_models(self):
         # AF3 is audio+text composite; verify SDPA toggles propagate to submodules.
         if not self.has_attentions:
@@ -220,155 +223,74 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
                         raise ValueError("The eager model should not have SDPA attention layers")
 
 
-@require_torch
 class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
     Slow tests against the public checkpoint to validate processor-model alignment and in-place fusion.
     """
 
     def setUp(self):
-        # Public AF3 checkpoint
-        self.checkpoint = "lashahub/audio-flamingo-3"
+        self.checkpoint = "nvidia/audio-flamingo-3-hf"
         self.processor = AutoProcessor.from_pretrained(self.checkpoint)
+        self.model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint, device_map="auto")
 
+    @require_torch
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_torch
     @slow
-    def test_integration_single_sample_alignment_and_mismatch(self):
-        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint).to(torch_device).eval()
+    def test_fixture_single_matches(self):
+        """
+        reproducer (creates JSON directly in repo): https://gist.github.com/lashahub/185b080ca87fe82fd397bc621e74efcb
+        """
+        path = Path(__file__).parent.parent.parent / "fixtures/audioflamingo3/expected_results_single.json"
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        exp_ids = torch.tensor(raw["token_ids"])
+        exp_txt = raw["transcriptions"]
 
-        # Use a small public audio clip
-        url = "https://audioflamingo3.github.io/static/emergent/Dogs%20barking%20in%20sync%20with%20the%20music.wav"
-        sr = getattr(self.processor.feature_extractor, "sampling_rate", 16000)
-        raw_audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=sr)
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcribe the input speech."},
+                    {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/WhDJDIviAOg_120_10.mp3"},
+                ],
+            }
+        ]
+        batch = self.processor.apply_chat_template(
+            conversation, tokenize=True, add_generation_prompt=True, return_dict=True
+        ).to(self.model.device)
+        seq = self.model.generate(**batch)
+        inp_len = batch["input_ids"].shape[1]
+        gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
 
-        # Build a ChatML prompt with a single <sound> placeholder (AF3 supports 0 or 1 per sample)
-        prompt = (
-            "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
-            "<|im_start|>user\n<sound>What's that sound?<|im_end|>\n"
-            "<|im_start|>assistant\n"
-        )
+        torch.testing.assert_close(gen_ids.cpu(), exp_ids)
+        txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
+        self.assertListEqual(txt, exp_txt)
 
-        inputs = self.processor(text=prompt, audio=[raw_audio], return_tensors="pt", padding=True).to(torch_device)
-
-        # Generate a few tokens (content not asserted strictly; we care about alignment)
-        _ = model.generate(**inputs, max_new_tokens=16)
-
-        # --- Alignment check: #<sound> tokens == sum of post-pool frame counts ---
-        feat_mask = inputs["feature_attention_mask"]  # (#windows, T_mel)
-        L_mel = feat_mask.sum(-1).to(dtype=torch.long)  # per-window lengths
-
-        pre = (L_mel - 1) // 2 + 1
-        post = (pre - 2) // 2 + 1
-        total_post_frames = int(post.sum().item())
-
-        sound_id = int(model.config.audio_token_id)
-        num_sound_tokens = int((inputs["input_ids"] == sound_id).sum().item())
-
-        self.assertEqual(
-            num_sound_tokens,
-            total_post_frames,
-            msg=f"Expanded <sound> token count ({num_sound_tokens}) must match post-pool frames ({total_post_frames}).",
-        )
-
-        # --- Mismatch path: artificially increase the number of <sound> tokens and expect a hard error ---
-        bad_inputs = {k: (v.clone() if isinstance(v, torch.Tensor) else v) for k, v in inputs.items()}
-        iid = bad_inputs["input_ids"]
-
-        # Flip a few non-sound tokens to <sound> to force mismatch
-        non_sound_positions = torch.nonzero(iid != sound_id, as_tuple=False)
-        # take first 3 positions from the first sequence (be robust to short prompts)
-        to_flip = non_sound_positions[:3]
-        for pos in to_flip:
-            b, t = int(pos[0]), int(pos[1])
-            iid[b, t] = sound_id
-
-        with self.assertRaisesRegex(ValueError, r"Audio tokens and features mismatch: tokens=\d+, frames=\d+"):
-            model.generate(**bad_inputs, max_new_tokens=8)
-
+    @require_torch
     @slow
-    def test_integration_batch_three_samples_and_global_alignment(self):
-        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint).to(torch_device).eval()
-
-        sr = getattr(self.processor.feature_extractor, "sampling_rate", 16000)
-        urls = [
-            "https://audioflamingo3.github.io/static/emergent/Dogs%20barking%20in%20sync%20with%20the%20music.wav",
-            "https://audioflamingo3.github.io/static/emergent/Aside%20from%20_Interstellar%20Spaces_,%20Saxophones%20do%20not%20bark%20nor%20meow.wav",
-            "https://audioflamingo3.github.io/static/emergent/Unlikely%20existence%20of%20banjo%20and%20rain%20sounds%20at%20the%20same%20time%20in%20the%20training%20data.wav",
-        ]
-        audios = [librosa.load(BytesIO(urlopen(u).read()), sr=sr)[0] for u in urls]
-
-        texts = [
-            (
-                "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
-                "<|im_start|>user\n<sound>What's happening in the audio?<|im_end|>\n"
-                "<|im_start|>assistant\n"
-            ),
-            (
-                "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
-                "<|im_start|>user\n<sound>Describe the sound.<|im_end|>\n"
-                "<|im_start|>assistant\n"
-            ),
-            (
-                "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
-                "<|im_start|>user\n<sound>What is this sound?<|im_end|>\n"
-                "<|im_start|>assistant\n"
-            ),
-        ]
-
-        # AF3 processor requires 1:1 text:audio
-        batch = self.processor(text=texts, audio=audios, return_tensors="pt", padding=True)
-        for k, v in list(batch.items()):
-            if isinstance(v, torch.Tensor):
-                batch[k] = v.to(torch_device)
-
-        gen = model.generate(**batch, max_new_tokens=16)
-        # Basic sanity on decode; don't pin to specific strings
-        new_tokens = gen[:, batch["input_ids"].shape[1] :]
-        decoded = self.processor.batch_decode(new_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-
-        self.assertEqual(len(decoded), 3)
-        self.assertTrue(all(isinstance(s, str) for s in decoded))
-
-        # Global alignment: total <sound> tokens == total post-pool frames
-        feat_mask = batch["feature_attention_mask"]  # (sum_windows, T_mel)
-        L_mel = feat_mask.sum(-1).to(dtype=torch.long)
-        pre = (L_mel - 1) // 2 + 1
-        post = (pre - 2) // 2 + 1
-        total_post_frames = int(post.sum().item())
-        sound_id = int(model.config.audio_token_id)
-        num_sound_tokens = int((batch["input_ids"] == sound_id).sum().item())
-        self.assertEqual(num_sound_tokens, total_post_frames)
-
-    @slow
-    def test_integration_batch_three_samples_processor_apply_chat_template(self):
-        import tempfile
-        from urllib.request import urlopen
-
-        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint).to(torch_device).eval()
-        sr = getattr(self.processor.feature_extractor, "sampling_rate", 16000)
-
-        urls = [
-            "https://audioflamingo3.github.io/static/emergent/Dogs%20barking%20in%20sync%20with%20the%20music.wav",
-            "https://audioflamingo3.github.io/static/emergent/Aside%20from%20_Interstellar%20Spaces_,%20Saxophones%20do%20not%20bark%20nor%20meow.wav",
-            "https://audioflamingo3.github.io/static/emergent/Unlikely%20existence%20of%20banjo%20and%20rain%20sounds%20at%20the%20same%20time%20in%20the%20training%20data.wav",
-        ]
-
-        # Create temp files and fill them directly
-        tmp_audios = []
-        for u in urls:
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                f.write(urlopen(u).read())
-                tmp_audios.append(f.name)
+    def test_fixture_batched_matches(self):
+        """
+        reproducer (creates JSON directly in repo): https://gist.github.com/lashahub/185b080ca87fe82fd397bc621e74efcb
+        """
+        path = Path(__file__).parent.parent.parent / "fixtures/audioflamingo3/expected_results_batched.json"
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        exp_ids = torch.tensor(raw["token_ids"])
+        exp_txt = raw["transcriptions"]
 
         conversations = [
             [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "What's happening in the audio?"},
-                        {"type": "audio", "path": tmp_audios[0]},
+                        {"type": "text", "text": "Transcribe the input speech."},
+                        {
+                            "type": "audio",
+                            "path": "https://audioflamingo3.github.io/static/long_speech/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
+                        },
                     ],
                 }
             ],
@@ -376,46 +298,22 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Describe the sound."},
-                        {"type": "audio", "path": tmp_audios[1]},
-                    ],
-                }
-            ],
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is this sound?"},
-                        {"type": "audio", "path": tmp_audios[2]},
+                        {
+                            "type": "text",
+                            "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
+                        },
+                        {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/FPSbCAANfbJLVSwD.mp3"},
                     ],
                 }
             ],
         ]
-
         batch = self.processor.apply_chat_template(
-            conversations,
-            tokenize=True,
-            add_generation_prompt=True,
-            sampling_rate=sr,
-            return_dict=True,
-            return_attention_mask=True,
-        ).to(torch_device)
-
-        gen = model.generate(**batch, max_new_tokens=16)
-
-        # Basic sanity on decode
+            conversations, tokenize=True, add_generation_prompt=True, return_dict=True
+        ).to(self.model.device)
+        seq = self.model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
-        new_tokens = gen[:, inp_len:]
-        decoded = self.processor.batch_decode(new_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        self.assertEqual(len(decoded), 3)
-        self.assertTrue(all(isinstance(s, str) for s in decoded))
+        gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
 
-        # Global alignment
-        feat_mask = batch["feature_attention_mask"]
-        L_mel = feat_mask.sum(-1).to(dtype=torch.long)
-        pre = (L_mel - 1) // 2 + 1
-        post = (pre - 2) // 2 + 1
-        total_post_frames = int(post.sum().item())
-        sound_id = int(model.config.audio_token_id)
-        num_sound_tokens = int((batch["input_ids"] == sound_id).sum().item())
-        self.assertEqual(num_sound_tokens, total_post_frames)
+        torch.testing.assert_close(gen_ids.cpu(), exp_ids)
+        txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
+        self.assertListEqual(txt, exp_txt)

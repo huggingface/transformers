@@ -29,25 +29,31 @@ from transformers.testing_utils import require_torch, require_torchaudio
 from ...test_processing_common import ProcessorTesterMixin
 
 
-@require_torch
-@require_torchaudio
 class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AudioFlamingo3Processor
 
     @classmethod
+    @require_torch
+    @require_torchaudio
     def setUpClass(cls):
-        cls.checkpoint = "lashahub/audio-flamingo-3"
+        cls.checkpoint = "nvidia/audio-flamingo-3-hf"
         cls.tmpdirname = tempfile.mkdtemp()
 
         processor = AudioFlamingo3Processor.from_pretrained(cls.checkpoint)
         processor.save_pretrained(cls.tmpdirname)
 
+    @require_torch
+    @require_torchaudio
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
+    @require_torch
+    @require_torchaudio
     def get_audio_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).audio_processor
 
+    @require_torch
+    @require_torchaudio
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
@@ -55,11 +61,15 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
+    @require_torch
+    @require_torchaudio
     def test_can_load_various_tokenizers(self):
         processor = AudioFlamingo3Processor.from_pretrained(self.checkpoint)
         tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
+    @require_torch
+    @require_torchaudio
     def test_save_load_pretrained_default(self):
         tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
         processor = AudioFlamingo3Processor.from_pretrained(self.checkpoint)
@@ -75,6 +85,8 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(reloaded.feature_extractor, WhisperFeatureExtractor)
 
+    @require_torch
+    @require_torchaudio
     def test_tokenizer_integration(self):
         slow_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, use_fast=False)
         fast_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, from_slow=True, legacy=False)
@@ -110,6 +122,8 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
+    @require_torch
+    @require_torchaudio
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.checkpoint)
         expected_prompt = (
@@ -128,7 +142,7 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "audio_1.wav",
+                        "path": "https://audioflamingo3.github.io/static/emergent/Dogs%20barking%20in%20sync%20with%20the%20music.wav",
                     },
                 ],
             }
