@@ -16,8 +16,6 @@
 import copy
 import unittest
 
-import pytest
-
 from transformers import (
     LightOnOCRConfig,
     LightOnOCRForConditionalGeneration,
