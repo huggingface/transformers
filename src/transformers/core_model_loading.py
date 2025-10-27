@@ -738,11 +738,11 @@ def convert_and_load_state_dict_in_model(
         for op in operations:
             op.clear_cache()
     model.inverse_converters = inverse_converters
-    EXEC.kill()
+    EXEC.shutdown(wait=True)
     return missing_keys, unexpected_keys, mismatch_keys, misc
 
 
-
+# TODO this is not done yet!
 def revert_weight_conversion(model, state_dict):
     reverse_key_mapping = model.inverse_converters
     original_state_dict = {}
