@@ -261,6 +261,7 @@ class Concatenate(ConversionOps):
                 index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
                 out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
                 offset += tensor.shape[self.dim]
+        torch.testing.assert_close(out  , torch.cat(value, dim=self.dim))
         return out
 
 

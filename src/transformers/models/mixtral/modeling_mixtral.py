@@ -84,8 +84,8 @@ class MixtralExperts(nn.Module):
 
             current_state = hidden_states.index_select(0, token_positions)
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(up)
-            current_hidden_states = current_hidden_states * gate
+            current_hidden_states = self.act_fn(gate)
+            current_hidden_states = current_hidden_states * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
 
             routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
@@ -93,7 +93,6 @@ class MixtralExperts(nn.Module):
             final_hidden_states.index_add_(0, token_positions, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
-
 
 class MixtralSparseMoeBlock(nn.Module):
     def __init__(self, config):
