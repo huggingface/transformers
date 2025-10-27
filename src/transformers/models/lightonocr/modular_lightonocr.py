@@ -54,6 +54,10 @@ class LightOnOCRConfig(PretrainedConfig):
     Args:
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The size of spatial merging for image patches.
+        image_token_id (`int`, *optional*, defaults to 151655):
+            The id of the image token in the vocabulary.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie input and output embeddings.
         vision_config (`dict` or `LightOnOCRVisionConfig`, *optional*):
             Custom vision configuration or dictionary with vision configuration values.
         text_config (`dict` or `LightOnOCRTextConfig`, *optional*):
