@@ -287,9 +287,8 @@ class Qwen2MoeExperts(nn.Module):
                 continue
 
             current_state = hidden_states.index_select(0, token_positions)
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2)
-            current_hidden_states = self.act_fn(up)
-            current_hidden_states = current_hidden_states * gate
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
 
             routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
