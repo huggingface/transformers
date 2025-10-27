@@ -112,6 +112,8 @@
       title: Distributed inference
     - local: perf_infer_cpu
       title: CPU
+    - local: perf_infer_cpu_optimum
+      title: CPU inference with Optimum
     title: Optimization
   - local: agents
     title: Agents
