@@ -34,13 +34,13 @@ if is_vision_available():
     from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
 
-class LightOnOCRTextConfig(Qwen3Config):
-    model_type = "lightonocr_text"
-
-
 class LightOnOCRVisionConfig(PixtralVisionConfig):
     model_type = "lightonocr_vision"
     pass
+
+
+class LightOnOCRTextConfig(Qwen3Config):
+    model_type = "lightonocr_text"
 
 
 class LightOnOCRConfig(PretrainedConfig):
@@ -404,35 +404,6 @@ class LightOnOCRPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-# Text model components - explicitly renamed from Qwen3 (LightOnOCRTextRMSNorm already defined above)
-class LightOnOCRTextPreTrainedModel(PreTrainedModel):
-    config_class = LightOnOCRTextConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LightOnOCRTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-
-
-@auto_docstring(
-    custom_intro="""
-    The language model of LightOnOCR, based on Qwen3 architecture.
-    """
-)
-class LightOnOCRTextModel(Qwen3Model):
-    config_class = LightOnOCRTextConfig
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-
 # Vision model components - explicitly renamed from Pixtral
 class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
     config_class = LightOnOCRVisionConfig
@@ -462,6 +433,35 @@ class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
 )
 class LightOnOCRVisionModel(PixtralVisionModel):
     config_class = LightOnOCRVisionConfig
+
+
+# Text model components - explicitly renamed from Qwen3 (LightOnOCRTextRMSNorm already defined above)
+class LightOnOCRTextPreTrainedModel(PreTrainedModel):
+    config_class = LightOnOCRTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LightOnOCRTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+
+
+@auto_docstring(
+    custom_intro="""
+    The language model of LightOnOCR, based on Qwen3 architecture.
+    """
+)
+class LightOnOCRTextModel(Qwen3Model):
+    config_class = LightOnOCRTextConfig
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
 
 
 class LightOnOCRModel(LightOnOCRPreTrainedModel):
@@ -680,10 +680,10 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
 
 __all__ = [
     "LightOnOCRPreTrainedModel",
-    "LightOnOCRTextModel",
-    "LightOnOCRTextPreTrainedModel",
     "LightOnOCRVisionModel",
     "LightOnOCRVisionPreTrainedModel",
+    "LightOnOCRTextModel",
+    "LightOnOCRTextPreTrainedModel",
     "LightOnOCRForConditionalGeneration",
     "LightOnOCRModel",
     "LightOnOCRConfig",
