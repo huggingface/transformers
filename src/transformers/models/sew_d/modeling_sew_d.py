@@ -1184,6 +1184,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
     config: SEWDConfig
     base_model_prefix = "sew-d"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):

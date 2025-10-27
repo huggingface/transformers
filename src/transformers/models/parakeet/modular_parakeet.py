@@ -15,8 +15,9 @@
 """PyTorch Parakeet model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -31,6 +32,16 @@ from ...utils.generic import check_model_inputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
+    """
+)
+class ParakeetEncoderModelOutput(BaseModelOutput):
+    attention_mask: Optional[torch.Tensor] = None
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
@@ -303,6 +314,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     config: ParakeetCTCConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ParakeetEncoderBlock"]
     _supports_flat_attention_mask = True
@@ -391,15 +403,19 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @check_model_inputs()
     @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        output_attention_mask: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
+        output_attention_mask (`bool`, *optional*):
+            Whether to return the output attention mask.
+
         Example:
 
         ```python
@@ -430,8 +446,8 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         )
 
         if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
-            attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
+            output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = output_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
             attention_mask = attention_mask & attention_mask.transpose(1, 2)
             attention_mask = attention_mask.unsqueeze(1)
 
@@ -451,7 +467,9 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
                     **kwargs,
                 )
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return ParakeetEncoderModelOutput(
+            last_hidden_state=hidden_states, attention_mask=output_mask.int() if output_attention_mask else None
+        )
 
 
 @dataclass

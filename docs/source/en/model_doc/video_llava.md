@@ -48,7 +48,7 @@ a unified visual representation, outperforming models designed specifically for 
 work to provide modest insights into the multi-modal inputs
 for the LLM*
 
-## Usage tips:
+## Usage tips
 
 - We advise users to use padding_side="left" when computing batched generation as it leads to more accurate results. Simply make sure to call processor.tokenizer.padding_side = "left" before generating.
 

@@ -51,7 +51,6 @@ BLIP-2 の使用を開始するのに役立つ公式 Hugging Face およびコ�
 ## Blip2Config
 
 [[autodoc]] Blip2Config
-    - from_vision_qformer_text_configs
 
 ## Blip2VisionConfig
 

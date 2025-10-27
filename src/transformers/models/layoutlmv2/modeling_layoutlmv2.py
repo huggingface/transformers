@@ -456,6 +456,7 @@ class LayoutLMv2Encoder(nn.Module):
 class LayoutLMv2PreTrainedModel(PreTrainedModel):
     config: LayoutLMv2Config
     base_model_prefix = "layoutlmv2"
+    input_modalities = ["image", "text"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

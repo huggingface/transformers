@@ -241,9 +241,7 @@ class FocalNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
-    test_pruning = False
     test_resize_embeddings = False
     has_attentions = False
     test_torch_exportable = True

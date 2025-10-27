@@ -31,7 +31,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder
 from ..mistral.modeling_mistral import (
     MistralAttention,
@@ -215,6 +214,10 @@ class MixtralRMSNorm(MistralRMSNorm):
     pass
 
 
+class MixtralRotaryEmbedding(MistralRotaryEmbedding):
+    pass
+
+
 class MixtralAttention(MistralAttention):
     pass
 
@@ -230,11 +233,10 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -258,10 +260,6 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.block_sparse_moe(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
-
-
-class MixtralRotaryEmbedding(MistralRotaryEmbedding):
-    pass
 
 
 class MixtralPreTrainedModel(MistralPreTrainedModel):
@@ -313,19 +311,17 @@ class MixtralModel(MistralModel):
         )
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

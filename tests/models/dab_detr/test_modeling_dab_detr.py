@@ -182,8 +182,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
-    test_pruning = False
+
     test_missing_keys = False
     zero_init_hidden_state = True
     test_torch_exportable = True
