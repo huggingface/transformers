@@ -26,27 +26,27 @@ Pre reqs to understand the docs:
 
 ## what we want do include in the doc
 
-- CB usage examples
-- CB API reference
-- light refresher on what is CB + links to blog post
+- [ ] CB usage examples
+- [ ] CB API reference
+- [x] light refresher on what is CB + links to blog post
 
-- installation / setup instructions
+- [ ] installation / setup instructions
 
-- open telemetry support
+- [x] open telemetry support
 
-- subsection in Transformers > Inference
+- [ ] subsection in Transformers > Inference
 
-- supported & unsupported features
+- [ ] supported & unsupported features
 
-- performance considerations
-  - note on benchmarks (CI + space)
-  - cuda graphs
-  - compile
-  - attn impl
+- [ ] performance considerations
+  - [ ] note on benchmarks (CI + space)
+  - [ ] cuda graphs
+  - [ ] compile
+  - [ ] attn impl
 
-- explicit intended use cases, the why of CB in transformers
+- [x] explicit intended use cases, the why of CB in transformers
 
-- integration with serving
+- [x] integration with serving
 ---
 
 
@@ -80,7 +80,7 @@ For a more detailed example, please refer to: [examples/continuous_batching](./p
 
 We have created a `ContinuousMixin` that is inherited by the `GenerationMixin` so that all auto regressive text models support CB.
 
-This adds the `generate_batch` to all models that inherit from `GenerationMixin`.
+This adds the `generate_batch` method to all models that inherit from `GenerationMixin`.
 
 You can use it as follows:
 
@@ -126,7 +126,7 @@ for request_id, output in batch_outputs.items():
 
 ### `ContinuousBatchingManager` example
 
-If you want more control wrt how you want to schedule requests using CB, you can use the `ContinuousBatchingManager` class directly.
+If you want more control w.r.t. how you want to schedule requests using CB, you can use the `ContinuousBatchingManager` class directly.
 
 This is what we use in `transformers serve` because requests arrive asynchronously and we can leverage the asynchronous nature of the CB process to make things more efficient.
 
@@ -145,9 +145,23 @@ from transformers.generation.continuous_batching import ContinuousBatchingManage
 
 ### Unsupported Features
 
+
 ## Performance Considerations
 
 
 ## Integration with Serving
+
+You can use CB in `transformers serve` by passing the `--continuous-batching` flag when starting the server.
+
+## Monitoring
+
+We have added `opentelemetry` support to Continuous Batching to help you monitor its performance in production. To enable it, you need to install the `opentelemetry` extra when installing `transformers`:
+
+```sh
+# this installs `opentelemetry-api`, `opentelemetry-sdk` and `opentelemetry-exporter-otlp`
+pip install transformers[open-telemetry]
+```
+
+This will enable traces and metrics collection in CB. You will then have to setup the backend to collect and visualize the traces and metrics.
 
 
