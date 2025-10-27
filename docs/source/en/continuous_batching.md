@@ -149,6 +149,17 @@ from transformers.generation.continuous_batching import ContinuousBatchingManage
 
 ### Unsupported Features
 
+- Prefix caching
+- Beam search
+- speculative (including assisted) decoding
+- tool calling
+- MTP (multi token prediction)
+- Medusa
+- anything related to `do_sample`
+
+Note that these aren't supported, at the moment. Some features like prefix caching, beam search or tool calling are on our roadmap and others will be best effort!
+
+Please do let us know if you'd like to see support for any of these features!
 
 ## Performance Considerations
 
