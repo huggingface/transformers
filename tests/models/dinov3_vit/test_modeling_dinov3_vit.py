@@ -27,6 +27,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers import DINOv3ViTForImageClassification, DINOv3ViTModel
 
@@ -199,6 +200,15 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+    def test_model_get_set_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
