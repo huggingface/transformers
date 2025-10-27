@@ -40,14 +40,14 @@ You can use LightOnOCR for various document understanding tasks including text e
 [[autodoc]] LightOnOCRProcessor
     - __call__
 
-## LightOnOCRText
+## LightOnOCRTextModel
 
-[[autodoc]] LightOnOCRText
+[[autodoc]] LightOnOCRTextModel
     - forward
 
-## LightOnOCRVision
+## LightOnOCRVisionModel
 
-[[autodoc]] LightOnOCRVision
+[[autodoc]] LightOnOCRVisionModel
     - forward
 
 ## LightOnOCRModel

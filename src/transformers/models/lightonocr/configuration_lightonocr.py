@@ -104,9 +104,6 @@ class LightOnOCRTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    # Remove unused attributes inherited from Qwen3Config
-    max_window_layers = None
-    use_sliding_window = None
 
     def __init__(
         self,
@@ -308,14 +305,14 @@ class LightOnOCRConfig(PretrainedConfig):
     def __init__(
         self,
         spatial_merge_size: int = 2,
-        image_token_index: int = 151655,
-        tie_word_embeddings=True,
+        image_token_id: int = 151655,
+        tie_word_embeddings=False,
         vision_config: Optional[dict[str, Any]] = None,
         text_config: Optional[dict[str, Any]] = None,
         **kwargs,
     ):
         self.spatial_merge_size = spatial_merge_size
-        self.image_token_id = image_token_index
+        self.image_token_id = image_token_id
 
         if vision_config is None:
             self.vision_config = LightOnOCRVisionConfig(

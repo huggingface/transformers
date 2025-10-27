@@ -100,8 +100,8 @@ PRIVATE_MODELS = [
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
-    "LightOnOCRText",
-    "LightOnOCRVision",
+    "LightOnOCRTextModel",
+    "LightOnOCRVisionModel",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
