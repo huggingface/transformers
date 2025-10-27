@@ -243,6 +243,7 @@ class Concatenate(ConversionOps):
         self.dim = dim
         self._inverse_op = Chunk
 
+    @torch.no_grad
     def convert(self, value: Sequence[torch.Tensor]) -> torch.Tensor:
         if isinstance(value[0], list):
             value = [v[0] for v in value]
@@ -261,8 +262,8 @@ class Concatenate(ConversionOps):
                 index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
                 out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
                 offset += tensor.shape[self.dim]
-        torch.testing.assert_close(out  , torch.cat(value, dim=self.dim))
-        return out
+        torch.testing.assert_close(out, torch.cat(value, dim=self.dim))
+        return out.clone() # need to say I can overwrite this storage now
 
 
 class MergeModulelist(Concatenate):
@@ -679,6 +680,7 @@ def convert_and_load_state_dict_in_model(
                 converter.quantization_operation[t] = Fp8Quantize()
 
     # 2. Actually convert the ckpt
+    inverse_converters = {}
     keys = list(by_conversion_pattern.keys()).copy()
     for key in keys:
         group = by_conversion_pattern.pop(key)
@@ -720,6 +722,8 @@ def convert_and_load_state_dict_in_model(
                         op = Cast(keep_in_dtype[matched_dtype_pattern])
                         output_value = op(output_value)
 
+                    for src in converter.source_keys: # what should happen to k when we meet k at saving
+                        inverse_converters[k] = {src :converter}
                     set_param_for_module(
                         model,
                         k,
@@ -733,4 +737,23 @@ def convert_and_load_state_dict_in_model(
         del group
         for op in operations:
             op.clear_cache()
-    return by_conversion_pattern, missing_keys, unexpected_keys, mismatch_keys, misc
+    model.inverse_converters = inverse_converters
+    return missing_keys, unexpected_keys, mismatch_keys, misc
+
+
+
+def revert_weight_conversion(model, state_dict):
+    reverse_key_mapping = model.inverse_converters
+    original_state_dict = {}
+    for key, value in state_dict.items():
+        for pattern, inverse_converter in reverse_key_mapping.items():
+            #TODO FIXME you name it
+            replacement = inverse_converter.lstrip("^")  # strip off un-needed chars and patterns
+            replacement = re.sub(r"\(.*\)", "", replacement)
+            key, n_replace = re.subn(pattern, replacement, key)
+            # Early exit of the loop
+            if n_replace > 0:
+                break
+        original_state_dict[key] = value
+    state_dict = original_state_dict
+    return state_dict

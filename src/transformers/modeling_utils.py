@@ -46,7 +46,7 @@ from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import _checkpoint_conversion_mapping as DEFAULT_WEIGHT_CONVERSION_MAPPING
-from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model
+from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model, revert_weight_conversion
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -3447,6 +3447,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
         save_peft_format: bool = True,
+        save_original_format: bool = False,
         **kwargs,
     ):
         """
@@ -3495,6 +3496,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 For backward compatibility with PEFT library, in case adapter weights are attached to the model, all
                 keys of the state dict of adapters needs to be prepended with `base_model.model`. Advanced users can
                 disable this behaviours by setting `save_peft_format` to `False`.
+            save_original_format (`bool`, *optional*, defaults to `True`):
+                For backward compatibility with the previous versions of `transfomers` you can save the checkpoint with
+                its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
+                checkpoint.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -3650,20 +3655,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             allowed_name in class_name.__name__.lower()
             for class_name in self.__class__.__mro__[:-1]
             for allowed_name in VLMS
-        ):
-            reverse_key_mapping = {v: k for k, v in self._checkpoint_conversion_mapping.items()}
-
-            original_state_dict = {}
-            for key, value in state_dict.items():
-                for pattern, replacement in reverse_key_mapping.items():
-                    replacement = replacement.lstrip("^")  # strip off un-needed chars and patterns
-                    replacement = re.sub(r"\(.*\)", "", replacement)
-                    key, n_replace = re.subn(pattern, replacement, key)
-                    # Early exit of the loop
-                    if n_replace > 0:
-                        break
-                original_state_dict[key] = value
-            state_dict = original_state_dict
+        ) or save_original_format:
+            # MEGA BIG TODO HERE: self._conversion_ops needs to be used to save the final ckpt
+            # using what was loaded. Actually self._conversion_ops wont work because we need it
+            # even if the files are not legacy -> thus no conversion happened
+            state_dict = revert_weight_conversion(self, state_dict)
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
@@ -4726,7 +4722,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
-            _conversion_ops, missing_keys, unexpected_keys, mismatched_keys, misc = (
+            missing_keys, unexpected_keys, mismatched_keys, misc = (
                 convert_and_load_state_dict_in_model(
                     model,
                     merged_state_dict,
@@ -4738,7 +4734,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     profile=profile_weight_conversion,
                 )
             )
-            model._conversion_ops = _conversion_ops
 
         for k in all_pointer:  # finally close all opened file pointeres
             k.__exit__(None, None, None)

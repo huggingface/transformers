@@ -180,10 +180,10 @@ def log_state_dict_report(
             rows.append(data)
 
     if misc:
-        for k in update_key_name(misc):
+        for k,v in update_key_name(misc):
             status = "MISC"
             status = _color(status, "red", ansi)
-            _details = misc[k][:term_w]
+            _details = v[:term_w]
             rows.append([k, status, _details, ""])
 
     if not rows:
