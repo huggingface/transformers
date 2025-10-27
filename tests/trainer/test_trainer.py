@@ -6181,36 +6181,54 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
         from transformers import AutoModelForSequenceClassification, Trainer, TrainingArguments
 
         model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
-        dataset = load_dataset("glue", "sst2", split="train[:100]")  # Slightly larger to ensure multiple saves
+        dataset = load_dataset("glue", "sst2", split="train[:100]")
 
+        # Test 1: save_model_limit without save_checkpoint_limit
         args = TrainingArguments(
-            output_dir=str(tmp_path),
+            output_dir=str(tmp_path / "test1"),
             save_strategy="steps",
-            save_steps=10,  # Save every 10 steps
-            max_steps=50,  # Train for 50 steps (will create ~5 checkpoints)
-            save_checkpoint_limit=2,  # Keep only 2 full checkpoints
-            save_model_limit=4,  # Keep 4 model weight files
+            save_steps=10,
+            max_steps=50,  # Creates 5 checkpoints
+            save_model_limit=3,  # Keep only 3 model weight files
             logging_steps=10,
-            eval_strategy="no",  # Disable eval to speed up test
-            report_to="none",  # Disable reporting
+            eval_strategy="no",
+            report_to="none",
         )
 
-        trainer = Trainer(
-            model=model,
-            args=args,
-            train_dataset=dataset,
-        )
-
+        trainer = Trainer(model=model, args=args, train_dataset=dataset)
         trainer.train()
 
-        # Check checkpoint directories
-        ckpt_dirs = sorted(glob.glob(os.path.join(tmp_path, "checkpoint-*")))
-        assert len(ckpt_dirs) == 2, f"Expected exactly 2 checkpoints, found {len(ckpt_dirs)}: {ckpt_dirs}"
+        # All 5 checkpoint directories should exist
+        ckpt_dirs = sorted(glob.glob(os.path.join(tmp_path / "test1", "checkpoint-*")))
+        assert len(ckpt_dirs) == 5, f"Expected 5 checkpoints, found {len(ckpt_dirs)}"
 
-        # Check model weight files
-        model_bins = glob.glob(os.path.join(tmp_path, "checkpoint-*/pytorch_model*.bin"))
-        assert len(model_bins) == 4, f"Expected exactly 4 model weight files, found {len(model_bins)}"
+        # But only 3 should have model weight files (last 3)
+        model_bins = glob.glob(os.path.join(tmp_path / "test1", "checkpoint-*/pytorch_model*.bin"))
+        assert len(model_bins) == 3, f"Expected 3 model weight files, found {len(model_bins)}"
 
-        # Verify the kept checkpoints are the most recent ones
-        assert "checkpoint-50" in ckpt_dirs[-1], "Latest checkpoint should be kept"
-        assert "checkpoint-40" in ckpt_dirs[-2], "Second-latest checkpoint should be kept"
+        # Verify which checkpoints have model weights (should be 30, 40, 50)
+        checkpoints_with_models = [os.path.basename(os.path.dirname(f)) for f in model_bins]
+        assert "checkpoint-30" in checkpoints_with_models
+        assert "checkpoint-40" in checkpoints_with_models
+        assert "checkpoint-50" in checkpoints_with_models
+
+        # Test 2: save_checkpoint_limit without save_model_limit
+        args2 = TrainingArguments(
+            output_dir=str(tmp_path / "test2"),
+            save_strategy="steps",
+            save_steps=10,
+            max_steps=50,
+            save_checkpoint_limit=2,  # Keep only 2 full checkpoints
+            logging_steps=10,
+            eval_strategy="no",
+            report_to="none",
+        )
+
+        trainer2 = Trainer(model=model, args=args2, train_dataset=dataset)
+        trainer2.train()
+
+        # Only 2 checkpoint directories should exist
+        ckpt_dirs2 = sorted(glob.glob(os.path.join(tmp_path / "test2", "checkpoint-*")))
+        assert len(ckpt_dirs2) == 2, f"Expected 2 checkpoints, found {len(ckpt_dirs2)}"
+        assert "checkpoint-40" in ckpt_dirs2[-2]
+        assert "checkpoint-50" in ckpt_dirs2[-1]

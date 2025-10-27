@@ -346,8 +346,10 @@ class TrainingArguments:
             checkpoints in `output_dir`. A full checkpoint includes model weights, optimizer states, scheduler
             states, and RNG states. This is useful when you want to keep fewer complete checkpoints while
             potentially keeping more model weight files (see `save_model_limit`).
+
             **Note**: If `save_total_limit` is also set, `save_total_limit` takes precedence for backward
             compatibility, and this parameter is ignored.
+
         save_model_limit (`int`, *optional*):
             If a value is passed, will limit the total number of model weight files to keep. Only deletes the
             model weight files (pytorch_model.bin, model.safetensors, etc.) from older checkpoints, leaving the
@@ -357,8 +359,11 @@ class TrainingArguments:
             **Note**: If `save_total_limit` is also set, `save_total_limit` takes precedence for backward
             compatibility, and this parameter is ignored.
 
-            **Example use case**: Set `save_checkpoint_limit=2` to keep only the 2 most recent full checkpoints
-            for training resumption, and `save_model_limit=10` to keep 10 model weight files for evaluation.
+            **Example use case**: During a long training run that creates 100 checkpoints, set `save_checkpoint_limit=3`
+            to keep only the 3 most recent full checkpoints for training resumption (in case you need to restart),
+            and set `save_model_limit=3` to keep only 3 model weight files. The checkpoint directories for older
+            saves will remain but without the heavy model weight files, saving significant storage space while
+            preserving optimizer states for analysis.
         save_safetensors (`bool`, *optional*, defaults to `True`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
             default `torch.load` and `torch.save`.
@@ -950,10 +955,12 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "If a value is passed, will limit the total number of full checkpoints (including "
-                "optimizer states, scheduler states, and RNG states). Deletes the older full checkpoints "
-                "in `output_dir`. This is independent of `save_total_limit`. If both this and "
-                "`save_total_limit` are set, `save_total_limit` takes precedence for backward compatibility."
+                "If a value is passed, will limit the total number of full checkpoint directories to keep. "
+                "Deletes the older checkpoint directories in `output_dir`. A full checkpoint includes the model "
+                "weights, optimizer states, scheduler states, and RNG states. "
+                "Note: When `save_total_limit` is also set, `save_total_limit` takes precedence and this "
+                "parameter is ignored (for backward compatibility). Use this parameter instead of `save_total_limit` "
+                "when you want separate control over checkpoints and model weights (see `save_model_limit`)."
             )
         },
     )
@@ -961,12 +968,14 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "If a value is passed, will limit the total number of model weight files "
-                "(e.g., pytorch_model.bin, model.safetensors) to keep. This allows keeping more "
-                "lightweight model weights for analysis while maintaining fewer full checkpoints. "
-                "Note: This only deletes the model weight files, not the entire checkpoint directories. "
-                "If both this and `save_total_limit` are set, `save_total_limit` takes precedence "
-                "for backward compatibility."
+                "If a value is passed, will limit the total number of model weight files to keep across all "
+                "checkpoint directories. Only deletes the model weight files (e.g., pytorch_model.bin, model.safetensors), "
+                "leaving the rest of the checkpoint directory intact (optimizer states, scheduler states, etc.). "
+                "This allows keeping more model snapshots for evaluation while using less storage than full checkpoints. "
+                "Note: When `save_total_limit` is also set, `save_total_limit` takes precedence and this "
+                "parameter is ignored (for backward compatibility). "
+                "Recommended usage: Set `save_checkpoint_limit` for full checkpoints needed for training resumption, "
+                "and set a higher `save_model_limit` to retain more model weights for evaluation/analysis."
             )
         },
     )

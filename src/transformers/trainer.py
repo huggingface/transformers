@@ -4154,10 +4154,12 @@ class Trainer:
                     continue
                 try:
                     for f in os.listdir(ckpt):
-                        # Match model weight files: pytorch_model.bin, model.safetensors, etc.
-                        if (f.startswith("pytorch_model") and f.endswith(".bin")) or (
-                            f.startswith("model") and f.endswith(".safetensors")
-                        ):
+                        is_pytorch_model = f.startswith("pytorch_model") and (".bin" in f)
+                        is_safetensors = f == "model.safetensors" or (
+                            f.startswith("model-") and f.endswith(".safetensors")
+                        )
+
+                        if is_pytorch_model or is_safetensors:
                             model_files.append(os.path.join(ckpt, f))
                 except (OSError, FileNotFoundError):
                     continue
