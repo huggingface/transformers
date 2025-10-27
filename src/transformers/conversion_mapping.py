@@ -41,7 +41,6 @@ _checkpoint_conversion_mapping = {
         #     Concatenate(dim=0),  # more like stack?
         # ),
         # Testing for now, this one is wrong!
-        WeightConverter("block_sparse_moe.*.w2.weight", "experts.down_proj.weight"),
         WeightConverter("*.block_sparse_moe.", "*.mlp."),
     ]
 }
