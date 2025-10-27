@@ -237,28 +237,34 @@ class TorchAoHfQuantizer(HfQuantizer):
         return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.full_ao_keys)]
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from torchao.quantization import FqnToConfig
-        from torchao.quantization.quant_api import _filter_fn_and_param_in_fqn_config
+
+        fqn_to_config_supported = False
+        if self.quantization_config._get_ao_version() >= version.parse("0.15.0"):
+            from torchao.quantization import FqnToConfig
+            from torchao.quantization.quant_api import _filter_fn_and_param_in_fqn_config
+            fqn_to_config_supported = True
+
         if self.quantization_config.quant_type == "autoquant":
             return False
-        elif isinstance(self.quantization_config.quant_type, FqnToConfig):
-            module, tensor_name = get_module_from_name(model, param_name)
-            result = _filter_fn_and_param_in_fqn_config(module, param_name.rsplit(".", 1)[0], self.quantization_config.quant_type, None)
-            if result:
-                return result
 
         # check if the param_name is not in self.modules_to_not_convert
         if any(key + "." in param_name or key == param_name for key in self.modules_to_not_convert):
             return False
         elif any(param_name.endswith(f":{x}") for x in self.full_ao_keys):
             return True
-        else:
-            # we only quantize the weight of nn.Linear and nn.Embedding
+        # Handle FqnToConfig, introduced in torchao 0.15.0+
+        elif fqn_to_config_supported and isinstance(self.quantization_config.quant_type, FqnToConfig):
             module, tensor_name = get_module_from_name(model, param_name)
-            _QUANTIZABLE = [torch.nn.Linear]
-            if self.quantization_config.include_input_output_embeddings:
-                _QUANTIZABLE.append(torch.nn.Embedding)
-            return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
+            module_fqn, param_name_fqn = param_name.rsplit(".", 1)
+            if _filter_fn_and_param_in_fqn_config(module, module_fqn, self.quantization_config.quant_type, None):
+                return True
+
+        # Fallback here, we only quantize the weight of nn.Linear and nn.Embedding
+        module, tensor_name = get_module_from_name(model, param_name)
+        _QUANTIZABLE = [torch.nn.Linear]
+        if self.quantization_config.include_input_output_embeddings:
+            _QUANTIZABLE.append(torch.nn.Embedding)
+        return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
     def create_quantized_param(
         self,
@@ -391,10 +397,9 @@ class TorchAoHfQuantizer(HfQuantizer):
                                 break
                         else:
                             c = config.module_fqn_to_config.get("_default", None)
-                    
                     if c is not None:
                         # filter_fn: not filtering out any modules
-                        quantize_(module, c, filter_fn=lambda fqn, mod: True)
+                        quantize_(module, c, filter_fn=lambda x, fqn: True)
                     return
 
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
