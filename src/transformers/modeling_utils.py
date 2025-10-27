@@ -2319,7 +2319,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if not is_flash_dmattn_available():
-            preface = "FlashDynamicMaskAttention has been toggled on, but it cannot be used due to the following error:"
+            preface = (
+                "FlashDynamicMaskAttention has been toggled on, but it cannot be used due to the following error:"
+            )
             install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashdynamicmaskattention to install Flash Dynamic Mask Attention."
 
             # package `flash-dmattn` can not be installed on Ascend NPU, following validation logics can be ignored.
@@ -2342,7 +2344,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             f"{preface} Flash Dynamic Mask Attention is not available on CPU. Please make sure torch can access a CUDA device."
                         )
                     else:
-                        raise ImportError(f"{preface} Flash Dynamic Mask Attention is not available. {install_message}")
+                        raise ImportError(
+                            f"{preface} Flash Dynamic Mask Attention is not available. {install_message}"
+                        )
                 elif torch.version.hip:
                     raise ImportError(f"{preface} Flash Dynamic Mask Attention is not available. {install_message}")
 
