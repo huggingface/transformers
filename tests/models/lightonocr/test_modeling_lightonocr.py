@@ -404,21 +404,11 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             self.assertEqual(image_features.shape[-1], config.text_config.hidden_size)
 
 
+@slow
 @require_torch
 class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
-
-    @slow
-    @require_vision
-    def test_small_model_inference(self):
-        """
-        Test basic inference with a small model.
-        This is a placeholder for when we have actual pretrained checkpoints.
-        """
-        # This test would be similar to LLaVA's integration tests
-        # but would require an actual pretrained LightOnOCR checkpoint
-        pass
 
     def test_model_can_generate_without_images(self):
         """
