@@ -3651,11 +3651,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
 
-        if any(
-            allowed_name in class_name.__name__.lower()
-            for class_name in self.__class__.__mro__[:-1]
-            for allowed_name in VLMS
-        ) or save_original_format:
+        if (
+            any(
+                allowed_name in class_name.__name__.lower()
+                for class_name in self.__class__.__mro__[:-1]
+                for allowed_name in VLMS
+            )
+            or save_original_format
+        ):
             # MEGA BIG TODO HERE: self._conversion_ops needs to be used to save the final ckpt
             # using what was loaded. Actually self._conversion_ops wont work because we need it
             # even if the files are not legacy -> thus no conversion happened
@@ -4702,13 +4705,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         all_pointer = set()
 
         keys = sorted(device_map.keys(), key=len, reverse=True)
-        pattern = re.compile(r'(' + '|'.join(map(re.escape, keys)) + r')')
+        pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
         for k, v in sharded_metadata["weight_map"].items():
             key = pattern.match(k).group(1)
             if key is not None:
                 device = device_map[key]
             else:
-                device = device_map['']
+                device = device_map[""]
             file_pointer = safe_open(
                 os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
             )
@@ -4722,17 +4725,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
-            missing_keys, unexpected_keys, mismatched_keys, misc = (
-                convert_and_load_state_dict_in_model(
-                    model,
-                    merged_state_dict,
-                    weight_mapping,
-                    tp_plan,
-                    hf_quantizer,
-                    device_map,
-                    keep_in_dtype,
-                    profile=profile_weight_conversion,
-                )
+            missing_keys, unexpected_keys, mismatched_keys, misc = convert_and_load_state_dict_in_model(
+                model,
+                merged_state_dict,
+                weight_mapping,
+                tp_plan,
+                hf_quantizer,
+                device_map,
+                keep_in_dtype,
+                profile=profile_weight_conversion,
             )
 
         for k in all_pointer:  # finally close all opened file pointeres

@@ -1,19 +1,21 @@
+import logging
 import re
 import shutil
-import logging
 import sys
-from typing import Optional, Iterable
-import re
-from collections import defaultdict, OrderedDict
-from typing import Any, Dict, List, Set, Tuple
+from collections import OrderedDict, defaultdict
+from collections.abc import Iterable
+from typing import Any, Optional
 
-_DIGIT_RX = re.compile(r'(?<=\.)(\d+)(?=\.|$)')  # numbers between dots or at the end
+
+_DIGIT_RX = re.compile(r"(?<=\.)(\d+)(?=\.|$)")  # numbers between dots or at the end
+
 
 def _pattern_of(key: str) -> str:
     """Replace every dot-delimited integer with '*' to get the structure."""
-    return _DIGIT_RX.sub('*', key)
+    return _DIGIT_RX.sub("*", key)
 
-def _fmt_indices(values: List[int]) -> str:
+
+def _fmt_indices(values: list[int]) -> str:
     """Format a list of ints as single number, {a, b, ...}, or first...last."""
     if len(values) == 1:
         return str(values[0])
@@ -22,7 +24,8 @@ def _fmt_indices(values: List[int]) -> str:
         return f"{values[0]}...{values[-1]}"
     return ", ".join(map(str, values))
 
-def update_key_name(mapping: Dict[str, Any]) -> Dict[str, Any]:
+
+def update_key_name(mapping: dict[str, Any]) -> dict[str, Any]:
     """
     Merge keys like 'layers.0.x', 'layers.1.x' into 'layers.{0, 1}.x'
     BUT only merge together keys that have the exact same value.
@@ -31,10 +34,10 @@ def update_key_name(mapping: Dict[str, Any]) -> Dict[str, Any]:
     # (pattern, value) -> list[set[int]] (per-star index values)
     not_mapping = False
     if not isinstance(mapping, dict):
-        mapping = {k:k for k in mapping }
+        mapping = {k: k for k in mapping}
         not_mapping = True
 
-    bucket: Dict[Tuple[str, Any], List[Set[int]]] = defaultdict(list)
+    bucket: dict[tuple[str, Any], list[set[int]]] = defaultdict(list)
     for key, val in mapping.items():
         digs = _DIGIT_RX.findall(key)
         patt = _pattern_of(key)
@@ -47,19 +50,19 @@ def update_key_name(mapping: Dict[str, Any]) -> Dict[str, Any]:
     out_items = {}
     for patt, values in bucket.items():
         sets, val = values[:-1], values[-1]
-        parts = patt.split('*')  # stars are between parts
+        parts = patt.split("*")  # stars are between parts
         final = parts[0]
         for i in range(1, len(parts)):
             # i-1 is the star index before parts[i]
-            if i-1 < len(sets) and sets[i-1]:
-                insert = _fmt_indices(sorted(sets[i-1]))
-                if len(sets[i-1]) > 1:
-                    final += '{' + insert + '}'
+            if i - 1 < len(sets) and sets[i - 1]:
+                insert = _fmt_indices(sorted(sets[i - 1]))
+                if len(sets[i - 1]) > 1:
+                    final += "{" + insert + "}"
                 else:
                     final += insert
             else:
                 # If no digits observed for this star position, keep a literal '*'
-                final += '*'
+                final += "*"
             final += parts[i]
 
         out_items[final] = val
@@ -70,11 +73,24 @@ def update_key_name(mapping: Dict[str, Any]) -> Dict[str, Any]:
         return out.keys()
     return out
 
+
 class ANSI:
     palette = {
-        'reset': '[0m', 'red':'[31m','yellow':'[33m','orange':'[38;5;208m','bold':'[1m','italic':'[3m','dim':'[2m'}
-    def __init__(self, enable): self.enable=enable
-    def __getitem__(self,key): return self.palette[key] if self.enable else ''
+        "reset": "[0m",
+        "red": "[31m",
+        "yellow": "[33m",
+        "orange": "[38;5;208m",
+        "bold": "[1m",
+        "italic": "[3m",
+        "dim": "[2m",
+    }
+
+    def __init__(self, enable):
+        self.enable = enable
+
+    def __getitem__(self, key):
+        return self.palette[key] if self.enable else ""
+
 
 _ansi_re = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -109,7 +125,6 @@ def _get_terminal_width(default=80):
         return shutil.get_terminal_size().columns
     except Exception:
         return default
-
 
 
 def log_state_dict_report(
@@ -174,24 +189,19 @@ def log_state_dict_report(
             status = _color(status, "yellow", ansi)
             data = [key, status]
             if term_w > limit_rows:
-                data.append(
-                    [ "Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"]
-                )
+                data.append(["Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"])
             rows.append(data)
 
     if misc:
-        for k,v in update_key_name(misc):
+        for k, v in update_key_name(misc):
             status = "MISC"
             status = _color(status, "red", ansi)
             _details = v[:term_w]
             rows.append([k, status, _details, ""])
 
     if not rows:
-        print(
-            f"No key issues when initializing {model.__class__.__name__} from {pretrained_model_name_or_path}."
-        )
+        print(f"No key issues when initializing {model.__class__.__name__} from {pretrained_model_name_or_path}.")
         return
-
 
     headers = ["Key", "Status"]
     if term_w > 200:

@@ -15,18 +15,17 @@
 """Core helpers for loading model checkpoints."""
 
 from __future__ import annotations
-from fnmatch import translate
-from concurrent.futures import ThreadPoolExecutor, Future, wait
-import os
-import threading
+
 import itertools
 import math
+import os
 import re
+import threading
 import time
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
-from contextlib import nullcontext
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Optional, Union
@@ -254,7 +253,7 @@ class Concatenate(ConversionOps):
         out_shape = list(tensors[0].shape)
         out_shape[self.dim] = sum([t.size(self.dim) for t in tensors])
 
-        with torch.no_grad(): # we use staging buffers
+        with torch.no_grad():  # we use staging buffers
             out = self._ensure_buffer(torch.Size(out_shape), dtype=tensors[0].dtype, device=tensors[0].device)
             offset = 0
             for tensor in tensors:
@@ -263,7 +262,7 @@ class Concatenate(ConversionOps):
                 out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
                 offset += tensor.shape[self.dim]
         torch.testing.assert_close(out, torch.cat(value, dim=self.dim))
-        return out.clone() # need to say I can overwrite this storage now
+        return out.clone()  # need to say I can overwrite this storage now
 
 
 class MergeModulelist(Concatenate):
@@ -284,7 +283,7 @@ class MergeModulelist(Concatenate):
         for group in value:
             if not isinstance(group, Sequence) or len(group) == 0:
                 raise ValueError("MergeModulelist requires non-empty sub-sequences.")
-            merged.append(torch.stack(tuple(group), dim=self.dim)) # TODO have a single staging tensor here as well!
+            merged.append(torch.stack(tuple(group), dim=self.dim))  # TODO have a single staging tensor here as well!
         return merged
 
 
@@ -340,7 +339,7 @@ class To(ConversionOps):
     def __init__(self, device):
         self.device = device
 
-    def convert(self, realized_value: list[list["PySafeSlice"]]):
+    def convert(self, realized_value: list[list[PySafeSlice]]):
         with torch.device(self.device):
             out = [[x[:] for x in inner] if isinstance(inner, list) else inner[:] for inner in realized_value]
         return out
@@ -564,6 +563,7 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, misma
     except Exception as e:
         misc[k] = f"{e} for {k} on {list(model.state_dict().keys())}"
 
+
 @dataclass(slots=True)
 class ConversionEntry:
     weight_converter: WeightConverter
@@ -578,35 +578,39 @@ PER_FILE_LIMIT = 4  # concurrent reads per file
 EXEC = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 _file_sems = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
 
+
 def _materialize_copy(x):
     # PyTorch: this runs in C and releases the GIL; good for threads.
     return x[:]  # contiguous, real copy
 
+
 def spawn_materialize(file_id, t) -> Future:
     sem = _file_sems[file_id]
+
     def _job():
         with sem:
             return _materialize_copy(t)
+
     return EXEC.submit(_job)
 
 
 def glob_replace_string(replace_glob: str, original: str, find_glob: str) -> str:
     # Build regex by escaping everything except '*' which becomes a capture group
-    pattern = re.escape(find_glob).replace(r'\*', '(.*?)')
-    partial = find_glob.startswith('*') or find_glob.endswith('*')
+    pattern = re.escape(find_glob).replace(r"\*", "(.*?)")
+    partial = find_glob.startswith("*") or find_glob.endswith("*")
     if not partial:
-        pattern = '^' + pattern + '$'
+        pattern = "^" + pattern + "$"
 
     # Map each '*' in replace_glob to the corresponding capture group (\1, \2, ...)
-    star_count = find_glob.count('*')
+    star_count = find_glob.count("*")
     rep, g = [], 1
     for ch in replace_glob:
-        if ch == '*' and g <= star_count:
-            rep.append(f'\\{g}')
+        if ch == "*" and g <= star_count:
+            rep.append(f"\\{g}")
             g += 1
         else:
             rep.append(ch)
-    replacement = ''.join(rep)
+    replacement = "".join(rep)
 
     if partial:
         return re.sub(pattern, replacement, original)
@@ -652,7 +656,7 @@ def convert_and_load_state_dict_in_model(
             converter = source_to_target[matched_pattern]  # TODO make sure its the ref
             sub_with_extractor = partial(re.sub, _glob_to_regex_src(matched_pattern), string=original_key)
             entry_key = "|".join(converter.target_keys)
-            target_key = "|".join(map(sub_with_extractor, [ k.replace("*", "\\1") for k in converter.target_keys]))
+            target_key = "|".join(map(sub_with_extractor, [k.replace("*", "\\1") for k in converter.target_keys]))
             entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
             converter_key = sub_with_extractor(matched_pattern)
         else:
@@ -668,7 +672,7 @@ def convert_and_load_state_dict_in_model(
         # TP OP should happen here as it materialized the tensor
 
         # If not TP, move tensors
-        fut = spawn_materialize(file_id, tensor)   # <— returns Future
+        fut = spawn_materialize(file_id, tensor)  # <— returns Future
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
         for t in target_key.split("|"):
             empty_tensor = meta_model_state_dict.get(t)
@@ -687,7 +691,7 @@ def convert_and_load_state_dict_in_model(
         converter = group.weight_converter
         operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
         iterator = group.collected_tensors.items()
-        for layer_name, tensors_for_this_layer in iterator: # TODO I need a global TQDM :)
+        for layer_name, tensors_for_this_layer in iterator:  # TODO I need a global TQDM :)
             concrete_target_keys = layer_name.split("|")
             if bool(set(concrete_target_keys) - unexpected_keys):
                 values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
@@ -722,17 +726,10 @@ def convert_and_load_state_dict_in_model(
                         op = Cast(keep_in_dtype[matched_dtype_pattern])
                         output_value = op(output_value)
 
-                    for src in converter.source_keys: # what should happen to k when we meet k at saving
-                        inverse_converters[k] = {src :converter}
+                    for src in converter.source_keys:  # what should happen to k when we meet k at saving
+                        inverse_converters[k] = {src: converter}
                     set_param_for_module(
-                        model,
-                        k,
-                        output_value,
-                        meta_model_state_dict,
-                        empty_tensor,
-                        mismatch_keys,
-                        missing_keys,
-                        misc
+                        model, k, output_value, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc
                     )
         del group
         for op in operations:
@@ -748,7 +745,7 @@ def revert_weight_conversion(model, state_dict):
     original_state_dict = {}
     for key, value in state_dict.items():
         for pattern, inverse_converter in reverse_key_mapping.items():
-            #TODO FIXME you name it
+            # TODO FIXME you name it
             replacement = inverse_converter.lstrip("^")  # strip off un-needed chars and patterns
             replacement = re.sub(r"\(.*\)", "", replacement)
             key, n_replace = re.subn(pattern, replacement, key)
