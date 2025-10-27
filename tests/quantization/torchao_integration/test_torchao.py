@@ -48,7 +48,6 @@ if is_torchao_available():
     from torchao.quantization import (
         Float8Tensor,
         Float8WeightOnlyConfig,
-        Float8DynamicActivationFloat8WeightConfig,
         Int4WeightOnlyConfig,
         Int8DynamicActivationInt8WeightConfig,
         Int8WeightOnlyConfig,
@@ -57,10 +56,7 @@ if is_torchao_available():
         ModuleFqnToConfig,
         FqnToConfig,
         PerAxis,
-        PerRow,
-        PerTensor,
     )
-    from torchao.quantization.quantize_.common import KernelPreference
     from torchao.quantization.autoquant import AQMixin
 
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0"):
