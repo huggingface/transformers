@@ -20,22 +20,12 @@ from ...utils import auto_docstring, is_vision_available
 from ..pixtral.configuration_pixtral import PixtralVisionConfig
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 from ..pixtral.modeling_pixtral import (
-    PixtralAttention,
-    PixtralAttentionLayer,
-    PixtralMLP,
-    PixtralRMSNorm,
-    PixtralRotaryEmbedding,
-    PixtralTransformer,
     PixtralVisionModel,
 )
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
-    Qwen3Attention,
-    Qwen3DecoderLayer,
-    Qwen3MLP,
     Qwen3Model,
     Qwen3RMSNorm,
-    Qwen3RotaryEmbedding,
 )
 
 
@@ -45,7 +35,9 @@ if is_vision_available():
 
 class LightOnOCRTextConfig(Qwen3Config):
     model_type = "lightonocr_text"
-    pass
+    # Remove unused attributes inherited from Qwen3Config
+    max_window_layers = None
+    use_sliding_window = None
 
 
 class LightOnOCRVisionConfig(PixtralVisionConfig):
@@ -59,13 +51,12 @@ class LightOnOCRConfig(PretrainedConfig):
     LightOnOCR model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will yield
+    a similar configuration to that of the LightOnOCR [lightonocr-hf/lightonocr-9b](https://huggingface.co/lightonocr-hf/lightonocr-9b) architecture.
 
     Args:
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The size of spatial merging for image patches.
-        image_token_index (`int`, *optional*, defaults to 151655):
-            The token index used to represent image tokens.
         vision_config (`dict` or `LightOnOCRVisionConfig`, *optional*):
             Custom vision configuration or dictionary with vision configuration values.
         text_config (`dict` or `LightOnOCRTextConfig`, *optional*):
@@ -151,41 +142,6 @@ class LightOnOCRConfig(PretrainedConfig):
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
-    @property
-    def vocab_size(self):
-        """Get vocab size from text config for generation."""
-        return self.text_config.vocab_size
-
-    @property
-    def hidden_size(self):
-        """Get hidden size from text config."""
-        return self.text_config.hidden_size
-
-    @hidden_size.setter
-    def hidden_size(self, value):
-        """Set hidden size in text config."""
-        self.text_config.hidden_size = value
-
-    @property
-    def num_attention_heads(self):
-        """Get num attention heads from text config."""
-        return self.text_config.num_attention_heads
-
-    @num_attention_heads.setter
-    def num_attention_heads(self, value):
-        """Set num attention heads in text config."""
-        self.text_config.num_attention_heads = value
-
-    @property
-    def num_hidden_layers(self):
-        """Get num hidden layers from text config."""
-        return self.text_config.num_hidden_layers
-
-    @num_hidden_layers.setter
-    def num_hidden_layers(self, value):
-        """Set num hidden layers in text config."""
-        self.text_config.num_hidden_layers = value
-
 
 class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -194,7 +150,7 @@ class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
-            "patch_size": None,  # Will be set from processor config
+            "patch_size": 14,
         },
         "common_kwargs": {
             "return_tensors": "pt",
@@ -459,28 +415,12 @@ class LightOnOCRTextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-class LightOnOCRTextMLP(Qwen3MLP):
-    pass
-
-
-class LightOnOCRTextAttention(Qwen3Attention):
-    pass
-
-
-class LightOnOCRTextDecoderLayer(Qwen3DecoderLayer):
-    pass
-
-
-class LightOnOCRTextRotaryEmbedding(Qwen3RotaryEmbedding):
-    pass
-
-
 @auto_docstring(
     custom_intro="""
     The language model of LightOnOCR, based on Qwen3 architecture.
     """
 )
-class LightOnOCRText(Qwen3Model):
+class LightOnOCRTextModel(Qwen3Model):
     config_class = LightOnOCRTextConfig
 
     def get_input_embeddings(self):
@@ -508,32 +448,8 @@ class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, LightOnOCRVisionRMSNorm):
+        else:
             module.weight.data.fill_(1.0)
-
-
-class LightOnOCRVisionRMSNorm(PixtralRMSNorm):
-    pass
-
-
-class LightOnOCRVisionMLP(PixtralMLP):
-    pass
-
-
-class LightOnOCRVisionAttention(PixtralAttention):
-    pass
-
-
-class LightOnOCRVisionAttentionLayer(PixtralAttentionLayer):
-    pass
-
-
-class LightOnOCRVisionRotaryEmbedding(PixtralRotaryEmbedding):
-    pass
-
-
-class LightOnOCRVisionTransformer(PixtralTransformer):
-    pass
 
 
 @auto_docstring(
@@ -541,7 +457,7 @@ class LightOnOCRVisionTransformer(PixtralTransformer):
     The vision encoder of LightOnOCR, based on Pixtral vision architecture.
     """
 )
-class LightOnOCRVision(PixtralVisionModel):
+class LightOnOCRVisionModel(PixtralVisionModel):
     config_class = LightOnOCRVisionConfig
 
 
@@ -555,11 +471,11 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
     def __init__(self, config: LightOnOCRConfig):
         super().__init__(config)
 
-        self.vision_encoder = LightOnOCRVision(config.vision_config)
+        self.vision_encoder = LightOnOCRVisionModel(config.vision_config)
 
         self.vision_projection = LightOnOCRVisionProjector(config)
 
-        self.language_model = LightOnOCRText(config.text_config)
+        self.language_model = LightOnOCRTextModel(config.text_config)
 
         self.post_init()
 
@@ -781,9 +697,9 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
 
 __all__ = [
     "LightOnOCRPreTrainedModel",
-    "LightOnOCRText",
+    "LightOnOCRTextModel",
     "LightOnOCRTextPreTrainedModel",
-    "LightOnOCRVision",
+    "LightOnOCRVisionModel",
     "LightOnOCRVisionPreTrainedModel",
     "LightOnOCRForConditionalGeneration",
     "LightOnOCRModel",

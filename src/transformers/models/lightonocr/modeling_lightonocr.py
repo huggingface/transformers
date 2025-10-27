@@ -194,6 +194,71 @@ class LightOnOCRTextMLP(nn.Module):
         return down_proj
 
 
+class LightOnOCRTextRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: LightOnOCRTextConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[LightOnOCRTextConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -271,6 +336,7 @@ class LightOnOCRTextAttention(nn.Module):
 
     def __init__(self, config: LightOnOCRTextConfig, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -297,7 +363,7 @@ class LightOnOCRTextAttention(nn.Module):
         self.k_norm = LightOnOCRTextRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     def forward(
         self,
@@ -364,7 +430,7 @@ class LightOnOCRTextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -390,48 +456,12 @@ class LightOnOCRTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class LightOnOCRTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: LightOnOCRTextConfig, device=None):
-        super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
 @auto_docstring(
     custom_intro="""
     The language model of LightOnOCR, based on Qwen3 architecture.
     """
 )
-class LightOnOCRText(LightOnOCRTextPreTrainedModel):
+class LightOnOCRTextModel(LightOnOCRTextPreTrainedModel):
     config_class = LightOnOCRTextConfig
 
     def __init__(self, config: LightOnOCRTextConfig):
@@ -502,19 +532,17 @@ class LightOnOCRText(LightOnOCRTextPreTrainedModel):
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -549,47 +577,99 @@ class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, LightOnOCRVisionRMSNorm):
+        else:
             module.weight.data.fill_(1.0)
 
 
-class LightOnOCRVisionRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        LightOnOCRVisionRMSNorm is equivalent to T5LayerNorm
-        """
+class LightOnOCRRotaryEmbedding(nn.Module):
+    """
+    The key with lightonocr embedding is just that you have a frequency for each pixel positions.
+    If you have height x width pixels (or embedding pixels), then the frequency used for ROPE
+    is given by indexing the pre_computed frequency on the width and height.
+
+    What you output is of dimension (batch, height * width, dim) with dim the embed dim.
+
+    This simply means that for each image hidden state, you are going to add
+    a corresponding positional embedding, based on its index in the grid.
+    """
+
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: LightOnOCRVisionConfig, device=None, layer_type=None):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class LightOnOCRVisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            raise ValueError(
+                f"{self.__class__.__name__} does not support non-default RoPE, but got `rope_type={self.rope_type}`"
+            )
+
+        inv_freq, attention_scaling = rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[LightOnOCRVisionConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Here is the diff from Llama RoPE
+        max_patches_per_side = config.image_size // config.patch_size
+        h = torch.arange(max_patches_per_side)
+        w = torch.arange(max_patches_per_side)
+
+        freqs = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        freqs_h = torch.outer(h, freqs[::2]).float()
+        freqs_w = torch.outer(w, freqs[1::2]).float()
+        inv_freq = torch.cat(
+            [
+                freqs_h[:, None, :].repeat(1, max_patches_per_side, 1),
+                freqs_w[None, :, :].repeat(max_patches_per_side, 1, 1),
+            ],
+            dim=-1,
+        ).reshape(-1, dim // 2)  # we reshape to only index on the position indexes, not tuple of indexes
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+
+        # TODO maybe make it torch compatible later on. We can also just slice
+        inv_freq = torch.cat((inv_freq, inv_freq), dim=-1)
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        freqs = self.inv_freq[position_ids]
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            emb = freqs
+            cos = emb.cos()
+            sin = emb.sin()
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class LightOnOCRVisionAttention(nn.Module):
+class LightOnOCRAttention(nn.Module):
     """
     Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
     """
@@ -662,13 +742,49 @@ class LightOnOCRVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class LightOnOCRVisionAttentionLayer(GradientCheckpointingLayer):
+class LightOnOCRMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention_norm = LightOnOCRVisionRMSNorm(config.hidden_size, eps=1e-5)
-        self.feed_forward = LightOnOCRVisionMLP(config)
-        self.attention = LightOnOCRVisionAttention(config)
-        self.ffn_norm = LightOnOCRVisionRMSNorm(config.hidden_size, eps=1e-5)
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+class LightOnOCRRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        LightOnOCRRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class LightOnOCRAttentionLayer(GradientCheckpointingLayer):
+    def __init__(self, config):
+        super().__init__()
+        self.attention_norm = LightOnOCRRMSNorm(config.hidden_size, eps=1e-5)
+        self.feed_forward = LightOnOCRMLP(config)
+        self.attention = LightOnOCRAttention(config)
+        self.ffn_norm = LightOnOCRRMSNorm(config.hidden_size, eps=1e-5)
 
     def forward(
         self,
@@ -712,66 +828,13 @@ class LightOnOCRVisionAttentionLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class LightOnOCRVisionRotaryEmbedding(nn.Module):
-    """
-    The key with light_on_o_c_r_vision embedding is just that you have a frequency for each pixel positions.
-    If you have height x width pixels (or embedding pixels), then the frequency used for ROPE
-    is given by indexing the pre_computed frequency on the width and height.
-
-    What you output is of dimension (batch, height * width, dim) with dim the embed dim.
-
-    This simply means that for each image hidden state, you are going to add
-    a corresponding positional embedding, based on its index in the grid.
-    """
-
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config, device=None):
-        super().__init__()
-        self.rope_type = "default"
-        self.dim = config.head_dim
-        self.base = config.rope_theta
-        max_patches_per_side = config.image_size // config.patch_size
-        freqs = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float() / self.dim))
-
-        h = torch.arange(max_patches_per_side, device=freqs.device)
-        w = torch.arange(max_patches_per_side, device=freqs.device)
-
-        freqs_h = torch.outer(h, freqs[::2]).float()
-        freqs_w = torch.outer(w, freqs[1::2]).float()
-        inv_freq = torch.cat(
-            [
-                freqs_h[:, None, :].repeat(1, max_patches_per_side, 1),
-                freqs_w[None, :, :].repeat(max_patches_per_side, 1, 1),
-            ],
-            dim=-1,
-        ).reshape(-1, self.dim // 2)  # we reshape to only index on the position indexes, not tuple of indexes
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-
-        # TODO maybe make it torch compatible later on. We can also just slice
-        self.register_buffer("inv_freq", torch.cat((inv_freq, inv_freq), dim=-1), persistent=False)
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        freqs = self.inv_freq[position_ids]
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            emb = freqs
-            cos = emb.cos()
-            sin = emb.sin()
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-class LightOnOCRVisionTransformer(nn.Module):
+class LightOnOCRTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.layers = torch.nn.ModuleList()
         for _ in range(config.num_hidden_layers):
-            self.layers.append(LightOnOCRVisionAttentionLayer(config))
+            self.layers.append(LightOnOCRAttentionLayer(config))
         self.gradient_checkpointing = False
 
     def forward(
@@ -872,7 +935,7 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
     The vision encoder of LightOnOCR, based on Pixtral vision architecture.
     """
 )
-class LightOnOCRVision(LightOnOCRVisionPreTrainedModel):
+class LightOnOCRVisionModel(LightOnOCRPreTrainedModel):
     base_model_prefix = "vision_encoder"
     config_class = LightOnOCRVisionConfig
 
@@ -887,9 +950,9 @@ class LightOnOCRVision(LightOnOCRVisionPreTrainedModel):
             bias=False,
         )
         self.patch_size = config.patch_size
-        self.ln_pre = LightOnOCRVisionRMSNorm(config.hidden_size, eps=1e-5)
-        self.transformer = LightOnOCRVisionTransformer(config)
-        self.patch_positional_embedding = LightOnOCRVisionRotaryEmbedding(config)
+        self.ln_pre = LightOnOCRRMSNorm(config.hidden_size, eps=1e-5)
+        self.transformer = LightOnOCRTransformer(config)
+        self.patch_positional_embedding = LightOnOCRRotaryEmbedding(config)
 
         self.post_init()
 
@@ -960,11 +1023,11 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
     def __init__(self, config: LightOnOCRConfig):
         super().__init__(config)
 
-        self.vision_encoder = LightOnOCRVision(config.vision_config)
+        self.vision_encoder = LightOnOCRVisionModel(config.vision_config)
 
         self.vision_projection = LightOnOCRVisionProjector(config)
 
-        self.language_model = LightOnOCRText(config.text_config)
+        self.language_model = LightOnOCRTextModel(config.text_config)
 
         self.post_init()
 
@@ -1186,9 +1249,9 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
 
 __all__ = [
     "LightOnOCRPreTrainedModel",
-    "LightOnOCRText",
+    "LightOnOCRTextModel",
     "LightOnOCRTextPreTrainedModel",
-    "LightOnOCRVision",
+    "LightOnOCRVisionModel",
     "LightOnOCRVisionPreTrainedModel",
     "LightOnOCRForConditionalGeneration",
     "LightOnOCRModel",
