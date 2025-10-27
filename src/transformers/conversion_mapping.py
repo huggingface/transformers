@@ -23,12 +23,23 @@ _checkpoint_conversion_mapping = {
                 Concatenate(dim=1),  # each process has 2 tensors, gate and up, we concat them into gate_up
             ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
         ),
-        # TODO: this one is flag dependant!
         WeightConverter(
-            ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
-            "self_attn.qkv_proj",
-            Concatenate(dim=0),  # more like stack?
+            source_keys=[
+                "block_sparse_moe.experts.*.w2.weight",
+            ],  # you give me a list of 2 keys, I collect a list of tensors
+            target_keys="mlp.experts.down_proj",  # target key gets the list of two tensors
+            operations=[
+                MergeModulelist(
+                    dim=0
+                ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
+            ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
         ),
+        # TODO: this one is flag dependant!
+        # WeightConverter(
+        #     ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
+        #     "self_attn.qkv_proj",
+        #     Concatenate(dim=0),  # more like stack?
+        # ),
         # Testing for now, this one is wrong!
         WeightConverter("block_sparse_moe.*.w2.weight", "experts.down_proj.weight"),
         WeightConverter("*.block_sparse_moe.", "*.mlp."),

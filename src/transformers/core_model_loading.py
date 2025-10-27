@@ -546,7 +546,7 @@ class WeightConverter:
         self._regex_pat = build_glob_alt(self.source_keys)
 
 
-def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys):
+def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc):
     try:
         module_path, _, param_name = k.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
@@ -560,8 +560,7 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, misma
             missing_keys.remove(k)
         setattr(module_obj, param_name, param_value)
     except Exception as e:
-        print(f"{e}, when trying to set for key {k}") # at this point errors should have already been handled
-
+        misc[k] = f"{e} for {k} on {list(model.state_dict().keys())}"
 
 @dataclass(slots=True)
 class ConversionEntry:
@@ -669,20 +668,23 @@ def convert_and_load_state_dict_in_model(
         # If not TP, move tensors
         fut = spawn_materialize(file_id, tensor)   # <— returns Future
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
-        for target_key in entry_key.split("|"):
-            empty_tensor = meta_model_state_dict.get(target_key)
+        for t in target_key.split("|"):
+            empty_tensor = meta_model_state_dict.get(t)
             if empty_tensor is None:
-                unexpected_keys.add(target_key)
+                unexpected_keys.add(t)
                 continue
-            if quantizer is not None and quantizer.param_needs_quantization(target_key):
+            if quantizer is not None and quantizer.param_needs_quantization(t):
                 # converter.quantization_operation[target_key] = quantizer.quantize_tensor
-                converter.quantization_operation[target_key] = Fp8Quantize()
+                converter.quantization_operation[t] = Fp8Quantize()
 
     # 2. Actually convert the ckpt
-    for group in by_conversion_pattern.values():
+    keys = list(by_conversion_pattern.keys()).copy()
+    for key in keys:
+        group = by_conversion_pattern.pop(key)
         converter = group.weight_converter
         operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
-        for layer_name, tensors_for_this_layer in group.collected_tensors.items(): # TODO I need a global TQDM :)
+        iterator = group.collected_tensors.items()
+        for layer_name, tensors_for_this_layer in iterator: # TODO I need a global TQDM :)
             concrete_target_keys = layer_name.split("|")
             if bool(set(concrete_target_keys) - unexpected_keys):
                 import time
@@ -700,7 +702,7 @@ def convert_and_load_state_dict_in_model(
                     try:
                         values = op(values)
                     except Exception as e:
-                        misc[layer_name] = (
+                        misc[f"conversion: {layer_name}"] = (
                             f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {values}"
                         )
 
@@ -715,13 +717,13 @@ def convert_and_load_state_dict_in_model(
                             misc[layer_name] += f"Failed to quantize with {op.__class__.__name__}: {e}"
                             continue
                 e = time.time()
-                print(layer_name, e-s)
                 for k, output_value in realized_value.items():
                     matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
                     if matched_dtype_pattern is not None:
                         op = Cast(keep_in_dtype[matched_dtype_pattern])
                         output_value = op(output_value)
 
+                    print(layer_name, e-s, output_value.device if not isinstance(output_value, list) else output_value[0].device)
                     set_param_for_module(
                         model,
                         k,
@@ -730,8 +732,9 @@ def convert_and_load_state_dict_in_model(
                         empty_tensor,
                         mismatch_keys,
                         missing_keys,
+                        misc
                     )
-
+        del group
         for op in operations:
             op.clear_cache()
     return by_conversion_pattern, missing_keys, unexpected_keys, mismatch_keys, misc

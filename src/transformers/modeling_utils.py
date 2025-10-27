@@ -4705,14 +4705,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         merged_state_dict = {}
         all_pointer = set()
 
-        pattern = re.compile(r'(' + '|'.join(map(re.escape, device_map.keys())) + r')')
+        keys = sorted(device_map.keys(), key=len, reverse=True)
+        pattern = re.compile(r'(' + '|'.join(map(re.escape, keys)) + r')')
         for k, v in sharded_metadata["weight_map"].items():
             key = pattern.match(k).group(1)
             if key is not None:
                 device = device_map[key]
             else:
                 device = device_map['']
-
             file_pointer = safe_open(
                 os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
             )
@@ -4807,7 +4807,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys=missing_keys,
             mismatched_keys=mismatched_keys,
             mismatched_shapes=mismatched_keys,
-            update_key_name=update_key_name,  # your existing function
             misc=misc,
         )
         disk_offload_index = None

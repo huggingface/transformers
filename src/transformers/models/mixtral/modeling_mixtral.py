@@ -83,7 +83,7 @@ class MixtralExperts(nn.Module):
                 continue
 
             current_state = hidden_states.index_select(0, token_positions)
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2)
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(up)
             current_hidden_states = current_hidden_states * gate
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
