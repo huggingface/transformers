@@ -17,7 +17,6 @@ from functools import partial
 from typing import Optional
 
 import torch
-import torch.nn.functional as F
 
 from .utils import (
     is_flash_dmattn_available,
@@ -99,7 +98,7 @@ def fdma_peft_integration_check(
     k: torch.Tensor,
     v: torch.Tensor,
     bias: Optional[torch.Tensor],
-    target_dtype: Optional[torch.dtype] = None
+    target_dtype: Optional[torch.dtype] = None,
 ):
     """
     PEFT usually casts the layer norms in float32 for training stability reasons
@@ -152,7 +151,7 @@ def _process_flash_dynamic_mask_attention_kwargs(
             A dict of kwargs that are requested and supported.
     """
     flash_kwargs = {
-        "is_causal": is_causal and not query_length == 1,
+        "is_causal": is_causal and query_length != 1,
         "softmax_scale": softmax_scale,
     }
 
