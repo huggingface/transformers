@@ -214,7 +214,7 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = MixtralAttention(config, layer_idx)
 
-        self.block_sparse_moe = MixtralSparseMoeBlock(config)
+        self.mlp = MixtralSparseMoeBlock(config)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -242,7 +242,7 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -254,7 +254,7 @@ class MixtralRotaryEmbedding(MistralRotaryEmbedding):
 class MixtralPreTrainedModel(MistralPreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="block_sparse_moe.gate", index=0),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
         "hidden_states": MixtralDecoderLayer,
         "attentions": MixtralAttention,
     }

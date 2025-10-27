@@ -462,7 +462,7 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = MiniMaxAttention(config, layer_idx)
 
-        self.block_sparse_moe = MiniMaxSparseMoeBlock(config)
+        self.mlp = MiniMaxSparseMoeBlock(config)
         self.input_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

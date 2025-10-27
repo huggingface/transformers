@@ -369,8 +369,10 @@ class To(ConversionOps):
     def __init__(self, device):
         self.device = device
 
-    def convert(self, realized_value):
-        return realized_value.to(self.device)
+    def convert(self, realized_value: list[list[PySafeSlice]]):
+        with torch.device(self.device):
+            out = [[x[:] for x in inner] if isinstance(inner, list) else inner[:] for inner in realized_value]
+        return out
 
 
 class DistributedOp(ConversionOps):  # all `distributed_operation` need to respect this
@@ -538,7 +540,7 @@ class Fp8Dequantize(QuantizationOp):
         return dequantized.reshape(quantized_fp32.shape)
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, weakref_slot=True)
 class WeightConverter:
     r"""
     A weight convert that acts on a pattern of source keys.
@@ -556,22 +558,13 @@ class WeightConverter:
     """
 
     source_keys: Union[str, list[str]]
-    target_keys: Optional[Union[str, list[str]]] = None
+    target_keys: Optional[Union[str, list[str]]] = []
+    operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
-    distributed_operation: Optional[dict[str, ConversionOps]] = None
-    quantization_operation: Optional[dict[str, ConversionOps]] = None
-    _operations: list[ConversionOps] = field(default_factory=list, repr=False)
+    distributed_operation: dict[str, ConversionOps] = field(default_factory=dict, compare=False, repr=False)
+    quantization_operation: dict[str, ConversionOps] = field(default_factory=dict, compare=False, repr=False)
     _compiled: tuple[tuple[str, re.Pattern], ...] = field(default_factory=tuple, compare=False, repr=False)
-
-    def __init__(
-        self, source_keys, target_keys=None, operations=None, distributed_operation=None, quantization_operation=None
-    ):
-        self.source_keys = source_keys
-        self.target_keys = target_keys
-        self.operations = operations
-        self.distributed_operation = distributed_operation
-        self.quantization_operation = quantization_operation
-        self.__post_init__()
+    _regex_pat: tuple[re.Pattern, dict[str, str]] = field(default_factory=tuple, compare=False, repr=False)
 
     def __post_init__(self):
         if not isinstance(self.source_keys, list):
@@ -582,19 +575,6 @@ class WeightConverter:
             else:
                 self.target_keys = [self.target_keys]
         self._regex_pat = build_glob_alt(self.source_keys)
-
-    @property
-    def operations(self) -> list[ConversionOps]:
-        return self._operations
-
-    @operations.setter
-    def operations(self, v: Union[None, ConversionOps, list[ConversionOps]]):
-        if v is None:
-            self._operations = []
-        elif isinstance(v, list):
-            self._operations = v
-        else:
-            self._operations = [v]
 
 
 def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, target_key, mismatch_keys, missing_keys):
@@ -611,12 +591,10 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, targe
     setattr(module_obj, param_name, param_value)
 
 
-@dataclass
+@dataclass(slots=True)
 class ConversionEntry:
     weight_converter: WeightConverter
     collected_tensors: dict = field(default_factory=lambda: defaultdict(dict))
-    matched_pattern: dict = field(default_factory=dict)
-    used_operations: dict = field(default_factory=lambda: defaultdict(list))
 
 
 def convert_and_load_state_dict_in_model(
@@ -655,91 +633,74 @@ def convert_and_load_state_dict_in_model(
     for original_key, tensor in state_dict.items():
         matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
         if matched_pattern is not None:
-            converter: WeightConverter = source_to_target[matched_pattern]
+            converter = source_to_target[matched_pattern]  # TODO make sure its the ref
             extractor = _compile_single_glob_for_extract(matched_pattern)
-            entry: ConversionEntry = by_conversion_pattern.setdefault(
-                "|".join(converter.target_keys), ConversionEntry(converter)
-            )
+            entry_key = "|".join(converter.target_keys)
+            entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
             sub_with_extractor = partial(re.sub, extractor, string=original_key)
             target_unique_key = "|".join(map(sub_with_extractor, converter.target_keys))
             converter_key = re.sub(extractor, matched_pattern, original_key)
-            if target_unique_key in entry.collected_tensors:
-                entry.collected_tensors[target_unique_key].setdefault(converter_key, []).append(tensor)
-            else:
-                entry.collected_tensors[target_unique_key] = {converter_key: [tensor]}
-            entry.matched_pattern[converter_key] = matched_pattern
+            entry.collected_tensors[target_unique_key].setdefault(converter_key, []).append(tensor)
         else:
             converter = WeightConverter(original_key)
-            converter_key = original_key
+            converter_key = entry_key = target_unique_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
             entry.collected_tensors[converter_key] = {converter_key: tensor}
 
-        for target_key in converter_key.split("|"):
-            if matched_tp_pattern := match_glob(target_key, tp_plan_alt, tp_plan_by_group_name):
-                if getattr(converter, "distributed_operation", None) is None:
-                    converter.distributed_operation[target_key] = ALL_PARALLEL_STYLES[
-                        model.tp_plan[matched_tp_pattern]
-                    ].shard_tensor
-            if getattr(converter, "quantization_operation", None) is None and quantizer.param_needs_quantization(
-                target_key
-            ):
+        if matched_tp_pattern := match_glob(converter.target_keys[0], tp_plan_alt, tp_plan_by_group_name):
+            if getattr(converter, "distributed_operation", None) is None:
+                converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
+
+        for target_key in entry_key.split("|"):
+            empty_tensor = meta_model_state_dict.get(target_key)
+            if empty_tensor is None:
+                unexpected_keys.add(target_key)
+                continue
+            if quantizer is not None and quantizer.param_needs_quantization(target_key):
+                # converter.quantization_operation[target_key] = quantizer.quantize_tensor
                 converter.quantization_operation[target_key] = Fp8Quantize()
 
     # 2. Actually convert the ckpt
     for group in by_conversion_pattern.values():
-        converter: WeightConverter = group.weight_converter
+        converter = group.weight_converter  # TODO make sure its a ref here
         for layer_name, tensors_for_this_layer in group.collected_tensors.items():
             concrete_target_keys = layer_name.split("|")
-
-            for target_key in concrete_target_keys:
-                empty_tensor = meta_model_state_dict.get(target_key)
-                if empty_tensor is None:
-                    unexpected_keys.add(target_key)
-                    continue
-
-                if op := converter.distributed_operation[target_key]:
+            if bool(set(concrete_target_keys) - unexpected_keys):
+                if op := converter.distributed_operation:
                     try:
                         values = op(tensors_for_this_layer.values())
-                        group.used_operations[target_key].append(converter.distributed_operation)
                     except Exception as e:
                         misc[target_key] = f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
                         continue
-                else:
-                    values = list(tensors_for_this_layer.values())
+                elif device_map is not None:
+                    op = To(device_map[layer_name]) if layer_name in device_map else To(device_map[""])
+                    values = op.convert(tensors_for_this_layer.values())
 
-            if bool(set(concrete_target_keys) - unexpected_keys):
                 for op in converter.operations:
                     try:
                         values = op.convert(values)
-                        group.used_operations[target_key].append(op)
                     except Exception as e:
-                        message = f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {tensors_for_this_layer}"
-                        misc[target_key] = message
+                        misc[target_key] = (
+                            f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {tensors_for_this_layer}"
+                        )
 
                 values = [values] if not isinstance(values, list) else values
                 realized_value = {k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys}
 
-                if quantizer is not None:
-                    for k in realized_value.keys():
-                        if op := converter.quantization_operation[k]:
-                            try:
-                                realized_value.update(op(realized_value[k]))
-                                group.used_operations[target_key].append(op)
-                            except Exception as e:
-                                misc[target_key] += f"Failed to quantize with {op.__class__.__name__}: {e}"
-                                continue
+                for k in realized_value.keys():
+                    if op := converter.quantization_operation.get(k):
+                        try:
+                            realized_value.update(op(realized_value[k]))
+                        except Exception as e:
+                            misc[target_key] += f"Failed to quantize with {op.__class__.__name__}: {e}"
+                            continue
 
                 for k, output_value in realized_value.items():
-                    if k in device_map:
-                        op = To(device_map[target_key])
-                        output_value = op.convert(output_value)
-                        group.used_operations[k].append(op)
-
                     matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
                     if matched_dtype_pattern is not None:
                         op = Cast(keep_in_dtype[matched_dtype_pattern])
                         output_value = op.convert(output_value)
-                        group.used_operations[k].append(op)
+
                     set_param_for_module(
                         model,
                         k,
@@ -751,129 +712,6 @@ def convert_and_load_state_dict_in_model(
                         missing_keys,
                     )
 
-        for op in group.used_operations.values():
+        for op in converter.operations:
             op.clear_cache()
     return by_conversion_pattern, missing_keys, unexpected_keys, mismatch_keys, misc
-
-
-ANSI = {
-    "reset": "\033[0m",
-    "red": "\033[31m",
-    "yellow": "\033[33m",
-    "orange": "\033[38;5;208m",  # 256-color "orange"
-    "bold": "\033[1m",
-    "italic": "\033[3m",
-    "dim": "\033[2m",
-}
-
-_ansi_re = re.compile(r"\x1b\[[0-9;]*m")
-
-
-def _strip_ansi(s: str) -> str:
-    return _ansi_re.sub("", str(s))
-
-
-def _pad(text, width):
-    t = str(text)
-    pad = max(0, width - len(_strip_ansi(t)))
-    return t + " " * pad
-
-
-def _make_table(rows, headers):
-    # compute display widths while ignoring ANSI codes
-    cols = list(zip(*([headers] + rows))) if rows else [headers]
-    widths = [max(len(_strip_ansi(x)) for x in col) for col in cols]
-    header_line = " | ".join(_pad(h, w) for h, w in zip(headers, widths))
-    sep_line = "-+-".join("-" * w for w in widths)
-    body = [" | ".join(_pad(c, w) for c, w in zip(r, widths)) for r in rows]
-    return "\n".join([header_line, sep_line] + body)
-
-
-def _color(s, color):
-    return f"{ANSI[color]}{s}{ANSI['reset']}"
-
-
-def _chunk(items, limit=200):
-    it = list(items)
-    if len(it) <= limit:
-        return it, 0
-    return it[:limit], len(it) - limit
-
-
-def log_state_dict_report(
-    *,
-    model,
-    pretrained_model_name_or_path,
-    logger,
-    error_msgs,
-    unexpected_keys,
-    missing_keys,
-    mismatched_keys,
-    mismatched_shapes,
-    misc=None,
-    update_key_name=lambda x: x,  # keep your mapper
-    limit_rows=200,  # safety for huge checkpoints
-    color=True,  # allow disabling for plain logs
-):
-    if error_msgs:
-        error_msg = "\n\t".join(error_msgs)
-        if "size mismatch" in error_msg:
-            error_msg += (
-                "\n\tYou may consider adding `ignore_mismatched_sizes=True` to `from_pretrained(...)` if appropriate."
-            )
-        raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
-
-    rows = []
-    if unexpected_keys:
-        keys, extra = _chunk(update_key_name(unexpected_keys), limit_rows)
-        for k in keys:
-            status = "UNEXPECTED"
-            status = _color(status, "orange") if color else status
-            rows.append([k, status, ""])
-
-    if missing_keys:
-        keys, extra = _chunk(update_key_name(missing_keys), max(0, limit_rows - len(rows)))
-        for k in keys:
-            status = "MISSING"
-            status = _color(status, "red") if color else status
-            rows.append([k, status, ""])
-
-    if mismatched_keys:
-        remaining = max(0, limit_rows - len(rows))
-        pairs = list(zip(mismatched_keys, mismatched_shapes))
-        pairs, extra = _chunk(pairs, remaining if remaining else len(pairs))
-        for key, (shape_ckpt, shape_model) in pairs:
-            status = "MISMATCH"
-            status = _color(status, "yellow") if color else status
-            rows.append(
-                [key, status, "Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"]
-            )
-
-    if misc:
-        for k in misc:
-            status = "MISC"
-            status = _color(status, "red") if color else status
-            rows.append([k, status, misc[k]])
-
-    if not rows:
-        logger.info(
-            f"No key issues when initializing {model.__class__.__name__} from {pretrained_model_name_or_path}."
-        )
-        return
-
-    headers = ["Key", "Status", "Checkpoint shape", "Details"]
-    table = _make_table(rows, headers=headers)
-
-    prelude = (
-        f"{ANSI['bold']}{model.__class__.__name__} LOAD REPORT{ANSI['reset']} from: {pretrained_model_name_or_path}\n"
-    )
-    tips = (
-        f"{ANSI['italic']}Notes:\n"
-        f"- {_color('UNEXPECTED', 'orange') + ANSI['italic']}: can be ignored when loading from different task/architecture; not ok if you expect identical arch.\n"
-        f"- {_color('MISSING', 'red') + ANSI['italic']}: those params were newly initialized; consider training on your downstream task.\n"
-        f"- {_color('MISSMATCH', 'yellow') + ANSI['italic']}: if intentional, use "
-        f"- {_color('MISC', 'yellow') + ANSI['italic']}: originate from the conversion scheme"
-        f"{ANSI['reset']}"
-    )
-
-    logger.warning(f"{prelude}{table}\n{tips}")

@@ -46,7 +46,7 @@ from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import _checkpoint_conversion_mapping as DEFAULT_WEIGHT_CONVERSION_MAPPING
-from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model, log_state_dict_report
+from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
@@ -124,6 +124,7 @@ from .utils.import_utils import (
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
 )
+from .utils.loading_report import log_state_dict_report
 from .utils.quantization_config import QuantizationMethod
 
 
@@ -4747,7 +4748,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
-        model._move_missing_keys_from_meta_to_cpu(list(missing_keys) + mismatched_keys, dtype, hf_quantizer)
+        model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(list(missing_keys) + mismatched_keys, is_quantized)
