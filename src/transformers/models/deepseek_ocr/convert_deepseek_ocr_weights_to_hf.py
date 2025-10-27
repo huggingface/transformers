@@ -33,15 +33,17 @@ from transformers import (
 CHAT_TEMPLATE = dedent(
     """
     {%- for message in messages %}
-        {%- set role = message['role'] | lower %}
         {%- if message['content'] is string %}
-{{ message['content'] }}
+{{ message['content'].rstrip() }}
         {%- else %}
+            {%- set ns = namespace(previous_was_image=False) %}
             {%- for content in message['content'] %}
-                {%- if content['type'] == 'text' %}
-{{ content['text'] }}
-                {%- elif content['type'] == 'image' %}
+                {%- if content['type'] == 'image' %}
 <image>
+                    {%- set ns.previous_was_image = True %}
+                {%- elif content['type'] == 'text' %}
+{{- ('\n' if ns.previous_was_image else '') + content['text'].rstrip() }}
+                    {%- set ns.previous_was_image = False %}
                 {%- endif %}
             {%- endfor %}
         {%- endif %}
@@ -49,9 +51,6 @@ CHAT_TEMPLATE = dedent(
 
         {%- endif %}
     {%- endfor %}
-    {%- if add_generation_prompt %}
-<|Assistant|>
-    {%- endif %}
     """
 ).strip()
 
