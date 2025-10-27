@@ -4134,19 +4134,19 @@ class Trainer:
                 logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
                 shutil.rmtree(checkpoint, ignore_errors=True)
             return  # Exit after handling save_total_limit
-        
+
         # --- NEW FUNCTIONALITY: Separate limits for checkpoints and model weights ---
         ckpt_limit = self.args.save_checkpoint_limit
         model_limit = self.args.save_model_limit
-        
+
         # If neither new limit is set, nothing to do
         if not any([(ckpt_limit and ckpt_limit > 0), (model_limit and model_limit > 0)]):
             return
-        
+
         checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime, output_dir=output_dir)
         if not checkpoints_sorted:
             return
-        
+
         # Delete old model weight files FIRST (before deleting checkpoint directories)
         if model_limit and model_limit > 0:
             model_files = []
@@ -4156,12 +4156,13 @@ class Trainer:
                 try:
                     for f in os.listdir(ckpt):
                         # Match model weight files: pytorch_model.bin, model.safetensors, etc.
-                        if (f.startswith("pytorch_model") and f.endswith(".bin")) or \
-                        (f.startswith("model") and f.endswith(".safetensors")):
+                        if (f.startswith("pytorch_model") and f.endswith(".bin")) or (
+                            f.startswith("model") and f.endswith(".safetensors")
+                        ):
                             model_files.append(os.path.join(ckpt, f))
                 except (OSError, FileNotFoundError):
                     continue
-            
+
             # Delete oldest model files if over limit
             if len(model_files) > model_limit:
                 num_to_delete = len(model_files) - model_limit
@@ -4172,7 +4173,7 @@ class Trainer:
                             os.remove(model_path)
                         except Exception as e:
                             logger.warning(f"Failed to delete {model_path}: {e}")
-    
+
         # Delete old full checkpoint directories
         if ckpt_limit and ckpt_limit > 0:
             if len(checkpoints_sorted) > ckpt_limit:
@@ -4181,6 +4182,7 @@ class Trainer:
                 for ckpt in checkpoints_to_delete:
                     logger.info(f"Deleting full checkpoint [{ckpt}] due to save_checkpoint_limit")
                     shutil.rmtree(ckpt, ignore_errors=True)
+
     def evaluate(
         self,
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
