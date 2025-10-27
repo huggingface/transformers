@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_vibevoice import *
     from .feature_extraction_vibevoice import *
     from .modeling_vibevoice import *
-    # from .modeling_vibevoice_inference import *     # TODO (ebezzam) single modeling file
     from .processing_vibevoice import *
     from .tokenization_vibevoice import *
 else:
