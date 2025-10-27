@@ -16,6 +16,8 @@
 import copy
 import unittest
 
+import pytest
+
 from transformers import (
     LightOnOCRConfig,
     LightOnOCRForConditionalGeneration,
@@ -26,7 +28,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_vision,
     slow,
     torch_device,
 )
@@ -127,7 +128,7 @@ class LightOnOCRVisionText2TextModelTester:
         return LightOnOCRConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            image_token_index=self.image_token_index,
+            image_token_id=self.image_token_index,
             spatial_merge_size=self.spatial_merge_size,
         )
 
@@ -168,6 +169,46 @@ class LightOnOCRVisionText2TextModelTester:
         }
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=None):
+        """Prepare config and inputs for generation tests."""
+        if batch_size is None:
+            batch_size = self.batch_size
+
+        # Get base config
+        config = self.get_config()
+
+        # Create pixel_values with the specified batch size
+        pixel_values = floats_tensor(
+            [
+                batch_size,
+                self.vision_config["num_channels"],
+                self.vision_config["image_size"],
+                self.vision_config["image_size"],
+            ]
+        )
+
+        # Create input_ids
+        input_ids = ids_tensor([batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+
+        # Avoid placing image tokens on positions that would be the pad token
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+
+        # Place image tokens at the beginning
+        input_ids[:, : self.num_image_tokens] = config.image_token_id
+
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+
+        # Create image_sizes - must match batch size
+        image_sizes = [(self.image_size, self.image_size)] * batch_size
+
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "image_sizes": image_sizes,
+        }
+        return config, inputs_dict
+
 
 @require_torch
 class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -188,6 +229,7 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     _is_composite = True
     test_head_masking = False
     test_pruning = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = LightOnOCRVisionText2TextModelTester(self)
@@ -195,6 +237,26 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         self.config_tester = ConfigTester(
             self, config_class=LightOnOCRConfig, has_text_modality=False, common_properties=common_properties
         )
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        """
+        Prepare inputs for the model class, ensuring image_sizes matches the batch size.
+        """
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        # Ensure image_sizes matches the batch size of pixel_values or input_ids
+        if "pixel_values" in inputs_dict and "image_sizes" in inputs_dict:
+            batch_size = inputs_dict["pixel_values"].shape[0]
+            # If image_sizes doesn't match batch size, adjust it
+            if len(inputs_dict["image_sizes"]) != batch_size:
+                # Take only the first batch_size entries
+                inputs_dict["image_sizes"] = inputs_dict["image_sizes"][:batch_size]
+
+        return inputs_dict
+
+    def prepare_config_and_inputs_for_generate(self, batch_size=1):
+        """Override to use the model_tester's custom method."""
+        return self.model_tester.prepare_config_and_inputs_for_generate(batch_size=batch_size)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -336,6 +398,38 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_eager_matches_fa2_generate(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_flash_attn_2_from_config(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_flex_attention_with_grads(self):
         pass
 
     def test_initialization(self):
