@@ -6170,3 +6170,45 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
                 self.assertIsInstance(module, torch.nn.Embedding)
                 self.assertEqual(name, "weight")
                 self.assertDictEqual(config, {"optim_bits": 32})
+    def test_separate_checkpoint_limits(tmp_path):
+        """Test that separate checkpoint and model weight limits work correctly."""
+        from transformers import Trainer, TrainingArguments, AutoModelForSequenceClassification
+        from datasets import load_dataset
+        import glob
+        import os
+        
+        model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+        dataset = load_dataset("glue", "sst2", split="train[:100]")  # Slightly larger to ensure multiple saves
+        
+        args = TrainingArguments(
+            output_dir=str(tmp_path),
+            save_strategy="steps",
+            save_steps=10,  # Save every 10 steps
+            max_steps=50,  # Train for 50 steps (will create ~5 checkpoints)
+            save_checkpoint_limit=2,  # Keep only 2 full checkpoints
+            save_model_limit=4,  # Keep 4 model weight files
+            logging_steps=10,
+            evaluation_strategy="no",  # Disable eval to speed up test
+            report_to="none",  # Disable reporting
+        )
+        
+        trainer = Trainer(
+            model=model,
+            args=args,
+            train_dataset=dataset,
+        )
+        
+        trainer.train()
+        
+        # Check checkpoint directories
+        ckpt_dirs = sorted(glob.glob(os.path.join(tmp_path, "checkpoint-*")))
+        assert len(ckpt_dirs) == 2, f"Expected exactly 2 checkpoints, found {len(ckpt_dirs)}: {ckpt_dirs}"
+        
+        # Check model weight files
+        model_bins = glob.glob(os.path.join(tmp_path, "checkpoint-*/pytorch_model*.bin"))
+        assert len(model_bins) == 4, f"Expected exactly 4 model weight files, found {len(model_bins)}"
+        
+        # Verify the kept checkpoints are the most recent ones
+        assert "checkpoint-50" in ckpt_dirs[-1], "Latest checkpoint should be kept"
+        assert "checkpoint-40" in ckpt_dirs[-2], "Second-latest checkpoint should be kept"
+

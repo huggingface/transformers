@@ -341,6 +341,25 @@ class TrainingArguments:
             `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be retained
             alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`, it is possible that two
             checkpoints are saved: the last one and the best one (if they are different).
+        save_checkpoint_limit (`int`, *optional*):
+            If a value is passed, will limit the total number of full checkpoints to keep. Deletes the older 
+            checkpoints in `output_dir`. A full checkpoint includes model weights, optimizer states, scheduler 
+            states, and RNG states. This is useful when you want to keep fewer complete checkpoints while 
+            potentially keeping more model weight files (see `save_model_limit`).
+            
+            **Note**: If `save_total_limit` is also set, `save_total_limit` takes precedence for backward 
+            compatibility, and this parameter is ignored.
+        save_model_limit (`int`, *optional*):
+            If a value is passed, will limit the total number of model weight files to keep. Only deletes the 
+            model weight files (pytorch_model.bin, model.safetensors, etc.) from older checkpoints, leaving the 
+            rest of the checkpoint directory intact. This allows retaining more model snapshots for evaluation 
+            while using less storage than full checkpoints.
+            
+            **Note**: If `save_total_limit` is also set, `save_total_limit` takes precedence for backward 
+            compatibility, and this parameter is ignored.
+            
+            **Example use case**: Set `save_checkpoint_limit=2` to keep only the 2 most recent full checkpoints 
+            for training resumption, and `save_model_limit=10` to keep 10 model weight files for evaluation.
         save_safetensors (`bool`, *optional*, defaults to `True`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
             default `torch.load` and `torch.save`.
@@ -919,6 +938,30 @@ class TrainingArguments:
                 " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
                 " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
                 " Default is unlimited checkpoints"
+            )
+        },
+    )
+    save_checkpoint_limit: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "If a value is passed, will limit the total number of full checkpoints (including "
+                "optimizer states, scheduler states, and RNG states). Deletes the older full checkpoints "
+                "in `output_dir`. This is independent of `save_total_limit`. If both this and "
+                "`save_total_limit` are set, `save_total_limit` takes precedence for backward compatibility."
+            )
+        },
+    )
+    save_model_limit: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "If a value is passed, will limit the total number of model weight files "
+                "(e.g., pytorch_model.bin, model.safetensors) to keep. This allows keeping more "
+                "lightweight model weights for analysis while maintaining fewer full checkpoints. "
+                "Note: This only deletes the model weight files, not the entire checkpoint directories. "
+                "If both this and `save_total_limit` are set, `save_total_limit` takes precedence "
+                "for backward compatibility."
             )
         },
     )
