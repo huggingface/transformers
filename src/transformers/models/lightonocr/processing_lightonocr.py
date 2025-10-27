@@ -22,7 +22,7 @@ class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
-            "patch_size": None,  # Will be set from processor config
+            "patch_size": 14,
         },
         "common_kwargs": {
             "return_tensors": "pt",

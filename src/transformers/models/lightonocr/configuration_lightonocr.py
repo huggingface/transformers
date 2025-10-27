@@ -7,7 +7,7 @@
 from typing import Any, Optional
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class LightOnOCRTextConfig(PreTrainedConfig):
@@ -55,45 +55,10 @@ class LightOnOCRTextConfig(PreTrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
@@ -139,30 +104,32 @@ class LightOnOCRTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    # Remove unused attributes inherited from Qwen3Config
+    max_window_layers = None
+    use_sliding_window = None
 
     def __init__(
         self,
-        vocab_size=151936,
-        hidden_size=4096,
-        intermediate_size=22016,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        use_sliding_window=False,
-        sliding_window=4096,
-        max_window_layers=28,
-        layer_types=None,
-        attention_dropout=0.0,
+        vocab_size: Optional[int] = 151936,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 22016,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        head_dim: Optional[int] = 128,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        use_sliding_window: Optional[bool] = False,
+        sliding_window: Optional[int] = 4096,
+        max_window_layers: Optional[int] = 28,
+        layer_types: Optional[list[str]] = None,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -185,15 +152,11 @@ class LightOnOCRTextConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -204,6 +167,11 @@ class LightOnOCRTextConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
@@ -241,8 +209,8 @@ class LightOnOCRVisionConfig(PreTrainedConfig):
             Activation function used in the hidden layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the attention layers.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            The RopeParameters
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -265,17 +233,17 @@ class LightOnOCRVisionConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        hidden_size=1024,
-        intermediate_size=4096,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=1024,
-        patch_size=16,
-        hidden_act="gelu",
-        attention_dropout=0.0,
-        rope_theta=10000.0,
-        initializer_range=0.02,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 4096,
+        num_hidden_layers: Optional[int] = 24,
+        num_attention_heads: Optional[int] = 16,
+        num_channels: Optional[int] = 3,
+        image_size: Optional[int] = 1024,
+        patch_size: Optional[int] = 16,
+        hidden_act: Optional[str] = "gelu",
+        attention_dropout: Optional[float] = 0.0,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -289,9 +257,16 @@ class LightOnOCRVisionConfig(PreTrainedConfig):
         self.image_size = image_size
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
-        self.rope_theta = rope_theta
         self.head_dim = hidden_size // num_attention_heads
         self.initializer_range = initializer_range
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
 
 class LightOnOCRConfig(PretrainedConfig):
@@ -300,13 +275,12 @@ class LightOnOCRConfig(PretrainedConfig):
     LightOnOCR model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will yield
+    a similar configuration to that of the LightOnOCR [lightonocr-hf/lightonocr-9b](https://huggingface.co/lightonocr-hf/lightonocr-9b) architecture.
 
     Args:
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The size of spatial merging for image patches.
-        image_token_index (`int`, *optional*, defaults to 151655):
-            The token index used to represent image tokens.
         vision_config (`dict` or `LightOnOCRVisionConfig`, *optional*):
             Custom vision configuration or dictionary with vision configuration values.
         text_config (`dict` or `LightOnOCRTextConfig`, *optional*):
@@ -391,41 +365,6 @@ class LightOnOCRConfig(PretrainedConfig):
             self.text_config = LightOnOCRTextConfig(**text_config)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
-
-    @property
-    def vocab_size(self):
-        """Get vocab size from text config for generation."""
-        return self.text_config.vocab_size
-
-    @property
-    def hidden_size(self):
-        """Get hidden size from text config."""
-        return self.text_config.hidden_size
-
-    @hidden_size.setter
-    def hidden_size(self, value):
-        """Set hidden size in text config."""
-        self.text_config.hidden_size = value
-
-    @property
-    def num_attention_heads(self):
-        """Get num attention heads from text config."""
-        return self.text_config.num_attention_heads
-
-    @num_attention_heads.setter
-    def num_attention_heads(self, value):
-        """Set num attention heads in text config."""
-        self.text_config.num_attention_heads = value
-
-    @property
-    def num_hidden_layers(self):
-        """Get num hidden layers from text config."""
-        return self.text_config.num_hidden_layers
-
-    @num_hidden_layers.setter
-    def num_hidden_layers(self, value):
-        """Set num hidden layers in text config."""
-        self.text_config.num_hidden_layers = value
 
 
 __all__ = ["LightOnOCRConfig"]
