@@ -153,7 +153,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("falcon_mamba", "FalconMambaModel"),
         ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
-        ("fgclip2","Fgclip2Model"),
+        ("fgclip2", "Fgclip2Model"),
         ("fgclip2_vision_model", "Fgclip2VisionModel"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),

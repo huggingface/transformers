@@ -37,13 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    filter_out_non_signature_kwargs,
-)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
 from ...utils.generic import check_model_inputs
 from .configuration_fgclip2 import Fgclip2Config, Fgclip2TextConfig, Fgclip2VisionConfig
 
@@ -98,12 +92,8 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
-        query.dtype
-    )
-    attn_weights = nn.functional.dropout(
-        attn_weights, p=dropout, training=module.training
-    )
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -148,21 +138,13 @@ class Fgclip2Attention(nn.Module):
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
-        queries = queries.view(
-            batch_size, seq_length, self.num_heads, self.head_dim
-        ).transpose(1, 2)
-        keys = keys.view(
-            batch_size, seq_length, self.num_heads, self.head_dim
-        ).transpose(1, 2)
-        values = values.view(
-            batch_size, seq_length, self.num_heads, self.head_dim
-        ).transpose(1, 2)
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[
-                self.config._attn_implementation
-            ]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -175,9 +157,7 @@ class Fgclip2Attention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(
-            batch_size, seq_length, embed_dim
-        ).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -264,11 +244,7 @@ class Fgclip2Output(ModelOutput):
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
-            (
-                self[k]
-                if k not in ["text_model_output", "vision_model_output"]
-                else getattr(self, k).to_tuple()
-            )
+            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
 
@@ -338,9 +314,7 @@ class Fgclip2VisionEmbeddings(nn.Module):
             )
 
             # (1, dim, target_height, target_width) -> (target_height * target_width, dim)
-            resized_embeddings = resized_embeddings.reshape(
-                embed_dim, height * width
-            ).transpose(0, 1)
+            resized_embeddings = resized_embeddings.reshape(embed_dim, height * width).transpose(0, 1)
 
             # Cast to original dtype
             resized_embeddings = resized_embeddings.to(source_dtype)
@@ -350,9 +324,7 @@ class Fgclip2VisionEmbeddings(nn.Module):
 
         return resulted_positional_embeddings
 
-    def forward(
-        self, pixel_values: torch.FloatTensor, spatial_shapes: torch.LongTensor
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.FloatTensor`):
@@ -390,9 +362,7 @@ class Fgclip2Encoder(nn.Module):
     def __init__(self, config: Fgclip2Config):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList(
-            [Fgclip2EncoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([Fgclip2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     # Ignore copy
@@ -423,9 +393,7 @@ class Fgclip2VisionTransformer(nn.Module):
         self.embeddings = Fgclip2VisionEmbeddings(config)
         self.encoder = Fgclip2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = (
-            True if not hasattr(config, "vision_use_head") else config.vision_use_head
-        )
+        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = Fgclip2MultiheadAttentionPoolingHead(config)
 
@@ -442,27 +410,16 @@ class Fgclip2VisionTransformer(nn.Module):
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
         """
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
-        if (
-            attention_mask is not None
-            and self.config._attn_implementation != "flash_attention_2"
-        ):
+        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                attention_mask, hidden_states.dtype
-            )
+            encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
         else:
             encoder_attention_mask = attention_mask
 
@@ -476,9 +433,7 @@ class Fgclip2VisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        pooler_output = (
-            self.head(last_hidden_state, attention_mask) if self.use_head else None
-        )
+        pooler_output = self.head(last_hidden_state, attention_mask) if self.use_head else None
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -658,15 +613,11 @@ class Fgclip2TextEmbeddings(nn.Module):
         embed_dim = config.hidden_size
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Embedding(
-            config.max_position_embeddings, embed_dim
-        )
+        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
-            "position_ids",
-            torch.arange(config.max_position_embeddings).expand((1, -1)),
-            persistent=False,
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
         keep_len = config.keep_len
@@ -681,9 +632,7 @@ class Fgclip2TextEmbeddings(nn.Module):
         self.mask2[keep_len:, :] = 1
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(longtext_len).expand((1, -1)), persistent=False
-        )
+        self.register_buffer("position_ids", torch.arange(longtext_len).expand((1, -1)), persistent=False)
 
     def forward(
         self,
@@ -700,9 +649,7 @@ class Fgclip2TextEmbeddings(nn.Module):
             Assumes compact semantic structure and local dependency dominance.
         """
 
-        seq_length = (
-            input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
-        )
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
@@ -771,9 +718,7 @@ class Fgclip2TextTransformer(nn.Module):
         # Validate walk_type
         walk_type = walk_type.lower()
         if walk_type not in ["short", "box", "long"]:
-            raise ValueError(
-                f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'."
-            )
+            raise ValueError(f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'.")
 
         # Convert walk_type to boolean flags for internal logic
         walk_short = walk_type == "short"
@@ -794,9 +739,7 @@ class Fgclip2TextTransformer(nn.Module):
             attention_mask = None
         elif attention_mask is not None and not uses_flash_attention:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(
-                attention_mask, hidden_states.dtype
-            )
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
@@ -890,30 +833,22 @@ class Fgclip2MultiheadAttentionPoolingHead(nn.Module):
         super().__init__()
 
         self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.attention = torch.nn.MultiheadAttention(
-            config.hidden_size, config.num_attention_heads, batch_first=True
-        )
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Fgclip2MLP(config)
         self.num_heads = config.num_attention_heads
 
-    def forward(
-        self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
         if attention_mask is not None:
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = _prepare_4d_attention_mask(
-                attention_mask, hidden_state.dtype, target_len
-            )
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
             attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
             attention_mask = attention_mask.reshape(-1, target_len, source_len)
 
-        hidden_state = self.attention(
-            probe, hidden_state, hidden_state, attn_mask=attention_mask
-        )[0]
+        hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
 
         residual = hidden_state
         hidden_state = self.layernorm(hidden_state)
@@ -1083,9 +1018,7 @@ class Fgclip2Model(Fgclip2PreTrainedModel):
         walk_type = walk_type.lower()
 
         if walk_type not in ["short", "box", "long"]:
-            raise ValueError(
-                f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'."
-            )
+            raise ValueError(f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'.")
 
         walk_short = walk_type == "short"
         walk_box = walk_type == "box"
@@ -1221,24 +1154,16 @@ class Fgclip2Model(Fgclip2PreTrainedModel):
         walk_type = walk_type.lower()
 
         if walk_type not in ["short", "box", "long"]:
-            raise ValueError(
-                f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'."
-            )
+            raise ValueError(f"Invalid `walk_type`: {walk_type}. Must be one of 'short', 'box', 'long'.")
 
         walk_short = walk_type == "short"
         walk_box = walk_type == "box"
         walk_long = walk_type == "long"
 
         # Use Fgclip2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
@@ -1274,13 +1199,9 @@ class Fgclip2Model(Fgclip2PreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text = torch.matmul(
-            text_embeds, image_embeds.t().to(text_embeds.device)
-        )
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
 
-        logit_scale, logit_bias = self.logit_scale.to(
-            text_embeds.device
-        ), self.logit_bias.to(text_embeds.device)
+        logit_scale, logit_bias = self.logit_scale.to(text_embeds.device), self.logit_bias.to(text_embeds.device)
         logits_per_text = logits_per_text * logit_scale.exp() + logit_bias
 
         logits_per_image = logits_per_text.t()
@@ -1339,17 +1260,13 @@ class Fgclip2Model(Fgclip2PreTrainedModel):
 
         if attention_mask is not None:
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = _prepare_4d_attention_mask(
-                attention_mask, hidden_state.dtype, target_len
-            )
-            attention_mask = attention_mask.repeat(
-                1, self.dense_feature_head.num_heads, 1, 1
-            )
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
+            attention_mask = attention_mask.repeat(1, self.dense_feature_head.num_heads, 1, 1)
             attention_mask = attention_mask.reshape(-1, target_len, source_len)
 
-        hidden_state = self.dense_feature_head.attention(
-            probe, hidden_state, hidden_state, attn_mask=attention_mask
-        )[0]
+        hidden_state = self.dense_feature_head.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[
+            0
+        ]
         residual = hidden_state
         hidden_state = self.dense_feature_head.layernorm(hidden_state)
         hidden_state = residual + self.dense_feature_head.mlp(hidden_state)
@@ -1434,17 +1351,13 @@ class Fgclip2Model(Fgclip2PreTrainedModel):
             bboxes = region_infos[i]
 
             if not bboxes:
-                all_region_features.append(
-                    torch.empty(0, hidden_dim, device=dense_feature_map.device)
-                )
+                all_region_features.append(torch.empty(0, hidden_dim, device=dense_feature_map.device))
                 continue
 
             # Reshape to (1, C, H', W')
             num_valid = h * w
             feat_seq = dense_feature_map[i, :num_valid]  # (num_valid, D)
-            feat_map = (
-                feat_seq.view(h, w, hidden_dim).permute(2, 0, 1).unsqueeze(0)
-            )  # (1, D, H', W')
+            feat_map = feat_seq.view(h, w, hidden_dim).permute(2, 0, 1).unsqueeze(0)  # (1, D, H', W')
 
             # Normalize bboxes to feature map coordinates
             rois = []
@@ -1454,9 +1367,7 @@ class Fgclip2Model(Fgclip2PreTrainedModel):
                 nx2 = (x2 / img_w) * w
                 ny2 = (y2 / img_h) * h
                 rois.append([0, nx1, ny1, nx2, ny2])  #
-            rois_tensor = torch.tensor(
-                rois, dtype=torch.float32, device=feat_map.device
-            )  # (N, 5)
+            rois_tensor = torch.tensor(rois, dtype=torch.float32, device=feat_map.device)  # (N, 5)
 
             # RoI Align on single image
             pooled = roi_align(
@@ -1474,9 +1385,4 @@ class Fgclip2Model(Fgclip2PreTrainedModel):
         return all_region_features
 
 
-__all__ = [
-    "Fgclip2Model",
-    "Fgclip2PreTrainedModel",
-    "Fgclip2TextModel",
-    "Fgclip2VisionModel",
-]
+__all__ = ["Fgclip2Model", "Fgclip2PreTrainedModel", "Fgclip2TextModel", "Fgclip2VisionModel"]

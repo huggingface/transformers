@@ -142,18 +142,14 @@ class Fgclip2ImageProcessingTester:
         ]
 
         if self.dynamic_max_patches:
-            candidate_values = [
-                _determine_max_value(img, patch_size=self.patch_size) for img in images
-            ]
+            candidate_values = [_determine_max_value(img, patch_size=self.patch_size) for img in images]
             max_num_patches = max(candidate_values)
         else:
             max_num_patches = self.max_num_patches
 
         return max_num_patches, self.patch_size * self.patch_size * self.num_channels
 
-    def prepare_image_inputs(
-        self, equal_resolution=False, numpify=False, torchify=False
-    ):
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -170,10 +166,7 @@ class Fgclip2ImageProcessingTester:
 # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest with CLIP->Fgclip2
 class Fgclip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Fgclip2ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = (
-        Fgclip2ImageProcessorFast if is_torchvision_available() else None
-    )
-    # fast_image_processing_class = None  # will be None → skip fast tests
+    fast_image_processing_class = Fgclip2ImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -201,9 +194,7 @@ class Fgclip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # Ignore copy
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict
-            )
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.max_num_patches, 256)
             self.assertEqual(image_processor.patch_size, 16)
             self.assertEqual(image_processor.dynamic_max_patches, True)
@@ -228,27 +219,16 @@ class Fgclip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        if (
-            self.image_processing_class is None
-            or self.fast_image_processing_class is None
-        ):
-            self.skipTest(
-                reason="Skipping slow/fast equivalence test as one of the image processors is not defined"
-            )
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        dummy_image = load_image(
-            url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(
-            **self.image_processor_dict
-        )
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.pixel_values, encoding_fast.pixel_values
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     # increase mean tolerance to 1e-3 -> 2e-3
     # Ignore copy
@@ -256,33 +236,19 @@ class Fgclip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        if (
-            self.image_processing_class is None
-            or self.fast_image_processing_class is None
-        ):
-            self.skipTest(
-                reason="Skipping slow/fast equivalence test as one of the image processors is not defined"
-            )
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        if (
-            hasattr(self.image_processor_tester, "do_center_crop")
-            and self.image_processor_tester.do_center_crop
-        ):
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(
-            equal_resolution=False, torchify=True
-        )
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(
-            **self.image_processor_dict
-        )
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.pixel_values, encoding_fast.pixel_values
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)

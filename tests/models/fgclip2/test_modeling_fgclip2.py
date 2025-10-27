@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Fgclip2 model."""
 
-
 import inspect
 import tempfile
 import unittest
@@ -64,9 +63,7 @@ if is_vision_available():
 class Fgclip2ModelTesterMixin(ModelTesterMixin):
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
-            config, inputs_dict = (
-                self.model_tester.prepare_config_and_inputs_for_common()
-            )
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -82,20 +79,12 @@ class Fgclip2ModelTesterMixin(ModelTesterMixin):
                 )
 
             if hasattr(model_sdpa, "vision_model"):
-                self.assertTrue(
-                    model_sdpa.vision_model.config._attn_implementation == "sdpa"
-                )
-                self.assertTrue(
-                    model_eager.vision_model.config._attn_implementation == "eager"
-                )
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
 
             if hasattr(model_sdpa, "text_model"):
-                self.assertTrue(
-                    model_sdpa.text_model.config._attn_implementation == "sdpa"
-                )
-                self.assertTrue(
-                    model_eager.text_model.config._attn_implementation == "eager"
-                )
+                self.assertTrue(model_sdpa.text_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
 
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_eager.config._attn_implementation == "eager")
@@ -109,14 +98,10 @@ class Fgclip2ModelTesterMixin(ModelTesterMixin):
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn:
-                self.skipTest(
-                    f"{model_class.__name__} does not support Flash Attention 2"
-                )
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             # Prepare inputs
-            config, inputs_dict = (
-                self.model_tester.prepare_config_and_inputs_for_common()
-            )
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             if "pixel_values" in inputs_dict:
                 inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(dtype)
 
@@ -126,9 +111,7 @@ class Fgclip2ModelTesterMixin(ModelTesterMixin):
                 # attention_masks["attention_mask"] = inputs_dict.pop("attention_mask")
                 inputs_dict["attention_mask"] = None
             if "pixel_attention_mask" in inputs_dict:
-                attention_masks["pixel_attention_mask"] = inputs_dict.pop(
-                    "pixel_attention_mask"
-                )
+                attention_masks["pixel_attention_mask"] = inputs_dict.pop("pixel_attention_mask")
                 inputs_dict["pixel_attention_mask"] = None
 
             # Save and load model with flash attention 2 and eager attentions
@@ -137,9 +120,7 @@ class Fgclip2ModelTesterMixin(ModelTesterMixin):
                 model.save_pretrained(tmp_dir)
 
                 model = model_class.from_pretrained(tmp_dir, dtype=dtype)
-                model_fa = model_class.from_pretrained(
-                    tmp_dir, dtype=dtype, attn_implementation="flash_attention_2"
-                )
+                model_fa = model_class.from_pretrained(tmp_dir, dtype=dtype, attn_implementation="flash_attention_2")
 
             model_fa.to(torch_device)
             model.to(torch_device)
@@ -150,15 +131,9 @@ class Fgclip2ModelTesterMixin(ModelTesterMixin):
                 outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
 
             # Choose which key to compare
-            key = [
-                k
-                for k in ["logits", "logits_per_image", "last_hidden_state"]
-                if k in outputs
-            ][0]
+            key = [k for k in ["logits", "logits_per_image", "last_hidden_state"] if k in outputs][0]
 
-            torch.testing.assert_close(
-                outputs[key], outputs_fa[key], atol=4e-2, rtol=4e-2
-            )
+            torch.testing.assert_close(outputs[key], outputs_fa[key], atol=4e-2, rtol=4e-2)
 
             # Run forward pass with attention masks
             inputs_dict.update(attention_masks)
@@ -171,32 +146,19 @@ class Fgclip2ModelTesterMixin(ModelTesterMixin):
 
             # Mask out padded tokens, they are different for SDPA and Flash Attention 2
             if key == "last_hidden_state" and "pixel_attention_mask" in inputs_dict:
-                output_tensor = (
-                    output_tensor * inputs_dict["pixel_attention_mask"][..., None]
-                )
-                output_tensor_fa = (
-                    output_tensor_fa * inputs_dict["pixel_attention_mask"][..., None]
-                )
-            elif (
-                key == "last_hidden_state"
-                and inputs_dict.get("attention_mask", None) is not None
-            ):
+                output_tensor = output_tensor * inputs_dict["pixel_attention_mask"][..., None]
+                output_tensor_fa = output_tensor_fa * inputs_dict["pixel_attention_mask"][..., None]
+            elif key == "last_hidden_state" and inputs_dict.get("attention_mask", None) is not None:
                 output_tensor = output_tensor * inputs_dict["attention_mask"][..., None]
-                output_tensor_fa = (
-                    output_tensor_fa * inputs_dict["attention_mask"][..., None]
-                )
+                output_tensor_fa = output_tensor_fa * inputs_dict["attention_mask"][..., None]
 
-            torch.testing.assert_close(
-                output_tensor, output_tensor_fa, atol=4e-2, rtol=4e-2
-            )
+            torch.testing.assert_close(output_tensor, output_tensor_fa, atol=4e-2, rtol=4e-2)
 
             # Check with inference + dropout
             model.train()
             _ = model_fa(**inputs_dict, output_hidden_states=True)
 
-    @unittest.skip(
-        reason="Fgclip2 has default right padding (tested in test_flash_attn_2_inference_equivalence)"
-    )
+    @unittest.skip(reason="Fgclip2 has default right padding (tested in test_flash_attn_2_inference_equivalence)")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
@@ -258,9 +220,7 @@ class Fgclip2VisionModelTester:
                 self.num_channels * self.patch_size * self.patch_size,
             ]
         )
-        pixel_attention_mask = torch.zeros(
-            self.batch_size, self.seq_length, device=torch_device, dtype=torch.long
-        )
+        pixel_attention_mask = torch.zeros(self.batch_size, self.seq_length, device=torch_device, dtype=torch.long)
 
         spatial_shapes = [
             (height, width)
@@ -269,9 +229,7 @@ class Fgclip2VisionModelTester:
             if height * width <= self.seq_length
         ] * self.batch_size
         spatial_shapes = spatial_shapes[: self.batch_size]
-        spatial_shapes = torch.tensor(
-            spatial_shapes, device=torch_device, dtype=torch.long
-        )
+        spatial_shapes = torch.tensor(spatial_shapes, device=torch_device, dtype=torch.long)
 
         for i, (height, width) in enumerate(spatial_shapes):
             pixel_attention_mask[i, : height * width] = 1
@@ -294,9 +252,7 @@ class Fgclip2VisionModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(
-        self, config, pixel_values, pixel_attention_mask, spatial_shapes
-    ):
+    def create_and_check_model(self, config, pixel_values, pixel_attention_mask, spatial_shapes):
         model = Fgclip2VisionModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -307,14 +263,10 @@ class Fgclip2VisionModelTester:
             result.last_hidden_state.shape,
             (self.batch_size, self.seq_length, self.hidden_size),
         )
-        self.parent.assertEqual(
-            result.pooler_output.shape, (self.batch_size, self.hidden_size)
-        )
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
-        config, pixel_values, pixel_attention_mask, spatial_shapes = (
-            self.prepare_config_and_inputs()
-        )
+        config, pixel_values, pixel_attention_mask, spatial_shapes = self.prepare_config_and_inputs()
         inputs_dict = {
             "pixel_values": pixel_values,
             "pixel_attention_mask": pixel_attention_mask,
@@ -398,9 +350,7 @@ class Fgclip2VisionModelTest(Fgclip2ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="Fgclip2 uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="Fgclip2 uses the same initialization scheme as the Flax original implementation")
     def test_initialization(self):
         pass
 
@@ -496,9 +446,7 @@ class Fgclip2TextModelTester:
             result.last_hidden_state.shape,
             (self.batch_size, self.seq_length, self.hidden_size),
         )
-        self.parent.assertEqual(
-            result.pooler_output.shape, (self.batch_size, self.hidden_size)
-        )
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -518,9 +466,7 @@ class Fgclip2TextModelTest(Fgclip2ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Fgclip2TextModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Fgclip2TextConfig, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=Fgclip2TextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -549,9 +495,7 @@ class Fgclip2TextModelTest(Fgclip2ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(
-        reason="Fgclip2 uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="Fgclip2 uses the same initialization scheme as the Flax original implementation")
     def test_initialization(self):
         pass
 
@@ -572,15 +516,11 @@ class Fgclip2ModelTester:
         self.parent = parent
         self.text_model_tester = Fgclip2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Fgclip2VisionModelTester(parent, **vision_kwargs)
-        self.batch_size = (
-            self.text_model_tester.batch_size
-        )  # need bs for batching_equivalence test
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = (
-            self.text_model_tester.prepare_config_and_inputs()
-        )
+        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values, pixel_attention_mask, spatial_shapes = (
             self.vision_model_tester.prepare_config_and_inputs()
         )
@@ -654,9 +594,7 @@ class Fgclip2ModelTester:
 @require_torch
 class Fgclip2ModelTest(Fgclip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Fgclip2Model,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"feature-extraction": Fgclip2Model} if is_torch_available() else {}
-    )
+    pipeline_model_mapping = {"feature-extraction": Fgclip2Model} if is_torch_available() else {}
     additional_model_inputs = [
         "pixel_values",
         "pixel_attention_mask",
@@ -677,9 +615,7 @@ class Fgclip2ModelTest(Fgclip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def setUp(self):
         self.model_tester = Fgclip2ModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Fgclip2Config, has_text_modality=False
-        )
+        self.config_tester = ConfigTester(self, config_class=Fgclip2Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -704,9 +640,7 @@ class Fgclip2ModelTest(Fgclip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(
-        reason="Fgclip2 uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="Fgclip2 uses the same initialization scheme as the Flax original implementation")
     def test_initialization(self):
         pass
 
@@ -717,9 +651,7 @@ class Fgclip2ModelTest(Fgclip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = Fgclip2VisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(
-                config.vision_config.to_dict(), vision_config.to_dict()
-            )
+            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
 
         # Save Fgclip2Config and check if we can load Fgclip2TextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -757,10 +689,8 @@ def prepare_img():
 @require_vision
 @require_torch
 class Fgclip2ModelIntegrationTest(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
-
         model_name = "qihoo360/fg-clip2-base"
         cls.model = Fgclip2Model.from_pretrained(model_name).to(torch_device)
         cls.processor = Fgclip2Processor.from_pretrained(model_name)
@@ -768,7 +698,6 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-
         del cls.model
         del cls.processor
         torch.cuda.empty_cache()
@@ -784,9 +713,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             "Students read quietly in the hushed library.",
         ]
 
-        inputs = self.processor(
-            text=short_en_text, images=self.image, return_tensors="pt"
-        )
+        inputs = self.processor(text=short_en_text, images=self.image, return_tensors="pt")
         inputs = inputs.to(torch_device)
 
         with torch.no_grad():
@@ -808,9 +735,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             [[7.1313, -12.3647, -26.1456, -22.0568, -17.3236, -13.9281]],
             device=torch_device,
         )
-        torch.testing.assert_close(
-            logits_per_image, expected_logits, rtol=1e-3, atol=1e-3
-        )
+        torch.testing.assert_close(logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
 
         long_en_text = [
             "In this heartwarming photograph, two fluffy cats lounge lazily on a plush pink sofa, one curled sideways like a crescent moon, the other sprawled on its back with all four paws relaxed, seemingly basking in the gentle warmth of afternoon sunlight filtering through sheer curtains; their eyes are peacefully shut, whiskers twitching faintly, tails occasionally swaying—a portrait of pure, unguarded contentment. The softness of the sofa fabric and the pastel hue of pink create a dreamlike, therapeutic ambiance that invites you to reach out and stroke their velvety fur or even collapse beside them to share the tranquility. This posture of total vulnerability is the feline language of trust and safety, a silent testament to the comfort of home. They need no words; their very stillness speaks volumes about joy and fulfillment. In a world racing toward productivity and noise, these cats offer a gentle, furry reminder: sometimes the most radical act of self-care is to pause, curl up in something soft, and let your mind drift—because true peace isn’t found in hustle, but in the quiet surrender to comfort.",
@@ -821,9 +746,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             "High-altitude lakes gleam like emerald shards dropped by gods between snow-capped peaks and rolling meadows, their crystalline waters mirroring scudding clouds and darting kingfishers. Yaks wade through shallows, bells chiming softly, while prayer flags snap in the wind like whispered sutras above a herder’s smoke-trailing tent. I sit on sun-warmed rocks, alpine flowers brushing my ankles, breathing air scented with pine resin and yak-butter tea. Here, no Wi-Fi bars blink, no calendar alerts chime—time flows with sun arcs and birdcalls. Urbanites chase ‘productivity’ yet starve for meaning; the plateau teaches that ‘being’ is enough. Watch a cloud morph, hear a raindrop kiss the lake, feel sunlight migrate across your skin. When nature recalibrates your soul, you realize: poetry isn’t found in plane tickets to Bali, but in the trembling awe of noticing a single wildflower after months of scrolling screens.",
         ]
 
-        inputs = self.processor(
-            images=self.image, text=long_en_text, max_length=196, return_tensors="pt"
-        )
+        inputs = self.processor(images=self.image, text=long_en_text, max_length=196, return_tensors="pt")
         inputs = inputs.to(torch_device)
 
         with torch.no_grad():
@@ -846,9 +769,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             [[1.5820, -14.4048, -23.1075, -16.6545, -16.3500, -21.9193]],
             device=torch_device,
         )
-        torch.testing.assert_close(
-            logits_per_image, expected_logits, rtol=1e-3, atol=1e-3
-        )
+        torch.testing.assert_close(logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_cn_inference(self):
@@ -861,9 +782,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             "图书馆里，学生安静读书。",
         ]
 
-        inputs = self.processor(
-            text=short_cn_text, images=self.image, return_tensors="pt"
-        )
+        inputs = self.processor(text=short_cn_text, images=self.image, return_tensors="pt")
         inputs = inputs.to(torch_device)
 
         with torch.no_grad():
@@ -886,9 +805,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             [[6.5309, -16.2254, -18.9228, -16.0596, -15.2771, -13.9292]],
             device=torch_device,
         )
-        torch.testing.assert_close(
-            logits_per_image, expected_logits, rtol=1e-3, atol=1e-3
-        )
+        torch.testing.assert_close(logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
 
         long_cn_text = [
             "在这张温馨的照片中，两只毛茸茸的猫咪慵懒地瘫在一张粉红色的绒布沙发上，一只侧卧蜷缩如月牙，另一只仰面朝天四脚舒展，仿佛在享受午后阳光透过窗帘洒下的温柔暖意；它们闭着眼睛，胡须微微颤动，尾巴偶尔轻摆，完全沉浸在无拘无束的放松状态中，沙发的柔软与色彩的甜美共同营造出一种童话般的治愈氛围，让人不禁想伸手抚摸它们蓬松的毛发，或干脆也躺下来共享这份宁静；猫咪的这种毫无防备的姿态，正是对家的安全感与主人信任的最好表达，它们不需要言语，仅凭姿态就能传递幸福与满足，也提醒着忙碌的人类：偶尔停下脚步，蜷在柔软处，放空大脑，才是对抗焦虑最温柔的方式。",
@@ -899,9 +816,7 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             "高原湖泊如一块被神明遗落的翡翠，镶嵌在雪山与草甸之间，湖水清澈见底，倒映着流云与飞鸟，牦牛群缓步涉水，脖铃叮当，牧民的帐篷升起袅袅炊烟；我坐在湖畔岩石上，脚下野花摇曳，风里带着雪松与酥油茶的气息，远处经幡在风中猎猎作响，仿佛在诵读古老的祈愿；这里没有Wi-Fi信号，没有会议提醒，时间以日升月落为刻度，生命以呼吸心跳为节奏；都市人追逐‘效率’与‘成就’，却常在深夜被空虚啃噬；而高原教会我的，是‘存在’本身即意义——看一朵云变形，听一滴水落湖，感受阳光在皮肤上移动的轨迹；当心灵被自然重新校准，我们才懂得：所谓诗与远方，不在机票终点，而在放下手机、凝视一朵野花时，内心涌起的久违悸动。",
         ]
 
-        inputs = self.processor(
-            images=self.image, text=long_cn_text, max_length=196, return_tensors="pt"
-        )
+        inputs = self.processor(images=self.image, text=long_cn_text, max_length=196, return_tensors="pt")
         inputs = inputs.to(torch_device)
 
         with torch.no_grad():
@@ -923,13 +838,10 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
             [[-0.3012, -15.8156, -21.3586, -13.2546, -15.2005, -23.6982]],
             device=torch_device,
         )
-        torch.testing.assert_close(
-            logits_per_image, expected_logits, rtol=1e-3, atol=1e-3
-        )
+        torch.testing.assert_close(logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_region_inference(self):
-
         text = "remote control"
 
         inputs = self.processor(images=self.image, text=text, return_tensors="pt")
@@ -956,6 +868,4 @@ class Fgclip2ModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[2.0169e-05, 9.9998e-01]], device=torch_device)
 
-        torch.testing.assert_close(
-            logits_per_image, expected_logits, rtol=1e-3, atol=1e-3
-        )
+        torch.testing.assert_close(logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)

@@ -100,9 +100,7 @@ def get_image_size_for_max_num_patches(
 
     def get_scaled_image_size(scale: float, size: int, patch_size: int) -> int:
         scaled_size = size * scale
-        scaled_size = (
-            math.ceil(scaled_size / patch_size) * patch_size
-        )  # make divisible by patch_size
+        scaled_size = math.ceil(scaled_size / patch_size) * patch_size  # make divisible by patch_size
         scaled_size = max(patch_size, scaled_size)  # ensure at least 1 patch
         return int(scaled_size)
 
@@ -133,17 +131,13 @@ def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
     image_height, image_width, num_channels = image.shape
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
-    patched_image = image.reshape(
-        num_patches_height, patch_size, num_patches_width, patch_size, num_channels
-    )
+    patched_image = image.reshape(num_patches_height, patch_size, num_patches_width, patch_size, num_channels)
     patched_image = patched_image.transpose(0, 2, 1, 3, 4)
     patched_image = patched_image.reshape(num_patches_height * num_patches_width, -1)
     return patched_image
 
 
-def pad_along_first_dim(
-    array: np.ndarray, target_length: int, pad_value: int = 0
-) -> tuple[np.ndarray, np.ndarray]:
+def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 0) -> tuple[np.ndarray, np.ndarray]:
     """
     Pad the array along the first dimension.
     """
@@ -158,7 +152,6 @@ def pad_along_first_dim(
 
 
 def _determine_max_value(image, patch_size: int = 16) -> int:
-
     image_height = image.shape[0]
     image_width = image.shape[1]
 
@@ -181,34 +174,37 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
     Constructs a FG-CLIP2 image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's dimensions to fit `max_num_patches` according to given `patch_size`.
-            Can be overridden by `do_resize` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
-            the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
-            method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image by the specified mean and standard deviation. Can be overridden by
-            `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch the image will be split to.
-        max_num_patches (`int`, *optional*, defaults to 256):
-            The image will be resized to have at most this number of patches,
-            and then padded in "patch" dimension to match this number exactly.
+            do_resize (`bool`, *optional*, defaults to `True`):
+                Whether to resize the image's dimensions to fit `max_num_patches` according to given `patch_size`.
+                Can be overridden by `do_resize` in the `preprocess` method.
+            resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+                Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
+            do_rescale (`bool`, *optional*, defaults to `True`):
+                Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
+                the `preprocess` method.
+            rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+                Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
+                method.
+            do_normalize (`bool`, *optional*, defaults to `True`):
+                Whether to normalize the image by the specified mean and standard deviation. Can be overridden by
+                `do_normalize` in the `preprocess` method.
+            image_mean (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+                Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+                channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+            image_std (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+                Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+                number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+                Can be overridden by the `image_std` parameter in the `preprocess` method.
+            do_convert_rgb (`bool`, *optional*, defaults to `True`):
+                Whether to convert the image to RGB.
+            patch_size (`int`, *optional*, defaults to 16):
+                The size (resolution) of each patch the image will be split to.
+            max_num_patches (`int`, *optional*, defaults to 256):
+                The image will be resized to have at most this number of patches,
+                and then padded in "patch" dimension to match this number exactly.
+            dynamic_max_patches (`bool`, *optional*, defaults to `self.dynamic_max_patches`):
+                Whether to dynamically determine `max_num_patches` from the largest input image.
+                If `False`, uses `max_num_patches` (either passed or default).
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
@@ -319,23 +315,15 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = (
-            rescale_factor if rescale_factor is not None else self.rescale_factor
-        )
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = (
-            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        )
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         patch_size = patch_size if patch_size is not None else self.patch_size
-        max_num_patches = (
-            max_num_patches if max_num_patches is not None else self.max_num_patches
-        )
+        max_num_patches = max_num_patches if max_num_patches is not None else self.max_num_patches
         dynamic_max_patches = (
-            dynamic_max_patches
-            if dynamic_max_patches is not None
-            else self.dynamic_max_patches
+            dynamic_max_patches if dynamic_max_patches is not None else self.dynamic_max_patches
         )  # ← 获取设置
 
         data_format = ChannelDimension.LAST
@@ -376,21 +364,14 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
         spatial_shapes = []
 
         images = [
-            to_channel_dimension_format(
-                image, data_format, input_channel_dim=input_data_format
-            )
-            for image in images
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
         if dynamic_max_patches:
             original_max_num_patches = max_num_patches
-            candidate_values = [
-                _determine_max_value(img, patch_size=patch_size) for img in images
-            ]
+            candidate_values = [_determine_max_value(img, patch_size=patch_size) for img in images]
             max_num_patches = max(candidate_values)
-            logger.info(
-                f"Dynamically set max_num_patches={max_num_patches} (originally {original_max_num_patches})"
-            )
+            logger.info(f"Dynamically set max_num_patches={max_num_patches} (originally {original_max_num_patches})")
 
         for image in images:
             if do_resize:
@@ -408,9 +389,7 @@ class Fgclip2ImageProcessor(BaseImageProcessor):
                 )
 
             if do_rescale:
-                image = self.rescale(
-                    image=image, scale=rescale_factor, input_data_format=data_format
-                )
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=data_format)
 
             if do_normalize:
                 image = self.normalize(
