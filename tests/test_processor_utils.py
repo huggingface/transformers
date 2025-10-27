@@ -1,7 +1,7 @@
 import tempfile
 
+from transformers import AutoTokenizer, PreTrainedTokenizer, ProcessorMixin
 from transformers.testing_utils import TestCasePlus
-from transformers import ProcessorMixin, AutoTokenizer, PreTrainedTokenizer
 
 
 class ProcessorSavePretrainedMultipleAttributes(TestCasePlus):
