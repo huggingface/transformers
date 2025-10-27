@@ -57,7 +57,7 @@ batch = processor.apply_chat_template(
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch, max_new_tokens=512)
+gen_ids = model.generate(**batch)
 
 inp_len = batch["input_ids"].shape[1]
 new_tokens = gen_ids[:, inp_len:]
@@ -104,7 +104,7 @@ batch = processor.apply_chat_template(
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch, max_new_tokens=512)
+gen_ids = model.generate(**batch)
 
 inp_len = batch["input_ids"].shape[1]
 new_tokens = gen_ids[:, inp_len:]
@@ -137,7 +137,7 @@ batch = processor.apply_chat_template(
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch, max_new_tokens=512)
+gen_ids = model.generate(**batch)
 
 inp_len = batch["input_ids"].shape[1]
 new_tokens = gen_ids[:, inp_len:]
@@ -170,7 +170,7 @@ batch = processor.apply_chat_template(
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch, max_new_tokens=512)
+gen_ids = model.generate(**batch)
 
 inp_len = batch["input_ids"].shape[1]
 new_tokens = gen_ids[:, inp_len:]
@@ -221,7 +221,7 @@ batch = processor.apply_chat_template(
     return_dict=True,
 ).to(model.device)
 
-gen_ids = model.generate(**batch, max_new_tokens=512)
+gen_ids = model.generate(**batch)
 
 inp_len = batch["input_ids"].shape[1]
 new_tokens = gen_ids[:, inp_len:]
