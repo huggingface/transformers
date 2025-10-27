@@ -25,25 +25,35 @@ A. Goel, S. Ghosh, J. Kim, S. Kumar, Z. Kong, S. Lee, C.-H. H. Yang, R. Duraiswa
 NVIDIA and University of Maryland  
 Project: https://research.nvidia.com/labs/adlr/AF3/
 
-## Quickstart
+## Usage
+
+### Audio Instruct Mode
+
+The model supports audio-text instructions, including multi-turn interactions, all processed in batches.
+
+➡️ audio + text instruction
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-MODEL_ID = "nvidia/audio-flamingo-3"
+MODEL_ID = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(MODEL_ID)
-model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto").eval()
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
 
-conversations = [
-    [{"role": "user", "content": [{"type": "text", "text": "Transcribe the input speech."}, {"type": "audio", "path": "audio_1.wav"}]}],
-    [{"role": "user", "content": [{"type": "text", "text": "Describe the song."}, {"type": "audio", "path": "audio_2.wav"}]}],
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Transcribe the input speech."},
+            {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/WhDJDIviAOg_120_10.mp3"},
+        ],
+    }
 ]
 
 batch = processor.apply_chat_template(
-    conversations,
+    conversation,
     tokenize=True,
     add_generation_prompt=True,
-    sampling_rate=getattr(processor.feature_extractor, "sampling_rate", 16000),
     return_dict=True,
 ).to(model.device)
 
@@ -51,7 +61,171 @@ gen_ids = model.generate(**batch, max_new_tokens=512)
 
 inp_len = batch["input_ids"].shape[1]
 new_tokens = gen_ids[:, inp_len:]
-texts = processor.batch_decode(new_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
+print(texts)
+```
+
+➡️ multi-turn:
+
+```python
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+MODEL_ID = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(MODEL_ID)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": "Instruction: How does the tone of female speech change throughout the audio? Choose the correct option among the options below: (A) Sad to happy (B) Happy to sad (C) Neutral to happy (D) Happy to neutral.",
+            },
+            {"type": "audio", "path": "https://audioflamingo3.github.io/static/long_audio/000000786159.31.wav"},
+        ],
+    },
+    {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "(A) Sad to happy"}],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Why do you think so?"},
+        ],
+    },
+]
+
+batch = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+).to(model.device)
+
+gen_ids = model.generate(**batch, max_new_tokens=512)
+
+inp_len = batch["input_ids"].shape[1]
+new_tokens = gen_ids[:, inp_len:]
+texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
+print(texts)
+```
+
+➡️ text only:
+
+```python
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+MODEL_ID = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(MODEL_ID)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What is the capital of France?"},
+        ],
+    }
+]
+
+batch = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+).to(model.device)
+
+gen_ids = model.generate(**batch, max_new_tokens=512)
+
+inp_len = batch["input_ids"].shape[1]
+new_tokens = gen_ids[:, inp_len:]
+texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
+print(texts)
+```
+
+➡️ audio only:
+
+```python
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+MODEL_ID = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(MODEL_ID)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/WhDJDIviAOg_120_10.mp3"},
+        ],
+    }
+]
+
+batch = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+).to(model.device)
+
+gen_ids = model.generate(**batch, max_new_tokens=512)
+
+inp_len = batch["input_ids"].shape[1]
+new_tokens = gen_ids[:, inp_len:]
+texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
+print(texts)
+```
+
+➡️ batched inference!
+
+```python
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+MODEL_ID = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(MODEL_ID)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+
+conversations = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe the input speech."},
+                {
+                    "type": "audio",
+                    "path": "https://audioflamingo3.github.io/static/long_speech/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
+                },
+            ],
+        }
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
+                },
+                {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/FPSbCAANfbJLVSwD.mp3"},
+            ],
+        }
+    ],
+]
+
+batch = processor.apply_chat_template(
+    conversations,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+).to(model.device)
+
+gen_ids = model.generate(**batch, max_new_tokens=512)
+
+inp_len = batch["input_ids"].shape[1]
+new_tokens = gen_ids[:, inp_len:]
+texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
 print(texts)
 ```
 
