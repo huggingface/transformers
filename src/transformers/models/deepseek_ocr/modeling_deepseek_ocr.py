@@ -720,7 +720,6 @@ class DeepseekOcrAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
@@ -734,15 +733,6 @@ class DeepseekOcrAttention(nn.Module):
         queries = queries.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
         keys = keys.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
-        # DEEPSEEK_OCR text model uses both `causal_attention_mask` and `attention_mask`
-        # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
-        if self.config._attn_implementation == "flash_attention_2":
-            self.is_causal = causal_attention_mask is not None
-        else:
-            if attention_mask is not None and causal_attention_mask is not None:
-                attention_mask = attention_mask + causal_attention_mask
-            elif causal_attention_mask is not None:
-                attention_mask = causal_attention_mask
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -754,13 +744,12 @@ class DeepseekOcrAttention(nn.Module):
             keys,
             values,
             attention_mask,
-            is_causal=self.is_causal,
             scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout,
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -793,14 +782,14 @@ class DeepseekOcrEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
@@ -847,13 +836,6 @@ class DeepseekOcrCLIPEncoder(nn.Module):
                 than the model's internal embedding lookup matrix.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Causal mask for the text model. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
@@ -1440,8 +1422,13 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
-
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        is_loaded = False
+        for index__, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            if index__ == 0 and not is_loaded and hidden_states.shape[1] > 1:
+                loaded_states = torch.load("deepseekocr/input_hidden_states")
+                hidden_states = loaded_states.to(hidden_states.device, dtype=hidden_states.dtype)
+                position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+                is_loaded = True
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
@@ -1536,6 +1523,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
                 crop_shape = image_spatial_crops[image_idx]
                 if isinstance(crop_shape, torch.Tensor):
                     crop_shape = crop_shape.tolist()
+
             width_crop_num = int(crop_shape[0]) if crop_shape is not None else 1
             height_crop_num = int(crop_shape[1]) if crop_shape is not None else 1
             has_local_crops = width_crop_num > 1 or height_crop_num > 1
@@ -1706,7 +1694,9 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
             image_spatial_crops=image_spatial_crops,
         )
 
-        new_image_features = [torch.cat([pf, self.view_seperator[None].to(pf)], dim=0) for pf in new_image_features]
+        new_image_features = [
+            torch.cat([pf, self.view_seperator.unsqueeze(0).to(pf.dtype)], dim=0) for pf in new_image_features
+        ]
         feature_lens = feature_lens + 1  # account for view separator
         concatenated_features = torch.cat(new_image_features, dim=0)
         return concatenated_features, feature_lens

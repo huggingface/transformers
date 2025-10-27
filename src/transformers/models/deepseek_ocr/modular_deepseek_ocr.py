@@ -420,6 +420,20 @@ class DeepseekOcrEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config):
         super().__init__(config)
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        return super().forward(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
+            **kwargs,
+        )
+
 
 class DeepseekOcrCLIPEncoder(CLIPEncoder):
     def __init__(self, config: DeepseekOcrCLIPVisionConfig):
@@ -707,9 +721,7 @@ class DeepseekOcrModel(LlavaNextModel):
                 else:
                     local_features = local_features.view(-1, local_features.shape[-1])
                     if image_newline is not None:
-                        newline = image_newline.unsqueeze(0).to(
-                            local_features.device, dtype=local_features.dtype
-                        )
+                        newline = image_newline.unsqueeze(0).to(local_features.device, dtype=local_features.dtype)
                         local_features = torch.cat((local_features, newline), dim=0)
 
                 processed_parts.append(local_features)
@@ -811,7 +823,9 @@ class DeepseekOcrModel(LlavaNextModel):
             image_spatial_crops=image_spatial_crops,
         )
 
-        new_image_features = [torch.cat([pf, self.view_seperator[None].to(pf)], dim=0) for pf in new_image_features]
+        new_image_features = [
+            torch.cat([pf, self.view_seperator.unsqueeze(0).to(pf.dtype)], dim=0) for pf in new_image_features
+        ]
         feature_lens = feature_lens + 1  # account for view separator
         concatenated_features = torch.cat(new_image_features, dim=0)
         return concatenated_features, feature_lens
