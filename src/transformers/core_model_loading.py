@@ -15,7 +15,10 @@
 """Core helpers for loading model checkpoints."""
 
 from __future__ import annotations
-
+from fnmatch import translate
+from concurrent.futures import ThreadPoolExecutor, Future, wait
+import os
+import threading
 import itertools
 import math
 import re
@@ -63,7 +66,7 @@ def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
     Convert a glob with '*' into a regex *source* string.
     '*' matches (\\d+) if digits_only else (.+). Inner groups are non-capturing.
     """
-    star = r"(?:\d+)" if digits_only else r"(?:.+)"
+    star = r"(\d+)" if digits_only else r"(.+)"
     return re.escape(glob).replace(r"\*", star)
 
 
@@ -195,52 +198,16 @@ class ConversionOps:
         self,
         value: Union[Sequence[torch.Tensor], torch.Tensor, dict[str, torch.Tensor]],
         *,
-        context: dict[str, Any],
         profile: bool = False,
     ) -> Any:
         """
         Execute the conversion while measuring runtime and optionally profiling the call.
         """
-
-        profiling_enabled = bool(profile)
-        profiler_ctx = nullcontext()
-
-        if profiling_enabled:
-            if torch_profile is None or ProfilerActivity is None:
-                logger.warning_once(
-                    "torch.profiler is unavailable; skipping profiling for %s operations.",
-                    self.__class__.__name__,
-                )
-                profiling_enabled = False
-            else:
-                activities = [ProfilerActivity.CPU]
-                if torch.cuda.is_available():
-                    activities.append(ProfilerActivity.CUDA)
-                profiler_ctx = torch_profile(activities=activities, record_shapes=True, profile_memory=True)
-
         start = time.perf_counter()
-        with profiler_ctx as prof:
-            result = self.convert(value, context=context)
+        result = self.convert(value)
         elapsed = time.perf_counter() - start
-
-        # Store the latest runtime for downstream consumers.
-        self.last_runtime_seconds = elapsed
-
-        logger.info("%s convert() finished in %.2f ms", self.__class__.__name__, elapsed * 1000)
-
-        if profiling_enabled and prof is not None:
-            try:
-                summary = prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=20)
-            except Exception as error:
-                logger.warning(
-                    "Failed to render profiler summary for %s due to %s.",
-                    self.__class__.__name__,
-                    error,
-                )
-            else:
-                self.last_profile_summary = summary
-                logger.info("Profiler summary for %s:\n%s", self.__class__.__name__, summary)
-
+        if profile:
+            print(elapsed)
         return result
 
 
@@ -277,14 +244,16 @@ class Concatenate(ConversionOps):
         self._inverse_op = Chunk
 
     def convert(self, value: Sequence[torch.Tensor]) -> torch.Tensor:
-        tensors = tuple(value)
+        if isinstance(value[0], list):
+            value = [v[0] for v in value]
+        tensors = value
         if not tensors:
             raise ValueError("Fuse requires at least one tensor to concatenate.")
 
         out_shape = list(tensors[0].shape)
-        out_shape[self.dim] *= len(tensors)
+        out_shape[self.dim] = sum([t.size(self.dim) for t in tensors])
 
-        with torch.no_grad():
+        with torch.no_grad(): # we use staging buffers
             out = self._ensure_buffer(torch.Size(out_shape), dtype=tensors[0].dtype, device=tensors[0].device)
             offset = 0
             for tensor in tensors:
@@ -313,7 +282,7 @@ class MergeModulelist(Concatenate):
         for group in value:
             if not isinstance(group, Sequence) or len(group) == 0:
                 raise ValueError("MergeModulelist requires non-empty sub-sequences.")
-            merged.append(torch.stack(tuple(group), dim=self.dim))
+            merged.append(torch.stack(tuple(group), dim=self.dim)) # TODO have a single staging tensor here as well!
         return merged
 
 
@@ -577,27 +546,70 @@ class WeightConverter:
         self._regex_pat = build_glob_alt(self.source_keys)
 
 
-def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, target_key, mismatch_keys, missing_keys):
+def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys):
     try:
         module_path, _, param_name = k.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
-        param_value = v[:]
+        param_value = v[0] if isinstance(v, list) else v[:]
         if not isinstance(param_value, torch.nn.Parameter):
             param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-        ref = meta_model_state_dict.get(k, empty_tensor if k == target_key else None)
+        ref = meta_model_state_dict.get(k, empty_tensor)
         if ref is not None and ref.shape != param_value.shape:
-            mismatch_keys.append((k, param_value.shape, ref.shape))
+            mismatch_keys.add((k, param_value.shape, ref.shape))
         if k in missing_keys:
             missing_keys.remove(k)
         setattr(module_obj, param_name, param_value)
     except Exception as e:
-        print(e) # at this point errors should have already been handled
+        print(f"{e}, when trying to set for key {k}") # at this point errors should have already been handled
 
 
 @dataclass(slots=True)
 class ConversionEntry:
     weight_converter: WeightConverter
     collected_tensors: dict = field(default_factory=lambda: defaultdict(dict))
+
+
+# Tune these to your storage:
+GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
+PER_FILE_LIMIT = 4  # concurrent reads per file
+
+# Global executor + per-file semaphores
+EXEC = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
+_file_sems = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
+
+def _materialize_copy(x):
+    # PyTorch: this runs in C and releases the GIL; good for threads.
+    return x[:]  # contiguous, real copy
+
+def spawn_materialize(file_id, t) -> Future:
+    sem = _file_sems[file_id]
+    def _job():
+        with sem:
+            return _materialize_copy(t)
+    return EXEC.submit(_job)
+
+
+def glob_replace_string(replace_glob: str, original: str, find_glob: str) -> str:
+    # Build regex by escaping everything except '*' which becomes a capture group
+    pattern = re.escape(find_glob).replace(r'\*', '(.*?)')
+    partial = find_glob.startswith('*') or find_glob.endswith('*')
+    if not partial:
+        pattern = '^' + pattern + '$'
+
+    # Map each '*' in replace_glob to the corresponding capture group (\1, \2, ...)
+    star_count = find_glob.count('*')
+    rep, g = [], 1
+    for ch in replace_glob:
+        if ch == '*' and g <= star_count:
+            rep.append(f'\\{g}')
+            g += 1
+        else:
+            rep.append(ch)
+    replacement = ''.join(rep)
+
+    if partial:
+        return re.sub(pattern, replacement, original)
+    return re.sub(pattern, replacement, original) if re.fullmatch(pattern, original) else original
 
 
 def convert_and_load_state_dict_in_model(
@@ -629,31 +641,34 @@ def convert_and_load_state_dict_in_model(
     source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
     weight_pattern_alt, weight_pattern_by_group_name = build_glob_alt(_patterns)
     tp_plan_alt, tp_plan_by_group_name = build_glob_alt(list(tp_plan.keys()))
-    device_map_alt, device_map_group_name = build_glob_alt(list(device_map.keys()))
     dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(keep_in_dtype.keys()))
 
     # 1. Create the conversion entries
     by_conversion_pattern: dict[str, ConversionEntry] = {}
-    for original_key, tensor in state_dict.items():
+    for original_key, (file_id, tensor) in state_dict.items():
         matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
         if matched_pattern is not None:
             converter = source_to_target[matched_pattern]  # TODO make sure its the ref
-            sub_with_extractor = partial(re.sub, glob_to_re(matched_pattern), string=original_key)
+            sub_with_extractor = partial(re.sub, _glob_to_regex_src(matched_pattern), string=original_key)
             entry_key = "|".join(converter.target_keys)
-            target_key = "|".join(map(sub_with_extractor, converter.target_keys))
+            target_key = "|".join(map(sub_with_extractor, [ k.replace("*", "\\1") for k in converter.target_keys]))
             entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
             converter_key = sub_with_extractor(matched_pattern)
-            entry.collected_tensors[target_key].setdefault(converter_key, []).append(tensor)
         else:
             converter = WeightConverter(original_key)
-            converter_key = entry_key = original_key
+            converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
-            entry.collected_tensors[converter_key] = {converter_key: tensor}
 
         if matched_tp_pattern := match_glob(converter.target_keys[0], tp_plan_alt, tp_plan_by_group_name):
             if getattr(converter, "distributed_operation", None) is None:
                 converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
+                # we should shard here and then as we don't have the complicated list of lists?
 
+        # TP OP should happen here as it materialized the tensor
+
+        # If not TP, move tensors
+        fut = spawn_materialize(file_id, tensor)   # <— returns Future
+        entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
         for target_key in entry_key.split("|"):
             empty_tensor = meta_model_state_dict.get(target_key)
             if empty_tensor is None:
@@ -666,29 +681,27 @@ def convert_and_load_state_dict_in_model(
     # 2. Actually convert the ckpt
     for group in by_conversion_pattern.values():
         converter = group.weight_converter
-        for layer_name, tensors_for_this_layer in group.collected_tensors.items():
+        operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
+        for layer_name, tensors_for_this_layer in group.collected_tensors.items(): # TODO I need a global TQDM :)
             concrete_target_keys = layer_name.split("|")
             if bool(set(concrete_target_keys) - unexpected_keys):
+                import time
+                s = time.time()
+                values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
+
                 if op := converter.distributed_operation:
                     try:
-                        values = op(tensors_for_this_layer.values())
+                        values = op(values)
                     except Exception as e:
-                        misc[target_key] = f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
+                        misc[layer_name] = f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
                         continue
-                elif device_map is not None:
-                    if key:=match_glob(layer_name, device_map_alt, device_map_group_name):
-                        device = device_map[key]
-                    else:
-                        device = device_map[""]
-                    op = To(device)
-                    values = op.convert(tensors_for_this_layer.values())
 
-                for op in converter.operations:
+                for op in operations:
                     try:
-                        values = op.convert(values)
+                        values = op(values)
                     except Exception as e:
-                        misc[target_key] = (
-                            f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {tensors_for_this_layer}"
+                        misc[layer_name] = (
+                            f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {values}"
                         )
 
                 values = [values] if not isinstance(values, list) else values
@@ -699,14 +712,15 @@ def convert_and_load_state_dict_in_model(
                         try:
                             realized_value.update(op(realized_value[k]))
                         except Exception as e:
-                            misc[target_key] += f"Failed to quantize with {op.__class__.__name__}: {e}"
+                            misc[layer_name] += f"Failed to quantize with {op.__class__.__name__}: {e}"
                             continue
-
+                e = time.time()
+                print(layer_name, e-s)
                 for k, output_value in realized_value.items():
                     matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
                     if matched_dtype_pattern is not None:
                         op = Cast(keep_in_dtype[matched_dtype_pattern])
-                        output_value = op.convert(output_value)
+                        output_value = op(output_value)
 
                     set_param_for_module(
                         model,
@@ -714,11 +728,10 @@ def convert_and_load_state_dict_in_model(
                         output_value,
                         meta_model_state_dict,
                         empty_tensor,
-                        target_key,
                         mismatch_keys,
                         missing_keys,
                     )
 
-        for op in converter.operations:
+        for op in operations:
             op.clear_cache()
     return by_conversion_pattern, missing_keys, unexpected_keys, mismatch_keys, misc

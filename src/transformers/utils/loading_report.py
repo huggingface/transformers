@@ -39,41 +39,12 @@ def _color(s, color, ansi):
     return f"{ansi[color]}{s}{ansi['reset']}"
 
 
-def _chunk(items, limit=200):
-    it = list(items)
-    if len(it) <= limit:
-        return it, 0
-    return it[:limit], len(it) - limit
-
-
 def _get_terminal_width(default=80):
     try:
         return shutil.get_terminal_size().columns
     except Exception:
         return default
 
-
-def _build_compact_table(rows, max_width):
-    """Build a compact 2-column table: Key | Status
-    Truncate keys if they're too long for the terminal width.
-    """
-    headers = ["Key", "Status"]
-    # compute max status width (strip ANSI)
-    status_width = max(len(_strip_ansi(r[1])) for r in rows) if rows else len(headers[1])
-    # allocate remaining space to key (allow 3 chars for separator and padding)
-    key_max = max(10, max_width - status_width - 3)
-
-    compact_rows = []
-    for r in rows:
-        key = r[0]
-        key_plain = _strip_ansi(key)
-        if len(key_plain) > key_max:
-            # keep start and end for readability
-            keep = max(0, key_max - 3)
-            key = key_plain[: keep // 2] + "..." + key_plain[-(keep - keep // 2) :]
-        compact_rows.append([key, r[1]])
-
-    return _make_table(compact_rows, headers)
 
 
 def log_state_dict_report(
@@ -109,7 +80,6 @@ def log_state_dict_report(
 
     # Detect whether the current stdout supports ANSI colors; allow callers to pass `color=False` to force no color
     color_enabled = bool(color and sys.stdout.isatty())
-    # instantiate simple ANSI accessor that returns empty strings when disabled
     ansi = ANSI(color_enabled)
 
     if error_msgs:
@@ -120,37 +90,40 @@ def log_state_dict_report(
             )
         raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
+    term_w = _get_terminal_width()
     rows = []
     if unexpected_keys:
-        keys, extra = _chunk(list(update_key_name(unexpected_keys)), limit_rows)
-        for k in keys:
+        for k in update_key_name(unexpected_keys):
             status = "UNEXPECTED"
             status = _color(status, "orange", ansi)
             rows.append([k, status, "", ""])
 
     if missing_keys:
-        keys, extra = _chunk(list(update_key_name(missing_keys)), max(0, limit_rows - len(rows)))
-        for k in keys:
+        for k in update_key_name(missing_keys):
             status = "MISSING"
             status = _color(status, "red", ansi)
             rows.append([k, status, "", ""])
 
     if mismatched_keys:
-        remaining = max(0, limit_rows - len(rows))
-        pairs = list(zip(mismatched_keys, mismatched_shapes))
-        pairs, extra = _chunk(pairs, remaining if remaining else len(pairs))
-        for key, (shape_ckpt, shape_model) in pairs:
+        for key, shape_ckpt, shape_model in mismatched_shapes:
             status = "MISMATCH"
             status = _color(status, "yellow", ansi)
-            rows.append(
-                [key, status, "Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"]
-            )
+            data = [key, status]
+            if term_w > 200:
+                data.append(
+                    [ "Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"]
+                )
+            rows.append(data)
 
     if misc:
         for k in misc:
             status = "MISC"
             status = _color(status, "red", ansi)
-            rows.append([k, status, misc[k], ""])
+            if term_w > 200:
+                _details = misc[k]
+            else:
+                _details = None
+            rows.append([k, status, _details, ""])
 
     if not rows:
         print(
@@ -158,39 +131,13 @@ def log_state_dict_report(
         )
         return
 
-    # Determine terminal width and whether to print full table
-    term_w = _get_terminal_width()
 
-    headers = ["Key", "Status", "Checkpoint shape", "Details"]
-
-    # if terminal is very tiny, use a simple one-line-per-entry format
-    if term_w < 20:
-        # Extremely small terminals: print `key: status` per line, truncating keys to fit.
-        lines = []
-        for r in rows:
-            key_plain = _strip_ansi(r[0])
-            status_plain = _strip_ansi(r[1])
-            # reserved space for ": " and at least 4 chars of status
-            allowed_key = max(1, term_w - len(status_plain) - 3)
-            if len(key_plain) > allowed_key:
-                key_plain = key_plain[: max(0, allowed_key - 3)] + "..."
-            lines.append(f"{key_plain}: {r[1]}")
-        table = "".join(lines)
-
-    # if terminal is narrow, fall back to a compact Key | Status table
-    if term_w < min_width_full_table:
-        # Build compact rows with only first two columns
-        compact_rows = [[r[0], r[1]] for r in rows]
-        table = _build_compact_table(compact_rows, max_width=term_w)
-
+    headers = ["Key", "Status"]
+    if term_w > 200:
+        headers += ["Checkpoint shape", "Details"]
     else:
-        # attempt full table; but if it would exceed terminal width, fall back to compact
-        table = _make_table([[r[0], r[1], r[2] if len(r) > 2 else "", r[3] if len(r) > 3 else ""] for r in rows], headers)
-        # quick width check: the first line length (header) must fit
-        first_line = table.splitlines()[0]
-        if len(_strip_ansi(first_line)) > term_w:
-            compact_rows = [[r[0], r[1]] for r in rows]
-            table = _build_compact_table(compact_rows, max_width=term_w)
+        headers += ["", ""]
+    table = _make_table(rows, headers=headers)
 
     prelude = (
         f"{ansi['bold']}{model.__class__.__name__} LOAD REPORT{ansi['reset']} from: {pretrained_model_name_or_path}\n"

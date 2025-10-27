@@ -4703,14 +4703,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Now we read all the files to get a pointer on each physical weights
         merged_state_dict = {}
-        all_pointer = {}
+        all_pointer = set()
+
+        pattern = re.compile(r'(' + '|'.join(map(re.escape, device_map.keys())) + r')')
         for k, v in sharded_metadata["weight_map"].items():
-            if v not in all_pointer:
-                file_pointer = safe_open(
-                    os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", # device="cpu"
-                )
-                all_pointer[v] = file_pointer
-            merged_state_dict[k] = all_pointer[v].get_slice(k)  # don't meterialize yet
+            key = pattern.match(k).group(1)
+            if key is not None:
+                device = device_map[key]
+            else:
+                device = device_map['']
+
+            file_pointer = safe_open(
+                os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
+            )
+            all_pointer.add(file_pointer)
+            merged_state_dict[k] = (v, file_pointer.get_slice(k))  # don't meterialize yet
             tp_plan = getattr(model, "_tp_plan", None)
 
         keep_in_dtype = None
@@ -4733,7 +4740,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             model._conversion_ops = _conversion_ops
 
-        for k in all_pointer.values():  # finally close all opened file pointeres
+        for k in all_pointer:  # finally close all opened file pointeres
             k.__exit__(None, None, None)
 
         new_state_dict = model.state_dict()
@@ -4748,10 +4755,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
-        model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, dtype, hf_quantizer)
+        miss_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
+        model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
-        model._initialize_missing_keys(list(missing_keys) + mismatched_keys, is_quantized)
+        model._initialize_missing_keys(miss_and_mismatched, is_quantized)
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
