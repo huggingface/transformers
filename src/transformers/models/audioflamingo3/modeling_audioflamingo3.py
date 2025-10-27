@@ -378,13 +378,12 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
         # Add positions, dropout
         inputs_embeds = inputs_embeds.permute(0, 2, 1)  # (B, S_in, C)
-        # TODO (ebezzam) can `self.embed_positions.weight` be used?`
-        positions = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        pos = self.embed_positions(positions).squeeze(0)
-        if pos.shape[0] < inputs_embeds.shape[1]:
+        embed_pos_weight = self.embed_positions.weight
+        if embed_pos_weight.shape[0] < inputs_embeds.shape[1]:
             raise ValueError(
-                f"embed_positions shorter than sequence length: {pos.shape[0]} < {inputs_embeds.shape[1]}"
+                f"embed_positions shorter than sequence length: {embed_pos_weight.shape[0]} < {inputs_embeds.shape[1]}"
             )
+        pos = embed_pos_weight[: inputs_embeds.shape[1]]
         hidden_states = nn.functional.dropout(
             inputs_embeds + pos[: inputs_embeds.shape[1]], p=self.dropout, training=self.training
         )
@@ -511,7 +510,6 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         input_features: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         feature_attention_mask: Optional[torch.Tensor] = None,
-        # TODO (ebezzam) why unused? normally passed to self.language_model
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,

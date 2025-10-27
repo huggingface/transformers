@@ -133,13 +133,12 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
 
         # Add positions, dropout
         inputs_embeds = inputs_embeds.permute(0, 2, 1)  # (B, S_in, C)
-        # TODO (ebezzam) can `self.embed_positions.weight` be used?`
-        positions = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        pos = self.embed_positions(positions).squeeze(0)
-        if pos.shape[0] < inputs_embeds.shape[1]:
+        embed_pos_weight = self.embed_positions.weight
+        if embed_pos_weight.shape[0] < inputs_embeds.shape[1]:
             raise ValueError(
-                f"embed_positions shorter than sequence length: {pos.shape[0]} < {inputs_embeds.shape[1]}"
+                f"embed_positions shorter than sequence length: {embed_pos_weight.shape[0]} < {inputs_embeds.shape[1]}"
             )
+        pos = embed_pos_weight[: inputs_embeds.shape[1]]
         hidden_states = nn.functional.dropout(
             inputs_embeds + pos[: inputs_embeds.shape[1]], p=self.dropout, training=self.training
         )
