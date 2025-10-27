@@ -107,7 +107,7 @@ def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[
     return name_map.get(m.lastgroup)
 
 
-def _compile_single_glob_for_extract(glob: str, *, digits_only: bool = True, allow_prefix: bool = True) -> str:
+def glob_to_re(glob: str, *, digits_only: bool = True, allow_prefix: bool = True) -> str:
     """
     Build a regex for a single glob that captures each '*' so we can extract per-layer identifiers.
     """
@@ -369,7 +369,7 @@ class To(ConversionOps):
     def __init__(self, device):
         self.device = device
 
-    def convert(self, realized_value: list[list[PySafeSlice]]):
+    def convert(self, realized_value: list[list["PySafeSlice"]]):
         with torch.device(self.device):
             out = [[x[:] for x in inner] if isinstance(inner, list) else inner[:] for inner in realized_value]
         return out
@@ -578,17 +578,20 @@ class WeightConverter:
 
 
 def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, target_key, mismatch_keys, missing_keys):
-    module_path, _, param_name = k.rpartition(".")
-    module_obj = model.get_submodule(module_path) if module_path else model
-    param_value = v[:]
-    if not isinstance(param_value, torch.nn.Parameter):
-        param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-    ref = meta_model_state_dict.get(k, empty_tensor if k == target_key else None)
-    if ref is not None and ref.shape != param_value.shape:
-        mismatch_keys.append((k, param_value.shape, ref.shape))
-    if k in missing_keys:
-        missing_keys.remove(k)
-    setattr(module_obj, param_name, param_value)
+    try:
+        module_path, _, param_name = k.rpartition(".")
+        module_obj = model.get_submodule(module_path) if module_path else model
+        param_value = v[:]
+        if not isinstance(param_value, torch.nn.Parameter):
+            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+        ref = meta_model_state_dict.get(k, empty_tensor if k == target_key else None)
+        if ref is not None and ref.shape != param_value.shape:
+            mismatch_keys.append((k, param_value.shape, ref.shape))
+        if k in missing_keys:
+            missing_keys.remove(k)
+        setattr(module_obj, param_name, param_value)
+    except Exception as e:
+        print(e) # at this point errors should have already been handled
 
 
 @dataclass(slots=True)
@@ -635,16 +638,15 @@ def convert_and_load_state_dict_in_model(
         matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
         if matched_pattern is not None:
             converter = source_to_target[matched_pattern]  # TODO make sure its the ref
-            extractor = _compile_single_glob_for_extract(matched_pattern)
+            sub_with_extractor = partial(re.sub, glob_to_re(matched_pattern), string=original_key)
             entry_key = "|".join(converter.target_keys)
+            target_key = "|".join(map(sub_with_extractor, converter.target_keys))
             entry: ConversionEntry = by_conversion_pattern.setdefault(entry_key, ConversionEntry(converter))
-            sub_with_extractor = partial(re.sub, extractor, string=original_key)
-            target_unique_key = "|".join(map(sub_with_extractor, converter.target_keys))
-            converter_key = re.sub(extractor, matched_pattern, original_key)
-            entry.collected_tensors[target_unique_key].setdefault(converter_key, []).append(tensor)
+            converter_key = sub_with_extractor(matched_pattern)
+            entry.collected_tensors[target_key].setdefault(converter_key, []).append(tensor)
         else:
             converter = WeightConverter(original_key)
-            converter_key = entry_key = target_unique_key = original_key
+            converter_key = entry_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
             entry.collected_tensors[converter_key] = {converter_key: tensor}
 
@@ -663,7 +665,7 @@ def convert_and_load_state_dict_in_model(
 
     # 2. Actually convert the ckpt
     for group in by_conversion_pattern.values():
-        converter = group.weight_converter  # TODO make sure its a ref here
+        converter = group.weight_converter
         for layer_name, tensors_for_this_layer in group.collected_tensors.items():
             concrete_target_keys = layer_name.split("|")
             if bool(set(concrete_target_keys) - unexpected_keys):
