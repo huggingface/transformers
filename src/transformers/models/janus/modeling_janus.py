@@ -1283,7 +1283,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoded_image = decoded_image.permute(0, 2, 3, 1)
         return decoded_image
 
-    @torch.no_grad
+    @torch.no_grad()
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
