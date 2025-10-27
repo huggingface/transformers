@@ -25,13 +25,13 @@ from .configuration_vibevoice import VibeVoiceDiffusionHeadConfig, VibeVoiceConf
 from ...activations import ACT2FN
 
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
-from ...modeling_utils import PreTrainedModel
 from ..auto import AutoModel
 from ...utils import logging, is_diffusers_available, auto_docstring, can_return_tuple
 from ...utils.import_utils import requires_backends
 from .generation_vibevoice import VibeVoiceGenerationMixin
 
-from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
+from ..llama.modeling_llama import LlamaMLP
+from ..qwen2.modeling_qwen2 import Qwen2RMSNorm, Qwen2PreTrainedModel
 from ..qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 
 
@@ -166,26 +166,8 @@ class TimestepEmbedder(nn.Module):
         return self.layer_2(self.act(self.layer_1(t_freq)))
 
 
-# TODO (ebezzam) modular from LlamaMLP
-class FeedForwardNetwork(nn.Module):
-    def __init__(
-        self,
-        embed_dim,
-        ffn_dim,
-        hidden_act="silu",
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.gate_proj = nn.Linear(self.embed_dim, ffn_dim, bias=False)
-        self.up_proj = nn.Linear(self.embed_dim, ffn_dim, bias=False)
-        self.down_proj = nn.Linear(ffn_dim, self.embed_dim, bias=False)
-        self.act_fn = ACT2FN[hidden_act]
-
-    def forward(self, x):
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
-        gate = self.act_fn(gate)
-        return self.down_proj(gate * up)
+class VibeVoiceMLP(LlamaMLP):
+    pass
 
 
 # NOTE (ebezzam) Qwen 2.5 Omni has most similar, but hardcoded fnn ratio: https://github.com/huggingface/transformers/blob/82451cbb30fde5ede89308ea2328f89c61d5a831/src/transformers/models/qwen2_5_omni/modeling_qwen2_5_omni.py#L2927
@@ -194,11 +176,7 @@ class HeadLayer(nn.Module):
         super().__init__()
         self.ffn_ratio = config.head_ffn_ratio
         ffn_dim = config.hidden_size * config.head_ffn_ratio
-        self.ffn = FeedForwardNetwork(
-            config.hidden_size,
-            ffn_dim,
-            hidden_act=config.hidden_act
-        )
+        self.ffn = VibeVoiceMLP(config)
         self.norm = VibeVoiceRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.act_fn = ACT2FN[config.hidden_act]
         self.linear = nn.Linear(config.hidden_size, ffn_dim, bias=False)
@@ -229,19 +207,14 @@ class FinalLayer(nn.Module):
 
 
 @auto_docstring
-class VibeVoicePreTrainedModel(PreTrainedModel):
+class VibeVoicePreTrainedModel(Qwen2PreTrainedModel):
     config: VibeVoiceConfig
-    base_model_prefix = "model"
-    # TODO (ebezzam) check below, probably from Qwen?
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    # TODO (ebezzam) check below
     _supports_cache_class = True
     _supports_flash_attn_2 = True
-    _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
-    _supports_attention_backend = True
-
+    
 
 @auto_docstring(
     custom_intro="""
@@ -292,7 +265,6 @@ class VibeVoiceDiffusionHead(VibeVoicePreTrainedModel):
         return hidden_states
 
 
-# TODO (ebezzam)  modular for SpeechConnector itself? (Voxtral?)
 class VibeVoiceSpeechConnector(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
@@ -348,7 +320,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    # TODO (ebezzam) move to processor since tokenizers are pretrained
+    # TODO (ebezzam) move to processor since tokenizer is pretrained?
     def get_speech_features(self, speech_tensors, speech_masks):
         """Process speech inputs through tokenizers and connectors."""
         # TODO (ebezzam) can remove unsqueeze since if we keep batch dim in processor?

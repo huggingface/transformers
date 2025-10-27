@@ -117,26 +117,20 @@ class TimestepEmbedder(nn.Module):
         return self.layer_2(self.act(self.layer_1(t_freq)))
 
 
-# TODO (ebezzam) modular from LlamaMLP
-class FeedForwardNetwork(nn.Module):
-    def __init__(
-        self,
-        embed_dim,
-        ffn_dim,
-        hidden_act="silu",
-    ):
+class VibeVoiceMLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.gate_proj = nn.Linear(self.embed_dim, ffn_dim, bias=False)
-        self.up_proj = nn.Linear(self.embed_dim, ffn_dim, bias=False)
-        self.down_proj = nn.Linear(ffn_dim, self.embed_dim, bias=False)
-        self.act_fn = ACT2FN[hidden_act]
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
-        gate = self.act_fn(gate)
-        return self.down_proj(gate * up)
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 # NOTE (ebezzam) Qwen 2.5 Omni has most similar, but hardcoded fnn ratio: https://github.com/huggingface/transformers/blob/82451cbb30fde5ede89308ea2328f89c61d5a831/src/transformers/models/qwen2_5_omni/modeling_qwen2_5_omni.py#L2927
@@ -145,7 +139,7 @@ class HeadLayer(nn.Module):
         super().__init__()
         self.ffn_ratio = config.head_ffn_ratio
         ffn_dim = config.hidden_size * config.head_ffn_ratio
-        self.ffn = FeedForwardNetwork(config.hidden_size, ffn_dim, hidden_act=config.hidden_act)
+        self.ffn = VibeVoiceMLP(config)
         self.norm = VibeVoiceRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.act_fn = ACT2FN[config.hidden_act]
         self.linear = nn.Linear(config.hidden_size, ffn_dim, bias=False)

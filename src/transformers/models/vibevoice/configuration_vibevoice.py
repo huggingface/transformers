@@ -55,7 +55,14 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.frequency_embedding_size = frequency_embedding_size
 
+        # NOTE (ebezzam) to use LlamaMLP via modular
+        self.mlp_bias = False
+
         super().__init__(**kwargs)
+
+    @property
+    def intermediate_size(self) -> int:
+        return self.hidden_size * self.head_ffn_ratio
 
 
 class VibeVoiceConfig(PretrainedConfig):
