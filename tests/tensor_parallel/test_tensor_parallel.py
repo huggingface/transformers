@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Run all tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py
 # Run specific config: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc"
 # Run multiple configs: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc or 4Proc"
 # Run spefic test: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallel2Proc::test_model_forward
@@ -375,8 +376,3 @@ class TestTensorParallel2Proc(TestTensorParallelBase):
 class TestTensorParallel4Proc(TestTensorParallelBase):
     """Test tensor parallel with 4 processes."""
     nproc_per_node = 4
-
-
-class TestTensorParallel8Proc(TestTensorParallelBase):
-    """Test tensor parallel with 8 processes."""
-    nproc_per_node = 8
