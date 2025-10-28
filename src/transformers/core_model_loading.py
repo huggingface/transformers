@@ -587,28 +587,14 @@ def spawn_materialize(file_id, t) -> Future:
 
     return EXEC.submit(_job)
 
+def spawn_tp_materialize(file_id, t, sharding_method) -> Future:
+    sem = _file_sems[file_id]
 
-def glob_replace_string(replace_glob: str, original: str, find_glob: str) -> str:
-    # Build regex by escaping everything except '*' which becomes a capture group
-    pattern = re.escape(find_glob).replace(r"\*", "(.*?)")
-    partial = find_glob.startswith("*") or find_glob.endswith("*")
-    if not partial:
-        pattern = "^" + pattern + "$"
+    def _job():
+        with sem:
+            return sharding_method(t)
 
-    # Map each '*' in replace_glob to the corresponding capture group (\1, \2, ...)
-    star_count = find_glob.count("*")
-    rep, g = [], 1
-    for ch in replace_glob:
-        if ch == "*" and g <= star_count:
-            rep.append(f"\\{g}")
-            g += 1
-        else:
-            rep.append(ch)
-    replacement = "".join(rep)
-
-    if partial:
-        return re.sub(pattern, replacement, original)
-    return re.sub(pattern, replacement, original) if re.fullmatch(pattern, original) else original
+    return EXEC.submit(_job)
 
 
 def convert_and_load_state_dict_in_model(
@@ -658,15 +644,12 @@ def convert_and_load_state_dict_in_model(
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
-        if matched_tp_pattern := match_glob(converter.target_keys[0], tp_plan_alt, tp_plan_by_group_name):
+        if matched_tp_pattern := match_glob(target_key.split('|')[0], tp_plan_alt, tp_plan_by_group_name):
             if getattr(converter, "distributed_operation", None) is None:
                 converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
-                # we should shard here and then as we don't have the complicated list of lists?
-
-        # TP OP should happen here as it materialized the tensor
-
-        # If not TP, move tensors
-        fut = spawn_materialize(file_id, tensor)  # <— returns Future
+            fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation)
+        else: # If not TP, async move tensors
+            fut = spawn_materialize(file_id, tensor)
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
         for t in target_key.split("|"):
             empty_tensor = meta_model_state_dict.get(t)

@@ -4708,10 +4708,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
         for k, v in sharded_metadata["weight_map"].items():
             key = pattern.match(k).group(1)
-            if key is not None:
+            if key is not None and key != '':
                 device = device_map[key]
             else:
-                device = device_map[""]
+                device = device_map[""].index
             file_pointer = safe_open(
                 os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
             )
