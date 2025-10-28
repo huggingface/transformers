@@ -138,14 +138,6 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
             tokenizer = BertTokenizer(vocab_file)
             tokenizer.chat_template = "test template"
-
-            with TemporaryHubRepo(token=self._token) as tmp_repo:
-                tokenizer.save_pretrained(
-                    tmp_repo.repo_id, token=self._token, push_to_hub=True, save_jinja_files=False
-                )
-                reloaded_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
-                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
-
             with TemporaryHubRepo(token=self._token) as tmp_repo:
                 tokenizer.save_pretrained(tmp_repo.repo_id, token=self._token, push_to_hub=True)
                 reloaded_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)

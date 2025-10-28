@@ -22,7 +22,6 @@ tests/generation/ @gante
 /src/transformers/models/auto/ @ArthurZucker
 /src/transformers/utils/ @ArthurZucker @Rocketknight1
 /src/transformers/loss/ @ArthurZucker
-/src/transformers/onnx/ @michaelbenayoun
 
 # Specific files come after the sections/globs, so they take priority
 /.circleci/config.yml @ArthurZucker @ydshieh

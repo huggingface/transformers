@@ -772,8 +772,6 @@ class ProcessorMixin(PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        save_jinja_files = kwargs.pop("save_jinja_files", True)
-
         os.makedirs(save_directory, exist_ok=True)
 
         if push_to_hub:
@@ -796,8 +794,7 @@ class ProcessorMixin(PushToHubMixin):
 
             # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
             if attribute_name == "tokenizer":
-                # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
-                attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
+                attribute.save_pretrained(save_directory)
             elif attribute._auto_class is not None:
                 custom_object_save(attribute, save_directory, config=attribute)
 
@@ -812,47 +809,29 @@ class ProcessorMixin(PushToHubMixin):
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
         output_chat_template_file_jinja = os.path.join(save_directory, CHAT_TEMPLATE_FILE)
-        output_chat_template_file_legacy = os.path.join(save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE)
         chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
 
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
-        if self.chat_template is not None:
-            is_single_template = isinstance(self.chat_template, str)
-            if save_jinja_files and is_single_template:
-                # New format for single templates is to save them as chat_template.jinja
-                with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
-                    f.write(self.chat_template)
-                logger.info(f"chat template saved in {output_chat_template_file_jinja}")
-            elif save_jinja_files and not is_single_template:
-                # New format for multiple templates is to save the default as chat_template.jinja
-                # and the other templates in the chat_templates/ directory
-                for template_name, template in self.chat_template.items():
-                    if template_name == "default":
-                        with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
-                            f.write(self.chat_template["default"])
-                        logger.info(f"chat template saved in {output_chat_template_file_jinja}")
-                    else:
-                        os.makedirs(chat_template_dir, exist_ok=True)
-                        template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
-                        with open(template_filepath, "w", encoding="utf-8") as f:
-                            f.write(template)
-                        logger.info(f"chat template saved in {template_filepath}")
-            elif is_single_template:
-                # Legacy format for single templates: Put them in chat_template.json
-                chat_template_json_string = (
-                    json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
-                )
-                with open(output_chat_template_file_legacy, "w", encoding="utf-8") as writer:
-                    writer.write(chat_template_json_string)
-                logger.info(f"chat template saved in {output_chat_template_file_legacy}")
-            elif self.chat_template is not None:
-                # At this point we have multiple templates in the legacy format, which is not supported
-                # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
-                raise ValueError(
-                    "Multiple chat templates are not supported in the legacy format. Please save them as "
-                    "separate files using the `save_jinja_files` argument."
-                )
+        if isinstance(self.chat_template, str):
+            # New format for single templates is to save them as chat_template.jinja
+            with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
+                f.write(self.chat_template)
+            logger.info(f"chat template saved in {output_chat_template_file_jinja}")
+        elif isinstance(self.chat_template, dict):
+            # New format for multiple templates is to save the default as chat_template.jinja
+            # and the other templates in the chat_templates/ directory
+            for template_name, template in self.chat_template.items():
+                if template_name == "default":
+                    with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
+                        f.write(self.chat_template["default"])
+                    logger.info(f"chat template saved in {output_chat_template_file_jinja}")
+                else:
+                    os.makedirs(chat_template_dir, exist_ok=True)
+                    template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                    with open(template_filepath, "w", encoding="utf-8") as f:
+                        f.write(template)
+                    logger.info(f"chat template saved in {template_filepath}")
 
         # Create a unified `preprocessor_config.json` and save all attributes as a composite config, except for tokenizers
         self.to_json_file(output_processor_file)
@@ -1066,9 +1045,6 @@ class ProcessorMixin(PushToHubMixin):
         if isinstance(chat_templates, dict) and "default" in chat_templates and len(chat_templates) == 1:
             chat_templates = chat_templates["default"]  # Flatten when we just have a single template/file
 
-        if chat_templates:
-            kwargs["chat_template"] = chat_templates
-
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
         # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
@@ -1093,14 +1069,13 @@ class ProcessorMixin(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {processor_file} from cache at {resolved_processor_file}")
 
-        if "chat_template" in processor_dict and processor_dict["chat_template"] is not None:
+        if processor_dict.get("chat_template") is not None:
             logger.warning_once(
                 "Chat templates should be in a 'chat_template.jinja' file but found key='chat_template' "
                 "in the processor's config. Make sure to move your template to its own file."
             )
-
-        if "chat_template" in kwargs:
-            processor_dict["chat_template"] = kwargs.pop("chat_template")
+        elif chat_templates:
+            processor_dict["chat_template"] = chat_templates
 
         # Audio tokenizer needs to load the model checkpoint first, because the saved
         # json file contains only references to the model path and repo id

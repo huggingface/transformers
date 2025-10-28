@@ -1407,7 +1407,10 @@ if __name__ == "__main__":
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
-    nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
+    nvidia_daily_ci_workflow = (
+        "huggingface/transformers/.github/workflows/self-scheduled-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-flash-attn-caller.yml",
+    )
     amd_daily_ci_workflows = (
         "huggingface/transformers/.github/workflows/self-scheduled-amd-mi325-caller.yml",
         "huggingface/transformers/.github/workflows/self-scheduled-amd-mi355-caller.yml",

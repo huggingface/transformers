@@ -447,7 +447,7 @@ def convert_transformer_weights(
             return zip([], [])
         else:
             raise ValueError(f"Unexpected member, {prop}, in Embedder.")
-    elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
+    elif f"{_TRANSFORMER_EMBEDDER}/mm_" in path:
         if not _INCLUDE_VISION_ENCODER.value:
             return zip([], [])
 
@@ -553,7 +553,7 @@ def convert(
                 continue
 
             path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
-            update_tree(path, weights, config.vision_config.dtype)
+            update_tree(f"model.{path}", weights, config.vision_config.dtype)
         else:
             for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
                 if not _INCLUDE_VISION_ENCODER.value:

@@ -1316,7 +1316,6 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
                 video_metadata = videos_inputs["video_metadata"]
-            video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
             video_grid_thw = None

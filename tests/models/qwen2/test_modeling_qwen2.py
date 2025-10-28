@@ -274,6 +274,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @slow
     def test_3b_generation(self):

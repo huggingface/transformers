@@ -34,12 +34,8 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging
-from ...video_utils import VideoInput, make_batched_videos
+from ...utils import TensorType, auto_docstring
 from .image_processing_video_llama_3 import VideoLlama3ImageProcessorKwargs
-
-
-logger = logging.get_logger(__name__)
 
 
 def smart_resize(
@@ -91,9 +87,6 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         "pixel_values",
         "image_grid_thw",
         "image_merge_sizes",
-        "pixel_values_videos",
-        "video_grid_thw",
-        "video_merge_sizes",
     ]
 
     def __init__(self, **kwargs: Unpack[VideoLlama3ImageProcessorKwargs]):
@@ -140,15 +133,13 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[VideoLlama3ImageProcessorKwargs],
     ) -> BatchFeature:
-        return super().preprocess(images, videos, **kwargs)
+        return super().preprocess(images, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        videos: VideoInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
@@ -161,39 +152,17 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         """
         # Prepare input images
         batch_feature = BatchFeature()
-        if images is not None:
-            if kwargs["temporal_patch_size"] != 1:
-                raise ValueError("`temporal_patch_size` must be 1 for VideoLLaMA3")
-            images = self._prepare_image_like_inputs(
-                images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-            )
-            batch_feature = self._preprocess(images, **kwargs)
-            batch_feature["image_merge_sizes"] = torch.tensor(
-                [kwargs["merge_size"]] * batch_feature.image_grid_thw.size(0),
-                dtype=batch_feature.image_grid_thw.dtype,
-                device=batch_feature.image_grid_thw.device,
-            )
-        if videos is not None:
-            logger.warning(
-                "`VideoLlama3ImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
-                "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `VideoLlama3VideoProcessor`. "
-            )
-            # Can't change _prepare_images_structure to work with videos because it also needs to work with images.
-            videos = make_batched_videos(videos)
-            videos = [
-                torch.stack(self._prepare_image_like_inputs(video, do_convert_rgb, input_data_format, device))
-                for video in videos
-            ]
-            video_outputs = self._preprocess(videos, **kwargs)
-            batch_feature.update(
-                {"pixel_values_videos": video_outputs.pixel_values, "video_grid_thw": video_outputs.image_grid_thw}
-            )
-            batch_feature["video_merge_sizes"] = torch.tensor(
-                [kwargs["merge_size"]] * video_outputs.image_grid_thw.size(0),
-                dtype=video_outputs.image_grid_thw.dtype,
-                device=video_outputs.image_grid_thw.device,
-            )
+        if kwargs["temporal_patch_size"] != 1:
+            raise ValueError("`temporal_patch_size` must be 1 for VideoLLaMA3")
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        batch_feature = self._preprocess(images, **kwargs)
+        batch_feature["image_merge_sizes"] = torch.tensor(
+            [kwargs["merge_size"]] * batch_feature.image_grid_thw.size(0),
+            dtype=batch_feature.image_grid_thw.dtype,
+            device=batch_feature.image_grid_thw.device,
+        )
         return batch_feature
 
     def _preprocess(

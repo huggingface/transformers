@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+import unittest.mock
 from functools import cached_property
 
 import timeout_decorator  # noqa
@@ -476,6 +477,23 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
             with torch.no_grad():
                 model(**inputs)[0]
+
+    def test_input_embeddings_support_forward_hook(self):
+        # Make sure that registering hooks on the input embeddings are indeed called
+        # in forward. This is necessary for gradient checkpointing in PEFT, see also #41821.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hook = unittest.mock.MagicMock(return_value=None)
+            model.get_input_embeddings().register_forward_hook(hook)
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            model(**inputs)
+
+            self.assertGreater(hook.call_count, 0)
 
     @require_torch_fp16
     def test_generate_fp16(self):

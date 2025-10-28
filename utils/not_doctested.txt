@@ -738,7 +738,6 @@ src/transformers/models/yoso/convert_yoso_pytorch_to_pytorch.py
 src/transformers/models/yoso/modeling_yoso.py
 src/transformers/models/zamba/configuration_zamba.py
 src/transformers/models/zamba/modeling_zamba.py
-src/transformers/onnx/config.py
 src/transformers/optimization.py
 src/transformers/pipelines/audio_classification.py
 src/transformers/pipelines/audio_utils.py

@@ -1318,7 +1318,7 @@ class BarkFineModel(BarkPreTrainedModel):
     output sound according to specific predefined voice.
     """
 )
-class BarkModel(BarkPreTrainedModel):
+class BarkModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkConfig
 
     def __init__(self, config):
