@@ -99,11 +99,14 @@ class HiggsAudioDecoderLayer(LlamaDecoderLayer):
     ) -> torch.Tensor:
         residual = hidden_states
 
+        audio_out_mask = audio_out_mask.to(hidden_states.device)
         hidden_states = hidden_states.masked_scatter(
-            audio_out_mask.unsqueeze(-1), self.audio_input_layernorm(hidden_states[audio_out_mask])
+            audio_out_mask.unsqueeze(-1),
+            self.audio_input_layernorm(hidden_states[audio_out_mask]).to(hidden_states.device),
         )
         hidden_states = hidden_states.masked_scatter(
-            ~audio_out_mask.unsqueeze(-1), self.input_layernorm(hidden_states[~audio_out_mask])
+            ~audio_out_mask.unsqueeze(-1),
+            self.input_layernorm(hidden_states[~audio_out_mask]).to(hidden_states.device),
         )
 
         # Self Attention
@@ -124,10 +127,10 @@ class HiggsAudioDecoderLayer(LlamaDecoderLayer):
         audio_hidden_states = self.audio_post_attention_layernorm(hidden_states[audio_out_mask])
 
         text_hidden_states = self.mlp(text_hidden_states)
-        hidden_states[~audio_out_mask] += text_hidden_states
+        hidden_states[~audio_out_mask] += text_hidden_states.to(hidden_states.device)
 
         audio_hidden_states = self.audio_mlp(audio_hidden_states)
-        hidden_states[audio_out_mask] += audio_hidden_states
+        hidden_states[audio_out_mask] += audio_hidden_states.to(hidden_states.device)
 
         return hidden_states
 
@@ -198,14 +201,15 @@ class HiggsAudioModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if audio_input_ids is not None and inputs_embeds is not None:
-            audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids)
+            if audio_input_ids is not None:
+                audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids)
+                audio_inputs_embeds = audio_inputs_embeds.to(inputs_embeds.device)
 
-            audio_in_token_mask = input_ids == self.config.audio_in_token_idx
-            audio_out_token_mask = input_ids == self.config.audio_out_token_idx
+                audio_in_token_mask = input_ids == self.config.audio_in_token_idx
+                audio_out_token_mask = input_ids == self.config.audio_out_token_idx
 
-            audio_token_mask = audio_in_token_mask | audio_out_token_mask
-            inputs_embeds = inputs_embeds.masked_scatter(audio_token_mask.unsqueeze(-1), audio_inputs_embeds)
+                audio_token_mask = audio_in_token_mask | audio_out_token_mask
+                inputs_embeds = inputs_embeds.masked_scatter(audio_token_mask.unsqueeze(-1), audio_inputs_embeds)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
