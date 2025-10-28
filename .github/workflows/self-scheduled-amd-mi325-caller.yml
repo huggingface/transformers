@@ -14,9 +14,39 @@ on:
       - run_amd_scheduled_ci_caller*
 
 jobs:
+  # This job is to only cache the huggigface/transformers-pytorch-amd-gpu image,
+  # as it is heavily used in the model-ci job
+  cache-pytorch-image:
+    name: Cache Pytorch Image
+    runs-on: amd-mi325-1gpu
+    steps:
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      
+      - name: Pull and save docker image to cache
+        run: |
+          image="huggingface/transformers-pytorch-amd-gpu"
+          final_path="/mnt/image-cache/transformers-pytorch-amd-gpu.tar"
+          tmp_path="${final_path}.tmp"
+
+          echo "Pulling image: ${image}"
+          docker pull "${image}"
+
+          echo "Saving to temp file: ${tmp_path}"
+          docker save "${image}" -o "${tmp_path}"
+
+          echo "Moving to final path: ${final_path}"
+          mv -f "${tmp_path}" "${final_path}"
+
+          echo "Cache populated successfully at ${final_path}"
+
   model-ci:
     name: Model CI
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    needs: cache-pytorch-image
     with:
       job: run_models_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -30,6 +60,7 @@ jobs:
   torch-pipeline:
     name: Torch pipeline CI
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    needs: cache-pytorch-image
     with:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -43,6 +74,7 @@ jobs:
   example-ci:
     name: Example CI
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    needs: cache-pytorch-image
     with:
       job: run_examples_gpu
       slack_report_channel: "#amd-hf-ci"
