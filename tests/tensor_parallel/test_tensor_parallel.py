@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Run the test: CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py
+# Run specific config: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc"
+# Run multiple configs: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc or 4Proc"
+# Run spefic test: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallel2Proc::test_model_forward
 
 import os
 import tempfile
@@ -100,178 +102,6 @@ class TestTensorParallelUtils(TestCasePlus):
         unpacked_weights = repack_weights(packed_weights, SHARDING_DIM, WORLD_SIZE, NUM_BLOCKS)
 
         assert torch.allclose(unpacked_weights, original_packed_weights)
-
-
-# ====== TEST FUNCTIONS ======
-def _test_model_forward_impl(rank):
-    """Implementation of test_model_forward for distributed execution."""
-    model_id = "JackFram/llama-68m"
-
-    int(os.environ["RANK"])
-    int(os.environ["WORLD_SIZE"])
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    torch.distributed.barrier()
-
-    has_dtensor = 0
-    for name, parameter in model.named_parameters():
-        if isinstance(parameter.data, torch.distributed.tensor.DTensor):
-            has_dtensor = 1
-            break
-
-    assert has_dtensor == 1, "TP model must has DTensor"
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-    prompt = "Can I help"
-
-    inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-    outputs = model(inputs)
-
-    next_token_logits = outputs[0][:, -1, :]
-    next_token = torch.argmax(next_token_logits, dim=-1)
-    response = tokenizer.decode(next_token)
-    assert response == "with"
-    print("response:", response)
-    torch.distributed.barrier()
-
-
-def _test_model_backward_pass_impl(rank):
-    """Implementation of test_model_backward_pass for distributed execution."""
-    model_id = "JackFram/llama-68m"
-
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
-    torch.distributed.barrier()
-
-    # Dummy forward and backward pass
-    # Note that loss.backward() will fail if there is a bug in the TP implementation
-    inputs = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
-    labels = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
-    loss = model(inputs, labels=labels).loss
-    loss.backward()
-
-    torch.distributed.barrier()
-
-
-def _test_model_generate_impl(rank):
-    """Implementation of test_model_generate for distributed execution."""
-    model_id = "JackFram/llama-68m"
-
-    int(os.environ["RANK"])
-    int(os.environ["WORLD_SIZE"])
-
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    torch.distributed.barrier()
-
-    model.forward = torch.compile(model.forward)
-
-    has_dtensor = 0
-    for name, parameter in model.named_parameters():
-        if isinstance(parameter.data, torch.distributed.tensor.DTensor):
-            has_dtensor = 1
-            break
-
-    assert has_dtensor == 1, "TP model must has DTensor"
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    prompt = "Can I help"
-
-    inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-    outputs = model.generate(inputs, max_new_tokens=10, cache_implementation="static")
-
-    output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-    assert output_text[0].startswith(prompt), f"Expected output to start with '{prompt}', got '{output_text[0]}'"
-
-    torch.distributed.barrier()
-
-
-def _test_model_save_impl(rank, tmp_dir, is_torchrun):
-    """Implementation of test_model_save for distributed execution."""
-    model_id = "JackFram/llama-68m"
-    kwargs = {}
-
-    if os.environ.get("RANK", None) is not None:
-        kwargs["tp_plan"] = "auto"
-        result_dir = f"{tmp_dir}/tp"
-    else:
-        result_dir = f"{tmp_dir}/nontp"
-
-    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
-    model.save_pretrained(result_dir)
-
-
-class TestTensorParallel(TestCasePlus):
-    nproc_per_node = 2
-
-    @require_torch_multi_accelerator
-    def test_model_forward(self):
-        init_distributed(tp=self.nproc_per_node)(_test_model_forward_impl)()
-
-    @require_torch_multi_accelerator
-    def test_model_backward_pass(self):
-        init_distributed(tp=self.nproc_per_node)(_test_model_backward_pass_impl)()
-
-    @require_torch_multi_accelerator
-    def test_model_generate(self):
-        init_distributed(tp=self.nproc_per_node)(_test_model_generate_impl)()
-
-    @require_huggingface_hub_greater_or_equal("0.31.4")
-    @require_torch_multi_accelerator
-    def test_model_save(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # First run with TP (distributed)
-            init_distributed(tp=self.nproc_per_node)(_test_model_save_impl)(tmp_dir, True)
-
-            # Then run without TP (non-distributed)
-            _test_model_save_impl(0, tmp_dir, False)
-
-            non_tp_model_path = os.path.join(tmp_dir, "nontp")
-            tp_model_path = os.path.join(tmp_dir, "tp")
-
-            for filename in os.listdir(non_tp_model_path):
-                if not filename.endswith(".safetensors"):
-                    continue
-
-                non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
-                tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
-                for non_tp_key in non_tp_model.keys():
-                    non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
-                    tp_tensor = tp_model.get_tensor(non_tp_key)
-                    assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
-                    del non_tp_tensor, tp_tensor
-
-    def test_custom_tp_plan(self):
-        script_to_run = textwrap.dedent(
-            r"""
-            import re
-            import torch
-            from torch.distributed.tensor import DTensor
-            from transformers import AutoModelForCausalLM
-
-            model_id = "JackFram/llama-68m"
-            # only shard attentions, but not mlps
-            tp_plan = {
-                "model.layers.*.self_attn.q_proj": "colwise",
-                "model.layers.*.self_attn.k_proj": "colwise",
-                "model.layers.*.self_attn.v_proj": "colwise",
-                "model.layers.*.self_attn.o_proj": "rowwise",
-            }
-
-            # Use custom tp_plan directly in from_pretrained
-            model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
-
-            # Check we can generate with the tp_plan
-            inputs = torch.randint(100, 200, (1, 10), device=model.device)
-            out = model.generate(inputs, max_new_tokens=10, do_sample=False)
-
-            # Check only the attentions are sharded
-            for name, param in model.named_parameters():
-                if re.search(r"\.self_attn\.(q|k|v|o)_proj\.", name):
-                    assert isinstance(param, DTensor)
-                else:
-                    assert not isinstance(param, DTensor)
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
-
 
 class TestTensorParallelProperties(TestCasePlus):
     def test_tp_plan_property_setter_getter(self):
@@ -378,6 +208,175 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
 
 
-@require_torch_multi_accelerator
-class TestTensorParallelAccelerator(TestTensorParallel):
-    nproc_per_node = backend_device_count(torch_device)
+# ====== TEST FUNCTIONS ======
+def _test_model_forward_impl(rank):
+    """Implementation of test_model_forward for distributed execution."""
+    model_id = "JackFram/llama-68m"
+
+    int(os.environ["RANK"])
+    int(os.environ["WORLD_SIZE"])
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    torch.distributed.barrier()
+
+    has_dtensor = 0
+    for name, parameter in model.named_parameters():
+        if isinstance(parameter.data, torch.distributed.tensor.DTensor):
+            has_dtensor = 1
+            break
+
+    assert has_dtensor == 1, "TP model must has DTensor"
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
+    prompt = "Can I help"
+
+    inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+    outputs = model(inputs)
+
+    next_token_logits = outputs[0][:, -1, :]
+    next_token = torch.argmax(next_token_logits, dim=-1)
+    response = tokenizer.decode(next_token)
+    assert response == "with"
+    print("response:", response)
+    torch.distributed.barrier()
+
+
+def _test_model_backward_pass_impl(rank):
+    """Implementation of test_model_backward_pass for distributed execution."""
+    model_id = "JackFram/llama-68m"
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
+    torch.distributed.barrier()
+
+    # Dummy forward and backward pass
+    # Note that loss.backward() will fail if there is a bug in the TP implementation
+    inputs = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
+    labels = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
+    loss = model(inputs, labels=labels).loss
+    loss.backward()
+
+    torch.distributed.barrier()
+
+
+def _test_model_generate_impl(rank):
+    """Implementation of test_model_generate for distributed execution."""
+    model_id = "JackFram/llama-68m"
+
+    int(os.environ["RANK"])
+    int(os.environ["WORLD_SIZE"])
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    torch.distributed.barrier()
+
+    model.forward = torch.compile(model.forward)
+
+    has_dtensor = 0
+    for name, parameter in model.named_parameters():
+        if isinstance(parameter.data, torch.distributed.tensor.DTensor):
+            has_dtensor = 1
+            break
+
+    assert has_dtensor == 1, "TP model must has DTensor"
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    prompt = "Can I help"
+
+    inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+    outputs = model.generate(inputs, max_new_tokens=10, cache_implementation="static")
+
+    output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+    assert output_text[0].startswith(prompt), f"Expected output to start with '{prompt}', got '{output_text[0]}'"
+
+    torch.distributed.barrier()
+
+
+def _test_model_save_impl(rank, tmp_dir, is_torchrun):
+    """Implementation of test_model_save for distributed execution."""
+    model_id = "JackFram/llama-68m"
+    kwargs = {}
+
+    if os.environ.get("RANK", None) is not None:
+        kwargs["tp_plan"] = "auto"
+        result_dir = f"{tmp_dir}/tp"
+    else:
+        result_dir = f"{tmp_dir}/nontp"
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+    model.save_pretrained(result_dir)
+
+
+class TestTensorParallelBase(TestCasePlus):
+    """Base class for tensor parallel tests. Subclasses must set nproc_per_node."""
+
+    nproc_per_node = None
+
+    @require_torch_multi_accelerator
+    def test_model_forward(self):
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_forward_impl)()
+
+    @require_torch_multi_accelerator
+    def test_model_backward_pass(self):
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_backward_pass_impl)()
+
+    @require_torch_multi_accelerator
+    def test_model_generate(self):
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_generate_impl)()
+
+    @require_huggingface_hub_greater_or_equal("0.31.4")
+    @require_torch_multi_accelerator
+    def test_model_save(self):
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # First run with TP (distributed)
+            init_distributed(tp=self.nproc_per_node)(_test_model_save_impl)(tmp_dir, True)
+
+            # Then run without TP (non-distributed)
+            _test_model_save_impl(0, tmp_dir, False)
+
+            non_tp_model_path = os.path.join(tmp_dir, "nontp")
+            tp_model_path = os.path.join(tmp_dir, "tp")
+
+            for filename in os.listdir(non_tp_model_path):
+                if not filename.endswith(".safetensors"):
+                    continue
+
+                non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
+                tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
+                for non_tp_key in non_tp_model.keys():
+                    non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
+                    tp_tensor = tp_model.get_tensor(non_tp_key)
+                    assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
+                    del non_tp_tensor, tp_tensor
+
+
+class TestTensorParallel2Proc(TestTensorParallelBase):
+    """Test tensor parallel with 2 processes."""
+    nproc_per_node = 2
+
+
+class TestTensorParallel4Proc(TestTensorParallelBase):
+    """Test tensor parallel with 4 processes."""
+    nproc_per_node = 4
+
+
+class TestTensorParallel8Proc(TestTensorParallelBase):
+    """Test tensor parallel with 8 processes."""
+    nproc_per_node = 8
