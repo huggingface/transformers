@@ -1128,28 +1128,6 @@ class DeepseekOcrTextExperts(nn.ModuleList):
         for _ in range(config.n_routed_experts):
             self.append(DeepseekOcrTextMLP(config, intermediate_size=config.moe_intermediate_size))
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
-        Returns:
-            (batch_size * sequence_length, hidden_dim)
-        """
-        final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        return final_hidden_states
-
 
 class DeepseekOcrTextMoe(nn.Module):
     def __init__(self, config: DeepseekOcrTextConfig):
@@ -1165,38 +1143,80 @@ class DeepseekOcrTextMoe(nn.Module):
         self.num_group = config.n_group
         self.top_k = config.num_experts_per_tok
         self.topk_group = config.topk_group
+        self.norm_topk_prob = getattr(config, "norm_topk_prob", False)
 
-    def route_tokens_to_experts(self, router_logits):
-        batch_size, seq_len, hidden_dim = router_logits.shape
-        router_logits = router_logits.view(-1, hidden_dim)
-        router_logits = router_logits.softmax(dim=-1, dtype=torch.float32)
+    def _select_experts(self, scores):
+        if self.top_k is None or self.top_k <= 0:
+            raise ValueError("`num_experts_per_tok` must be a positive integer for MoE routing.")
+
         if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=False)
+            topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = router_logits.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values
+            if self.num_group is None or self.topk_group is None:
+                raise ValueError("`n_group` and `topk_group` must be provided for group_limited_greedy routing.")
+            group_scores = scores.view(scores.shape[0], self.num_group, -1).max(dim=-1).values
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
             group_mask = torch.zeros_like(group_scores)
             group_mask.scatter_(1, group_idx, 1)
             score_mask = (
                 group_mask.unsqueeze(-1)
-                .expand(batch_size * seq_len, self.num_group, self.num_experts // self.num_group)
-                .reshape(batch_size * seq_len, -1)
+                .expand(scores.shape[0], self.num_group, scores.shape[-1] // self.num_group)
+                .reshape(scores.shape[0], -1)
             )
-            tmp_scores = router_logits.masked_fill(~score_mask.bool(), 0.0)
-            topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
+            masked_scores = scores.masked_fill(~score_mask.bool(), 0.0)
+            topk_weight, topk_idx = torch.topk(masked_scores, k=self.top_k, dim=-1, sorted=False)
+        else:
+            raise ValueError(f"Unsupported topk routing method: {self.topk_method}")
+
+        if self.top_k > 1 and self.norm_topk_prob:
+            denominator = topk_weight.sum(dim=-1, keepdim=True).clamp_min(1e-20)
+            topk_weight = topk_weight / denominator
 
         topk_weight = topk_weight * self.routed_scaling_factor
         return topk_idx, topk_weight
 
+    def _moe_infer(self, tokens, topk_idx, topk_weight):
+        counts = topk_idx.new_zeros((topk_idx.shape[0], len(self.experts)))
+        counts.scatter_(1, topk_idx, 1)
+        tokens_per_expert = counts.sum(dim=0).cpu().tolist()
+
+        flat_indices = topk_idx.view(-1)
+        sorted_positions = flat_indices.argsort()
+        sorted_tokens = tokens[sorted_positions // topk_idx.shape[1]]
+
+        outputs = []
+        cursor = 0
+        for expert_idx, num_tokens in enumerate(tokens_per_expert):
+            num_tokens = int(num_tokens)
+            if num_tokens == 0:
+                continue
+            next_cursor = cursor + num_tokens
+            expert_inp = sorted_tokens[cursor:next_cursor]
+            expert_out = self.experts[expert_idx](expert_inp)
+            outputs.append(expert_out)
+            cursor = next_cursor
+
+        combined = torch.cat(outputs, dim=0) if outputs else sorted_tokens.new_empty((0, tokens.shape[-1]))
+        dispatch_buffer = torch.empty_like(combined)
+        dispatch_buffer[sorted_positions] = combined
+        dispatch_buffer = dispatch_buffer.view(topk_idx.shape[0], self.top_k, -1)
+        weighted = dispatch_buffer.to(topk_weight.dtype) * topk_weight.unsqueeze(-1)
+        return weighted.sum(dim=1).to(tokens.dtype)
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = nn.functional.linear(hidden_states.type(torch.float32), self.gate.weight.type(torch.float32))
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        router_logits = F.linear(hidden_states.float(), self.gate.weight.float())
+        router_scores = router_logits.softmax(dim=-1, dtype=torch.float32)
+        router_indices, router_weights = self._select_experts(router_scores.view(-1, router_scores.shape[-1]))
+
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
+        moe_output = self._moe_infer(hidden_states, router_indices, router_weights).view(*orig_shape)
+
+        if hasattr(self, "shared_experts"):
+            moe_output = moe_output + self.shared_experts(residuals)
+
+        return moe_output
 
 
 class DeepseekOcrTextDecoderLayer(GradientCheckpointingLayer):
@@ -1204,10 +1224,7 @@ class DeepseekOcrTextDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = DeepseekOcrTextAttention(config, layer_idx)
-        self.mlp = (
-            DeepseekOcrTextMoe(config) if layer_idx >= config.first_k_dense_replace else DeepseekOcrTextMLP(config)
-        )
-
+        self.mlp = DeepseekOcrTextMoe(config) if layer_idx >= config.first_k_dense_replace else DeepseekOcrTextMLP(config)
         self.input_layernorm = DeepseekOcrTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekOcrTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
