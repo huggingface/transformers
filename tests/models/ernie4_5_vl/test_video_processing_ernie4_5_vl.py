@@ -334,7 +334,7 @@ class Ernie4_5_VlVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
 
     @unittest.skip(
         reason="Ernie 4.5 VL draws on images with PIL which is not tracable by torch. "
-               "See `_render_image_with_timestamp` for the concrete function."
+        "See `_render_image_with_timestamp` for the concrete function."
     )
     def test_can_compile_fast_video_processor(self):
         pass
