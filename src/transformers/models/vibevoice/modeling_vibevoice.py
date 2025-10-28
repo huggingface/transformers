@@ -173,7 +173,8 @@ class FinalLayer(nn.Module):
 class VibeVoicePreTrainedModel(PreTrainedModel):
     config: VibeVoiceConfig
     base_model_prefix = "model"
-    # TODO (ebezzam) check below, probably from Qwen?
+    # TODO (ebezzam) check below
+    # original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L69
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
@@ -233,7 +234,6 @@ class VibeVoiceDiffusionHead(VibeVoicePreTrainedModel):
         return hidden_states
 
 
-# TODO (ebezzam)  modular for SpeechConnector itself? (Voxtral?)
 class VibeVoiceSpeechConnector(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
@@ -289,7 +289,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    # TODO (ebezzam) move to processor since tokenizers are pretrained
+    # TODO (ebezzam) move to processor since tokenizer is pretrained?
     def get_speech_features(self, speech_tensors, speech_masks):
         """Process speech inputs through tokenizers and connectors."""
         # TODO (ebezzam) can remove unsqueeze since if we keep batch dim in processor?
@@ -360,6 +360,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
 
 class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGenerationMixin):
+    # TODO (ebezzam) needed?
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
 
@@ -403,16 +404,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     def semantic_connector(self):
         return self.model.semantic_connector
 
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings and the output embeddings.
-        """
-        # Tie lm_head.weight to language_model.embed_tokens.weight
-        if not getattr(self.config, "tie_word_embeddings", False):
-            return
-
-        if hasattr(self, "lm_head") and hasattr(self.model.language_model, "embed_tokens"):
-            self.lm_head.weight = self.model.language_model.embed_tokens.weight
+    @property
+    def language_model(self):
+        return self.model.language_model
 
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()

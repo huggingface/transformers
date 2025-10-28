@@ -29,9 +29,10 @@ from ..auto import AutoModel
 from ...utils import logging, is_diffusers_available, auto_docstring, can_return_tuple
 from ...utils.import_utils import requires_backends
 from .generation_vibevoice import VibeVoiceGenerationMixin
+from ...modeling_utils import PreTrainedModel
 
 from ..llama.modeling_llama import LlamaMLP
-from ..qwen2.modeling_qwen2 import Qwen2RMSNorm, Qwen2PreTrainedModel
+from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 
 
@@ -207,13 +208,19 @@ class FinalLayer(nn.Module):
 
 
 @auto_docstring
-class VibeVoicePreTrainedModel(Qwen2PreTrainedModel):
+class VibeVoicePreTrainedModel(PreTrainedModel):
     config: VibeVoiceConfig
+    base_model_prefix = "model"
     # TODO (ebezzam) check below
+    # original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L69
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_attention_backend = True
     
 
 @auto_docstring(
@@ -390,6 +397,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
 
 class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGenerationMixin):
+    # TODO (ebezzam) needed?
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
 
@@ -433,17 +441,10 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     def semantic_connector(self):
         return self.model.semantic_connector
 
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings and the output embeddings.
-        """
-        # Tie lm_head.weight to language_model.embed_tokens.weight
-        if not getattr(self.config, 'tie_word_embeddings', False):
-            return
-
-        if hasattr(self, 'lm_head') and hasattr(self.model.language_model, 'embed_tokens'):
-            self.lm_head.weight = self.model.language_model.embed_tokens.weight
-
+    @property
+    def language_model(self):
+        return self.model.language_model
+    
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
 

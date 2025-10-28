@@ -15,9 +15,21 @@
 
 import argparse
 import torch
+import gc
+import os
 from safetensors.torch import load_file
 import json
-from transformers import VibeVoiceConfig, VibeVoiceModel, VibeVoiceAcousticTokenizerModel, VibeVoiceSemanticTokenizerModel, VibeVoiceAcousticTokenizerConfig, VibeVoiceSemanticTokenizerConfig
+from transformers import (
+    VibeVoiceConfig,
+    VibeVoiceForConditionalGeneration,
+    VibeVoiceAcousticTokenizerModel, 
+    VibeVoiceSemanticTokenizerModel, 
+    VibeVoiceAcousticTokenizerConfig, 
+    VibeVoiceSemanticTokenizerConfig,
+    VibeVoiceProcessor,
+    VibeVoiceFeatureExtractor,
+    VibeVoiceTokenizer,
+)
 
 
 def update_state_dict_for_hf_model(state_dict):
@@ -75,7 +87,7 @@ def update_state_dict_for_hf_model(state_dict):
         # Handle prediction_head -> diffusion_head mapping
         if "prediction_head." in key:
             key = key.replace("prediction_head.", "diffusion_head.")
-            new_key = key
+            new_key = new_key.replace("prediction_head.", "diffusion_head.")
         
         # Handle TimestepEmbedder MLP Sequential -> individual layers mapping
         if "diffusion_head.t_embedder.mlp." in key:
@@ -103,7 +115,7 @@ def update_state_dict_for_hf_model(state_dict):
     return updated_state_dict
 
 
-def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
+def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None):
 
     if bfloat16:
         dtype = torch.bfloat16
@@ -247,10 +259,10 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
         raise ValueError(f"missing keys found: {missing}")
-    # # -- push to hub, TODO disable for now
-    # if push_to_hub is not None:
-    #     print(f"------ Pushing to hub as {push_to_hub + '-SemanticTokenizer'} ------")
-    #     semantic_model.push_to_hub(push_to_hub + "-SemanticTokenizer")
+    # -- push to hub
+    if push_to_hub is not None:
+        print(f"------ Pushing to hub as {push_to_hub + '-SemanticTokenizer'} ------")
+        semantic_model.push_to_hub(push_to_hub + "-SemanticTokenizer")
 
     # 5) Create and save acoustic tokenizer
     print("\n=== Creating acoustic tokenizer ===")
@@ -269,19 +281,51 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
         raise ValueError(f"missing keys found: {missing}")
-    # # -- push to hub, TODO disable for now
-    # if push_to_hub is not None:
-    #     print(f"------ Pushing to hub as {push_to_hub + '-AcousticTokenizer'} ------")
-    #     acoustic_model.push_to_hub(push_to_hub + "-AcousticTokenizer")
+    # -- push to hub
+    if push_to_hub is not None:
+        print(f"------ Pushing to hub as {push_to_hub + '-AcousticTokenizer'} ------")
+        acoustic_model.push_to_hub(push_to_hub + "-AcousticTokenizer")
 
-    # 6) Create and save full VibeVoice model
+    # 6) Create VibeVoice processor
+    # -- load processor config
+    print("\n=== Creating VibeVoice processor ===")
+    if processor_config is not None:
+        with open(processor_config, "r") as f:
+            processor_config = json.load(f)
+        audio_config = processor_config.get("audio_processor", {})
+        language_model_pretrained_name = processor_config.get("language_model_pretrained_name", None)
+    
+    # Default to 1.5B model: https://huggingface.co/microsoft/VibeVoice-1.5B/blob/main/preprocessor_config.json
+    if "sampling_rate" not in audio_config:
+        audio_config["sampling_rate"] = 24000
+    if "normalize_audio" not in audio_config:
+        audio_config["normalize_audio"] = True
+    if "target_dB_FS" not in audio_config:
+        audio_config["target_dB_FS"] = -25
+    if "eps" not in audio_config:
+        audio_config["eps"] = 1e-6
+    if language_model_pretrained_name is None:
+        language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
+    
+    processor = VibeVoiceProcessor(
+        feature_extractor=VibeVoiceFeatureExtractor(**audio_config),
+        tokenizer=VibeVoiceTokenizer.from_pretrained(language_model_pretrained_name),
+        # audio_tokenizer=VibeVoiceAcousticTokenizerModel.from_pretrained(push_to_hub + "-AcousticTokenizer"),
+    )
+    processor.save_pretrained(output_dir)
+
+    if push_to_hub is not None:
+        print(f"------ Pushing processor to hub as {push_to_hub} ------")
+        processor.push_to_hub(push_to_hub)
+
+    # 7) Create and save full VibeVoice model
     print("\n=== Creating full model ===")
     model_config["acoustic_tokenizer_config"] = acoustic_config.to_dict()
     model_config["semantic_tokenizer_config"] = semantic_config.to_dict()
     vibevoice_config = VibeVoiceConfig(**model_config)
-    vibevoice_model = VibeVoiceModel(vibevoice_config).to(dtype)
+    vibevoice_model = VibeVoiceForConditionalGeneration(vibevoice_config).to(dtype)
 
-    # -- print dtypes of key components for verification, TODO remove
+    # -- print dtypes of key components for verification
     print("Acoustic connector dtype : ", vibevoice_model.acoustic_connector.fc1.weight.dtype)
     print("Semantic connector dtype : ", vibevoice_model.semantic_connector.fc1.weight.dtype)
     print("Language model dtype : ", vibevoice_model.language_model.embed_tokens.weight.dtype)
@@ -290,35 +334,53 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16):
     print("Diffusion head dtype : ", vibevoice_model.diffusion_head.noisy_images_proj.weight.dtype)
 
     # -- load into HF model
+    # add "model." prefix
+    updated_state_dict = {f"model.{k}": v for k, v in updated_state_dict.items()}
+    # add lm_head weights
+    # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L123
+    updated_state_dict["lm_head.weight"] = updated_state_dict["model.language_model.embed_tokens.weight"]
+    
     missing, unexpected = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
     if len(unexpected) != 0:
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
         raise ValueError(f"missing keys found: {missing}")
+    vibevoice_model.save_pretrained(output_dir)
+    
     # -- push to hub
     if push_to_hub is not None:
         print(f"------ Pushing full VibeVoice model to hub as {push_to_hub} ------")
         vibevoice_model.push_to_hub(push_to_hub)
 
-
-    # # TODO create audio feature extractor / processor config
+    # 8) Check model
+    gc.collect()
+    print("Reloading the model to check if it's saved correctly.")
+    VibeVoiceProcessor.from_pretrained(output_dir)
+    VibeVoiceForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16)
+    # TODO (ebezzam) "auto" not working for: model.speech_scaling_factor, model.speech_bias_factor
+    # VibeVoiceForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
+    print("Model reloaded successfully.")
 
 
 """
-Conversion script to convert original VibeVoice model into three HF checkpoints:
-- ViveVoiceModel
+Conversion script to convert original VibeVoice model into three HF checkpoints for:
+- VibeVoiceForConditionalGeneration
 - VibeVoiceAcousticTokenizerModel
 - VibeVoiceSemanticTokenizerModel
 
 ```bash
-# -- download checkpoint and config
+# -- download checkpoint and configs
+# -- download script here: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-download_vibevoice_checkpoint-py
 python src/transformers/models/vibevoice/download_vibevoice_checkpoint.py
 wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P /raid/eric/vibevoice
+wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/preprocessor_config.json -P /raid/eric/vibevoice
 
 # -- run conversion
 python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --checkpoint /raid/eric/vibevoice/VibeVoice-1.5B-combined.safetensors \
+    --output_dir /raid/eric/vibevoice/hf_vibevoice \
     --config_path /raid/eric/vibevoice/config.json \
+    --processor_config /raid/eric/vibevoice/preprocessor_config.json \
     --push_to_hub bezzam/VibeVoice-1.5B
 ```
 Models will be pushed to:
@@ -330,8 +392,12 @@ Models will be pushed to:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", required=True, default=None, type=str, help="Original VibeVoice model checkpoint.")
+    parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
     parser.add_argument(
-        "--config_path", default=None, type=str, help="Path to hf config.json of model to convert"
+        "--config_path", default=None, type=str, help="Path to config.json of model to convert"
+    )
+    parser.add_argument(
+        "--processor_config", default=None, type=str, help="Path to preprocessor_config.json of model to convert"
     )
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
@@ -343,7 +409,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     convert_checkpoint(
         args.checkpoint,
+        args.output_dir,
         args.config_path,
         args.push_to_hub,
         bfloat16=not args.float32,
+        processor_config=args.processor_config
     )

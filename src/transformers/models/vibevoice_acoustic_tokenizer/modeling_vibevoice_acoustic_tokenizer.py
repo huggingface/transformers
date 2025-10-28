@@ -308,7 +308,7 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
 
 @auto_docstring
 class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
-    config = VibeVoiceAcousticTokenizerConfig
+    config: VibeVoiceAcousticTokenizerConfig
     base_model_prefix = "vibevoice_acoustic_tokenizer"
     main_input_name = "audio"
     _supports_flash_attn_2 = True

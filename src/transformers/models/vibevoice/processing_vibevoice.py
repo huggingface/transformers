@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import math
 import os
 import re
 from typing import Optional, Union
@@ -25,9 +23,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, logging, is_soundfile_available, is_torch_available
-from .feature_extraction_vibevoice import VibeVoiceFeatureExtractor
-from .tokenization_vibevoice import VibeVoiceTokenizer
+from ...utils import logging, is_soundfile_available, is_torch_available
 
 
 logger = logging.get_logger(__name__)
@@ -51,6 +47,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 24000,
             "padding": True,
             "return_attention_mask": True,
+            "speech_tok_compress_ratio": 3200,  # acoustic_tokenizer.hop_length
             # "eos_token_id": 1024,
             # "pad_token_id": 1025,
             # "bos_token_id": 1026,
@@ -72,127 +69,30 @@ class VibeVoiceProcessor(ProcessorMixin):
     Args:
         tokenizer (`VibeVoiceTokenizer`):
             The tokenizer for text processing.
-        audio_processor (`VibeVoiceFeatureExtractor`):
+        feature_extractor (`VibeVoiceFeatureExtractor`):
             The audio processor for speech processing.
-        speech_tok_compress_ratio (`int`, *optional*, defaults to 3200):
-            The compression ratio for speech tokenization.
-        db_normalize (`bool`, *optional*, defaults to True):
-            Whether to apply decibel normalization to audio inputs.
+        audio_tokenizer (`VibeVoiceAcousticTokenizerModel`):
+            The audio tokenizer for encoding/decoding audio tokens.
     """
-    # TODO `audio_processor` or `feature_extractor`
-    # TODO: add audio tokenizer?
-    attributes = ["audio_processor", "tokenizer"]
-    audio_processor_class = "VibeVoiceFeatureExtractor"
-    tokenizer_class = "VibeVoiceTokenizer"
 
-    def __init__(self, audio_processor, tokenizer, speech_tok_compress_ratio=3200, db_normalize=True, **kwargs):
-        super().__init__(audio_processor, tokenizer)
-        self.speech_tok_compress_ratio = speech_tok_compress_ratio
-        self.db_normalize = db_normalize
-        self.system_prompt = " Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n"
+    feature_extractor_class = "VibeVoiceFeatureExtractor"
+    tokenizer_class = "VibeVoiceTokenizer"
+    # TODO (ebezzam) add this? Only Dia as such as a usage
+    # audio_tokenizer_class = "VibeVoiceAcousticTokenizerModel"
+
+    # def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
+    #     super().__init__(feature_extractor, tokenizer, audio_tokenizer)
+
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
         
-        # Pre-compute common token sequences for efficiency
+        # Pre-compute common token sequences
+        self.system_prompt = " Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n"
         self._prompt_tokens = self.tokenizer.encode(self.system_prompt)
         self._voice_input_tokens = self.tokenizer.encode(' Voice input:\n', add_special_tokens=False)
         self._text_input_tokens = self.tokenizer.encode(' Text input:\n', add_special_tokens=False)
         self._speech_output_tokens = self.tokenizer.encode(' Speech output:\n', add_special_tokens=False)
         self._newline_tokens = self.tokenizer.encode('\n', add_special_tokens=False)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        """
-        Instantiate a VibeVoiceProcessor from a pretrained VibeVoice processor.
-
-        Args:
-            pretrained_model_name_or_path (`str` or `os.PathLike`):
-                This can be either:
-                - a string, the *model id* of a pretrained model
-                - a path to a *directory* containing processor config
-
-        Returns:
-            [`VibeVoiceProcessor`]: The processor object instantiated from pretrained model.
-        """
-
-        # Load processor configuration
-        config_path = os.path.join(pretrained_model_name_or_path, "preprocessor_config.json")
-        if os.path.exists(config_path):
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-        else:
-            logger.warning(f"No preprocessor_config.json found at {pretrained_model_name_or_path}, using defaults")
-            config = {
-                "speech_tok_compress_ratio": 3200,
-                "db_normalize": True,
-            }
-
-        # Extract main processor parameters
-        speech_tok_compress_ratio = config.get("speech_tok_compress_ratio", 3200)
-        db_normalize = config.get("db_normalize", True)
-
-        # Load tokenizer - try from model path first, then fallback to Qwen
-        language_model_pretrained_name = config.get("language_model_pretrained_name") or kwargs.pop("language_model_pretrained_name", "Qwen/Qwen2.5-1.5B")
-        logger.info(f"Loading tokenizer from {language_model_pretrained_name}")
-        if 'qwen' in language_model_pretrained_name.lower():
-            tokenizer = VibeVoiceTokenizer.from_pretrained(
-                language_model_pretrained_name,
-                **kwargs
-            )
-        else:
-            raise ValueError(f"Unsupported tokenizer type for {language_model_pretrained_name}. Supported types: Qwen, Llama, Gemma.")
-
-        # Load audio processor
-        if "audio_processor" in config:
-            # Create audio processor from config
-            audio_config = config["audio_processor"]
-            audio_processor = VibeVoiceFeatureExtractor(
-                sampling_rate=audio_config.get("sampling_rate", 24000),
-                normalize_audio=audio_config.get("normalize_audio", True),
-                target_dB_FS=audio_config.get("target_dB_FS", -25),
-                eps=audio_config.get("eps", 1e-6),
-            )
-        else:
-            # Create default audio processor
-            audio_processor = VibeVoiceFeatureExtractor()
-
-        # Create and return the processor
-        return cls(
-            tokenizer=tokenizer,
-            audio_processor=audio_processor,
-            speech_tok_compress_ratio=speech_tok_compress_ratio,
-            db_normalize=db_normalize,
-        )
-
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], **kwargs):
-        """
-        Save a processor to a directory, so that it can be re-loaded using the
-        [`~VibeVoiceProcessor.from_pretrained`] class method.
-
-        Args:
-            save_directory (`str` or `os.PathLike`):
-                Directory where the processor will be saved.
-        """
-
-        os.makedirs(save_directory, exist_ok=True)
-
-        # Save processor configuration
-        processor_config = {
-            "processor_class": "VibeVoiceProcessor",
-            "speech_tok_compress_ratio": self.speech_tok_compress_ratio,
-            "db_normalize": self.db_normalize,
-            "audio_processor": {
-                "feature_extractor_type": "VibeVoiceFeatureExtractor",
-                "sampling_rate": getattr(self.audio_processor, 'sampling_rate', 24000),
-                "normalize_audio": getattr(self.audio_processor, 'normalize_audio', True),
-                "target_dB_FS": getattr(self.audio_processor, 'target_dB_FS', -25),
-                "eps": getattr(self.audio_processor, 'eps', 1e-6),
-            }
-        }
-
-        config_path = os.path.join(save_directory, "preprocessor_config.json")
-        with open(config_path, 'w') as f:
-            json.dump(processor_config, f, indent=2)
-
-        logger.info(f"Processor configuration saved in {config_path}")
 
     def __call__(
         self,
@@ -264,6 +164,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         return_tensors = audio_kwargs["return_tensors"]
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+        speech_tok_compress_ratio = int(audio_kwargs.pop("speech_tok_compress_ratio"))
 
         # Handle text
         if isinstance(text, str) or (isinstance(text, list) and len(text) > 0 and not isinstance(text[0], str)):
@@ -309,17 +210,17 @@ class VibeVoiceProcessor(ProcessorMixin):
             # -- but tokenize only accepts batch of size [batch, 1, time] and not [batch, n_audio, time], namely needs 1D audio
             # -- so probably better to move audio tokenizer here and then loop over to compute audio tokenizer outputs
             # unique_audio = [speaker_to_audio[spk] for spk in sorted(speaker_to_audio)]
-            # processed_audio = self.audio_processor(unique_audio, **audio_kwargs)
+            # processed_audio = self.feature_extractor(unique_audio, **audio_kwargs)
             # processed_audio["speech_tensors"] = processed_audio.pop("audio")
 
             # With duplicates (TODO would like to remove this)
             voices = [voice for _voices in voice_samples_list for voice in _voices]
-            processed_audio = self.audio_processor(voices, **audio_kwargs)
+            processed_audio = self.feature_extractor(voices, **audio_kwargs)
             processed_audio["speech_tensors"] = processed_audio.pop("audio")
 
             # Create speech masks for audio tokenizer based on its compression ratio
             padding_masks = processed_audio["padding_mask"]
-            vae_tok_seqlens = torch.ceil(padding_masks.sum(dim=-1) / self.speech_tok_compress_ratio).int().tolist()
+            vae_tok_seqlens = torch.ceil(padding_masks.sum(dim=-1) / speech_tok_compress_ratio).int().tolist()
             speech_masks = torch.zeros((len(padding_masks), max(vae_tok_seqlens)), dtype=torch.bool)
             for i, seq_len in enumerate(vae_tok_seqlens):
                 speech_masks[i, :seq_len] = True
@@ -497,8 +398,8 @@ class VibeVoiceProcessor(ProcessorMixin):
         Return the list of inputs accepted by the model.
         """
         tokenizer_input_names = self.tokenizer.model_input_names
-        audio_processor_input_names = self.audio_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + audio_processor_input_names + ["speech_inputs", "speech_input_mask"]))
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["speech_inputs", "speech_input_mask"]))
 
     def save_audio(
         self,
@@ -518,7 +419,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             List[str]: Paths to the saved audio files.
         """
         if sampling_rate is None:
-            sampling_rate = self.audio_processor.sampling_rate
+            sampling_rate = self.feature_extractor.sampling_rate
 
         if not is_soundfile_available():
             raise ImportError("Please install `soundfile` to save audio files.")

@@ -334,7 +334,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
 
 @auto_docstring
 class VibeVoiceSemanticTokenizerPreTrainedModel(PreTrainedModel):
-    config = VibeVoiceSemanticTokenizerConfig
+    config: VibeVoiceSemanticTokenizerConfig
     base_model_prefix = "vibevoice_semantic_tokenizer"
     main_input_name = "audio"
     _supports_flash_attn_2 = True
