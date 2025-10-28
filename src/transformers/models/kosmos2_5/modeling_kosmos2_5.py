@@ -395,7 +395,7 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMlp,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->dropout_rate
-class Pix2StructVisionMlp(nn.Module):
+class Kosmos2_5VisionMlp(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig):
         super().__init__()
         self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
