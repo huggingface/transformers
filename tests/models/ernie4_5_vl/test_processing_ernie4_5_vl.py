@@ -130,7 +130,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             list(inputs.keys()),
-            ["input_ids", "attention_mask", "pixel_values", "image_grid_thw"],
+            ["input_ids", "attention_mask", "mm_token_type_ids", "pixel_values", "image_grid_thw"],
         )
 
         # test if it raises when no input is passed
@@ -205,9 +205,10 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             return_tensors=return_tensors,
         )
-        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask"]))
+        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask", "mm_token_type_ids"]))
         self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
         self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
+        self.assertEqual(len(out_dict_text["mm_token_type_ids"]), batch_size)
 
         # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
         for idx, url in enumerate(input_data[:batch_size]):
@@ -225,6 +226,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
+        self.assertEqual(len(out_dict["mm_token_type_ids"]), batch_size)
 
         if modality == "video":
             # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
@@ -273,7 +275,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask", "mm_token_type_ids"])
 
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {

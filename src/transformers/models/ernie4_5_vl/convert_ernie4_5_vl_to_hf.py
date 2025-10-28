@@ -27,6 +27,7 @@ from transformers import (
     AutoTokenizer,
     Ernie4_5_VLConfig,
     Ernie4_5_VLImageProcessor,
+    # Ernie4_5_VLImageProcessorFast,
     Ernie4_5_VLProcessor,
     Ernie4_5_VLVideoProcessor,
     LlamaTokenizer,
@@ -423,9 +424,9 @@ def convert_processor(model_path, save_dir):
     tokenizer = AutoTokenizer.from_pretrained(save_dir)
 
     processor = Ernie4_5_VLProcessor(
-        # TODO: check if I didnt mess up something here
-        # Using the slow processor for now as it changes the default output otherwise
+        # TODO: switch to fast processor, slightly changes output on larger models tho
         image_processor=Ernie4_5_VLImageProcessor(),
+        # image_processor=Ernie4_5_VLImageProcessorFast(),
         tokenizer=tokenizer,
         video_processor=Ernie4_5_VLVideoProcessor(),
         chat_template=tokenizer.chat_template,

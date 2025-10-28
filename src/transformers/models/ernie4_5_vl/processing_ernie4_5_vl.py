@@ -208,6 +208,13 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
+    @property
+    def model_input_names(self):
+        """Additional `mm_token_type_ids` used for modality isolated MoE"""
+        model_input_names = super().model_input_names
+        model_input_names.append("mm_token_type_ids")
+        return model_input_names
+
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
