@@ -189,16 +189,14 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
                 image = image.convert("RGB")
 
             orig_width, orig_height = image.size
-            max_dim = max(orig_width, orig_height)
-            min_dim = min(orig_width, orig_height)
+            # max_dim = max(orig_width, orig_height)
+            # min_dim = min(orig_width, orig_height)
 
             if orig_width <= patch_image_size and orig_height <= patch_image_size:
                 crop_ratio = [1, 1]
                 images_crop_raw = []
             else:
-                images_crop_raw, crop_ratio = self.dynamic_preprocess(
-                    image, patch_image_size, max_num=dynamic_hd
-                )
+                images_crop_raw, crop_ratio = self.dynamic_preprocess(image, patch_image_size, max_num=dynamic_hd)
 
             interp_mode = interpolation if interpolation is not None else self.resample
             if isinstance(interp_mode, F.InterpolationMode):

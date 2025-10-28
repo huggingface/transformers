@@ -885,7 +885,7 @@ class DeepseekOcrCLIPVisionTransformer(nn.Module):
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = DeepseekOcrVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = DeepseekOcrCLIPEncoder(config)
 
     @auto_docstring
@@ -1009,8 +1009,40 @@ class DeepseekOcrTextExperts(nn.ModuleList):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.n_routed_experts
+        self.top_k = config.num_experts_per_tok
         for _ in range(config.n_routed_experts):
             self.append(DeepseekOcrTextMLP(config, intermediate_size=config.moe_intermediate_size))
+
+    def forward(self, hidden_states: torch.Tensor, topk_idx: torch.Tensor, topk_weight: torch.Tensor) -> torch.Tensor:
+        tokens_per_expert = torch.bincount(topk_idx.view(-1), minlength=self.num_experts)
+
+        flat_indices = topk_idx.view(-1)
+        sorted_positions = flat_indices.argsort()
+        original_token_indices = sorted_positions // self.top_k
+
+        sorted_tokens = hidden_states[original_token_indices]
+        combined_results = torch.empty_like(sorted_tokens)
+
+        boundaries = torch.cumsum(tokens_per_expert, dim=0)
+        start_indices = torch.cat((torch.tensor([0], device=boundaries.device), boundaries[:-1]))
+
+        for i in range(self.num_experts):
+            count = tokens_per_expert[i].item()
+            if count == 0:
+                continue
+
+            start = start_indices[i].item()
+            end = boundaries[i].item()
+
+            combined_results[start:end] = self[i](sorted_tokens[start:end])
+
+        dispatch_buffer = torch.empty_like(combined_results)
+        dispatch_buffer.scatter_(0, sorted_positions.unsqueeze(-1).expand_as(combined_results), combined_results)
+
+        dispatch_buffer = dispatch_buffer.view(topk_idx.shape[0], self.top_k, -1)
+        weighted = dispatch_buffer.to(topk_weight.dtype) * topk_weight.unsqueeze(-1)
+
+        return weighted.sum(dim=1).to(hidden_states.dtype)
 
 
 class DeepseekOcrTextMoe(nn.Module):
@@ -1029,7 +1061,7 @@ class DeepseekOcrTextMoe(nn.Module):
         self.topk_group = config.topk_group
         self.norm_topk_prob = getattr(config, "norm_topk_prob", False)
 
-    def _select_experts(self, scores):
+    def route_tokens_to_experts(self, scores):
         if self.top_k is None or self.top_k <= 0:
             raise ValueError("`num_experts_per_tok` must be a positive integer for MoE routing.")
 
@@ -1059,48 +1091,21 @@ class DeepseekOcrTextMoe(nn.Module):
         topk_weight = topk_weight * self.routed_scaling_factor
         return topk_idx, topk_weight
 
-    def _moe_infer(self, tokens, topk_idx, topk_weight):
-        counts = topk_idx.new_zeros((topk_idx.shape[0], len(self.experts)))
-        counts.scatter_(1, topk_idx, 1)
-        tokens_per_expert = counts.sum(dim=0).cpu().tolist()
-
-        flat_indices = topk_idx.view(-1)
-        sorted_positions = flat_indices.argsort()
-        sorted_tokens = tokens[sorted_positions // topk_idx.shape[1]]
-
-        outputs = []
-        cursor = 0
-        for expert_idx, num_tokens in enumerate(tokens_per_expert):
-            num_tokens = int(num_tokens)
-            if num_tokens == 0:
-                continue
-            next_cursor = cursor + num_tokens
-            expert_inp = sorted_tokens[cursor:next_cursor]
-            expert_out = self.experts[expert_idx](expert_inp)
-            outputs.append(expert_out)
-            cursor = next_cursor
-
-        combined = torch.cat(outputs, dim=0) if outputs else sorted_tokens.new_empty((0, tokens.shape[-1]))
-        dispatch_buffer = torch.empty_like(combined)
-        dispatch_buffer[sorted_positions] = combined
-        dispatch_buffer = dispatch_buffer.view(topk_idx.shape[0], self.top_k, -1)
-        weighted = dispatch_buffer.to(topk_weight.dtype) * topk_weight.unsqueeze(-1)
-        return weighted.sum(dim=1).to(tokens.dtype)
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = F.linear(hidden_states.float(), self.gate.weight.float())
+        router_logits = nn.functional.linear(hidden_states.type(torch.float32), self.gate.weight.type(torch.float32))
         router_scores = router_logits.softmax(dim=-1, dtype=torch.float32)
-        router_indices, router_weights = self._select_experts(router_scores.view(-1, router_scores.shape[-1]))
-
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        moe_output = self._moe_infer(hidden_states, router_indices, router_weights).view(*orig_shape)
+        router_scores_flat = router_scores.view(-1, router_scores.shape[-1])
+        topk_indices, topk_weights = self.route_tokens_to_experts(router_scores_flat)
+        hidden_states_flat = hidden_states.view(-1, hidden_states.shape[-1])
+        expert_output = self.experts(hidden_states_flat, topk_indices, topk_weights)
+        hidden_states = expert_output.view(*orig_shape)
 
         if hasattr(self, "shared_experts"):
-            moe_output = moe_output + self.shared_experts(residuals)
+            hidden_states = hidden_states + self.shared_experts(residuals)
 
-        return moe_output
+        return hidden_states
 
 
 def rotate_half(x):
@@ -1764,7 +1769,7 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         image_sizes = kwargs.pop("image_sizes", None)
         image_attention_mask = kwargs.pop("image_attention_mask", None)
-        num_img_tokens = kwargs.pop("num_img_tokens", None)
+        # num_img_tokens = kwargs.pop("num_img_tokens", None)
         if image_sizes is None and image_spatial_crop is not None:
             image_sizes = image_spatial_crop
 
