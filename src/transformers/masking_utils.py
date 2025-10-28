@@ -1038,7 +1038,7 @@ def create_sliding_window_causal_mask(
         use_vmap = True
 
     # If we detected packing format
-    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+    if packed_sequence_mask is not None:
         if use_vmap and not _is_torch_greater_or_equal_than_2_6:
             raise ValueError(
                 "Packed masking along custom patterns (i.e. and/or masks) is only allowed from `torch>=2.6.0`."
@@ -1160,7 +1160,7 @@ def create_chunked_causal_mask(
         use_vmap = True
 
     # If we detected packing format
-    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+    if packed_sequence_mask is not None:
         if use_vmap and not _is_torch_greater_or_equal_than_2_6:
             raise ValueError(
                 "Packed masking along custom patterns (i.e. and/or masks) is only allowed from `torch>=2.6.0`."
