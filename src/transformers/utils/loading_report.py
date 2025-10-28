@@ -80,6 +80,7 @@ class ANSI:
         "red": "[31m",
         "yellow": "[33m",
         "orange": "[38;5;208m",
+        "purple": "[35m",
         "bold": "[1m",
         "italic": "[3m",
         "dim": "[2m",
@@ -184,18 +185,19 @@ def log_state_dict_report(
             rows.append([k, status, "", ""])
 
     if mismatched_keys:
-        for key, shape_ckpt, shape_model in mismatched_shapes:
+        iterator = {a: (b, c) for a,b,c in mismatched_shapes}
+        for key, (shape_ckpt, shape_model) in update_key_name(iterator).items():
             status = "MISMATCH"
             status = _color(status, "yellow", ansi)
             data = [key, status]
             if term_w > limit_rows:
-                data.append(["Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"])
+                data.append(" ".join(["Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"]))
             rows.append(data)
 
     if misc:
         for k, v in update_key_name(misc).items():
             status = "MISC"
-            status = _color(status, "red", ansi)
+            status = _color(status, "purple", ansi)
             _details = v[:term_w]
             rows.append([k, status, _details, ""])
 
@@ -214,11 +216,11 @@ def log_state_dict_report(
         f"{ansi['bold']}{model.__class__.__name__} LOAD REPORT{ansi['reset']} from: {pretrained_model_name_or_path}\n"
     )
     tips = (
-        f"{ansi['italic']}Notes:\n"
+        f"\n\n{ansi['italic']}Notes:\n"
         f"- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}: can be ignored when loading from different task/architecture; not ok if you expect identical arch.\n"
         f"- {_color('MISSING', 'red', ansi) + ansi['italic']}: those params were newly initialized; consider training on your downstream task.\n"
         f"- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}: if intentional, use appropriate reinit/resize logic.\n"
-        f"- {_color('MISC', 'yellow', ansi) + ansi['italic']}: originate from the conversion scheme\n"
+        f"- {_color('MISC', 'purple', ansi) + ansi['italic']}: originate from the conversion scheme\n"
         f"{ansi['reset']}"
     )
 

@@ -587,12 +587,12 @@ def spawn_materialize(file_id, t) -> Future:
 
     return EXEC.submit(_job)
 
-def spawn_tp_materialize(file_id, t, sharding_method) -> Future:
+def spawn_tp_materialize(file_id, t, sharding_method, empty_tensor) -> Future:
     sem = _file_sems[file_id]
 
     def _job():
         with sem:
-            return sharding_method(t)
+            return sharding_method.shard_tensor(t, empty_tensor)[0]
 
     return EXEC.submit(_job)
 
@@ -644,12 +644,27 @@ def convert_and_load_state_dict_in_model(
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
-        if matched_tp_pattern := match_glob(target_key.split('|')[0], tp_plan_alt, tp_plan_by_group_name):
-            if getattr(converter, "distributed_operation", None) is None:
-                converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
-            fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation)
+        first_target_key = target_key.split('|')[0]
+        if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
+            empty_tensor = meta_model_state_dict.get(first_target_key)
+            if getattr(converter, "distributed_operation", {}) == {}:
+                converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]]
+                converter.distributed_operation.device_mesh=device_mesh
+                converter.distributed_operation.rank=device_map[''].index
+            # if many source keys -> collection {key1: [tensors1, ...], key2: tensors2} with futur ops.
+            # if the empty tensor is 3d
+            #   EP: dim=0   -> tensors[0], tensors[1] to rank 0 
+            #               -> tensors[1], tensors[2] to rank 1
+            #               -> tensors[3], tensors[4] to rank 2
+            #   TP: dim=1   -> tensors[0, ..., 7][:dim/8] to rank 0
+            #               -> tensors[0, ..., 7][dim/8:2*dim/8] to rank 1
+            # if empty tensor is 2d: 
+            #   TP: dim=0   -> tensors[0, ..., 7][:dim/8] to rank 0
+            #               -> tensors[0, ..., 7][dim/8:2*dim/8] to rank 1
+            fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation, empty_tensor)
         else: # If not TP, async move tensors
             fut = spawn_materialize(file_id, tensor)
+
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
         for t in target_key.split("|"):
             empty_tensor = meta_model_state_dict.get(t)
@@ -672,12 +687,6 @@ def convert_and_load_state_dict_in_model(
             concrete_target_keys = layer_name.split("|")
             if bool(set(concrete_target_keys) - unexpected_keys):
                 values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
-                if op := converter.distributed_operation:
-                    try:
-                        values = op(values)
-                    except Exception as e:
-                        misc[layer_name] = f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
-                        continue
 
                 for op in operations:
                     try:

@@ -358,7 +358,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
         rank (int): Global rank of the current process/device.
         dim (int): Dimension along which to shard the tensor.
     """
-    param_dim = empty_param.dim()
+    param_dim = len(param.get_shape())
 
     if dim < 0:
         dim = param_dim + dim
@@ -381,7 +381,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     if start < empty_param.shape[dim]:
         slice_indices[dim] = slice(start, end)
         param = param[tuple(slice_indices)]
-        if isinstance(param, list):
+        if isinstance(param, list): # TODO handle the modulelist case!
             param = [p[:] for p in param]
         return param
     dimensions = list(param.shape)
@@ -413,6 +413,8 @@ class TensorParallelLayer:
     """
 
     use_dtensor = True
+    device_mes=None
+    rank = None
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh): ...
@@ -584,7 +586,9 @@ class ColwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
-    def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+    def shard_tensor(self, param, empty_param, param_type=None):
+        device_mesh = self.device_mesh
+        rank = self.rank
         if param_type == "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
             shard = [Shard(-1)]
@@ -672,6 +676,18 @@ class RowwiseParallel(TensorParallelLayer):
         self.output_layouts = (output_layouts or Replicate(),)
         self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
+
+
+    def shard_tensor(self, param, empty_param, param_type=None):
+        device_mesh = self.device_mesh
+        rank = self.rank
+        if param_type == "bias":
+            shard = [Replicate()]
+            parameter = param[:]
+        else:
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
+            shard = [Shard(-1)]
+        return parameter, shard
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # Rowwise shard weight to Shard(1), bias to Replicate(), weight be Shard(1)
