@@ -16,22 +16,61 @@
 
 import os
 import tempfile
-import textwrap
+import warnings
 
-from transformers import is_torch_available
+from safetensors import safe_open
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
+    get_torch_dist_unique_port,
     require_huggingface_hub_greater_or_equal,
     require_torch_multi_accelerator,
     torch_device,
-    torchrun,
 )
 
 
 if is_torch_available():
     import torch
+    import torch.multiprocessing as mp
+
+
+def global_wrapper(rank, func, tp, port, func_args, func_kwargs):
+    def setup_dist_env(rank, world_size, port):
+        os.environ["WORLD_SIZE"] = str(world_size)
+        os.environ["RANK"] = str(rank)
+        os.environ["LOCAL_RANK"] = str(rank)
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = str(port)
+
+    world_size = tp
+    setup_dist_env(rank, world_size, port)
+
+    if torch.cuda.is_available():
+        torch.cuda.set_device(rank)
+        torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    else:
+        torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+    func(rank, *func_args, **func_kwargs)
+
+    torch.distributed.barrier()
+    torch.distributed.destroy_process_group()
+
+
+def init_distributed(tp: int):
+    def _init_distributed(func):
+        def wrapper(*args, **kwargs):
+            world_size = tp
+            port = get_torch_dist_unique_port()
+            spawn_args = (func, tp, port, args, kwargs)
+            mp.spawn(global_wrapper, args=spawn_args, nprocs=world_size)
+
+        return wrapper
+
+    return _init_distributed
 
 
 class TestTensorParallelUtils(TestCasePlus):
@@ -63,135 +102,126 @@ class TestTensorParallelUtils(TestCasePlus):
         assert torch.allclose(unpacked_weights, original_packed_weights)
 
 
+# ====== TEST FUNCTIONS ======
+def _test_model_forward_impl(rank):
+    """Implementation of test_model_forward for distributed execution."""
+    model_id = "JackFram/llama-68m"
+
+    int(os.environ["RANK"])
+    int(os.environ["WORLD_SIZE"])
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    torch.distributed.barrier()
+
+    has_dtensor = 0
+    for name, parameter in model.named_parameters():
+        if isinstance(parameter.data, torch.distributed.tensor.DTensor):
+            has_dtensor = 1
+            break
+
+    assert has_dtensor == 1, "TP model must has DTensor"
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
+    prompt = "Can I help"
+
+    inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+    outputs = model(inputs)
+
+    next_token_logits = outputs[0][:, -1, :]
+    next_token = torch.argmax(next_token_logits, dim=-1)
+    response = tokenizer.decode(next_token)
+    assert response == "with"
+    print("response:", response)
+    torch.distributed.barrier()
+
+
+def _test_model_backward_pass_impl(rank):
+    """Implementation of test_model_backward_pass for distributed execution."""
+    model_id = "JackFram/llama-68m"
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
+    torch.distributed.barrier()
+
+    # Dummy forward and backward pass
+    # Note that loss.backward() will fail if there is a bug in the TP implementation
+    inputs = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
+    labels = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
+    loss = model(inputs, labels=labels).loss
+    loss.backward()
+
+    torch.distributed.barrier()
+
+
+def _test_model_generate_impl(rank):
+    """Implementation of test_model_generate for distributed execution."""
+    model_id = "JackFram/llama-68m"
+
+    int(os.environ["RANK"])
+    int(os.environ["WORLD_SIZE"])
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    torch.distributed.barrier()
+
+    model.forward = torch.compile(model.forward)
+
+    has_dtensor = 0
+    for name, parameter in model.named_parameters():
+        if isinstance(parameter.data, torch.distributed.tensor.DTensor):
+            has_dtensor = 1
+            break
+
+    assert has_dtensor == 1, "TP model must has DTensor"
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    prompt = "Can I help"
+
+    inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+    outputs = model.generate(inputs, max_new_tokens=10, cache_implementation="static")
+
+    output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+    assert output_text[0].startswith(prompt), f"Expected output to start with '{prompt}', got '{output_text[0]}'"
+
+    torch.distributed.barrier()
+
+
+def _test_model_save_impl(rank, tmp_dir, is_torchrun):
+    """Implementation of test_model_save for distributed execution."""
+    model_id = "JackFram/llama-68m"
+    kwargs = {}
+
+    if os.environ.get("RANK", None) is not None:
+        kwargs["tp_plan"] = "auto"
+        result_dir = f"{tmp_dir}/tp"
+    else:
+        result_dir = f"{tmp_dir}/nontp"
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+    model.save_pretrained(result_dir)
+
+
 class TestTensorParallel(TestCasePlus):
     nproc_per_node = 2
 
+    @require_torch_multi_accelerator
     def test_model_forward(self):
-        script_to_run = textwrap.dedent(
-            """
-            import torch
-            import os
-            from transformers import AutoModelForCausalLM, AutoTokenizer
+        init_distributed(tp=self.nproc_per_node)(_test_model_forward_impl)()
 
-            model_id = "JackFram/llama-68m"
-
-            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-            torch.distributed.barrier()
-
-            has_dtensor = 0
-            for name, parameter in model.named_parameters():
-                if isinstance(parameter.data, torch.distributed.tensor.DTensor):
-                    has_dtensor = 1
-                    break
-
-            assert has_dtensor == 1, "TP model must has DTensor"
-
-            tokenizer = AutoTokenizer.from_pretrained(model_id, legacy=False)
-            prompt = "Can I help"
-
-            inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-            outputs = model(inputs)
-
-            next_token_logits = outputs[0][:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1)
-            response = tokenizer.decode(next_token)
-            assert response == "with"
-
-            torch.distributed.barrier()
-            torch.distributed.destroy_process_group()
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
-
+    @require_torch_multi_accelerator
     def test_model_backward_pass(self):
-        script_to_run = textwrap.dedent(
-            """
-            import torch
-            import os
-            from transformers import AutoModelForCausalLM
-            from torch import nn
+        init_distributed(tp=self.nproc_per_node)(_test_model_backward_pass_impl)()
 
-            model_id = "JackFram/llama-68m"
-
-            model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
-            torch.distributed.barrier()
-
-            # Dummy forward and backward pass
-            # Note that loss.backward() will fail if there is a bug in the TP implementation
-            inputs = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
-            labels = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
-            loss = model(inputs, labels=labels).loss
-            loss.backward()
-
-            torch.distributed.barrier()
-            torch.distributed.destroy_process_group()
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
-
+    @require_torch_multi_accelerator
     def test_model_generate(self):
-        script_to_run = textwrap.dedent(
-            """
-            import torch
-            import os
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-
-            model_id = "JackFram/llama-68m"
-
-            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-            torch.distributed.barrier()
-
-            model.forward = torch.compile(model.forward)
-
-            has_dtensor = 0
-            for name, parameter in model.named_parameters():
-                if isinstance(parameter.data, torch.distributed.tensor.DTensor):
-                    has_dtensor = 1
-                    break
-
-            assert has_dtensor == 1, "TP model must have DTensor"
-
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
-            prompt = "Can I help"
-
-            inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-            outputs = model.generate(inputs, max_new_tokens=10, cache_implementation="static")
-
-            output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-            assert output_text[0].startswith(prompt), f"Expected output to start with '{prompt}', got '{output_text[0]}'"
-
-            torch.distributed.barrier()
-            torch.distributed.destroy_process_group()
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
+        init_distributed(tp=self.nproc_per_node)(_test_model_generate_impl)()
 
     @require_huggingface_hub_greater_or_equal("0.31.4")
+    @require_torch_multi_accelerator
     def test_model_save(self):
-        from safetensors import safe_open
-
         with tempfile.TemporaryDirectory() as tmp_dir:
-            for is_torchrun in [True, False]:
-                script_to_run = textwrap.dedent(
-                    f"""
-                    import torch
-                    import os
-                    from transformers import AutoModelForCausalLM
+            # First run with TP (distributed)
+            init_distributed(tp=self.nproc_per_node)(_test_model_save_impl)(tmp_dir, True)
 
-                    model_id = "JackFram/llama-68m"
-                    kwargs = dict()
-
-                    if os.environ.get("RANK", None) is not None:
-                        kwargs["tp_plan"] = "auto"
-                        result_dir = "{tmp_dir}/tp"
-                    else:
-                        result_dir = "{tmp_dir}/nontp"
-
-                    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
-                    model.save_pretrained(result_dir)
-                    """
-                )
-                torchrun(script_to_run, self.nproc_per_node, is_torchrun=is_torchrun, env=self.get_env())
+            # Then run without TP (non-distributed)
+            _test_model_save_impl(0, tmp_dir, False)
 
             non_tp_model_path = os.path.join(tmp_dir, "nontp")
             tp_model_path = os.path.join(tmp_dir, "tp")
@@ -246,8 +276,6 @@ class TestTensorParallel(TestCasePlus):
 class TestTensorParallelProperties(TestCasePlus):
     def test_tp_plan_property_setter_getter(self):
         """Test that tp_plan property can be set and retrieved correctly."""
-        from transformers import AutoModelForCausalLM
-
         model_id = "JackFram/llama-68m"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
@@ -275,8 +303,6 @@ class TestTensorParallelProperties(TestCasePlus):
 
     def test_tp_plan_validation_invalid_style(self):
         """Test that invalid parallel styles are rejected."""
-        from transformers import AutoModelForCausalLM
-
         model_id = "JackFram/llama-68m"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
@@ -289,9 +315,6 @@ class TestTensorParallelProperties(TestCasePlus):
 
     def test_tp_plan_validation_nonexistent_layer_warning(self):
         """Test that warnings are issued for non-existent layer patterns."""
-        import warnings
-
-        from transformers import AutoModelForCausalLM
 
         model_id = "JackFram/llama-68m"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
@@ -308,10 +331,6 @@ class TestTensorParallelProperties(TestCasePlus):
 
     def test_tp_plan_valid_layer_patterns(self):
         """Test that valid layer patterns are accepted without warnings."""
-        import warnings
-
-        from transformers import AutoModelForCausalLM
-
         model_id = "JackFram/llama-68m"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
@@ -347,8 +366,6 @@ class TestTensorParallelProperties(TestCasePlus):
 
     def test_tp_plan_none_handling(self):
         """Test that None values are handled correctly."""
-        from transformers import AutoModelForCausalLM
-
         model_id = "JackFram/llama-68m"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
