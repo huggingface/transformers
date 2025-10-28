@@ -14,31 +14,20 @@
 # limitations under the License.
 """HiggsAudioProcessor."""
 
-from dataclasses import asdict, dataclass
-from io import BytesIO
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Optional, Union
-from urllib.request import urlopen
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import is_librosa_available, is_soundfile_available, is_torch_available, logging
-from ...utils.chat_template_utils import render_jinja_template
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...utils import is_torch_available, logging
 
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
 
-
-if is_soundfile_available():
-    import soundfile as sf
-
-if is_librosa_available():
-    import librosa
 
 logger = logging.get_logger(__name__)
 
@@ -47,76 +36,9 @@ class HiggsAudioProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 24000,
-            "audio_in_token": "<|AUDIO|>",
-            "audio_out_token": "<|AUDIO_OUT|>",
-            "audio_in_token_idx": 128015,
-            "audio_out_token_idx": 128016,
-            "audio_stream_bos_id": 1024,
-            "audio_stream_eos_id": 1025,
-            "audio_num_codebooks": 8,
-            "audio_codebook_size": 1024,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
-
-
-@dataclass
-class HiggsAudioChatSample:
-    # Shape (seq_len,): The input text tokens.
-    input_ids: "torch.LongTensor"
-
-    # Shape (seq_len,): The label ids.
-    label_ids: "torch.LongTensor"
-
-    # Shape (num_codebooks, audio_seq_len): The audio tokens that are concatenated.
-    audio_ids_concat: "torch.LongTensor"
-
-    # Here `audio_seq_len` is the length of the concatenated audio tokens.
-    # Shape (num_audios,): The start index of each audio token in the concatenated audio tokens.
-    audio_ids_start: "torch.LongTensor"
-
-    def get_audio_codes(self, idx):
-        if self.audio_ids_start is None:
-            return None
-        code_start = self.audio_ids_start[idx]
-        if idx < len(self.audio_ids_start) - 1:
-            code_end = self.audio_ids_start[idx + 1]
-        else:
-            code_end = self.audio_ids_concat.shape[-1]
-
-        return self.audio_ids_concat[:, code_start:code_end]
-
-
-@dataclass
-class HiggsAudioBatchInput:
-    # shape (bsz, seq_len).
-    input_ids: "torch.LongTensor"
-
-    # shape (bsz, seq_len).
-    attention_mask: "torch.Tensor"
-
-    # shape (num_codebooks, audio_out_total_length).
-    audio_out_ids: Optional["torch.LongTensor"]
-
-    # shape (num_audio_out,)
-    audio_out_ids_start: Optional["torch.LongTensor"]
-
-    # Currently, we concatenate audio segments along dim 0 to handle variadic audio segment length.
-    # For example:
-    #   audio_out_ids_start = [0, 2, 4, 8]
-    # The first two audio segments come from the same sample in a batch,
-    # and the other two come from different samples.
-    # shape (num_codebooks, audio_in_total_length).
-    audio_in_ids: Optional["torch.LongTensor"]
-
-    # shape (num_audio_in,)
-    audio_in_ids_start: Optional["torch.LongTensor"]
-
-    # shape (bsz, seq_len).
-    label_ids: Optional["torch.LongTensor"]
-
-    # shape (num_codebooks, audio_out_total_length).
-    label_audio_ids: Optional["torch.LongTensor"]
 
 
 @dataclass
@@ -124,71 +46,6 @@ class HiggsAudioResponse:
     audio: Optional[np.ndarray] = None
     generated_text: str = ""
     sampling_rate: Optional[int] = None
-
-
-def build_delay_pattern_mask(
-    input_ids: "torch.LongTensor",
-    bos_token_id: int,
-    pad_token_id: int,
-):
-    """Implement the delay pattern proposed in "Simple and Controllable Music Generation", https://arxiv.org/pdf/2306.05284
-
-    In the delay pattern, each codebook is offset by the previous codebook by
-    one. We insert a special delay token at the start of the sequence if its delayed, and append pad token once the sequence finishes.
-
-    Take the example where there are 4 codebooks and audio sequence length=5. After shifting, the output should have length seq_len + num_codebooks - 1
-
-    - [ *,  *,  *,  *,  *,  P,  P,  P]
-    - [ B,  *,  *,  *,  *,  *,  P,  P]
-    - [ B,  B,  *,  *,  *,  *,  *,  P]
-    - [ B,  B,  B,  *,  *,  *,  *,  *]
-
-    where B indicates the delay token id, P is the special padding token id and `*` indicates that the original audio token.
-
-    Now let's consider the case where we have a sequence of audio tokens to condition on.
-    The audio tokens were originally in the following non-delayed form:
-
-    - [a, b]
-    - [c, d]
-    - [e, f]
-    - [g, h]
-
-    After conversion, we get the following delayed form:
-    - [a, b, -1, -1, -1]
-    - [B, c,  d, -1, -1]
-    - [B, B,  e,  f, -1]
-    - [B, B,  B,  g,  h]
-
-    Note that we have a special token `-1` that indicates it should be replaced by a new token we see in the generation phase.
-    In that case, we should override the `-1` tokens in auto-regressive generation.
-
-    Args:
-        input_ids (:obj:`torch.LongTensor`):
-            The input ids of the prompt. It will have shape (bsz, num_codebooks, seq_len).
-        bos_token_id (:obj:`int`):
-            The id of the special delay token
-        pad_token_id (:obj:`int`):
-            The id of the padding token. Should be the same as eos_token_id.
-
-    Returns:
-        input_ids (:obj:`torch.LongTensor`):
-            The transformed input ids with delay pattern applied. It will have shape (bsz, num_codebooks, seq_len + num_codebooks - 1).
-        input_ids_with_gen_mask (:obj:`torch.LongTensor`):
-            The transformed input ids with delay pattern applied. The -1 in the output indicates new tokens that should be generated.
-
-    """
-    bsz, num_codebooks, seq_len = input_ids.shape
-
-    new_seq_len = seq_len + num_codebooks - 1
-    input_ids_with_gen_mask = torch.ones((bsz, num_codebooks, new_seq_len), dtype=torch.long, device=input_ids.device)
-    bos_mask = torch.tril(input_ids_with_gen_mask, -1) > 0
-    eos_mask = torch.triu(input_ids_with_gen_mask, seq_len) > 0
-    input_ids_with_gen_mask[bos_mask] = bos_token_id
-    input_ids_with_gen_mask[(~bos_mask) & (~eos_mask)] = input_ids.reshape(-1)
-    input_ids = input_ids_with_gen_mask.clone()
-    input_ids[eos_mask] = pad_token_id
-    input_ids_with_gen_mask[eos_mask] = -1
-    return input_ids, input_ids_with_gen_mask
 
 
 def revert_delay_pattern(data):
@@ -213,7 +70,7 @@ def revert_delay_pattern(data):
 class HiggsAudioProcessor(ProcessorMixin):
     r"""
     Constructs a Higgs Audio processor which wraps a [`DacFeatureExtractor`], a [`AutoTokenizer`],
-    and a [`HiggsAudioTokenizer`] into a single processor. It inherits, the audio feature extraction, tokenizer,
+    and a [`HiggsAudioTokenizerModel`] into a single processor. It inherits, the audio feature extraction, tokenizer,
     and audio encode/decode functionalities.
     See [`~HiggsAudioProcessor.__call__`] and [`~HiggsAudioProcessor.decode`] for more information.
 
@@ -222,15 +79,15 @@ class HiggsAudioProcessor(ProcessorMixin):
             An instance of [`DacFeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of [`AutoTokenizer`]. The tokenizer is a required input.
-        audio_tokenizer (`HiggsAudioTokenizer`):
-            An instance of [`HiggsAudioTokenizer`]. The audio tokenizer is a required input.
+        audio_tokenizer (`HiggsAudioTokenizerModel`):
+            An instance of [`HiggsAudioTokenizerModel`]. The audio tokenizer is a required input.
         chat_template (`str`, *optional*):
             A template string for chat formatting when combining text and audio interactions.
     """
 
     feature_extractor_class = "DacFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
-    audio_tokenizer_class = "HiggsAudioTokenizer"
+    audio_tokenizer_class = "HiggsAudioTokenizerModel"
 
     def __init__(
         self,
@@ -238,10 +95,11 @@ class HiggsAudioProcessor(ProcessorMixin):
         tokenizer,
         audio_tokenizer,
         chat_template=None,
-        audio_token="<|AUDIO|>",
-        audio_bos_token="<|audio_bos|>",
+        audio_token="<|AUDIO_OUT|>",
+        audio_bos_token="<|audio_out_bos|>",
         audio_eos_token="<|audio_eos|>",
     ):
+        # TODO: better like that? (so llava like) or should it be more like Dia with things in the HiggsAudioProcessorKwargs
         if chat_template is None:
             chat_template = self.default_chat_template
 
@@ -271,7 +129,6 @@ class HiggsAudioProcessor(ProcessorMixin):
         )
 
         text_kwargs = output_kwargs["text_kwargs"]
-        audio_kwargs = output_kwargs["audio_kwargs"]
         return_tensors = text_kwargs.get("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
@@ -304,20 +161,34 @@ class HiggsAudioProcessor(ProcessorMixin):
                 audio = [audio]
 
             # Process each audio
-            for i, audio_data in enumerate(audio):
+            for audio_data in audio:
                 # Assume audio_data comes with the correct sample rate or resample
                 if hasattr(audio_data, "shape"):
                     processed_audio = audio_data
                 else:
                     processed_audio = np.array(audio_data)
-
-                # Generate audio tokens
+                # Generate audio tokens and store them in a list
                 input_values = self.feature_extractor(processed_audio)
                 input_values = torch.tensor(
                     input_values["input_values"][0], device=self.audio_tokenizer.device
                 ).unsqueeze(0)
-                audio_ids = self.audio_tokenizer.encode(input_values)
-                audio_ids_list.append(audio_ids[0].squeeze(0).transpose(0, 1).cpu())
+                audio_ids = self.audio_tokenizer.encode(input_values).audio_codes
+
+                audio_ids = torch.cat(
+                    [
+                        torch.full((*audio_ids.shape[:2], 1), 1024, dtype=torch.int, device=audio_ids.device),
+                        audio_ids,
+                        torch.full((*audio_ids.shape[:2], 1), 1025, dtype=torch.int, device=audio_ids.device),
+                    ],
+                    dim=2,
+                )
+
+                audio_ids = self.build_delay_pattern_mask(
+                    audio_ids,
+                    bos_token_id=1024,
+                    pad_token_id=1025,
+                )[0].squeeze(0)
+                audio_ids_list.append(audio_ids.squeeze(0).transpose(0, 1).cpu())
 
             # Get the actual number of audio tokens from encoded audio
             num_audio_tokens_list = [len(audio_ids) for audio_ids in audio_ids_list]
@@ -344,9 +215,11 @@ class HiggsAudioProcessor(ProcessorMixin):
         data = {}
         data.update(encoding)
         if audio is not None:
-            data.update({
-                "audio_input_ids": torch.stack(audio_ids_list, dim=0),
-            })
+            data.update(
+                {
+                    "audio_input_ids": torch.stack(audio_ids_list, dim=0),
+                }
+            )
 
         return BatchFeature(data=data, tensor_type="pt")
 
@@ -360,21 +233,15 @@ class HiggsAudioProcessor(ProcessorMixin):
 
     def decode(
         self,
-        decoder_text_ids: "torch.Tensor",
         decoder_audio_ids: list["torch.Tensor"],
-        prompt_token_length: int,
         **kwargs: Unpack[HiggsAudioProcessorKwargs],
     ) -> HiggsAudioResponse:
-        """
-        Decodes a single sequence of audio codebooks into the respective audio waveform via the
-        `audio_tokenizer`.
-        """
         output_kwargs = self._merge_kwargs(
             HiggsAudioProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]
-        audio_codebook_size = audio_kwargs["audio_codebook_size"]
+        audio_codebook_size = 1024
 
         if len(decoder_audio_ids) > 0:
             wv_list = []
@@ -386,14 +253,32 @@ class HiggsAudioProcessor(ProcessorMixin):
         else:
             wv_numpy = None
 
-        # We only support one request at a time now
-        generated_text_tokens = decoder_text_ids.cpu().numpy()[prompt_token_length:]
-        generated_text = self.tokenizer.decode(generated_text_tokens)
-
         return HiggsAudioResponse(
             audio=wv_numpy,
-            generated_text=generated_text,
-            sampling_rate=self.audio_tokenizer.sampling_rate,
+            sampling_rate=24000
         )
+
+    def build_delay_pattern_mask(
+        self,
+        input_ids: "torch.LongTensor",
+        bos_token_id: int,
+        pad_token_id: int,
+        ) -> tuple["torch.LongTensor", "torch.LongTensor"]:
+
+        delay_pattern = list(range(self.audio_tokenizer.config.num_quantizers))
+
+        bsz, num_codebooks, seq_len = input_ids.shape
+
+        new_seq_len = seq_len + num_codebooks - 1
+        input_ids_with_gen_mask = torch.ones((bsz, num_codebooks, new_seq_len), dtype=torch.long, device=input_ids.device)
+        bos_mask = torch.tril(input_ids_with_gen_mask, -1) > 0
+        eos_mask = torch.triu(input_ids_with_gen_mask, seq_len) > 0
+        input_ids_with_gen_mask[bos_mask] = bos_token_id
+        input_ids_with_gen_mask[(~bos_mask) & (~eos_mask)] = input_ids.reshape(-1)
+        input_ids = input_ids_with_gen_mask.clone()
+        input_ids[eos_mask] = pad_token_id
+        input_ids_with_gen_mask[eos_mask] = -1
+        return input_ids, input_ids_with_gen_mask
+
 
 __all__ = ["HiggsAudioProcessor"]
