@@ -70,7 +70,6 @@ if is_natten_available():
         key_flat = key.reshape(batch * heads, height, width, head_dim)
 
         # Compute attention scores using unfold-like operation
-        # This is computationally expensive but maintains compatibility
         kernel_size_sq = kernel_size * kernel_size
         attention_scores = torch.zeros(
             batch, heads, height, width, kernel_size_sq, dtype=query.dtype, device=query.device
