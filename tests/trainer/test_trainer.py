@@ -6175,7 +6175,9 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
         """Test that separate checkpoint and model weight limits work correctly."""
         import glob
         import os
+
         from datasets import load_dataset
+
         from transformers import AutoModelForSequenceClassification
 
         model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
@@ -6206,9 +6208,7 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
             self.assertEqual(len(model_bins), 3, f"Expected 3 model weight files, found {len(model_bins)}")
 
             # Verify which checkpoints have model weights (should be 30, 40, 50)
-            checkpoints_with_models = [
-                os.path.basename(os.path.dirname(f)) for f in model_bins
-            ]
+            checkpoints_with_models = [os.path.basename(os.path.dirname(f)) for f in model_bins]
             self.assertIn("checkpoint-30", checkpoints_with_models)
             self.assertIn("checkpoint-40", checkpoints_with_models)
             self.assertIn("checkpoint-50", checkpoints_with_models)
