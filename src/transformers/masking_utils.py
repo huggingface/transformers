@@ -285,6 +285,13 @@ def _ignore_bidirectional_mask_sdpa(padding_mask: Optional[torch.Tensor]) -> boo
 
 
 def _non_vmap_expansion_sdpa(batch_size, cache_position, kv_arange):
+    """
+    Broadcasts indices along their non-responsible dimensions.
+    Allows the usage of any index-based mask function.
+
+    Reference:
+        - https://github.com/huggingface/optimum-onnx/blob/c123e8f4fab61b54a8e0e31ce74462bcacca576e/optimum/exporters/onnx/model_patcher.py#L362-L365
+    """
     device = cache_position.device
     batch_indices = torch.arange(batch_size, dtype=torch.long, device=device)[:, None, None, None]
     head_indices = torch.arange(1, dtype=torch.long, device=device)[None, :, None, None]
@@ -304,7 +311,7 @@ def sdpa_mask(
     allow_is_causal_skip: bool = True,
     allow_is_bidirectional_skip: bool = False,
     allow_torch_fix: bool = True,
-    use_vmap: bool = False,  # TODO: docstring
+    use_vmap: bool = False,
     **kwargs,
 ) -> Optional[torch.Tensor]:
     """
@@ -340,6 +347,9 @@ def sdpa_mask(
         allow_torch_fix (`bool`, optional):
             Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
             versions. We need an arg to skip it when using eager. By default `True`.
+        use_vmap (`bool`, optional):
+            Whether to use `vmap` during the mask construction or not. Allows powerful custom patterns that may not be
+            index-based (for the cost of speed performance). By default `False`.
 
 
     ## Creating a simple causal mask:
@@ -432,11 +442,15 @@ def sdpa_mask(
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
 
+    # Actual mask creation
+    # Option 1: Fast non-vmap mask creation (default)
     if not use_vmap:
         # Apply mask function element-wise through broadcasting
         attention_mask = mask_function(*_non_vmap_expansion_sdpa(batch_size, cache_position, kv_arange))
         # Expand the mask to match batch size and query length if they weren't used in the mask function
         attention_mask = attention_mask.expand(batch_size, -1, q_length, kv_length)
+
+    # Option 2: Vmap mask creation (torch>=2.6 and custom patterns)
     elif _is_torch_greater_or_equal_than_2_6:
         batch_arange = torch.arange(batch_size, device=cache_position.device)
         head_arange = torch.arange(1, device=cache_position.device)
@@ -445,6 +459,8 @@ def sdpa_mask(
         # We don't need to add an offset to the mask_function either, as we vmap directly the correct indices for k and kv indices
         with TransformGetItemToIndex():
             attention_mask = _vmap_for_bhqkv(mask_function)(batch_arange, head_arange, cache_position, kv_arange)
+
+    # Option 3: Limited vmap mask creation (torch<2.6 and custom patterns)
     else:
         # This creates the 4D mask easily. Note that we do not include vmap over the batch_idx dimension as well,
         # as vmap cannot handle slicing a tensor from scalar tensor (it internally calls `.item()` which vmap does not allow
@@ -458,7 +474,7 @@ def sdpa_mask(
     # Due to a bug in versions of torch<2.5, we need to update the mask in case a query is not attending to any
     # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
     if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
-        attention_mask |= torch.all(~attention_mask, dim=-1, keepdim=True)
+        attention_mask = attention_mask | torch.all(~attention_mask, dim=-1, keepdim=True)
 
     return attention_mask
 
@@ -471,7 +487,7 @@ def eager_mask(
     mask_function: Callable = causal_mask_function,
     attention_mask: Optional[torch.Tensor] = None,
     dtype: torch.dtype = torch.float32,
-    uses_vmap: bool = False,
+    use_vmap: bool = False,
     **kwargs,
 ) -> torch.Tensor:
     """
@@ -494,6 +510,9 @@ def eager_mask(
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
         dtype (`torch.dtype`, optional):
             The dtype to use for the mask. By default, `torch.float32`.
+        use_vmap (`bool`, optional):
+            Whether to use `vmap` during the mask construction or not. Allows powerful custom patterns that may not be
+            index-based (for the cost of speed performance). By default `False`.
     """
     # The masks for eager attention are simply boolean mask from sdpa, casted to 0 and -inf
     _ = kwargs.pop("allow_is_causal_skip", None)
@@ -509,7 +528,7 @@ def eager_mask(
         allow_is_causal_skip=False,
         allow_is_bidirectional_skip=False,
         allow_torch_fix=False,
-        uses_vmap=uses_vmap,
+        use_vmap=use_vmap,
         **kwargs,
     )
     min_dtype = torch.finfo(dtype).min
@@ -791,6 +810,11 @@ def create_causal_mask(
     mask_factory_function = causal_mask_function
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
+    # Defaulting to using non-vmap based mask creations except when detecting
+    # users passing custom mask functions (as we cannot guarantee that they
+    # are properly index-based as required by our implementation).
+    use_vmap = False
+
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
     if _is_torch_xpu_available:
@@ -802,24 +826,25 @@ def create_causal_mask(
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
     # padding mask, etc) as the resulting mask may otherwise not be correct!
-    uses_vmap = False  # TODO --> move a bit, describe, and copy to other fns
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = or_masks(mask_factory_function, or_mask_function)
         allow_is_causal_skip = False
-        uses_vmap = True
+        use_vmap = True
     if and_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_causal_skip = False
-        uses_vmap = True
+        use_vmap = True
 
     # If we detected packing format
     if packed_sequence_mask is not None:
-        if uses_vmap and not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError("TODO: custom patterns not possible with padding free")
+        if use_vmap and not _is_torch_greater_or_equal_than_2_6:
+            raise ValueError(
+                "Packed masking along custom patterns (i.e. and/or masks) is only allowed from `torch>=2.6.0`."
+            )
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
@@ -834,7 +859,7 @@ def create_causal_mask(
         allow_is_causal_skip=allow_is_causal_skip,  # additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
-        uses_vmap=uses_vmap,  # Short-circuit to non-vmap expansions for the mask
+        use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
     )
     return causal_mask
 
@@ -888,23 +913,26 @@ def create_bidirectional_mask(
 
     # Allow skipping the mask creation except we have additional masking operators (and/or masks)
     allow_is_bidirectional_skip = True
+    # Defaulting to using non-vmap based mask creations except when detecting
+    # users passing custom mask functions (as we cannot guarantee that they
+    # are properly index-based as required by our implementation).
+    use_vmap = False
 
     # Allow slight deviations from the base mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
     # padding mask, etc) as the resulting mask may otherwise not be correct!
-    uses_vmap = False
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = or_masks(mask_factory_function, or_mask_function)
         allow_is_bidirectional_skip = False
-        uses_vmap = True
+        use_vmap = True
     if and_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_bidirectional_skip = False
-        uses_vmap = True
+        use_vmap = True
 
     # We now create the mask
     attention_mask = mask_interface(
@@ -919,7 +947,7 @@ def create_bidirectional_mask(
         allow_is_bidirectional_skip=allow_is_bidirectional_skip,
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
-        uses_vmap=uses_vmap,  # Short-circuit to non-vmap expansions for the mask
+        use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
     )
     return attention_mask
 
@@ -982,6 +1010,10 @@ def create_sliding_window_causal_mask(
     mask_factory_function = sliding_window_causal_mask_function(sliding_window)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
+    # Defaulting to using non-vmap based mask creations except when detecting
+    # users passing custom mask functions (as we cannot guarantee that they
+    # are properly index-based as required by our implementation).
+    use_vmap = False
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
     allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
@@ -994,14 +1026,20 @@ def create_sliding_window_causal_mask(
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = or_masks(mask_factory_function, or_mask_function)
         allow_is_causal_skip = False
+        use_vmap = True
     if and_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_causal_skip = False
+        use_vmap = True
 
     # If we detected packing format
     if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+        if use_vmap and not _is_torch_greater_or_equal_than_2_6:
+            raise ValueError(
+                "Packed masking along custom patterns (i.e. and/or masks) is only allowed from `torch>=2.6.0`."
+            )
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
@@ -1017,6 +1055,7 @@ def create_sliding_window_causal_mask(
         local_size=sliding_window,  # Additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
+        use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
     )
     return causal_mask
 
@@ -1083,6 +1122,7 @@ def create_chunked_causal_mask(
         )
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    # TODO: check if we can use non-vmap here + if the old torch restriction is still valid then
     # For chunked attention and batched inputs, we need to take the number of left padding tokens into account
     # to start the chunk from the actual start of the sequence for the padded sequence
     if attention_mask is not None:
@@ -1104,6 +1144,10 @@ def create_chunked_causal_mask(
     mask_factory_function = chunked_causal_mask_function(chunk_size, left_padding_tokens)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
+    # Defaulting to using non-vmap based mask creations except when detecting
+    # users passing custom mask functions (as we cannot guarantee that they
+    # are properly index-based as required by our implementation).
+    use_vmap = False
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
     allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
@@ -1116,14 +1160,20 @@ def create_chunked_causal_mask(
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = or_masks(mask_factory_function, or_mask_function)
         allow_is_causal_skip = False
+        use_vmap = True
     if and_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_causal_skip = False
+        use_vmap = True
 
     # If we detected packing format
     if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+        if use_vmap and not _is_torch_greater_or_equal_than_2_6:
+            raise ValueError(
+                "Packed masking along custom patterns (i.e. and/or masks) is only allowed from `torch>=2.6.0`."
+            )
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
@@ -1139,6 +1189,7 @@ def create_chunked_causal_mask(
         local_size=chunk_size,  # Additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
+        use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
     )
     return causal_mask
 
