@@ -2160,7 +2160,7 @@ class Trainer:
             )
 
     def get_cp_size(self) -> int:
-        """ Get the context parallel size"""
+        """Get the context parallel size"""
         if getattr(self.accelerator, "parallelism_config", None) is None:
             return 1
         pc = self.accelerator.parallelism_config

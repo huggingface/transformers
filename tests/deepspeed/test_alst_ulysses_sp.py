@@ -19,11 +19,11 @@ from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
+    read_json_file,
     require_accelerate,
     require_torch_multi_accelerator,
     slow,
     write_file,
-    read_json_file,
 )
 
 
@@ -51,14 +51,16 @@ class TestTrainerALSTUlyssesSP(TestCasePlus):
 
         # shared setup
         world_size = 2
-        script_path = __file__ #self.test_file_dir} / "test_alst_ulysses_sp.py"
+        script_path = __file__  # self.test_file_dir} / "test_alst_ulysses_sp.py"
         ds_config_path = self.test_file_dir / "ds_config_zero2.json"
 
         # step 1. Run with CP enabled (cp_size=world_size)
-        cp_yes_output_dir = self.get_auto_remove_tmp_dir("./xxx", return_pathlib_obj=True, after=False)
+        cp_yes_output_dir = self.get_auto_remove_tmp_dir(return_pathlib_obj=True)
         cp_yes_accelerate_config_path = cp_yes_output_dir / "context_parallel_config.yaml"
         cp_yes_losses_path = cp_yes_output_dir / "cp_yes_losses.json"
-        write_file(cp_yes_accelerate_config_path, f"""
+        write_file(
+            cp_yes_accelerate_config_path,
+            f"""
 distributed_type: DEEPSPEED
 deepspeed_config:
   deepspeed_config_file: {ds_config_path}
@@ -73,7 +75,8 @@ parallelism_config:
   parallelism_config_cp_backend: deepspeed
   parallelism_config_cp_seq_length_is_variable: true
   parallelism_config_cp_attn_implementation: sdpa
-                   """, )
+                   """,
+        )
 
         cmd_cp = f"""
             accelerate launch
@@ -93,17 +96,20 @@ parallelism_config:
         execute_subprocess_async(cmd_cp, env=self.get_env())
 
         # step 2. Run without CP enabled (cp_size=world_size)
-        cp_no_output_dir = self.get_auto_remove_tmp_dir("./yyy", return_pathlib_obj=True, after=False)
+        cp_no_output_dir = self.get_auto_remove_tmp_dir(return_pathlib_obj=True)
         cp_no_accelerate_config_path = cp_no_output_dir / "context_parallel_config.yaml"
         cp_no_losses_path = cp_no_output_dir / "cp_yes_losses.json"
-        write_file(cp_no_accelerate_config_path, f"""
+        write_file(
+            cp_no_accelerate_config_path,
+            f"""
 distributed_type: DEEPSPEED
 deepspeed_config:
   deepspeed_config_file: {ds_config_path}
 machine_rank: 0
 num_machines: 1
 num_processes: {world_size}
-                   """, )
+                   """,
+        )
 
         cmd_cp = f"""
             accelerate launch
@@ -124,7 +130,7 @@ num_processes: {world_size}
 
         # Compare losses - should be very close since CP just splits sequence computation
         cp_yes_losses = read_json_file(cp_yes_losses_path)
-        cp_no_losses  = read_json_file(cp_no_losses_path)
+        cp_no_losses = read_json_file(cp_no_losses_path)
 
         assert len(cp_yes_losses) == len(cp_no_losses), (
             f"Different number of losses: CP has {len(cp_yes_losses)}, no-CP has {len(cp_no_losses)}"
@@ -146,7 +152,6 @@ num_processes: {world_size}
 
 
 if __name__ == "__main__":
-
     model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
     # Parse custom arguments (not TrainingArguments parameters)

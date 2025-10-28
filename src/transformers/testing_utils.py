@@ -4078,6 +4078,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
 
     return output
 
+
 def write_file(file, content):
     with open(file, "w") as f:
         f.write(content)
