@@ -4164,6 +4164,8 @@ class Trainer:
                 except (OSError, FileNotFoundError):
                     continue
 
+            if not model_files:
+                return
             # Delete oldest model files if over limit
             if len(model_files) > model_limit:
                 num_to_delete = len(model_files) - model_limit
