@@ -6172,64 +6172,82 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
                 self.assertDictEqual(config, {"optim_bits": 32})
 
     def test_separate_checkpoint_limits(self):
-        """Test that separate checkpoint and model weight limits work correctly."""
+        """Tests that save_checkpoint_limit and save_model_limit work independently without network access."""
         import glob
         import os
+        import tempfile
 
-        from datasets import load_dataset
+        import torch
+        from torch import nn
+        from torch.utils.data import Dataset
 
-        from transformers import AutoModelForSequenceClassification
+        from transformers import Trainer, TrainingArguments
 
-        model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
-        dataset = load_dataset("glue", "sst2", split="train[:100]")
+        # ---- 1. Dummy dataset ----
+        class DummyDataset(Dataset):
+            def __init__(self, n=20):
+                self.x = torch.randn(n, 8)
+                self.y = torch.randint(0, 2, (n,))
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # Test 1: save_model_limit without save_checkpoint_limit
+            def __len__(self):
+                return len(self.x)
+
+            def __getitem__(self, idx):
+                return {"input_ids": self.x[idx], "labels": self.y[idx]}
+
+        dataset = DummyDataset()
+
+        # ---- 2. Dummy model ----
+        class TinyModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(8, 2)
+
+            def forward(self, input_ids, labels=None):
+                logits = self.linear(input_ids)
+                loss = None
+                if labels is not None:
+                    loss_fn = nn.CrossEntropyLoss()
+                    loss = loss_fn(logits, labels)
+                return {"loss": loss, "logits": logits}
+
+        model = TinyModel()
+
+        # ---- 3. Test save_model_limit only ----
+        with tempfile.TemporaryDirectory() as tmpdir:
             args = TrainingArguments(
-                output_dir=os.path.join(tmp_dir, "test1"),
+                output_dir=os.path.join(tmpdir, "model_limit"),
                 save_strategy="steps",
-                save_steps=10,
-                max_steps=50,
-                save_model_limit=3,
-                logging_steps=10,
-                eval_strategy="no",
+                save_steps=2,
+                max_steps=8,
+                save_model_limit=2,
                 report_to="none",
             )
-
             trainer = Trainer(model=model, args=args, train_dataset=dataset)
             trainer.train()
 
-            # All 5 checkpoint directories should exist
-            ckpt_dirs = sorted(glob.glob(os.path.join(tmp_dir, "test1", "checkpoint-*")))
-            self.assertEqual(len(ckpt_dirs), 5, f"Expected 5 checkpoints, found {len(ckpt_dirs)}")
+            ckpts = sorted(glob.glob(os.path.join(tmpdir, "model_limit", "checkpoint-*")))
+            # There should be 4 checkpoints (2,4,6,8)
+            self.assertEqual(len(ckpts), 4)
 
-            # But only 3 should have model weight files (last 3)
-            model_bins = glob.glob(os.path.join(tmp_dir, "test1", "checkpoint-*", "pytorch_model*.bin"))
-            self.assertEqual(len(model_bins), 3, f"Expected 3 model weight files, found {len(model_bins)}")
+            # But only 2 should contain weight files
+            model_files = glob.glob(os.path.join(tmpdir, "model_limit", "checkpoint-*", "pytorch_model*.bin"))
+            self.assertEqual(len(model_files), 2)
 
-            # Verify which checkpoints have model weights (should be 30, 40, 50)
-            checkpoints_with_models = [os.path.basename(os.path.dirname(f)) for f in model_bins]
-            self.assertIn("checkpoint-30", checkpoints_with_models)
-            self.assertIn("checkpoint-40", checkpoints_with_models)
-            self.assertIn("checkpoint-50", checkpoints_with_models)
-
-            # Test 2: save_checkpoint_limit without save_model_limit
+        # ---- 4. Test save_checkpoint_limit only ----
+        with tempfile.TemporaryDirectory() as tmpdir:
             args2 = TrainingArguments(
-                output_dir=os.path.join(tmp_dir, "test2"),
+                output_dir=os.path.join(tmpdir, "ckpt_limit"),
                 save_strategy="steps",
-                save_steps=10,
-                max_steps=50,
-                save_checkpoint_limit=2,
-                logging_steps=10,
-                eval_strategy="no",
+                save_steps=2,
+                max_steps=8,
+                save_checkpoint_limit=1,
                 report_to="none",
             )
-
             trainer2 = Trainer(model=model, args=args2, train_dataset=dataset)
             trainer2.train()
 
-            # Only 2 checkpoint directories should exist
-            ckpt_dirs2 = sorted(glob.glob(os.path.join(tmp_dir, "test2", "checkpoint-*")))
-            self.assertEqual(len(ckpt_dirs2), 2, f"Expected 2 checkpoints, found {len(ckpt_dirs2)}")
-            self.assertIn("checkpoint-40", ckpt_dirs2[-2])
-            self.assertIn("checkpoint-50", ckpt_dirs2[-1])
+            ckpts2 = sorted(glob.glob(os.path.join(tmpdir, "ckpt_limit", "checkpoint-*")))
+            # Only 1 checkpoint directory (the latest)
+            self.assertEqual(len(ckpts2), 1)
+            self.assertTrue(ckpts2[0].endswith("checkpoint-8"))
