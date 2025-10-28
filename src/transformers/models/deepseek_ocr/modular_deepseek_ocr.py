@@ -584,7 +584,6 @@ class DeepseekOcrCLIPVisionModel(CLIPVisionModel):
             **kwargs,
         )
 
-
 class DeepseekOcrTextMLP(nn.Module):
     def __init__(self, config: DeepseekOcrTextConfig, hidden_size=None, intermediate_size=None):
         super().__init__()
@@ -653,8 +652,8 @@ class DeepseekOcrTextMoe(nn.Module):
             raise ValueError(f"Unsupported topk routing method: {self.topk_method}")
 
         if self.top_k > 1 and self.norm_topk_prob:
-            denom = topk_weight.sum(dim=-1, keepdim=True).clamp_min(1e-20)
-            topk_weight = topk_weight / denom
+            denominator = topk_weight.sum(dim=-1, keepdim=True).clamp_min(1e-20)
+            topk_weight = topk_weight / denominator
 
         topk_weight = topk_weight * self.routed_scaling_factor
         return topk_idx, topk_weight
@@ -690,19 +689,17 @@ class DeepseekOcrTextMoe(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-
         router_logits = F.linear(hidden_states.float(), self.gate.weight.float())
         router_scores = router_logits.softmax(dim=-1, dtype=torch.float32)
-        router_indices, router_weights = self._select_experts(router_scores)
+        router_indices, router_weights = self._select_experts(router_scores.view(-1, router_scores.shape[-1]))
 
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        moe_outputs = self._moe_infer(hidden_states, router_indices, router_weights)
-        moe_outputs = moe_outputs.view(*orig_shape)
+        moe_output = self._moe_infer(hidden_states, router_indices, router_weights).view(*orig_shape)
 
         if hasattr(self, "shared_experts"):
-            moe_outputs = moe_outputs + self.shared_experts(residuals)
+            moe_output = moe_output + self.shared_experts(residuals)
 
-        return moe_outputs
+        return moe_output
 
 
 class DeepseekOcrTextAttention(LlamaAttention):
