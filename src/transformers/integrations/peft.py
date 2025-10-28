@@ -218,13 +218,10 @@ class PeftAdapterMixin:
             token = adapter_kwargs.pop("token")
 
         if peft_config is None:
-            new_args = adapter_kwargs.copy()
-            if 'token' in new_args:
-                new_args.pop('token')
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
                 token=token,
-                **new_args,
+                **adapter_kwargs,
             )
 
             if adapter_config_file is None:
@@ -655,10 +652,6 @@ def maybe_load_adapters(
     _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
 
     if _adapter_model_path is None:
-        new_args = adapter_kwargs.copy()
-        if 'token' in new_args:
-            new_args.pop('token')
-
         _adapter_model_path = find_adapter_config_file(
             pretrained_model_name_or_path,
             cache_dir=download_kwargs.get("cache_dir"),
@@ -669,7 +662,7 @@ def maybe_load_adapters(
             local_files_only=bool(download_kwargs.get("local_files_only", False)),
             subfolder=download_kwargs.get("subfolder", ""),
             _commit_hash=download_kwargs.get("commit_hash"),
-            **new_args,
+            **adapter_kwargs,
         )
 
     if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
