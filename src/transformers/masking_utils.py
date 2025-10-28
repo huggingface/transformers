@@ -135,8 +135,6 @@ def chunked_causal_mask_function(chunk_size: int, left_padding: torch.Tensor) ->
     """
     This return the mask_function function to create a chunked attention mask.
     """
-    if not _is_torch_greater_or_equal_than_2_6:
-        return and_masks(_legacy_chunked_overlay(chunk_size), causal_mask_function)
     return and_masks(chunked_overlay(chunk_size, left_padding), causal_mask_function)
 
 
@@ -462,6 +460,11 @@ def sdpa_mask(
 
     # Option 3: Limited vmap mask creation (torch<2.6 and custom patterns)
     else:
+        logger.warning_once(
+            "Using vmap mask creation (custom patterns with and/or masks) has limited capabilities under "
+            "`torch<2.6.0`. We cannot guarantee that the correct mask is constructed."
+        )
+
         # This creates the 4D mask easily. Note that we do not include vmap over the batch_idx dimension as well,
         # as vmap cannot handle slicing a tensor from scalar tensor (it internally calls `.item()` which vmap does not allow
         # However, in more recent version of Pytorch, a trick was introduced to handle it
@@ -1122,7 +1125,6 @@ def create_chunked_causal_mask(
         )
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
-    # TODO: check if we can use non-vmap here + if the old torch restriction is still valid then
     # For chunked attention and batched inputs, we need to take the number of left padding tokens into account
     # to start the chunk from the actual start of the sequence for the padded sequence
     if attention_mask is not None:
@@ -1130,17 +1132,6 @@ def create_chunked_causal_mask(
         left_padding_tokens = (attention_mask.cumsum(dim=-1) == torch.zeros_like(attention_mask)).sum(dim=-1)
     else:
         left_padding_tokens = torch.zeros(batch_size, device=cache_position.device, dtype=int)
-    # Raise a warning for older versions if the problematic left-padding situation arises
-    if (
-        not _is_torch_greater_or_equal_than_2_6
-        and kv_length + kv_offset > chunk_size
-        and (left_padding_tokens > 0).any()
-    ):
-        logger.warning_once(
-            "Due to limitations of your current torch version, we cannot correctly account for the left-padding "
-            "when computing the chunked attention pattern. This will lead to a wrong attention mask for the padded "
-            "sequences. Behavior will be undefined. Please upgrade to `torch>=2.6` to solve this issue."
-        )
     mask_factory_function = chunked_causal_mask_function(chunk_size, left_padding_tokens)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
