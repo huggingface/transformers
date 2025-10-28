@@ -114,9 +114,9 @@ class FPQuantBaseTest(unittest.TestCase):
     @require_torch_multi_accelerator
     def test_quantized_model_multi_accelerator(self):
         """
-        Simple test that checks if the quantized model is working properly with multiple accelerators
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 CUDA GPUs, or set ZE_AFFINITY_MASK=0,1
-        if you have more than 2 Intel XPUs
+        Simple test that checks if the quantized model is working properly with multiple accelerators.
+        Set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 CUDA GPUs. Or set ZE_AFFINITY_MASK=0,1
+        if you have more than 2 Intel XPUs.
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
