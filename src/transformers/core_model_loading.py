@@ -29,6 +29,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Optional, Union
+from torch.distributed.tensor import DTensor
 
 import torch
 from torch import Tensor
@@ -574,21 +575,28 @@ class WeightConverter:
         self._regex_pat = build_glob_alt(self.source_keys)
 
 
-def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc):
+def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc, distributed_operation):
     try:
         module_path, _, param_name = k.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
         param_value = v[0] if isinstance(v, list) else v[:]
-        if not isinstance(param_value, torch.nn.Parameter):
-            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
         ref = meta_model_state_dict.get(k, empty_tensor)
+
+        if not isinstance(param_value, torch.nn.Parameter):
+            if distributed_operation != {} and distributed_operation.use_dtensor:
+                param_value = DTensor.from_local(
+                    param_value, distributed_operation.device_mesh, distributed_operation.shard, run_check=False, shape=ref.size(), stride=ref.stride()
+                )
+            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+
         if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((k, param_value.shape, ref.shape))
         if k in missing_keys:
             missing_keys.remove(k)
+
         setattr(module_obj, param_name, param_value)
     except Exception as e:
-        misc[k] = f"{e} for {k} on {list(model.state_dict().keys())}"
+        misc[k] = f"{e} for {k} on {list(module_obj.state_dict().keys())}"
 
 
 @dataclass(slots=True)
@@ -679,14 +687,19 @@ def convert_and_load_state_dict_in_model(
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
         first_target_key = target_key.split("|")[0]
-        if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name) and device_mesh:
-            empty_tensor = meta_model_state_dict.get(first_target_key)
-            if getattr(converter, "distributed_operation", {}) == {}:
-                converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]]
-                converter.distributed_operation.device_mesh = device_mesh
-                converter.distributed_operation.rank = device_map[""].index
-            fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation, empty_tensor)
-        else:  # If not TP, async move tensors
+        fut = None
+        if device_mesh:
+            if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
+                empty_tensor = meta_model_state_dict.get(first_target_key)
+                if getattr(converter, "distributed_operation", {}) == {}:
+                    converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]]
+                    converter.distributed_operation.device_mesh = device_mesh
+                    converter.distributed_operation.rank = device_map[""].index
+                    converter.distributed_operation.empty_tensor = empty_tensor.clone()
+                    # shard_index=len(entry.collected_tensors[target_key].get(converter_key, [])
+                fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation, empty_tensor)
+
+        if fut is None:  # If not TP, async move tensors
             fut = spawn_materialize(file_id, tensor)
 
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
@@ -741,7 +754,7 @@ def convert_and_load_state_dict_in_model(
                     for src in converter.source_keys:  # what should happen to k when we meet k at saving
                         inverse_converters[k] = {src: converter}
                     set_param_for_module(
-                        model, k, output_value, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc
+                        model, k, output_value, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc, converter.distributed_operation
                     )
         del group
         for op in operations:

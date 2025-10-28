@@ -5021,7 +5021,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
                 else:
-                    hf_quantizer.create_quantized_param(self, value, key, "cpu")
+                    # hf_quantizer.create_quantized_param(self, value, key, "cpu")
+                    pass
 
     def _initialize_missing_keys(self, missing_keys: list[str], is_quantized: bool) -> None:
         """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to

@@ -372,13 +372,14 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     if rank >= world_size:
         raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
 
-    shard_size = math.ceil(empty_param.shape[dim] / world_size)
+
+    shard_size = math.ceil(param.get_shape()[dim] / world_size)
     start = rank * shard_size
 
     # Construct slicing index dynamically
-    end = min(start + shard_size, empty_param.shape[dim])
+    end = min(start + shard_size, param.get_shape()[dim])
     slice_indices = [slice(None)] * param_dim
-    if start < empty_param.shape[dim]:
+    if start < param.get_shape()[dim]:
         slice_indices[dim] = slice(start, end)
         param = param[tuple(slice_indices)]
         if isinstance(param, list):  # TODO handle the modulelist case!
@@ -595,6 +596,7 @@ class ColwiseParallel(TensorParallelLayer):
         else:
             shard = [Shard(-2)]
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
+        self.shard = shard
         return parameter, shard
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -686,6 +688,7 @@ class RowwiseParallel(TensorParallelLayer):
         else:
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
             shard = [Shard(-1)]
+        self.shard = shard
         return parameter, shard
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
