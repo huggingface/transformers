@@ -677,20 +677,6 @@ class LightOnOCRVisionModel(LightOnOCRPreTrainedModel):
         )
 
 
-# Text model components - explicitly renamed from Qwen3 (LightOnOCRTextRMSNorm already defined above)
-class LightOnOCRTextPreTrainedModel(PreTrainedModel):
-    config_class = LightOnOCRTextConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LightOnOCRTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-
-
 class LightOnOCRTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -969,6 +955,25 @@ class LightOnOCRTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
+class LightOnOCRTextPreTrainedModel(PreTrainedModel):
+    config: LightOnOCRTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LightOnOCRTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": LightOnOCRTextDecoderLayer,
+        "attentions": LightOnOCRTextAttention,
+    }
+
+
 @auto_docstring(
     custom_intro="""
     The language model of LightOnOCR, based on Qwen3 architecture.
@@ -1169,7 +1174,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, projected_visual)
 
         # Get language model outputs
-        return self.language_model(
+        outputs = self.language_model(
             input_ids=None,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
@@ -1178,6 +1183,8 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
+
+        return outputs
 
 
 class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMixin):
@@ -1207,6 +1214,7 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
         return self.model.language_model
 
     @can_return_tuple
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
