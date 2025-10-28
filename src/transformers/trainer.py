@@ -2159,6 +2159,17 @@ class Trainer:
                 ignore_keys_for_eval=ignore_keys_for_eval,
             )
 
+    def get_cp_size(self) -> int:
+        """ Get the context parallel size"""
+        if getattr(self.accelerator, "parallelism_config", None) is None:
+            return 1
+        pc = self.accelerator.parallelism_config
+        if pc.cp_backend == "deepspeed":
+            return pc.cp_size
+        # XXX: not sure if backend=="torch" needs to return cp_size here as well it wasn't originally (a bug?)
+
+        return 1
+
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
@@ -2176,8 +2187,8 @@ class Trainer:
     def get_total_train_batch_size(self, args) -> int:
         """Calculates total batch size (micro_batch * grad_accum * dp_world_size).
 
-        Note: Only considers DP and TP (dp_world_size = world_size // tp_size)."""
-        dp_world_size = args.world_size // self.get_tp_size()
+        Note: Only considers DP and TP and SP/CP (dp_world_size = world_size // tp_size // cp_size)."""
+        dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size()
         return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
 
     def _inner_training_loop(
@@ -2300,6 +2311,11 @@ class Trainer:
                 )
         else:
             self.optimizer = self.accelerator.prepare(self.optimizer)
+
+        # since DataLoader was Accelerate prepared w/o a model arg in the same call, we now have to complete the DL wrapping for ALST/UlyssesSP, after model has been prepared
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.cp_backend == "deepspeed":
+            train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
 
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
@@ -3635,7 +3651,7 @@ class Trainer:
             getattr(self.accelerator, "parallelism_config", None) is not None
             and self.accelerator.parallelism_config.cp_enabled
         ):
-            if self.accelerator.parallelism_config.backend == "torch":
+            if self.accelerator.parallelism_config.cp_backend == "torch":
                 if hasattr(model, "config"):
                     if model.config._attn_implementation != "sdpa":
                         raise ValueError(
@@ -3650,7 +3666,7 @@ class Trainer:
                         inputs["shift_labels"] = labels[:, 1:].contiguous()
 
             # carve out space to make it clear there are other backends with different requirements, even though no code needs to be run at the moment
-            elif self.accelerator.parallelism_config.backend == "deepspeed":
+            elif self.accelerator.parallelism_config.cp_backend == "deepspeed":
                 # - accelerator.parallelism_config performs the `model.config._attn_implementation` checks already and it supports more than `dspa`
                 # - UlyssesSPDataLoaderAdapter called from Accelerate performs the `shift_label` creation - must not interfere
                 # - position_ids generation should be done by HF Trainer if it wasn't done by the user
@@ -3830,7 +3846,7 @@ class Trainer:
         make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.backend == "deepspeed":
+        if pc is not None and pc.cp_backend == "deepspeed":
             unwrapped_model = self.accelerator.unwrap_model(model)
 
             outputs = model(**inputs)
@@ -3952,7 +3968,7 @@ class Trainer:
             # deepspeed already takes care of saving the checkpoint below, so we need this only for the torch cp backend
             if (
                 self.accelerator.should_save_model
-                and getattr(self.accelerator, "parallelism_config").backend == "torch"
+                and getattr(self.accelerator, "parallelism_config").cp_backend == "torch"
             ):
                 self._save(output_dir)
         # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
@@ -5180,7 +5196,7 @@ class Trainer:
                 # Divide by number of devices with the same batch
                 # XXX: double check if this is only for fsdp
                 pc = getattr(self.accelerator, "parallelism_config", None)
-                if pc is not None and pc.backend == "torch":
+                if pc is not None and pc.cp_backend == "torch":
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
 
         return num_items_in_batch

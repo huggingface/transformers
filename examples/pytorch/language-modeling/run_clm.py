@@ -629,6 +629,18 @@ def main():
             preds = preds[:, :-1].reshape(-1)
             return metric.compute(predictions=preds, references=labels)
 
+    from accelerate.utils import ParallelismConfig
+    from accelerate.utils.dataclasses import DeepSpeedContextParallelConfig
+    training_args.parallelism_config = ParallelismConfig(
+        backend="deepspeed",
+        cp_size=2,
+        dp_shard_size=1, # 2 w/ 4 gpus
+        cp_handler=DeepSpeedContextParallelConfig(
+            seq_length_is_variable=True,
+            attn_implementation="sdpa",
+        ),
+    )
+
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
