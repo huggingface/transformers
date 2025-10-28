@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 import re
+from typing import Optional
+
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
 
 
@@ -352,16 +353,19 @@ class FP8Linear(nn.Linear):
                 output = output + self.bias
             return output.to(dtype=input.dtype)
 
+
 def _ceil_div(a, b):
     return (a + b - 1) // b
 
 
 class FP8Expert(nn.Module):
     dtype = torch.float8_e4m3fn
+
     def __init__(self, config, block_size, device):
         super().__init__()
 
         from ..activations import ACT2FN
+
         self.block_size = block_size
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
@@ -425,9 +429,13 @@ class FP8Expert(nn.Module):
                 continue
 
             current_state = hidden_states.index_select(0, token_positions)
-            gate, up = self.linear(current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scales_inv[expert_idx]).chunk(2, dim=-1)
+            gate, up = self.linear(
+                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scales_inv[expert_idx]
+            ).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = self.linear(current_hidden_states, self.down_proj[expert_idx], self.down_proj_scales_inv[expert_idx])
+            current_hidden_states = self.linear(
+                current_hidden_states, self.down_proj[expert_idx], self.down_proj_scales_inv[expert_idx]
+            )
 
             routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
             current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
@@ -457,6 +465,7 @@ class FP8Expert(nn.Module):
             torch_accelerator_module.synchronize()
             return output.to(dtype=input.dtype)
 
+
 # TODO: we do need this.... but not recursive...
 def _replace_with_fp8_linear(
     model,
@@ -469,33 +478,43 @@ def _replace_with_fp8_linear(
     iterator = list(model.named_parameters()).copy()
     for name, empty_tensor in iterator:
         current_key_name = name
-        name = name.rsplit(".", 1)[0] if '.' in name else name
+        name = name.rsplit(".", 1)[0] if "." in name else name
         module = model.get_submodule(name)
 
-        current_key_name_str = re.sub(r"\d+","*" ,current_key_name)
+        current_key_name_str = re.sub(r"\d+", "*", current_key_name)
         if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
             with init_empty_weights():
-                if "gate_up_proj" in current_key_name or "down_proj" in current_key_name and "experts" in current_key_name: # Experts!
+                if (
+                    "gate_up_proj" in current_key_name
+                    or "down_proj" in current_key_name
+                    and "experts" in current_key_name
+                ):  # Experts!
                     in_features = empty_tensor.size(-2)
                     out_features = empty_tensor.size(-1)
-                    model.set_submodule(name, FP8Expert(
-                        config=model.config,
-                        block_size = quantization_config.weight_block_size,
-                        device=empty_tensor.device,
-                    ))
+                    model.set_submodule(
+                        name,
+                        FP8Expert(
+                            config=model.config,
+                            block_size=quantization_config.weight_block_size,
+                            device=empty_tensor.device,
+                        ),
+                    )
 
                 elif isinstance(module, nn.Linear):
-                    in_features=module.in_features
-                    out_features=module.out_features
-                    model.set_submodule(name, FP8Linear(
-                        in_features=in_features,
-                        out_features=out_features,
-                        bias=module.bias is not None,
-                        device=module.weight.device,
-                        dtype=module.weight.dtype,
-                        activation_scheme=quantization_config.activation_scheme,
-                        block_size=quantization_config.weight_block_size,
-                    ))
+                    in_features = module.in_features
+                    out_features = module.out_features
+                    model.set_submodule(
+                        name,
+                        FP8Linear(
+                            in_features=in_features,
+                            out_features=out_features,
+                            bias=module.bias is not None,
+                            device=module.weight.device,
+                            dtype=module.weight.dtype,
+                            activation_scheme=quantization_config.activation_scheme,
+                            block_size=quantization_config.weight_block_size,
+                        ),
+                    )
                 has_been_replaced = True
         # when changing a layer the TP PLAN for that layer should be updated. TODO
 

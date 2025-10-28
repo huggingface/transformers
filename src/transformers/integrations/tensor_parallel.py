@@ -381,7 +381,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     if start < empty_param.shape[dim]:
         slice_indices[dim] = slice(start, end)
         param = param[tuple(slice_indices)]
-        if isinstance(param, list): # TODO handle the modulelist case!
+        if isinstance(param, list):  # TODO handle the modulelist case!
             param = [p[:] for p in param]
         return param
     dimensions = list(param.shape)
@@ -413,7 +413,7 @@ class TensorParallelLayer:
     """
 
     use_dtensor = True
-    device_mes=None
+    device_mes = None
     rank = None
 
     @staticmethod
@@ -676,7 +676,6 @@ class RowwiseParallel(TensorParallelLayer):
         self.output_layouts = (output_layouts or Replicate(),)
         self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
-
 
     def shard_tensor(self, param, empty_param, param_type=None):
         device_mesh = self.device_mesh

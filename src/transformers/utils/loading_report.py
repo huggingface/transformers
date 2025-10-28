@@ -185,20 +185,22 @@ def log_state_dict_report(
             rows.append([k, status, ""])
 
     if mismatched_keys:
-        iterator = {a: (b, c) for a,b,c in mismatched_shapes}
+        iterator = {a: (b, c) for a, b, c in mismatched_shapes}
         for key, (shape_ckpt, shape_model) in update_key_name(iterator).items():
             status = "MISMATCH"
             status = _color(status, "yellow", ansi)
             data = [key, status]
             if term_w > limit_rows:
-                data.append(" ".join(["Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"]))
+                data.append(
+                    " ".join(["Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"])
+                )
             rows.append(data)
 
     if misc:
         for k, v in update_key_name(misc).items():
             status = "MISC"
             status = _color(status, "purple", ansi)
-            _details = v[:term_w] 
+            _details = v[:term_w]
             rows.append([k, status, _details])
 
     if not rows:

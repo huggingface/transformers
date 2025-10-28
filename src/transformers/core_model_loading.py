@@ -433,7 +433,7 @@ class Fp8Quantize(QuantizationOp):
         block_size = None
         if quant_config is not None:
             if isinstance(quant_config, dict):
-                block_size = quant_config.get("weight_block_size", None)
+                block_size = quant_config.get("weight_block_size")
             else:
                 block_size = getattr(quant_config, "weight_block_size", None)
         if block_size is None:
@@ -491,6 +491,7 @@ class Fp8Quantize(QuantizationOp):
             target_keys: quantized,
             scale_key: inv_scales,
         }
+
 
 class Fp8Dequantize(QuantizationOp):
     """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
@@ -619,6 +620,7 @@ def spawn_materialize(file_id, t) -> Future:
 
     return EXEC.submit(_job)
 
+
 def spawn_tp_materialize(file_id, t, sharding_method, empty_tensor) -> Future:
     sem = _file_sems[file_id]
 
@@ -676,15 +678,15 @@ def convert_and_load_state_dict_in_model(
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
-        first_target_key = target_key.split('|')[0]
+        first_target_key = target_key.split("|")[0]
         if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name) and device_mesh:
             empty_tensor = meta_model_state_dict.get(first_target_key)
             if getattr(converter, "distributed_operation", {}) == {}:
                 converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]]
-                converter.distributed_operation.device_mesh=device_mesh
-                converter.distributed_operation.rank=device_map[''].index
+                converter.distributed_operation.device_mesh = device_mesh
+                converter.distributed_operation.rank = device_map[""].index
             fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation, empty_tensor)
-        else: # If not TP, async move tensors
+        else:  # If not TP, async move tensors
             fut = spawn_materialize(file_id, tensor)
 
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
@@ -724,7 +726,9 @@ def convert_and_load_state_dict_in_model(
                 for k in list(realized_value.keys()).copy():
                     if op := converter.quantization_operation.get(k):
                         try:
-                            realized_value.update(op.convert({k:realized_value.pop(k)}, quant_config=quantizer.quantization_config))
+                            realized_value.update(
+                                op.convert({k: realized_value.pop(k)}, quant_config=quantizer.quantization_config)
+                            )
                         except Exception as e:
                             misc[layer_name] = f"{op.__class__.__name__}: {e}"
 

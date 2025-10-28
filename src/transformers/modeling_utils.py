@@ -2619,7 +2619,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         try:
-            if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            if isinstance(
+                module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
+            ):
                 module.weight.data.normal_(mean=0.0, std=std)
                 if module.bias is not None:
                     module.bias.data.zero_()
@@ -4711,7 +4713,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
         for k, v in sharded_metadata["weight_map"].items():
             key = pattern.match(k).group(1)
-            if key is not None and key != '':
+            if key is not None and key != "":
                 device = device_map[key]
             else:
                 device = device_map[""].index
