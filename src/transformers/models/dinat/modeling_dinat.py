@@ -37,12 +37,6 @@ from .configuration_dinat import DinatConfig
 
 
 if is_natten_available():
-    from natten.functional import na2d as natten2d
-
-    # Wrapper functions to maintain compatibility with the old natten API
-    # The old API had natten2dqkrpb and natten2dav, but the new API uses a unified na2d
-    # We need to manually handle RPB (relative position bias) since new API doesn't support it directly
-
     def natten2dqkrpb(query, key, rpb, kernel_size, dilation):
         """
         Compute neighborhood attention scores with relative position bias.
@@ -143,9 +137,6 @@ else:
         raise OptionalDependencyNotAvailable()
 
     def natten2dav(*args, **kwargs):
-        raise OptionalDependencyNotAvailable()
-
-    def natten2d(*args, **kwargs):
         raise OptionalDependencyNotAvailable()
 
 
