@@ -50,7 +50,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -83,7 +83,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_resize
 from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.modeling_qwen2_vl import VisionMlp
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from .configuration_ernie4_5_vl import Ernie4_5_VLConfig, Ernie4_5_VLTextConfig
 
 
@@ -245,7 +244,7 @@ class Ernie4_5_VLMoeBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        token_type_ids: Optional[torch.Tensor] = None,
+        mm_token_type_ids: Optional[torch.BoolTensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
 
@@ -253,7 +252,7 @@ class Ernie4_5_VLMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        if token_type_ids is not None and token_type_ids.any():
+        if mm_token_type_ids is not None and mm_token_type_ids.any():
             final_hidden_states = torch.zeros_like(hidden_states)
             router_logits = torch.zeros(
                 size=(batch_size * sequence_length, self.num_experts),
@@ -262,9 +261,9 @@ class Ernie4_5_VLMoeBlock(nn.Module):
             )
 
             # True (1) == vision, False (0) == text tokens
-            token_type_ids = token_type_ids.bool()
-            token_type_ids_router = token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
-            token_type_ids_states = token_type_ids[..., None].expand(-1, -1, hidden_dim)
+            mm_token_type_ids = mm_token_type_ids.bool()
+            token_type_ids_router = mm_token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
+            token_type_ids_states = mm_token_type_ids[..., None].expand(-1, -1, hidden_dim)
 
             # Extract and separate tokens into their modalities
             text_hidden_states = hidden_states[~token_type_ids_states].reshape(batch_size, -1, hidden_dim)
@@ -314,7 +313,7 @@ class Ernie4_5_VLDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
+        mm_token_type_ids: Optional[torch.BoolTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -339,7 +338,7 @@ class Ernie4_5_VLDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         if isinstance(self.mlp, Ernie4_5_VLMoeBlock):
-            hidden_states, _ = self.mlp(hidden_states, token_type_ids)
+            hidden_states, _ = self.mlp(hidden_states, mm_token_type_ids)
         else:
             hidden_states = self.mlp(hidden_states)
         hidden_states = hidden_states + residual
@@ -378,13 +377,17 @@ class Ernie4_5_VLTextModel(Ernie4_5_MoeModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
+        mm_token_type_ids: Optional[torch.BoolTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ):
+    ) -> MoeModelOutputWithPast:
+        r"""
+        mm_token_type_ids (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -440,7 +443,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_MoeModel):
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                token_type_ids=token_type_ids,
+                mm_token_type_ids=mm_token_type_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
                 **kwargs,
@@ -911,7 +914,6 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
 
             return position_ids, mrope_position_deltas
 
-    # TODO: check for correctness
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
@@ -952,33 +954,6 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         image_embeds = torch.split(image_embeds, split_sizes)
         return image_embeds
 
-    def get_tokentype_mask(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-    ):
-        """Return the mask indicating a multimodal token (including the start/end tokens of an image/video)"""
-
-        def get_mask_for_token_id(token_id):
-            if input_ids is not None:
-                return (input_ids == token_id).bool()
-
-            mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            return mask.all(-1).bool()
-
-        total_mask = get_mask_for_token_id(self.config.image_token_id)
-        for token_id in [
-            self.config.image_start_token_id,
-            self.config.image_end_token_id,
-            self.config.video_token_id,
-            self.config.video_start_token_id,
-            self.config.video_end_token_id,
-        ]:
-            total_mask = torch.logical_or(total_mask, get_mask_for_token_id(token_id))
-        return total_mask
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -986,7 +961,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
+        mm_token_type_ids: Optional[torch.BoolTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -999,6 +974,8 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, MoeModelOutputWithPast]:
         r"""
+        mm_token_type_ids (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1036,13 +1013,10 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 cache_position=cache_position,
             )
 
-        if token_type_ids is None:
-            token_type_ids = self.get_tokentype_mask(input_ids, inputs_embeds)
-
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
-            token_type_ids=token_type_ids,
+            mm_token_type_ids=mm_token_type_ids,
             attention_mask=attention_mask,
             use_cache=use_cache,
             past_key_values=past_key_values,
@@ -1082,9 +1056,8 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
         past_key_values=None,
         image_grid_thw=None,
         video_grid_thw=None,
-        # Intentionally ignore position ids and token type ids to force custom cache logic
+        # Intentionally ignore position ids to force custom cache logic
         position_ids=None,
-        token_type_ids=None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
@@ -1108,15 +1081,11 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
             video_grid_thw=video_grid_thw,
             cache_position=cache_position,
         )
-        # Using our own token type logic
-        model_inputs["token_type_ids"] = self.model.get_tokentype_mask(
-            model_inputs["input_ids"],
-            model_inputs["inputs_embeds"],
-        )
 
         if model_inputs["cache_position"][0] != 0:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
+            model_inputs["mm_token_type_ids"] = None
 
         return model_inputs
 
@@ -1127,7 +1096,7 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
+        mm_token_type_ids: Optional[torch.BoolTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1143,6 +1112,8 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, MoeCausalLMOutputWithPast]:
         r"""
+        mm_token_type_ids (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1162,7 +1133,7 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            token_type_ids=token_type_ids,
+            mm_token_type_ids=mm_token_type_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1510,55 +1481,7 @@ class Ernie4_5_VLImageProcessorFast(Qwen2VLImageProcessorFast):
         )
 
 
-class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        # TODO: Prolly dont need this anymore
-        "videos_kwargs": {
-            "do_sample_frames": True,
-        },
-    }
-
-
-class Ernie4_5_VLProcessor(Qwen2VLProcessor):
-    r"""
-    Constructs a Ernie 4.5 VL processor which wraps a Ernie 4.5 VL image processor and a Llama tokenizer into a single processor.
-    [`Ernie4_5_VLProcessor`] offers all the functionalities of [`Ernie4_5_VLImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~Ernie4_5_VLProcessor.__call__`] and [`~Ernie4_5_VLProcessor.decode`] for more information.
-    Args:
-        image_processor ([`Ernie4_5_VLImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        video_processor ([`Ernie4_5_VLVideoProcessor`], *optional*):
-            The video processor is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
-    tokenizer_class = (None, "LlamaTokenizerFast")
-
-    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
-        self.image_token = "<|IMAGE_PLACEHOLDER|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.video_token = "<|VIDEO_PLACEHOLDER|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-        self.image_token_id = (
-            tokenizer.image_token_id
-            if getattr(tokenizer, "image_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_token)
-        )
-        self.video_token_id = (
-            tokenizer.video_token_id
-            if getattr(tokenizer, "video_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.video_token)
-        )
-
-
 __all__ = [
-    "Ernie4_5_VLProcessor",
     "Ernie4_5_VLImageProcessor",
     "Ernie4_5_VLImageProcessorFast",
     "Ernie4_5_VLForConditionalGeneration",
