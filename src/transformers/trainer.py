@@ -2394,14 +2394,15 @@ class Trainer:
 
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
+            epoch_iterator = iter(epoch_dataloader)
+    
+            if len_dataloader is None and epoch > epochs_trained and _steps_in_current_epoch > 0:
+                steps_in_epoch = _steps_in_current_epoch
+                _steps_in_current_epoch = 0
             if hasattr(epoch_dataloader, "set_epoch"):
                 epoch_dataloader.set_epoch(epoch)
 
-            steps_in_epoch = (
-                len(epoch_dataloader)
-                if len_dataloader is not None
-                else args.max_steps * args.gradient_accumulation_steps
-            )
+           
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
             step = -1
@@ -2417,7 +2418,13 @@ class Trainer:
                     self._load_rng_state(resume_from_checkpoint)
 
             epoch_iterator = iter(epoch_dataloader)
+            if len_dataloader is not None:
+                steps_in_epoch = len(epoch_iterator)
+            else:
+                # For iterable datasets without __len__
+                steps_in_epoch = args.max_steps * args.gradient_accumulation_steps
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
+            _steps_in_current_epoch = 0
             remainder = steps_in_epoch % args.gradient_accumulation_steps
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
@@ -2553,7 +2560,10 @@ class Trainer:
 
                         model.zero_grad()
                         self.state.global_step += 1
-                        self.state.epoch = epoch + (step + 1) / steps_in_epoch
+                        if len_dataloader is None:
+                            _steps_in_current_epoch += 1
+
+                        self.state.epoch = epoch + (step + 1 + _steps_in_current_epoch) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
                         self._maybe_log_save_evaluate(
                             tr_loss,
