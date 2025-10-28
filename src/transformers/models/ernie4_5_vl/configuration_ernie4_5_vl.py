@@ -40,7 +40,7 @@ class Ernie4_5_VLVisionConfig(PreTrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         in_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_size (`int`, *optional*, defaults to `14`):
+        patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The size used for merging spatial dimensions.
@@ -143,7 +143,7 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        moe_intermediate_size (`list[int]`, *optional*, defaults to [1536, 512]):
+        moe_intermediate_size (`list[int]`, *optional*, defaults to `[1536, 512]`):
             Intermediate size of the routed experts; differs between text (first) and image (second) experts.
         moe_k (`int`, *optional*, defaults to 6):
             Number of selected experts.
@@ -153,7 +153,7 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
             The number of experts that are shared for all MoE forwards.
         moe_layer_start_index (`int`, *optional*, defaults to 1):
             The first index at which MoE layers start to appear.
-        moe_layer_end_index (`int`, *optional*, defaults to -1):
+        moe_layer_end_index (`int`, *optional*, defaults to 29):
             The last possible index for a MoE layer.
         moe_layer_interval (`int`, *optional*, defaults to 1):
             The intervals between MoE layers to appear.
