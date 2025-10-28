@@ -356,24 +356,20 @@ def _ceil_div(a, b):
     return (a + b - 1) // b
 
 
-class FP8Expert(nn.Parameter):
+class FP8Expert(nn.Module):
     dtype = torch.float8_e4m3fn
-
     def __init__(self, config, block_size, device):
         super().__init__()
 
-        from ...activations import ACT2FN
+        from ..activations import ACT2FN
         self.block_size = block_size
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
 
-        # Shapes mirror Linear(out_features, in_features)
-        # gate_up: (2*intermediate, hidden) ; down: (hidden, intermediate)
         Wg_out, Wg_in = 2 * self.intermediate_dim, self.hidden_dim
         Wd_out, Wd_in = self.hidden_dim, self.intermediate_dim
 
-        # FP8 weight tensors (packed per-expert)
         self.gate_up_proj = nn.Parameter(
             torch.empty(self.num_experts, Wg_out, Wg_in, dtype=FP8Expert.dtype, device=device)
         )
@@ -472,44 +468,38 @@ def _replace_with_fp8_linear(
     quantization_config=None,
     has_been_replaced=False,
 ):
-    """Replace Linear layers with FP8Linear."""
-    if current_key_name is None:
-        current_key_name = []
-
     iterator = list(model.named_parameters()).copy()
     for name, empty_tensor in iterator:
-        current_key_name.append(name)
+        current_key_name = name
         name = name.rsplit(".", 1)[0] if '.' in name else name
         module = model.get_submodule(name)
 
-        if isinstance(module, nn.Linear) and name not in (modules_to_not_convert or []) or "gate_up_proj" in name or "down_proj" in name :
-            current_key_name_str = re.sub(r"\d+","*" ,".".join(current_key_name))
-            if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
-                with init_empty_weights():
-                    if "gate_up_proj" in name or "down_proj" in name and "experts" in name: # Experts!
-                        in_features = module.size(-2)
-                        out_features = module.size(-1)
-                        model.set_submodule(name, FP8Expert(
-                            config=model.config,
-                            block_size = quantization_config.weight_block_size,
-                            device=module.weight.device,
-                        ))
+        current_key_name_str = re.sub(r"\d+","*" ,".".join(current_key_name))
+        if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
+            with init_empty_weights():
+                if "gate_up_proj" in current_key_name or "down_proj" in current_key_name and "experts" in current_key_name: # Experts!
+                    in_features = empty_tensor.size(-2)
+                    out_features = empty_tensor.size(-1)
+                    model.set_submodule(name, FP8Expert(
+                        config=model.config,
+                        block_size = quantization_config.weight_block_size,
+                        device=empty_tensor.device,
+                    ))
 
-                    else:
-                        in_features=module.in_features
-                        out_features=module.out_features
-                        model.set_submodule(name, FP8Linear(
-                            in_features=in_features,
-                            out_features=out_features,
-                            bias=module.bias is not None,
-                            device=module.weight.device,
-                            dtype=module.weight.dtype,
-                            activation_scheme=quantization_config.activation_scheme,
-                            block_size=quantization_config.weight_block_size,
-                        ))
-                    has_been_replaced = True
+                elif isinstance(module, nn.Linear):
+                    in_features=module.in_features
+                    out_features=module.out_features
+                    model.set_submodule(name, FP8Linear(
+                        in_features=in_features,
+                        out_features=out_features,
+                        bias=module.bias is not None,
+                        device=module.weight.device,
+                        dtype=module.weight.dtype,
+                        activation_scheme=quantization_config.activation_scheme,
+                        block_size=quantization_config.weight_block_size,
+                    ))
+                has_been_replaced = True
         # when changing a layer the TP PLAN for that layer should be updated. TODO
-        current_key_name.pop(-1)
 
     return model, has_been_replaced
 
@@ -520,7 +510,7 @@ def replace_with_fp8_linear(
     quantization_config=None,
 ):
     """Helper function to replace model layers with FP8 versions."""
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    modules_to_not_convert += ["lm_head"]
 
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
