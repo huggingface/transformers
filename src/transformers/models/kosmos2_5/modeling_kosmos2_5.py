@@ -395,7 +395,7 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMlp,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->dropout_rate
-class Kosmos2_5VisionMlp(nn.Module):
+class Pix2StructVisionMlp(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig):
         super().__init__()
         self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
@@ -416,6 +416,7 @@ class Kosmos2_5VisionMlp(nn.Module):
         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
         # See https://github.com/huggingface/transformers/issues/20287
         # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
+        dtype = hidden_states.dtype
         if (
             isinstance(self.wo.weight, torch.Tensor)
             and hidden_states.dtype != self.wo.weight.dtype
@@ -424,7 +425,7 @@ class Kosmos2_5VisionMlp(nn.Module):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
 
         hidden_states = self.wo(hidden_states)
-        return hidden_states
+        return hidden_states.to(dtype)
 
 
 def eager_attention_forward(
