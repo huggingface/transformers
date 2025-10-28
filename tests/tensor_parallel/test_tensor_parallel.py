@@ -104,6 +104,7 @@ class TestTensorParallelUtils(TestCasePlus):
 
         assert torch.allclose(unpacked_weights, original_packed_weights)
 
+
 class TestTensorParallelProperties(TestCasePlus):
     def test_tp_plan_property_setter_getter(self):
         """Test that tp_plan property can be set and retrieved correctly."""
@@ -370,9 +371,11 @@ class TestTensorParallelBase(TestCasePlus):
 
 class TestTensorParallel2Proc(TestTensorParallelBase):
     """Test tensor parallel with 2 processes."""
+
     nproc_per_node = 2
 
 
 class TestTensorParallel4Proc(TestTensorParallelBase):
     """Test tensor parallel with 4 processes."""
+
     nproc_per_node = 4
