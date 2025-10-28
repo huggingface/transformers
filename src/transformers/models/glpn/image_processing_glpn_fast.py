@@ -25,6 +25,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     PILImageResampling,
+    SizeDict,
 )
 from ...utils import (
     TensorType,
@@ -45,7 +46,6 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
     - (No normalization by default)
     """
 
-    # Persist ONLY the same keys as the slow processor
     do_resize = True
     do_rescale = True
     do_normalize = False
@@ -56,12 +56,6 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
     interpolation = F.InterpolationMode.BILINEAR
     valid_kwargs = GLPNImageProcessorKwargs
 
-    # If BaseImageProcessorFast supports it, this makes persistence explicit:
-    try:
-        config_keys = {"do_resize", "size_divisor", "resample", "do_rescale"}
-    except Exception:
-        pass
-
     def __init__(self, **kwargs) -> None:
         if "ensure_multiple_of" in kwargs and "size_divisor" not in kwargs:
             kwargs = dict(kwargs)
@@ -70,24 +64,6 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         kwargs.setdefault("resample", PILImageResampling.BILINEAR)
         kwargs.setdefault("size", {"height": 480, "width": 640})
         super().__init__(**kwargs)
-
-    @staticmethod
-    def _crop_to_multiple(
-        images: torch.Tensor,
-        size_divisor: int = 32,
-        interpolation: "F.InterpolationMode" = F.InterpolationMode.BILINEAR,
-    ) -> torch.Tensor:
-        """
-        Resize images (B,C,H,W) by flooring H and W to nearest multiple of `size_divisor`.
-        Uses interpolation to match slow GLPN behavior.
-        """
-        _, _, h, w = images.shape
-        new_h = (h // size_divisor) * size_divisor
-        new_w = (w // size_divisor) * size_divisor
-        if (new_h, new_w) == (h, w):
-            return images
-        # Resize (not crop) to match slow processor behavior
-        return F.resize(images, size=(new_h, new_w), interpolation=interpolation, antialias=True)
 
     def _preprocess(
         self,
@@ -123,7 +99,16 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
 
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self._crop_to_multiple(stacked_images, sd, interpolation)
+                # Calculate target size (nearest multiple of size_divisor)
+                _, _, h, w = stacked_images.shape
+                new_h = (h // sd) * sd
+                new_w = (w // sd) * sd
+
+                if (new_h, new_w) != (h, w):
+                    target_size = SizeDict(height=new_h, width=new_w)
+                    stacked_images = self.resize(
+                        stacked_images, size=target_size, interpolation=interpolation, antialias=True
+                    )
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
@@ -131,51 +116,30 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
 
         reordered = reorder_images(processed_groups, grouped_index)
 
-        if return_tensors:
-            # Detect heterogeneous shapes
-            shapes = {tuple(img.shape) for img in reordered}
-            if len(shapes) > 1:
-                # Pad to max height and width in batch
-                max_height = max(img.shape[-2] for img in reordered)
-                max_width = max(img.shape[-1] for img in reordered)
+        # Pad to max size if there are heterogeneous shapes
+        shapes = {tuple(img.shape) for img in reordered}
+        if len(shapes) > 1:
+            reordered = self.pad(reordered, pad_size=None)
 
-                padded = []
-                for img in reordered:
-                    h, w = img.shape[-2:]
-                    if h < max_height or w < max_width:
-                        # Pad to max dimensions
-                        pad_h = max_height - h
-                        pad_w = max_width - w
-                        # Pad on right and bottom
-                        img = torch.nn.functional.pad(img, (0, pad_w, 0, pad_h))
-                    padded.append(img)
-                reordered = padded
+        processed = torch.stack(reordered, dim=0) if return_tensors else reordered
 
-            processed = torch.stack(reordered, dim=0)
-            tensor_type = return_tensors
-        else:
-            processed = reordered
-            tensor_type = None
-
-        return BatchFeature(data={"pixel_values": processed}, tensor_type=tensor_type)
+        return BatchFeature(data={"pixel_values": processed}, tensor_type=return_tensors)
 
     # ensure only slow keys are serialized
     def to_dict(self):
         output_dict = super().to_dict()
 
-        # Keep only these keys with their values (everything else gets set to None)
         keys_to_keep = {
             "image_processor_type",
-            "_processor_class",  # Identity metadata
+            "_processor_class",
             "do_resize",
             "size_divisor",
             "resample",
-            "do_rescale",  # Core GLPN params
+            "do_rescale",
             "default_to_square",
-            "data_format",  # Fast processor params
+            "data_format",
         }
 
-        # Set all other keys to None (don't persist their values)
         for key in list(output_dict.keys()):
             if key not in keys_to_keep:
                 output_dict[key] = None
@@ -188,7 +152,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         Mirrors slow GLPN: PyTorch interpolate w/ bicubic, align_corners=False.
         """
         requires_backends(self, "torch")
-        predicted_depth = outputs.predicted_depth  # shape: (B, H, W) or (B, 1, H, W)
+        predicted_depth = outputs.predicted_depth
 
         results = []
         target_sizes = target_sizes or [None] * predicted_depth.shape[0]

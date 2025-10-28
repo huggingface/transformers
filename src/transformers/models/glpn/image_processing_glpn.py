@@ -239,21 +239,20 @@ class GLPNImageProcessor(BaseImageProcessor):
         if return_tensors:
             shapes = {tuple(img.shape) for img in images}
             if len(shapes) > 1:
-                # Find max dimensions
                 max_height = max(img.shape[-2] for img in images)
                 max_width = max(img.shape[-1] for img in images)
 
-                # Pad each image to max dimensions
                 padded_images = []
                 for img in images:
                     h, w = img.shape[-2:]
-                    if h < max_height or w < max_width:
-                        # Create padded array with zeros
-                        padded = np.zeros((*img.shape[:-2], max_height, max_width), dtype=img.dtype)
-                        padded[..., :h, :w] = img
-                        padded_images.append(padded)
-                    else:
-                        padded_images.append(img)
+                    pad_h = max_height - h
+                    pad_w = max_width - w
+                    if pad_h > 0 or pad_w > 0:
+                        # Pad bottom and right to reach max dimensions
+                        # np.pad format: ((before, after), ...) for each dimension
+                        # For (C, H, W) format: no padding on channels, pad height and width
+                        img = np.pad(img, ((0, 0), (0, pad_h), (0, pad_w)), mode="constant", constant_values=0)
+                    padded_images.append(img)
                 images = padded_images
 
         data = {"pixel_values": images}
