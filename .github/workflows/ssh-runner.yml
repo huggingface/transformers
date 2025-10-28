@@ -116,6 +116,7 @@ jobs:
           waitForSSH: true
           sshTimeout: 15m
           version: '1.90.3'
+          sha256sum: '96411140a11ccdfff6243b88e3f84692e1f176990050fb9f43a53970c0873f31'
 
       - name: wait2
         if: success() || failure()
