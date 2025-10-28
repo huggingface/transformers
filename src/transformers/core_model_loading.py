@@ -425,40 +425,76 @@ class Fp8Quantize(QuantizationOp):
         self._inverse_op = Fp8Dequantize
 
     def convert(self, input_dict: torch.Tensor, *, quant_config: dict[str, Any]) -> dict[str, torch.Tensor]:
+        # Unpack single key/value (value may be wrapped in a list)
         target_keys, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
-        block_size = quant_config.weight_block_size
-        if block_size is None and quant_config is not None:
-            block_size = getattr(quant_config, "weight_block_size", None)
+
+        # Resolve block size (support dict-like or attr-like quant_config)
+        block_size = None
+        if quant_config is not None:
+            if isinstance(quant_config, dict):
+                block_size = quant_config.get("weight_block_size", None)
+            else:
+                block_size = getattr(quant_config, "weight_block_size", None)
         if block_size is None:
             block_size = (value.shape[-2], value.shape[-1])
 
         block_m, block_n = block_size
-        rows, cols = value.shape[-2:]
+        rows, cols = value.shape[-2], value.shape[-1]
+
+        # Enforce exact tiling like your original
         if rows % block_m != 0 or cols % block_n != 0:
             raise ValueError(
                 f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n}). for {target_keys}"
             )
+
+        # Leading dims can be empty (2D) or include num_experts/... (3D+)
+        leading_shape = value.shape[:-2]
+        rows_tiles = rows // block_m
+        cols_tiles = cols // block_n
+
+        original_shape = value.shape
+        value_fp32 = value.to(torch.float32)
+
+        # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
+        reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
+
+        # Per-tile max-abs over the block dims
+        # dims: block_m is at -3, block_n is at -1 after the reshape
+        max_abs = reshaped.abs().amax(dim=(-3, -1))
+        safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
+
+        # Tile scale (we store inverse scale like your Linear: weight_scale_inv)
+        scales = _FP8_MAX / safe_max_abs
+        scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
+
+        # Broadcast scales back over the block dims and quantize
+        # max_abs/scales shape: (..., rows_tiles, cols_tiles)
+        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
+        scaled = reshaped * scales_broadcast
+
+        if _FP8_IS_INT:
+            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         else:
-            original_shape = value.shape
-            value_fp32 = value.to(torch.float32)
-            reshaped = value_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
-            max_abs = reshaped.abs().amax(dim=(2, 4))
-            safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
-            scales = _FP8_MAX / safe_max_abs
-            scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))
-            scales_reshaped = scales.unsqueeze(-1).unsqueeze(2)
-            scaled = reshaped * scales_reshaped
-            if _FP8_IS_INT:
-                quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-            else:
-                quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-            quantized = quantized.reshape(original_shape)
-            inv_scales = (1.0 / scales).reshape(-1, rows // block_m, cols // block_n).to(torch.float32)
+            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
 
+        quantized = quantized.reshape(original_shape)
+
+        inv_scales = (1.0 / scales).to(torch.float32)  # shape: (*leading, rows_tiles, cols_tiles)
+
+        # Choose a sensible scale key:
+        # - For "...weight" tensors keep "<prefix>.weight_scale_inv" (back-compat with FP8Linear).
+        # - Otherwise (e.g., experts like "gate_up_proj") use "<name>_scales_inv".
+        if target_keys.endswith("weight"):
             scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
-            return {target_keys: quantized, scale_key: inv_scales[0]}
+        else:
+            scale_key = target_keys + "_scale_inv"
 
+        # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
+        return {
+            target_keys: quantized,
+            scale_key: inv_scales,
+        }
 
 class Fp8Dequantize(QuantizationOp):
     """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
@@ -504,7 +540,7 @@ class Fp8Dequantize(QuantizationOp):
         return dequantized.reshape(quantized_fp32.shape)
 
 
-@dataclass(slots=True, weakref_slot=True)
+@dataclass(slots=True)
 class WeightConverter:
     r"""
     A weight convert that acts on a pattern of source keys.
@@ -645,7 +681,7 @@ def convert_and_load_state_dict_in_model(
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
         first_target_key = target_key.split('|')[0]
-        if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
+        if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name) and device_mesh:
             empty_tensor = meta_model_state_dict.get(first_target_key)
             if getattr(converter, "distributed_operation", {}) == {}:
                 converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]]
@@ -704,7 +740,7 @@ def convert_and_load_state_dict_in_model(
                         try:
                             realized_value.update(op.convert({k:realized_value.pop(k)}, quant_config=quantizer.quantization_config))
                         except Exception as e:
-                            misc[layer_name] = f"Failed to quantize with {op.__class__.__name__}: {e}"
+                            misc[layer_name] = f"{op.__class__.__name__}: {e}"
 
                 for k, output_value in realized_value.items():
                     matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)

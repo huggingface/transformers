@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from typing import Optional
-
+import re
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
 
 
@@ -352,8 +352,118 @@ class FP8Linear(nn.Linear):
                 output = output + self.bias
             return output.to(dtype=input.dtype)
 
+def _ceil_div(a, b):
+    return (a + b - 1) // b
 
-# TODO: we do need this....
+
+class FP8Expert(nn.Parameter):
+    dtype = torch.float8_e4m3fn
+
+    def __init__(self, config, block_size, device):
+        super().__init__()
+
+        from ...activations import ACT2FN
+        self.block_size = block_size
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+
+        # Shapes mirror Linear(out_features, in_features)
+        # gate_up: (2*intermediate, hidden) ; down: (hidden, intermediate)
+        Wg_out, Wg_in = 2 * self.intermediate_dim, self.hidden_dim
+        Wd_out, Wd_in = self.hidden_dim, self.intermediate_dim
+
+        # FP8 weight tensors (packed per-expert)
+        self.gate_up_proj = nn.Parameter(
+            torch.empty(self.num_experts, Wg_out, Wg_in, dtype=FP8Expert.dtype, device=device)
+        )
+        self.down_proj = nn.Parameter(
+            torch.empty(self.num_experts, Wd_out, Wd_in, dtype=FP8Expert.dtype, device=device)
+        )
+
+        # Create inverse scale tiles only when using 1-byte types (fp8)
+        if self.gate_up_proj.element_size() == 1:
+            bo, bi = self.block_size
+
+            # gate_up tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
+            gu_scale_o = _ceil_div(Wg_out, bo)
+            gu_scale_i = _ceil_div(Wg_in, bi)
+            self.gate_up_proj_scales_inv = nn.Parameter(
+                torch.empty(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32, device=device)
+            )
+
+            # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
+            dp_scale_o = _ceil_div(Wd_out, bo)
+            dp_scale_i = _ceil_div(Wd_in, bi)
+            self.down_proj_scales_inv = nn.Parameter(
+                torch.empty(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32, device=device)
+            )
+        else:
+            # Match FP8Linear behavior when not using 1-byte weights
+            self.register_parameter("gate_up_proj_scale_inv", None)
+            self.register_parameter("down_proj_scale_inv", None)
+
+        # (Optional) bias per projection — many MoEs omit bias; keep None to match your FP8Linear default
+        self.register_parameter("gate_up_bias", None)
+        self.register_parameter("down_bias", None)
+
+        # Activation used in the MLP (same as your config / ACT2FN)
+        # Keep a handle here; actual usage happens in forward of your MoE block
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).flatten()
+
+        for expert_idx in expert_hit.tolist():
+            expert_selection = expert_mask[expert_idx].squeeze(0)
+            top_indices, token_positions = torch.where(expert_selection)
+            if token_positions.numel() == 0:
+                continue
+
+            current_state = hidden_states.index_select(0, token_positions)
+            gate, up = self.linear(current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scales[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self.linear(current_hidden_states, self.down_proj[expert_idx], self.down_proj_scales[expert_idx])
+
+            routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
+            current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
+            final_hidden_states.index_add_(0, token_positions, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+    def linear(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
+        if weight.element_size() > 1:
+            return F.linear(input, weight, self.bias)
+        else:
+            # Context manager used to switch among the available accelerators
+            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
+            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
+            with torch_accelerator_module.device(input.device):
+                qinput, scale = act_quant(input, self.block_size[1])
+                output = w8a8_block_fp8_matmul_triton(
+                    qinput,
+                    weight,
+                    scale,
+                    weight_scale_inv,
+                    self.block_size,
+                    output_dtype=input.dtype,
+                )
+            # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
+            # preceding operations are ready before proceeding
+            torch_accelerator_module.synchronize()
+            if self.bias is not None:
+                output = output + self.bias
+            return output.to(dtype=input.dtype)
+
+# TODO: we do need this.... but not recursive...
 def _replace_with_fp8_linear(
     model,
     tp_plan=None,
@@ -366,35 +476,39 @@ def _replace_with_fp8_linear(
     if current_key_name is None:
         current_key_name = []
 
-    for name, module in model.named_children():
+    iterator = list(model.named_parameters()).copy()
+    for name, empty_tensor in iterator:
         current_key_name.append(name)
+        name = name.rsplit(".", 1)[0] if '.' in name else name
+        module = model.get_submodule(name)
 
-        if isinstance(module, nn.Linear) and name not in (modules_to_not_convert or []):
-            current_key_name_str = ".".join(current_key_name)
+        if isinstance(module, nn.Linear) and name not in (modules_to_not_convert or []) or "gate_up_proj" in name or "down_proj" in name :
+            current_key_name_str = re.sub(r"\d+","*" ,".".join(current_key_name))
             if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
                 with init_empty_weights():
-                    model._modules[name] = FP8Linear(
-                        in_features=module.in_features,
-                        out_features=module.out_features,
-                        bias=module.bias is not None,
-                        device=module.weight.device,
-                        dtype=module.weight.dtype,
-                        activation_scheme=quantization_config.activation_scheme,
-                        block_size=quantization_config.weight_block_size,
-                    )
+                    if "gate_up_proj" in name or "down_proj" in name and "experts" in name: # Experts!
+                        in_features = module.size(-2)
+                        out_features = module.size(-1)
+                        model.set_submodule(name, FP8Expert(
+                            config=model.config,
+                            block_size = quantization_config.weight_block_size,
+                            device=module.weight.device,
+                        ))
+
+                    else:
+                        in_features=module.in_features
+                        out_features=module.out_features
+                        model.set_submodule(name, FP8Linear(
+                            in_features=in_features,
+                            out_features=out_features,
+                            bias=module.bias is not None,
+                            device=module.weight.device,
+                            dtype=module.weight.dtype,
+                            activation_scheme=quantization_config.activation_scheme,
+                            block_size=quantization_config.weight_block_size,
+                        ))
                     has_been_replaced = True
-            # when changing a layer the TP PLAN for that layer should be updated. TODO
-
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = _replace_with_fp8_linear(
-                module,
-                tp_plan,
-                modules_to_not_convert,
-                current_key_name,
-                quantization_config,
-                has_been_replaced=has_been_replaced,
-            )
-
+        # when changing a layer the TP PLAN for that layer should be updated. TODO
         current_key_name.pop(-1)
 
     return model, has_been_replaced

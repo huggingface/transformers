@@ -217,10 +217,10 @@ def log_state_dict_report(
     )
     tips = (
         f"\n\n{ansi['italic']}Notes:\n"
-        f"- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}: can be ignored when loading from different task/architecture; not ok if you expect identical arch.\n"
-        f"- {_color('MISSING', 'red', ansi) + ansi['italic']}: those params were newly initialized; consider training on your downstream task.\n"
-        f"- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}: if intentional, use appropriate reinit/resize logic.\n"
-        f"- {_color('MISC', 'purple', ansi) + ansi['italic']}: originate from the conversion scheme\n"
+        f"- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}:\tcan be ignored when loading from different task/architecture; not ok if you expect identical arch.\n"
+        f"- {_color('MISSING', 'red', ansi) + ansi['italic']}:\tthose params were newly initialized; consider training on your downstream task.\n"
+        f"- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}:t\tckpt weights were loaded, but they did not match the original empty weight.\n"
+        f"- {_color('MISC', 'purple', ansi) + ansi['italic']}:\toriginate from the conversion scheme\n"
         f"{ansi['reset']}"
     )
 

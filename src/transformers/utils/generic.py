@@ -918,7 +918,7 @@ def check_model_inputs(tie_last_hidden_states=True):
                             monkey_patched_layers.append((module, original_forward))
 
             try:
-                if kwargs.get("debug_io", True):
+                if kwargs.get("debug_io", False):
                     with model_addition_debugger_context(
                         self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
                     ):
