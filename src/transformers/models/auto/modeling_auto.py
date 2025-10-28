@@ -199,7 +199,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("hgnet_v2", "HGNetV2Backbone"),
         ("hiera", "HieraModel"),
         ("higgs_audio", "HiggsAudioForConditionalGeneration"),
-        ("higgs_audio_tokenizer", "HiggsAudioTokenizer"),
+        ("higgs_audio_tokenizer", "HiggsAudioTokenizerModel"),
         ("hubert", "HubertModel"),
         ("hunyuan_v1_dense", "HunYuanDenseV1Model"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Model"),
@@ -1806,7 +1806,7 @@ MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
-        ("higgs_audio_tokenizer", "HiggsAudioTokenizer"),
+        ("higgs_audio_tokenizer", "HiggsAudioTokenizerModel"),
     ]
 )
 

@@ -30,18 +30,72 @@ import torchaudio
 
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
-from ..auto.modeling_auto import AutoModel
+from ..auto import AutoModel
 from .configuration_higgs_audio_tokenizer import HiggsAudioTokenizerConfig
 
 
+class HiggsAudioTokenizerEuclideanCodebook(nn.Module):
+    """Codebook with Euclidean distance."""
+
+    def __init__(self, config):
+        super().__init__()
+        embed = torch.zeros(config.codebook_size, config.codebook_dim)
+        self.codebook_size = config.codebook_size
+        self.register_buffer("inited", torch.Tensor([True]))
+        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
+        self.register_buffer("embed", embed)
+        self.register_buffer("embed_avg", embed.clone())
+
+    def quantize(self, hidden_states):
+        embed = self.embed.t()
+        scaled_states = hidden_states.pow(2).sum(1, keepdim=True)
+        dist = -(scaled_states - 2 * hidden_states @ embed + embed.pow(2).sum(0, keepdim=True))
+        embed_ind = dist.max(dim=-1).indices
+        return embed_ind
+
+    def encode(self, hidden_states):
+        shape = hidden_states.shape
+        hidden_states = hidden_states.reshape((-1, shape[-1]))
+        embed_ind = self.quantize(hidden_states)
+        embed_ind = embed_ind.view(*shape[:-1])
+        return embed_ind
+
+    def decode(self, embed_ind):
+        quantized = F.embedding(embed_ind, self.embed)
+        return quantized
+
+
+class HiggsAudioTokenizerVectorQuantization(nn.Module):
+    def __init__(self, config: HiggsAudioTokenizerConfig):
+        super().__init__()
+        self.codebook = HiggsAudioTokenizerEuclideanCodebook(config)
+        codebook_dim = config.codebook_dim
+        dim = config.hidden_size
+        requires_projection = codebook_dim != dim
+        self.project_in = nn.Linear(dim, codebook_dim) if requires_projection else nn.Identity()
+        self.project_out = nn.Linear(codebook_dim, dim) if requires_projection else nn.Identity()
+
+    def encode(self, hidden_states):
+        hidden_states = hidden_states.permute(0, 2, 1)
+        hidden_states = self.project_in(hidden_states)
+        embed_in = self.codebook.encode(hidden_states)
+        return embed_in
+
+    def decode(self, embed_ind):
+        quantize = self.codebook.decode(embed_ind)
+        quantize = self.project_out(quantize)
+        quantize = quantize.permute(0, 2, 1)
+        return quantize
+
+
 @dataclass
-@auto_docstring
 class HiggsAudioTokenizerOutput(ModelOutput):
-    r"""
-    audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, time_steps)`):
-        Codebook indices for each codebook (quantized discrete representation of input).
-    audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
-        Reconstructed audio data.
+    """
+    Args:
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+            Discrete code indices computed using `model.encode`.
+        audio_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`, *optional*)
+            Decoded audio values obtained using the decoder part of HiggsAudioTokenizer.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
@@ -49,204 +103,25 @@ class HiggsAudioTokenizerOutput(ModelOutput):
 
 
 @dataclass
-@auto_docstring
 class HiggsAudioTokenizerEncoderOutput(ModelOutput):
-    r"""
-    audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
-        Codebook indices for each codebook (quantized discrete representation of input).
+    """
+    Args:
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+            Discrete code indices computed using `model.encode`.
     """
 
-    audio_codes: Optional[torch.FloatTensor] = None
+    audio_codes: Optional[torch.LongTensor] = None
 
 
 @dataclass
-@auto_docstring
 class HiggsAudioTokenizerDecoderOutput(ModelOutput):
-    r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, input_length)`, *optional*):
-        Decoded audio values, obtained using the decoder part of HiggsAudioTokenizer.
+    """
+    Args:
+        audio_values (`torch.FloatTensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
+            Decoded audio values obtained using the decoder part of HiggsAudioTokenizer.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
-
-
-class Snake1d(nn.Module):
-    """
-    A 1-dimensional Snake activation function module.
-    """
-
-    def __init__(self, hidden_dim):
-        super().__init__()
-        self.alpha = nn.Parameter(torch.ones(1, hidden_dim, 1))
-
-    def forward(self, hidden_states):
-        shape = hidden_states.shape
-        hidden_states = hidden_states.reshape(shape[0], shape[1], -1)
-        hidden_states = hidden_states + (self.alpha + 1e-9).reciprocal() * torch.sin(self.alpha * hidden_states).pow(2)
-        hidden_states = hidden_states.reshape(shape)
-        return hidden_states
-
-
-class HiggsAudioTokenizerResidualUnit(nn.Module):
-    """
-    A residual unit composed of Snake1d and weight-normalized Conv1d layers with dilations.
-    """
-
-    def __init__(self, dimension: int = 16, dilation: int = 1):
-        super().__init__()
-        pad = ((7 - 1) * dilation) // 2
-
-        self.snake1 = Snake1d(dimension)
-        self.conv1 = nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad)
-        self.snake2 = Snake1d(dimension)
-        self.conv2 = nn.Conv1d(dimension, dimension, kernel_size=1)
-
-    def forward(self, hidden_state):
-        """
-        Forward pass through the residual unit.
-
-        Args:
-            hidden_state (`torch.Tensor` of shape `(batch_size, channels, time_steps)`):
-                Input tensor .
-
-        Returns:
-            output_tensor (`torch.Tensor` of shape `(batch_size, channels, time_steps)`):
-                Input tensor after passing through the residual unit.
-        """
-        output_tensor = hidden_state
-        output_tensor = self.conv1(self.snake1(output_tensor))
-        output_tensor = self.conv2(self.snake2(output_tensor))
-
-        padding = (hidden_state.shape[-1] - output_tensor.shape[-1]) // 2
-        if padding > 0:
-            hidden_state = hidden_state[..., padding:-padding]
-        output_tensor = hidden_state + output_tensor
-        return output_tensor
-
-
-class HiggsAudioTokenizerEncoderBlock(nn.Module):
-    """Encoder block used in HIGGS_AUDIO_TOKENIZER encoder."""
-
-    def __init__(self, config: HiggsAudioTokenizerConfig, stride: int = 1, stride_index: int = 1):
-        super().__init__()
-
-        dimension = config.encoder_hidden_size * 2**stride_index
-        self.res_unit1 = HiggsAudioTokenizerResidualUnit(dimension // 2, dilation=1)
-        self.res_unit2 = HiggsAudioTokenizerResidualUnit(dimension // 2, dilation=3)
-        self.res_unit3 = HiggsAudioTokenizerResidualUnit(dimension // 2, dilation=9)
-        self.snake1 = Snake1d(dimension // 2)
-        self.conv1 = nn.Conv1d(
-            dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
-        )
-
-    def forward(self, hidden_state):
-        hidden_state = self.res_unit1(hidden_state)
-        hidden_state = self.res_unit2(hidden_state)
-        hidden_state = self.snake1(self.res_unit3(hidden_state))
-        hidden_state = self.conv1(hidden_state)
-
-        return hidden_state
-
-
-class HiggsAudioTokenizerEncoder(nn.Module):
-    """HIGGS_AUDIO_TOKENIZER Encoder"""
-
-    def __init__(self, config: HiggsAudioTokenizerConfig):
-        super().__init__()
-
-        strides = config.downsampling_ratios
-        # Create first convolution
-        self.conv1 = nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3)
-
-        self.block = []
-        # Create EncoderBlocks that double channels as they downsample by `stride`
-        for stride_index, stride in enumerate(strides):
-            stride_index = stride_index + 1
-            self.block += [HiggsAudioTokenizerEncoderBlock(config, stride=stride, stride_index=stride_index)]
-
-        self.block = nn.ModuleList(self.block)
-        d_model = config.encoder_hidden_size * 2**stride_index
-        self.snake1 = Snake1d(d_model)
-        self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
-
-    def forward(self, hidden_state):
-        hidden_state = self.conv1(hidden_state)
-
-        for module in self.block:
-            hidden_state = module(hidden_state)
-
-        hidden_state = self.snake1(hidden_state)
-        hidden_state = self.conv2(hidden_state)
-
-        return hidden_state
-
-
-class HiggsAudioTokenizerDecoderBlock(nn.Module):
-    """Decoder block used in HIGGS_AUDIO_TOKENIZER decoder."""
-
-    def __init__(self, config: HiggsAudioTokenizerConfig, stride: int = 1, stride_index: int = 1):
-        super().__init__()
-
-        input_dim = config.decoder_hidden_size // 2**stride_index
-        output_dim = config.decoder_hidden_size // 2 ** (stride_index + 1)
-        self.snake1 = Snake1d(input_dim)
-        self.conv_t1 = nn.ConvTranspose1d(
-            input_dim,
-            output_dim,
-            kernel_size=2 * stride,
-            stride=stride,
-            padding=math.ceil(stride / 2),
-        )
-
-        self.res_unit1 = HiggsAudioTokenizerResidualUnit(output_dim, dilation=1)
-        self.res_unit2 = HiggsAudioTokenizerResidualUnit(output_dim, dilation=3)
-        self.res_unit3 = HiggsAudioTokenizerResidualUnit(output_dim, dilation=9)
-
-    def forward(self, hidden_state):
-        hidden_state = self.snake1(hidden_state)
-        hidden_state = self.conv_t1(hidden_state)
-        hidden_state = self.res_unit1(hidden_state)
-        hidden_state = self.res_unit2(hidden_state)
-        hidden_state = self.res_unit3(hidden_state)
-
-        return hidden_state
-
-
-class HiggsAudioTokenizerDecoder(nn.Module):
-    """HIGGS_AUDIO_TOKENIZER Decoder"""
-
-    def __init__(self, config: HiggsAudioTokenizerConfig):
-        super().__init__()
-
-        input_channel = config.hidden_size
-        channels = config.decoder_hidden_size
-        strides = config.upsampling_ratios
-
-        # Add first conv layer
-        self.conv1 = nn.Conv1d(input_channel, channels, kernel_size=7, padding=3)
-
-        # Add upsampling + MRF blocks
-        block = []
-        for stride_index, stride in enumerate(strides):
-            block += [HiggsAudioTokenizerDecoderBlock(config, stride, stride_index)]
-
-        self.block = nn.ModuleList(block)
-        output_dim = config.decoder_hidden_size // 2 ** (stride_index + 1)
-        self.snake1 = Snake1d(output_dim)
-        self.conv2 = nn.Conv1d(output_dim, 1, kernel_size=7, padding=3)
-        self.tanh = nn.Tanh()
-
-    def forward(self, hidden_state):
-        hidden_state = self.conv1(hidden_state)
-
-        for layer in self.block:
-            hidden_state = layer(hidden_state)
-
-        hidden_state = self.snake1(hidden_state)
-        hidden_state = self.conv2(hidden_state)
-        hidden_state = self.tanh(hidden_state)
-
-        return hidden_state
 
 
 class ResidualUnit(nn.Module):
@@ -295,7 +170,7 @@ class SemanticEncoderBlock(nn.Module):
         return hidden_state
 
 
-class HiggsAudioTokenizerSemanticEncoder(nn.Module):
+class SemanticEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         if len(config.strides) != len(config.channel_ratios):
@@ -356,7 +231,7 @@ class SemanticDecoderBlock(nn.Module):
         return hidden_state
 
 
-class HiggsAudioTokenizerSemanticDecoder(nn.Module):
+class SemanticDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv1 = nn.Conv1d(
@@ -396,67 +271,9 @@ class HiggsAudioTokenizerSemanticDecoder(nn.Module):
         return hidden_state
 
 
-class HiggsAudioTokenizerEuclideanCodebook(nn.Module):
-    """Codebook with Euclidean distance."""
-
-    def __init__(self, config):
-        super().__init__()
-        embed = torch.zeros(config.codebook_size, config.codebook_dim)
-        self.codebook_size = config.codebook_size
-        self.register_buffer("inited", torch.Tensor([True]))
-        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
-
-    def quantize(self, hidden_states):
-        embed = self.embed.t()
-        scaled_states = hidden_states.pow(2).sum(1, keepdim=True)
-        dist = -(scaled_states - 2 * hidden_states @ embed + embed.pow(2).sum(0, keepdim=True))
-        embed_ind = dist.max(dim=-1).indices
-        return embed_ind
-
-    def encode(self, hidden_states):
-        shape = hidden_states.shape
-        hidden_states = hidden_states.reshape((-1, shape[-1]))
-        embed_ind = self.quantize(hidden_states)
-        embed_ind = embed_ind.view(*shape[:-1])
-        return embed_ind
-
-    def decode(self, embed_ind):
-        quantized = F.embedding(embed_ind, self.embed)
-        return quantized
-
-
-class HiggsAudioTokenizerVectorQuantization(nn.Module):
-    """
-    Vector quantization implementation. Currently supports only euclidean distance.
-    """
-
-    def __init__(self, config: HiggsAudioTokenizerConfig):
-        super().__init__()
-        self.codebook = HiggsAudioTokenizerEuclideanCodebook(config)
-        codebook_dim = config.codebook_dim
-        dim = config.hidden_size
-        requires_projection = codebook_dim != dim
-        self.project_in = nn.Linear(dim, codebook_dim) if requires_projection else nn.Identity()
-        self.project_out = nn.Linear(codebook_dim, dim) if requires_projection else nn.Identity()
-
-    def encode(self, hidden_states):
-        hidden_states = hidden_states.permute(0, 2, 1)
-        hidden_states = self.project_in(hidden_states)
-        embed_in = self.codebook.encode(hidden_states)
-        return embed_in
-
-    def decode(self, embed_ind):
-        quantize = self.codebook.decode(embed_ind)
-        quantize = self.project_out(quantize)
-        quantize = quantize.permute(0, 2, 1)
-        return quantize
-
-
 class HiggsAudioTokenizerResidualVectorQuantization(nn.Module):
     """
-    Residual vector quantization implementation. Follows Algorithm 1 in https://arxiv.org/pdf/2107.03312.pdf
+    Residual vector quantization implementation. Follows Algorithm 1 in https://huggingface.co/papers/2107.03312
     """
 
     def __init__(self, config: HiggsAudioTokenizerConfig):
@@ -523,7 +340,6 @@ class HiggsAudioTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -532,6 +348,23 @@ class HiggsAudioTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
+        elif module.__class__.__name__ == "Snake1d":
+            module.alpha.data.fill_(1.0)
+        elif isinstance(module, nn.ConvTranspose1d):
+            module.reset_parameters()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+        elif isinstance(module, HiggsAudioTokenizerModel):
+            # The conv1d are not handled correctly, as `self.acoustic_encoder/decoder` are initialized from a PreTrainedModel,
+            # but then only the submodules are used (which are not PreTrainedModels...) -> here we reinit them as in DacModel
+            for submodule in module.acoustic_encoder.modules():
+                if isinstance(submodule, nn.Conv1d):
+                    nn.init.trunc_normal_(submodule.weight, std=0.02)
+                    nn.init.constant_(submodule.bias, 0)
+            for submodule in module.acoustic_decoder.modules():
+                if isinstance(submodule, nn.Conv1d):
+                    nn.init.trunc_normal_(submodule.weight, std=0.02)
+                    nn.init.constant_(submodule.bias, 0)
 
     def apply_weight_norm(self):
         """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
@@ -569,33 +402,26 @@ class HiggsAudioTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
                     torch.nn.utils.parametrize.remove_parametrizations(m, "weight", leave_parametrized=True)
 
 
-@auto_docstring(custom_intro="""The Higgs Audio neural audio codec model.""")
-class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
-    def __init__(self, config: HiggsAudioTokenizerConfig):
+@auto_docstring(custom_intro="""The HiggsAudioTokenizer neural audio codec model.""")
+class HiggsAudioTokenizerModel(HiggsAudioTokenizerPreTrainedModel):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.pad = config.pad
-        self.acoustic_encoder = HiggsAudioTokenizerEncoder(config.acoustic_model_config)
-        self.acoustic_decoder = HiggsAudioTokenizerDecoder(config.acoustic_model_config)
+        self.pad = config.hop_length // 2
+        acoustic_model = AutoModel.from_config(config.acoustic_model_config)
+        self.acoustic_encoder = acoustic_model.encoder
+        self.acoustic_decoder = acoustic_model.decoder
         self._adjust_dac_decoder(self.acoustic_decoder)
-        self.encoder_semantic = HiggsAudioTokenizerSemanticEncoder(config)
-        self.decoder_semantic = HiggsAudioTokenizerSemanticDecoder(config)
-        self.semantic_model = AutoModel.from_config(config.semantic_model_config)
+        self.encoder_semantic = SemanticEncoder(config)
+        self.decoder_semantic = SemanticDecoder(config)
+        self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
         self.fc = nn.Linear(config.hidden_size, config.hidden_size)
         self.fc1 = nn.Linear(config.hidden_size, config.semantic_model_config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, config.acoustic_model_config.hidden_size)
         self.quantizer = HiggsAudioTokenizerResidualVectorQuantization(config)
 
-        self.downsample_mode = config.downsample_mode
-        self.semantic_downsample_factor = int(
-            config.hop_length / (config.sample_rate / config.semantic_sample_rate) / config.downsample_factor
-        )
-        self.sampling_rate = config.sample_rate
-        self.semantic_sample_rate = config.semantic_sample_rate
-        if self.downsample_mode == "avg":
-            self.semantic_pooling = nn.AvgPool1d(
-                kernel_size=config.semantic_downsample_factor, stride=config.semantic_downsample_factor
-            )
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @staticmethod
     def _adjust_dac_decoder(decoder: nn.Module):
@@ -612,9 +438,15 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
             decoder.tanh = nn.Identity()
 
     def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
-        input_values = torchaudio.functional.resample(input_values, self.sampling_rate, self.semantic_sample_rate)
+        if self.config.sample_rate != self.config.semantic_sample_rate:
+            input_values = torchaudio.functional.resample(
+                input_values, self.config.sample_rate, self.config.semantic_sample_rate
+            )
+
         input_values = input_values[:, 0, :]
-        input_values = F.pad(input_values, (self.pad, self.pad))
+        # TODO: there is a diff here with original codebase https://github.com/boson-ai/higgs-audio/blob/f644b62b855ba2b938896436221e01efadcc76ca/boson_multimodal/audio_processing/higgs_audio_tokenizer.py#L173-L174
+        # input_values = F.pad(input_values, (self.pad, self.pad))
+        input_values = F.pad(input_values, (160, 160))
         with torch.no_grad():
             outputs = self.semantic_model(input_values, output_hidden_states=True)
             hidden_states = outputs.hidden_states
@@ -622,11 +454,13 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
         stacked = torch.stack(hidden_states, dim=1)
         semantic_features = stacked.mean(dim=1)
 
-        if self.downsample_mode == "step_down":
-            if self.semantic_downsample_factor > 1:
-                semantic_features = semantic_features[:, :: self.semantic_downsample_factor, :]
-        elif self.downsample_mode == "avg":
-            semantic_features = self.semantic_pooling(semantic_features.transpose(1, 2)).transpose(1, 2)
+        semantic_downsample_factor = int(
+            self.config.hop_length
+            / (self.config.sample_rate / self.config.semantic_sample_rate)
+            / self.config.downsample_factor
+        )
+        if semantic_downsample_factor > 1:
+            semantic_features = semantic_features[:, ::semantic_downsample_factor, :]
 
         return semantic_features
 
@@ -636,7 +470,6 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
         input_values: torch.Tensor,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
     ) -> Union[torch.Tensor, HiggsAudioTokenizerEncoderOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
@@ -651,11 +484,6 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
             `torch.LongTensor` of shape `(batch_size, num_quantizers, codes_length)` containing the discrete encoded audio codes.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if input_values.ndim != 3:
-            raise ValueError(
-                f"Expected input shape (batch_size, channels, num_samples), but got shape {input_values.shape}"
-            )
 
         channels = input_values.shape[1]
         if channels != 1:
@@ -688,7 +516,9 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
 
     @auto_docstring
     def decode(
-        self, audio_codes: torch.Tensor, return_dict: Optional[bool] = None, **kwargs
+        self,
+        audio_codes: torch.Tensor,
+        return_dict: Optional[bool] = None,
     ) -> Union[torch.Tensor, HiggsAudioTokenizerDecoderOutput]:
         r"""
         audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`):
@@ -697,7 +527,8 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
             Whether or not to return a [`~utils.ModelOutput`]
 
         Returns:
-            Decoded audio values of shape `(batch_size, channels, num_samples)` obtained using the decoder part of HiggsAudioTokenizer.
+            Decoded audio values of shape `(batch_size, channels, num_samples)` obtained using the decoder part of
+            HiggsAudioTokenizer.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -718,16 +549,16 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
         audio_codes: Optional[torch.Tensor] = None,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], HiggsAudioTokenizerOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
             The raw float values of the input audio waveform.
-        audio_codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
             Discrete code indices computed using `model.encode`.
         bandwidth (`float`, *optional*):
-            Target bandwidth in kbps. Must be one of `config.target_bandwidths`.
-            Defaults to the highest available bandwidth.
+            Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
+        bandwidth (`float`, *optional*):
+            Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
         return_dict (`bool`, *optional*):
             Whether to return a [`HiggsAudioTokenizerOutput`] instead of a plain tuple.
 
@@ -740,14 +571,15 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
 
         ```python
         >>> from datasets import load_dataset
-        >>> from transformers import AutoFeatureExtractor, HiggsAudioTokenizer
+        >>> from transformers import AutoFeatureExtractor, HiggsAudioTokenizerModel
 
-        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
-        >>> audio_sample = dataset["train"]["audio"][0]["array"]
-
-        >>> model_id = "bosonai/higgs-audio-v2-tokenizer"
-        >>> model = HiggsAudioTokenizer.from_pretrained(model_id)
+        >>> model_id = "hf-audio/higgs_audio_tokenizer-hubert-librispeech"
+        >>> model = HiggsAudioTokenizerModel.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+        >>> audio_sample = dataset[0]['audio']['array']
 
         >>> inputs = feature_extractor(raw_audio=audio_sample, return_tensors="pt")
 
@@ -770,4 +602,4 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
         return HiggsAudioTokenizerOutput(audio_codes=audio_codes, audio_values=audio_values)
 
 
-__all__ = ["HiggsAudioTokenizer", "HiggsAudioTokenizerPreTrainedModel"]
+__all__ = ["HiggsAudioTokenizerModel"]

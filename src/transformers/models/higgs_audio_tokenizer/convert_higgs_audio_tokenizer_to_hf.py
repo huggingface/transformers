@@ -25,8 +25,8 @@ import yaml
 from transformers import (
     AutoConfig,
     DacFeatureExtractor,
-    HiggsAudioTokenizer,
     HiggsAudioTokenizerConfig,
+    HiggsAudioTokenizerModel,
     logging,
 )
 
@@ -214,7 +214,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     if not torch.cuda.is_available():
         raise ValueError("Run this script on a machine with a GPU for weight norm layers to be correctly copied.")
     torch_device = "cuda"
-    model = HiggsAudioTokenizer(config).to(torch_device)
+    model = HiggsAudioTokenizerModel(config).to(torch_device)
 
     logger.info("Loading original checkpoint ...")
 

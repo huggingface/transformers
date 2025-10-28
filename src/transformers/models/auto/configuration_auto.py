@@ -645,7 +645,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("hgnet_v2", "HGNet-V2"),
         ("hiera", "Hiera"),
         ("higgs_audio", "HiggsAudio"),
-        ("higgs_audio_tokenizer", "HiggsAudioTokenizer"),
+        ("higgs_audio_tokenizer", "HiggsAudioTokenizerModel"),
         ("hubert", "Hubert"),
         ("hunyuan_v1_dense", "HunYuanDenseV1"),
         ("hunyuan_v1_moe", "HunYuanMoeV1"),

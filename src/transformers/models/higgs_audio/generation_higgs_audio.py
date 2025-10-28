@@ -246,9 +246,9 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # ============================
-            if input_ids.shape[-1] == 820:
+            if input_ids[..., -1] == 271:
                 next_tokens = torch.tensor([128013], device=input_ids.device)
-            elif input_ids.shape[-1] == 821:
+            elif input_ids[..., -1] == 128013:
                 next_tokens = torch.tensor([128016], device=input_ids.device)
                 model_kwargs["audio_input_ids"] = torch.cat(
                     [model_kwargs["audio_input_ids"], torch.tensor([[[1024] * 8]], device=input_ids.device)], dim=1
@@ -291,7 +291,7 @@ class HiggsAudioGenerationMixin(GenerationMixin):
 
         if return_dict_in_generate:
             return HiggsAudioGenerationOutput(
-                sequences=input_ids,
+                sequences=model_kwargs.get("audio_input_ids"),
                 scores=scores,
                 logits=raw_logits,
                 attentions=decoder_attentions,
@@ -300,4 +300,4 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 audio_sequences=model_kwargs.get("audio_input_ids"),
             )
         else:
-            return input_ids
+            return model_kwargs.get("audio_input_ids")

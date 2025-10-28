@@ -28,7 +28,7 @@ from transformers import (
     HiggsAudioConfig,
     HiggsAudioForConditionalGeneration,
     HiggsAudioProcessor,
-    HiggsAudioTokenizer,
+    HiggsAudioTokenizerModel,
     logging,
 )
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         processor = HiggsAudioProcessor(
             DacFeatureExtractor(sampling_rate=24000, hop_length=1),
             AutoTokenizer.from_pretrained("bosonai/higgs-audio-v2-generation-3B-base"),
-            HiggsAudioTokenizer.from_pretrained("szhengac25/higgs-audio-v2-tokenizer"),
+            HiggsAudioTokenizerModel.from_pretrained("szhengac25/higgs-audio-v2-tokenizer"),
         )
         processor.save_pretrained(args.pytorch_dump_folder_path)
 
