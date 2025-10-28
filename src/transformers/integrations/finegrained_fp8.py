@@ -425,9 +425,9 @@ class FP8Expert(nn.Module):
                 continue
 
             current_state = hidden_states.index_select(0, token_positions)
-            gate, up = self.linear(current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scales[expert_idx]).chunk(2, dim=-1)
+            gate, up = self.linear(current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scales_inv[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = self.linear(current_hidden_states, self.down_proj[expert_idx], self.down_proj_scales[expert_idx])
+            current_hidden_states = self.linear(current_hidden_states, self.down_proj[expert_idx], self.down_proj_scales_inv[expert_idx])
 
             routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
             current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
@@ -455,8 +455,6 @@ class FP8Expert(nn.Module):
             # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
             torch_accelerator_module.synchronize()
-            if self.bias is not None:
-                output = output + self.bias
             return output.to(dtype=input.dtype)
 
 # TODO: we do need this.... but not recursive...
@@ -474,7 +472,7 @@ def _replace_with_fp8_linear(
         name = name.rsplit(".", 1)[0] if '.' in name else name
         module = model.get_submodule(name)
 
-        current_key_name_str = re.sub(r"\d+","*" ,".".join(current_key_name))
+        current_key_name_str = re.sub(r"\d+","*" ,current_key_name)
         if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
             with init_empty_weights():
                 if "gate_up_proj" in current_key_name or "down_proj" in current_key_name and "experts" in current_key_name: # Experts!

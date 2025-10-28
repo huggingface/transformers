@@ -182,7 +182,7 @@ def log_state_dict_report(
         for k in update_key_name(missing_keys):
             status = "MISSING"
             status = _color(status, "red", ansi)
-            rows.append([k, status, "", ""])
+            rows.append([k, status, ""])
 
     if mismatched_keys:
         iterator = {a: (b, c) for a,b,c in mismatched_shapes}
@@ -198,8 +198,8 @@ def log_state_dict_report(
         for k, v in update_key_name(misc).items():
             status = "MISC"
             status = _color(status, "purple", ansi)
-            _details = v[:term_w]
-            rows.append([k, status, _details, ""])
+            _details = v[:term_w] 
+            rows.append([k, status, _details])
 
     if not rows:
         print(f"No key issues when initializing {model.__class__.__name__} from {pretrained_model_name_or_path}.")
@@ -207,7 +207,7 @@ def log_state_dict_report(
 
     headers = ["Key", "Status"]
     if term_w > 200:
-        headers += ["Checkpoint shape", "Details"]
+        headers += ["Details"]
     else:
         headers += ["", ""]
     table = _make_table(rows, headers=headers)
@@ -219,7 +219,7 @@ def log_state_dict_report(
         f"\n\n{ansi['italic']}Notes:\n"
         f"- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}:\tcan be ignored when loading from different task/architecture; not ok if you expect identical arch.\n"
         f"- {_color('MISSING', 'red', ansi) + ansi['italic']}:\tthose params were newly initialized; consider training on your downstream task.\n"
-        f"- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}:t\tckpt weights were loaded, but they did not match the original empty weight.\n"
+        f"- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}:\tckpt weights were loaded, but they did not match the original empty weight.\n"
         f"- {_color('MISC', 'purple', ansi) + ansi['italic']}:\toriginate from the conversion scheme\n"
         f"{ansi['reset']}"
     )

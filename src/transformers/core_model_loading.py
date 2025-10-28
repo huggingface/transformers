@@ -481,14 +481,10 @@ class Fp8Quantize(QuantizationOp):
         quantized = quantized.reshape(original_shape)
 
         inv_scales = (1.0 / scales).to(torch.float32)  # shape: (*leading, rows_tiles, cols_tiles)
-
-        # Choose a sensible scale key:
-        # - For "...weight" tensors keep "<prefix>.weight_scale_inv" (back-compat with FP8Linear).
-        # - Otherwise (e.g., experts like "gate_up_proj") use "<name>_scales_inv".
         if target_keys.endswith("weight"):
             scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
         else:
-            scale_key = target_keys + "_scale_inv"
+            scale_key = target_keys + "_scales_inv"
 
         # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
         return {
@@ -687,16 +683,6 @@ def convert_and_load_state_dict_in_model(
                 converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]]
                 converter.distributed_operation.device_mesh=device_mesh
                 converter.distributed_operation.rank=device_map[''].index
-            # if many source keys -> collection {key1: [tensors1, ...], key2: tensors2} with futur ops.
-            # if the empty tensor is 3d
-            #   EP: dim=0   -> tensors[0], tensors[1] to rank 0 
-            #               -> tensors[1], tensors[2] to rank 1
-            #               -> tensors[3], tensors[4] to rank 2
-            #   TP: dim=1   -> tensors[0, ..., 7][:dim/8] to rank 0
-            #               -> tensors[0, ..., 7][dim/8:2*dim/8] to rank 1
-            # if empty tensor is 2d: 
-            #   TP: dim=0   -> tensors[0, ..., 7][:dim/8] to rank 0
-            #               -> tensors[0, ..., 7][dim/8:2*dim/8] to rank 1
             fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation, empty_tensor)
         else: # If not TP, async move tensors
             fut = spawn_materialize(file_id, tensor)
