@@ -324,7 +324,11 @@ class SentencePieceBackend(PreTrainedTokenizerBase):
         # Patterns: "none", "cls_sep", "eos", "bos", "cls_double_sep"
         self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", "cls_sep")
 
-        # 5. init the parent class
+        # 6. Set backend to "sentencepiece" if not already set
+        if "backend" not in kwargs:
+            kwargs["backend"] = "sentencepiece"
+
+        # 7. init the parent class
         super().__init__(**kwargs)
 
         # 5. Load the SentencePiece model

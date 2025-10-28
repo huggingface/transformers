@@ -439,7 +439,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Patterns: "none", "cls_sep", "eos", "bos", "cls_double_sep"
         self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", "cls_sep")
 
-        # 5. init the parent class
+        # 6. Set backend to "custom" if not already set (for direct PreTrainedTokenizer subclasses)
+        if "backend" not in kwargs:
+            kwargs["backend"] = "custom"
+
+        # 7. init the parent class
         super().__init__(**kwargs)
 
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
@@ -729,12 +733,21 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             batch_outputs = {}
             for current_text, current_pair in zip(text, pairs):
                 # Handle tuples/lists as sequence pairs like ("text1", "text2")
+                # For is_split_into_words=True: only unpack if it's a tuple of exactly 2 sequences (pair)
+                # Otherwise, treat the list as a single pretokenized sequence
                 if isinstance(current_text, (list, tuple)) and current_text and not isinstance(current_text[0], int) and current_pair is None:
-                    if len(current_text) == 2:
+                    # Check if this looks like a pair: tuple/list of length 2 where elements are strings or lists/tuples
+                    is_pair = (
+                        len(current_text) == 2 
+                        and (isinstance(current_text[0], str) or isinstance(current_text[0], (list, tuple)))
+                        and (isinstance(current_text[1], str) or isinstance(current_text[1], (list, tuple)))
+                    )
+                    if is_pair:
                         current_text, current_pair = current_text
                     elif len(current_text) == 1:
                         current_text = current_text[0]
-                    else:
+                    elif not is_split_into_words:
+                        # Only raise error for non-pretokenized input
                         raise ValueError(f"Expected a pair of sequences, got {len(current_text)} sequences.")
                 
                 current_output = self._encode_plus(
@@ -1252,3 +1265,63 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         else:
             # All zeros pattern (default): everything gets 0s
             return [0] * (seq0_len + seq1_len)
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str, ...]:
+        """
+        Default implementation for common vocabulary saving patterns.
+        Saves self.encoder/self.vocab as JSON, optionally with self.bpe_ranks as merges.
+        Returns empty tuple if no vocabulary exists.
+        
+        Override this method if your tokenizer needs custom saving logic (e.g., SentencePiece models,
+        multiple vocabulary files, or special file formats).
+        
+        Args:
+            save_directory (`str`):
+                The directory in which to save the vocabulary.
+            filename_prefix (`str`, *optional*):
+                An optional prefix to add to the named of the saved files.
+        
+        Returns:
+            `tuple[str, ...]`: Paths to the files saved, or empty tuple if no files saved.
+        """
+        import json
+        import os
+        
+        vocab_attr = getattr(self, 'encoder', None) or getattr(self, 'vocab', None)
+        if vocab_attr is None:
+            return ()
+        
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return ()
+        
+        vocab_files_names = getattr(self, 'vocab_files_names', {})
+        prefix = f"{filename_prefix}-" if filename_prefix else ""
+        
+        # Save vocabulary
+        vocab_file = os.path.join(save_directory, prefix + vocab_files_names.get('vocab_file', 'vocab.json'))
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(vocab_attr, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+        
+        # Save BPE merges if present
+        bpe_ranks = getattr(self, 'bpe_ranks', None)
+        if bpe_ranks is None:
+            return (vocab_file,)
+        
+        merge_file = os.path.join(save_directory, prefix + vocab_files_names.get('merges_file', 'merges.txt'))
+        with open(merge_file, "w", encoding="utf-8") as writer:
+            if getattr(self, 'add_bpe_version_header', False):
+                writer.write("#version: 0.2\n")
+            
+            index = 0
+            for bpe_tokens, token_index in sorted(bpe_ranks.items(), key=lambda kv: kv[1]):
+                if index != token_index:
+                    logger.warning(
+                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
+                        " Please check that the tokenizer is not corrupted!"
+                    )
+                    index = token_index
+                writer.write(" ".join(bpe_tokens) + "\n")
+                index += 1
+        
+        return (vocab_file, merge_file)

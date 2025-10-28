@@ -17,6 +17,7 @@ see tokenization_utils.py
 """
 
 import copy
+import inspect
 import json
 import os
 from collections import defaultdict
@@ -169,6 +170,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             kwargs.setdefault("padding_side", _padding["direction"])
             kwargs.setdefault("max_length", _padding["length"])
             kwargs.setdefault("pad_to_multiple_of", _padding["pad_to_multiple_of"])
+
+        # Set backend to "tokenizers" if not already set
+        if "backend" not in kwargs:
+            kwargs["backend"] = "tokenizers"
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
@@ -964,4 +969,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if len(additional_special_tokens) > 0:
             kwargs["additional_special_tokens"] = additional_special_tokens
 
-        return self.__class__(tokenizer_object=tokenizer, **kwargs)
+        # Check if the class accepts tokenizer_object parameter
+        class_signature = inspect.signature(self.__class__.__init__)
+        if "tokenizer_object" in class_signature.parameters:
+            # Standard path: pass tokenizer_object to constructor
+            return self.__class__(tokenizer_object=tokenizer, **kwargs)
+        else:
+            # Alternative path: create instance without tokenizer_object and set _tokenizer directly
+            new_tokenizer = self.__class__(**kwargs)
+            new_tokenizer._tokenizer = tokenizer
+            return new_tokenizer

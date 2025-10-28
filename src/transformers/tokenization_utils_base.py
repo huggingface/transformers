@@ -1053,6 +1053,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         self.deprecation_warnings = {}
 
+        # Backend information (V5: tracking which backend and files were used)
+        self.backend = kwargs.pop("backend", None)
+        self.files_loaded = kwargs.pop("files_loaded", [])
+
     # ---- Special tokens API (moved from SpecialTokensMixin) ----
     def add_special_tokens(
         self,
@@ -1846,6 +1850,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if key != "additional_special_tokens":
                     init_kwargs[key] = added_tokens_map.get(str(init_kwargs[key]), init_kwargs[key])
 
+        # Track which files were loaded (if not already set by AutoTokenizer)
+        if "files_loaded" not in init_kwargs:
+            files_loaded = []
+            for file_key, file_path in resolved_vocab_files.items():
+                if file_path and file_key not in ["tokenizer_config_file", "special_tokens_map_file", "added_tokens_file"]:
+                    # Extract just the filename from the path
+                    files_loaded.append(os.path.basename(file_path))
+            init_kwargs["files_loaded"] = files_loaded
+        
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)

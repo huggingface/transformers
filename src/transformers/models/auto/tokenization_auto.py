@@ -193,7 +193,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("layoutlm", "BertTokenizer" if is_tokenizers_available() else None),
         ("layoutlmv2", "LayoutLMv2Tokenizer" if is_tokenizers_available() else None),
         ("layoutlmv3", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None),
-        ("layoutxlm", "LayoutXLMTokenizerFast" if is_tokenizers_available() else None),
+        ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
         ("led", "LEDTokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None),
         ("llama", "LlamaTokenizer" if is_tokenizers_available() else None),
@@ -340,7 +340,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2_phoneme", "Wav2Vec2PhonemeCTCTokenizer"),
-        ("whisper", "WhisperTokenizerFast" if is_tokenizers_available() else None),
+        ("whisper", "WhisperTokenizer" if is_tokenizers_available() else None),
         ("xclip", "CLIPTokenizerFast" if is_tokenizers_available() else None),
         ("xglm", "XGLMTokenizer" if is_tokenizers_available() else None),
         ("xlm", "XLMTokenizer"),
@@ -493,6 +493,8 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
     Raises:
         ValueError: If tokenizer could not be loaded with tokenizers backend
     """
+    files_loaded = []
+    
     # Try tokenizer.json first
     try:
         tokenizer_json_exists = has_file(
@@ -507,6 +509,9 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         tokenizer_json_exists = False
 
     if tokenizer_json_exists:
+        files_loaded.append("tokenizer.json")
+        kwargs["backend"] = "tokenizers"
+        kwargs["files_loaded"] = files_loaded
         return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
     # Try extracting from SentencePiece model
@@ -535,6 +540,9 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                 if "vocab" in fast_sig.parameters:
                     try:
                         vocab_ids, vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
+                        files_loaded.append(spm_file)
+                        kwargs["backend"] = "tokenizers"
+                        kwargs["files_loaded"] = files_loaded
                         # If tokenizer needs both vocab and merges (BPE models)
                         if "merges" in fast_sig.parameters:
                             return tokenizer_class.from_pretrained(
@@ -585,6 +593,9 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
     if vocab_json_exists and merges_txt_exists:
         vocab = load_vocab(vocab_file)
         merges = load_merges(merges_file)
+        files_loaded.extend(["vocab.json", "merges.txt"])
+        kwargs["backend"] = "tokenizers"
+        kwargs["files_loaded"] = files_loaded
         return tokenizer_class.from_pretrained(
             pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
         )
@@ -641,6 +652,11 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 "Please install it with: pip install sentencepiece"
             )
         logger.info("Loading tokenizer with SentencePiece backend")
+        # Track files loaded for SentencePiece backend
+        spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
+        files_loaded = [spm_file] if spm_file else []
+        kwargs["backend"] = "sentencepiece"
+        kwargs["files_loaded"] = files_loaded
         return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
     # Route to tokenizers backend (default)
@@ -659,6 +675,9 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 issubclass(tokenizer_class, bc) for bc in backend_classes
             ):
                 logger.info("Loading tokenizer with custom PreTrainedTokenizer backend (edge case)")
+                # Track the backend type for custom tokenizers
+                kwargs["backend"] = "custom"
+                kwargs["files_loaded"] = []  # Custom tokenizers may load various files
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             if TokenizersBackend is None:
@@ -676,6 +695,9 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 f"Tokenizers backend was requested but no tokenizer class found. "
                 f"Falling back to SentencePieceBackend since {spm_file} file was found."
             )
+            files_loaded = [spm_file]
+            kwargs["backend"] = "sentencepiece"
+            kwargs["files_loaded"] = files_loaded
             return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError(
