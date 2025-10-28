@@ -1482,6 +1482,7 @@ class Ernie4_5_VLImageProcessorFast(Qwen2VLImageProcessorFast):
 
 
 __all__ = [
+    "Ernie4_5_VLPreTrainedModel",
     "Ernie4_5_VLImageProcessor",
     "Ernie4_5_VLImageProcessorFast",
     "Ernie4_5_VLForConditionalGeneration",

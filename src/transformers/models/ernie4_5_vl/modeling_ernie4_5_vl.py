@@ -1838,6 +1838,7 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
 
 
 __all__ = [
+    "Ernie4_5_VLPreTrainedModel",
     "Ernie4_5_VLForConditionalGeneration",
     "Ernie4_5_VLModel",
     "Ernie4_5_VLTextModel",

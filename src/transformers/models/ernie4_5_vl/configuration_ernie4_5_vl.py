@@ -14,8 +14,8 @@
 # limitations under the License.
 """Ernie4.5-VL model configuration"""
 
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
-from ...modeling_utils import PreTrainedConfig
 
 
 class Ernie4_5_VLVisionConfig(PreTrainedConfig):
