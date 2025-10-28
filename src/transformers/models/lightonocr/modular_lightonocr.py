@@ -219,16 +219,29 @@ class LightOnOCRProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
-        # Expand image token if image is present
         if image_inputs.get("pixel_values") is not None:
-            height, width = image_inputs["image_sizes"][0]
-            num_height_tokens = height // self.effective_patch_size
-            num_width_tokens = width // self.effective_patch_size
-            num_patches = num_height_tokens * num_width_tokens
+            image_sizes_iter = iter(image_inputs["image_sizes"])
+            prompt_strings = []
 
-            # Replace single image token with repeated tokens
-            expanded_tokens = self.image_token * num_patches
-            prompt_strings = [sample.replace(self.image_token, expanded_tokens) for sample in text]
+            for sample in text:
+                replace_strings = []
+
+                while self.image_token in sample:
+                    image_height, image_width = next(image_sizes_iter)
+                    num_height_tokens = image_height // self.effective_patch_size
+                    num_width_tokens = image_width // self.effective_patch_size
+                    num_patches = num_height_tokens * num_width_tokens
+
+                    replace_str = self.image_token * num_patches
+                    replace_strings.append(replace_str)
+
+                    sample = sample.replace(self.image_token, "<placeholder>", 1)
+
+                while "<placeholder>" in sample:
+                    replace_str = replace_strings.pop(0)
+                    sample = sample.replace("<placeholder>", replace_str, 1)
+
+                prompt_strings.append(sample)
         else:
             prompt_strings = text
 
@@ -273,7 +286,7 @@ class LightOnOCRProcessor(ProcessorMixin):
                 )
                 num_height_tokens = resized_height // self.effective_patch_size
                 num_width_tokens = resized_width // self.effective_patch_size
-                num_image_tokens.append((num_width_tokens + 1) * num_height_tokens)
+                num_image_tokens.append(num_width_tokens * num_height_tokens)
 
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
