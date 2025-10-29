@@ -244,5 +244,3 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skipTest("Chat template not required for OCR model")
 
 
-if __name__ == "__main__":
-    unittest.main()
