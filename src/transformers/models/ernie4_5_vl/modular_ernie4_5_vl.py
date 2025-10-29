@@ -1079,13 +1079,13 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
 
         # Using our own caching with rope delta
         model_inputs["position_ids"] = self.model.get_position_ids(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            cache_position=cache_position,
+            input_ids=model_inputs.get("input_ids", None),
+            attention_mask=model_inputs.get("attention_mask", None),
+            past_key_values=model_inputs.get("past_key_values", None),
+            inputs_embeds=model_inputs.get("inputs_embeds", None),
+            image_grid_thw=model_inputs.get("image_grid_thw", None),
+            video_grid_thw=model_inputs.get("video_grid_thw", None),
+            cache_position=model_inputs.get("cache_position", None),
         )
 
         if model_inputs["cache_position"][0] != 0:
