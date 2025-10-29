@@ -171,7 +171,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         layer_types: Optional[list[str]] = None,
         final_logit_softcapping: Optional[float] = None,
         attn_logit_softcapping: Optional[float] = None,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         use_bidirectional_attention: Optional[bool] = False,
         **kwargs,
     ):
