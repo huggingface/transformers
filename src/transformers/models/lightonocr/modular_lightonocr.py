@@ -20,7 +20,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, is_vision_available
-from ...utils.generic import check_model_inputs
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..pixtral.configuration_pixtral import PixtralVisionConfig
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 from ..pixtral.modeling_pixtral import (
@@ -681,7 +681,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         past_key_values: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if inputs_embeds is None:
             if input_ids is None:
@@ -765,7 +765,7 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
