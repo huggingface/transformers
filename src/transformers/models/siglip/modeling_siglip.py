@@ -510,7 +510,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.fc2.weight)
             nn.init.normal_(module.fc1.bias, std=1e-6)
             nn.init.normal_(module.fc2.bias, std=1e-6)
-        elif isinstance(module, SiglipMultiheadAttentionPoolingHead):
+        elif "MultiheadAttentionPoolingHead" in module.__class__.__name__:
             nn.init.xavier_uniform_(module.probe.data)
             nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
             nn.init.zeros_(module.attention.in_proj_bias.data)
@@ -700,6 +700,38 @@ class SiglipVisionTransformer(PreTrainedModel):
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = SiglipMultiheadAttentionPoolingHead(config)
+
+    def _init_weights(self, module):
+        if isinstance(module, SiglipVisionEmbeddings):
+            width = self.config.hidden_size
+            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+        elif isinstance(module, SiglipAttention):
+            nn.init.xavier_uniform_(module.q_proj.weight)
+            nn.init.xavier_uniform_(module.k_proj.weight)
+            nn.init.xavier_uniform_(module.v_proj.weight)
+            nn.init.xavier_uniform_(module.out_proj.weight)
+            nn.init.zeros_(module.q_proj.bias)
+            nn.init.zeros_(module.k_proj.bias)
+            nn.init.zeros_(module.v_proj.bias)
+            nn.init.zeros_(module.out_proj.bias)
+        elif isinstance(module, SiglipMLP):
+            nn.init.xavier_uniform_(module.fc1.weight)
+            nn.init.xavier_uniform_(module.fc2.weight)
+            nn.init.normal_(module.fc1.bias, std=1e-6)
+            nn.init.normal_(module.fc2.bias, std=1e-6)
+        elif "MultiheadAttentionPoolingHead" in module.__class__.__name__:
+            if hasattr(module, "probe"):
+                nn.init.xavier_uniform_(module.probe.data)
+            if hasattr(module, "attention"):
+                nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
+                nn.init.zeros_(module.attention.in_proj_bias.data)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            lecun_normal_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
 
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
