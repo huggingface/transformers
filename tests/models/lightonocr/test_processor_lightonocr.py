@@ -71,6 +71,32 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.image_break_token_id = tokenizer.convert_tokens_to_ids(tokenizer.image_break_token)
         tokenizer.image_end_token_id = tokenizer.convert_tokens_to_ids(tokenizer.image_end_token)
 
+        # Add a basic multimodal-aware chat template to the tokenizer
+        # This template extracts text from the multimodal content format
+        tokenizer.chat_template = (
+            "{% for message in messages %}"
+            "{% if loop.first and messages[0]['role'] != 'system' %}"
+            "{{ '<|im_start|>system\\nYou are a helpful assistant.<|im_end|>\\n' }}"
+            "{% endif %}"
+            "{{'<|im_start|>' + message['role'] + '\\n' }}"
+            "{% if message['content'] is string %}"
+            "{{ message['content'] }}"
+            "{% else %}"
+            "{% for content in message['content'] %}"
+            "{% if content['type'] == 'text' %}"
+            "{{ content['text'] }}"
+            "{% elif content['type'] == 'image' %}"
+            "{{ '<|image_pad|>' }}"
+            "{% endif %}"
+            "{% endfor %}"
+            "{% endif %}"
+            "{{ '<|im_end|>\\n' }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+            "{{ '<|im_start|>assistant\\n' }}"
+            "{% endif %}"
+        )
+
         # Create and save processor
         processor = LightOnOCRProcessor(
             image_processor=image_processor,
@@ -234,18 +260,3 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(inputs["image_sizes"]), 1)
         # Image size should be a tuple of (height, width)
         self.assertEqual(len(inputs["image_sizes"][0]), 2)
-
-    # Override chat template tests from ProcessorTesterMixin since LightOnOCR doesn't require them for OCR
-    def test_apply_chat_template_image_0(self):
-        """Skip chat template test - not applicable for OCR model."""
-        self.skipTest("Chat template not required for OCR model")
-
-    def test_apply_chat_template_image_1(self):
-        """Skip chat template test - not applicable for OCR model."""
-        self.skipTest("Chat template not required for OCR model")
-
-    def test_apply_chat_template_image_2(self):
-        """Skip chat template test - not applicable for OCR model."""
-        self.skipTest("Chat template not required for OCR model")
-
-
