@@ -391,29 +391,11 @@ class LightOnOCRPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        # Determine which component this module belongs to by checking the module path
-        module_name = None
-        for name, mod in self.named_modules():
-            if mod is module:
-                module_name = name
-                break
-
-        # Use appropriate initializer range based on module path
-        if module_name and module_name.startswith("vision_encoder"):
-            std = (
-                self.config.vision_config.initializer_range
-                if hasattr(self.config.vision_config, "initializer_range")
-                else 0.02
-            )
-        elif module_name and module_name.startswith("language_model"):
-            std = (
-                self.config.text_config.initializer_range
-                if hasattr(self.config.text_config, "initializer_range")
-                else 0.02
-            )
-        else:
-            # For projector and other components, use language model's initializer range
-            std = 0.02
+        std = (
+            self.config.text_config.initializer_range
+            if hasattr(self.config, "text_config") and hasattr(self.config.text_config, "initializer_range")
+            else 0.02
+        )
 
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
