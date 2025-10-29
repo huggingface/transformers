@@ -256,13 +256,14 @@ class Concatenate(ConversionOps):
 
         with torch.no_grad():  # we use staging buffers
             out = self._ensure_buffer(torch.Size(out_shape), dtype=tensors[0].dtype, device=tensors[0].device)
-            offset = 0
-            for tensor in tensors:
-                index = [slice(None)] * tensor.ndim
-                index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
-                out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
-                offset += tensor.shape[self.dim]
-        torch.testing.assert_close(out, torch.cat(value, dim=self.dim))
+            torch.cat(tensors,dim=self.dim, out=out)
+            # offset = 0
+            # for tensor in tensors:
+            #     index = [slice(None)] * tensor.ndim
+            #     index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
+            #     out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda) # 95% CPU time
+            #     offset += tensor.shape[self.dim]
+
         return out.clone()  # need to say I can overwrite this storage now
 
 
@@ -278,13 +279,20 @@ class MergeModulelist(Concatenate):
         self._inverse_op = SplitModulelist
 
     def convert(self, value: Sequence[torch.Tensor]) -> list[torch.Tensor]:
-        if not isinstance(value, Sequence):
-            raise TypeError(f"MergeModulelist expects a sequence of sequences of tensors. It received {value}.")
-        merged: list[torch.Tensor] = []
-        for group in value:
-            if not isinstance(group, Sequence) or len(group) == 0:
-                raise ValueError("MergeModulelist requires non-empty sub-sequences.")
-            merged.append(torch.stack(tuple(group), dim=self.dim))  # TODO have a single staging tensor here as well!
+        merged = []
+        with torch.no_grad():  # we use staging buffers
+            for group in value:
+                if not isinstance(group, Sequence) or len(group) == 0:
+                    raise ValueError("MergeModulelist requires non-empty sub-sequences.")
+                group = [k for k in group if k.ndim]
+                out_shape = list(group[0].shape)
+                out_shape.insert(self.dim, len(group))
+                out = self._ensure_buffer(torch.Size(out_shape), dtype=group[0].dtype, device=group[0].device)
+                torch.stack(tuple(group), dim=self.dim, out=out)
+                # for off, tensor in enumerate(group):
+                #     out[off].copy_(tensor, non_blocking=tensor.is_cuda)
+                # torch.as_tensor(numpy.stack(batch))
+                merged.append(out.clone())  # TODO have a single staging tensor here as well!
         return merged
 
 
@@ -629,12 +637,12 @@ def spawn_materialize(file_id, t) -> Future:
     return EXEC.submit(_job)
 
 
-def spawn_tp_materialize(file_id, t, sharding_method, empty_tensor) -> Future:
+def spawn_tp_materialize(file_id, t, sharding_method, empty_tensor, tensor_idx) -> Future:
     sem = _file_sems[file_id]
 
     def _job():
         with sem:
-            return sharding_method.shard_tensor(t, empty_tensor)[0]
+            return sharding_method.shard_tensor(t, empty_tensor, tensor_idx=tensor_idx)[0]
 
     return EXEC.submit(_job)
 
@@ -696,8 +704,8 @@ def convert_and_load_state_dict_in_model(
                     converter.distributed_operation.device_mesh = device_mesh
                     converter.distributed_operation.rank = device_map[""].index
                     converter.distributed_operation.empty_tensor = empty_tensor.clone()
-                    # shard_index=len(entry.collected_tensors[target_key].get(converter_key, [])
-                fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation, empty_tensor)
+                shard_index=len(entry.collected_tensors[target_key].get(converter_key, []))
+                fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation, empty_tensor, shard_index)
 
         if fut is None:  # If not TP, async move tensors
             fut = spawn_materialize(file_id, tensor)

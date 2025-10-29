@@ -333,6 +333,12 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
         else:
+            if isinstance(self.weight, torch.distributed.tensor.DTensor):
+                weight = self.weight._local_tensor
+                scale_inv = self.weight_scale_inv._local_tensor
+            else:
+                weight = self.weight
+                scale_inv = self.weight_scale_inv
             # Context manager used to switch among the available accelerators
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             torch_accelerator_module = getattr(torch, device_type, torch.cuda)
@@ -340,9 +346,9 @@ class FP8Linear(nn.Linear):
                 qinput, scale = act_quant(input, self.block_size[1])
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
-                    self.weight,
+                    weight,
                     scale,
-                    self.weight_scale_inv,
+                    scale_inv,
                     self.block_size,
                     output_dtype=input.dtype,
                 )
@@ -419,13 +425,13 @@ class FP8Expert(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
 
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+        num_experts = top_k_weights.shape[1]
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).flatten()
-
         for expert_idx in expert_hit.tolist():
             expert_selection = expert_mask[expert_idx].squeeze(0)
             top_indices, token_positions = torch.where(expert_selection)
-            if token_positions.numel() == 0:
+            if token_positions.numel() == 0 or expert_idx == num_experts:
                 continue
 
             current_state = hidden_states.index_select(0, token_positions)
