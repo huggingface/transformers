@@ -384,6 +384,11 @@ class Siglip2Encoder(nn.Module):
 
 
 class Siglip2VisionTransformer(nn.Module):
+    _can_record_outputs = {
+        "hidden_states": Siglip2EncoderLayer,
+        "attentions": Siglip2Attention,
+    }
+
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__()
         self.config = config
@@ -396,6 +401,7 @@ class Siglip2VisionTransformer(nn.Module):
         if self.use_head:
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -811,7 +817,6 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

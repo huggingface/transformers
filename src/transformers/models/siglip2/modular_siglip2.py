@@ -37,6 +37,7 @@ from transformers.models.siglip.modeling_siglip import (
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...utils import auto_docstring, filter_out_non_signature_kwargs
+from ...utils.generic import check_model_inputs
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -314,6 +315,7 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
 class Siglip2VisionModel(SiglipVisionModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
