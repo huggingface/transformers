@@ -165,7 +165,7 @@ jobs:
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
-      image: huggingface/transformers-pytorch-gpu
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
