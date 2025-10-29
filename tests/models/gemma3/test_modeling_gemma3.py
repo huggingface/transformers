@@ -73,7 +73,7 @@ class Gemma3ModelTester(GemmaModelTester):
 class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (Gemma3TextModel, Gemma3ForCausalLM, Gemma3TextForSequenceClassification) if is_torch_available() else ()
-    )
+    )ok
     all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False

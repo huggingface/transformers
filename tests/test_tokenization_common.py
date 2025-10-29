@@ -419,10 +419,10 @@ Hey how are you doing"""
         SPECIAL_TOKEN_1 = "[SPECIAL_TOKEN_1]"
         SPECIAL_TOKEN_2 = "[SPECIAL_TOKEN_2]"
 
-        # Both methods should add the token to `_additional_special_tokens` and `added_tokens_decoder`
+        # Both methods should add the token to `_extra_special_tokens` and `added_tokens_decoder`
         tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
         tokenizer.add_special_tokens(
-            {"additional_special_tokens": [SPECIAL_TOKEN_2]}, replace_additional_special_tokens=False
+            {"extra_special_tokens": [SPECIAL_TOKEN_2]}, replace_extra_special_tokens=False
         )
 
         token_1 = tokenizer.tokenize(SPECIAL_TOKEN_1)
@@ -476,8 +476,8 @@ Hey how are you doing"""
             self.assertTrue(hasattr(tokenizer, attr))
             self.assertTrue(hasattr(tokenizer, attr + "_id"))
 
-        self.assertTrue(hasattr(tokenizer, "additional_special_tokens"))
-        self.assertTrue(hasattr(tokenizer, "additional_special_tokens_ids"))
+        self.assertTrue(hasattr(tokenizer, "extra_special_tokens"))
+        self.assertTrue(hasattr(tokenizer, "extra_special_tokens_ids"))
 
         attributes_list = [
             "model_max_length",
@@ -517,13 +517,13 @@ Hey how are you doing"""
             self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
             self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
 
-        setattr(tokenizer, "additional_special_tokens_ids", [])
-        self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [])
-        self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [])
+        setattr(tokenizer, "extra_special_tokens_ids", [])
+        self.assertListEqual(getattr(tokenizer, "extra_special_tokens"), [])
+        self.assertListEqual(getattr(tokenizer, "extra_special_tokens_ids"), [])
 
-        setattr(tokenizer, "additional_special_tokens_ids", [token_id_to_test_setters])
-        self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
-        self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters])
+        setattr(tokenizer, "extra_special_tokens_ids", [token_id_to_test_setters])
+        self.assertListEqual(getattr(tokenizer, "extra_special_tokens"), [token_to_test_setters])
+        self.assertListEqual(getattr(tokenizer, "extra_special_tokens_ids"), [token_id_to_test_setters])
 
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
@@ -554,10 +554,10 @@ Hey how are you doing"""
 
         sample_text = " He is very happy, UNwant\u00e9d,running"
         tokenizer.add_tokens(["bim", "bambam"])
-        additional_special_tokens = tokenizer.additional_special_tokens
-        additional_special_tokens.append("new_additional_special_token")
+        extra_special_tokens = tokenizer.extra_special_tokens
+        extra_special_tokens.append("new_extra_special_token")
         tokenizer.add_special_tokens(
-            {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+            {"extra_special_tokens": extra_special_tokens}, replace_extra_special_tokens=False
         )
         before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
         before_vocab = tokenizer.get_vocab()
@@ -571,7 +571,7 @@ Hey how are you doing"""
         self.assertDictEqual(before_vocab, after_vocab)
         self.assertIn("bim", after_vocab)
         self.assertIn("bambam", after_vocab)
-        self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
+        self.assertIn("new_extra_special_token", after_tokenizer.extra_special_tokens)
         self.assertEqual(after_tokenizer.model_max_length, 42)
 
         tokenizer = tokenizer.__class__.from_pretrained(tmpdirname, model_max_length=43)
@@ -586,10 +586,10 @@ Hey how are you doing"""
 
         sample_text = " He is very happy, UNwant\u00e9d,running"
         tokenizer.add_tokens(["bim", "bambam"])
-        additional_special_tokens = tokenizer.additional_special_tokens
-        additional_special_tokens.append("new_additional_special_token")
+        extra_special_tokens = tokenizer.extra_special_tokens
+        extra_special_tokens.append("new_extra_special_token")
         tokenizer.add_special_tokens(
-            {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+            {"extra_special_tokens": extra_special_tokens}, replace_extra_special_tokens=False
         )
         before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
         before_vocab = tokenizer.get_vocab()
@@ -602,7 +602,7 @@ Hey how are you doing"""
         self.assertDictEqual(before_vocab, after_vocab)
         self.assertIn("bim", after_vocab)
         self.assertIn("bambam", after_vocab)
-        self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
+        self.assertIn("new_extra_special_token", after_tokenizer.extra_special_tokens)
         self.assertEqual(after_tokenizer.model_max_length, 42)
 
         tokenizer = tokenizer.__class__.from_pretrained(tmpdirname, model_max_length=43)
@@ -748,14 +748,14 @@ Hey how are you doing"""
     def test_sequence_ids(self):
         tokenizer = self.get_tokenizer()
 
-        if not tokenizer.is_fast:
-            self.skipTest(reason="No fast tokenizer defined")
+        if tokenizer.backend == "custom":
+            self.skipTest(reason="Custom backend tokenizer")
 
         seq_0 = "Test this method."
         seq_1 = "With these inputs."
 
         # We want to have sequence 0 and sequence 1 are tagged
-        # respectively with 0 and 1 token_ids
+        # respectively with 0 and 1 token_ids\
         # (regardless of whether the model use token type ids)
         # We use this assumption in the QA pipeline among other place
         output = tokenizer(seq_0)
@@ -985,10 +985,10 @@ Hey how are you doing"""
         ]
         for tokenizer, pretrained_name, _ in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                if not self.test_rust_tokenizer:
-                    self.skipTest(reason="No fast tokenizer defined")
+                tokenizer_r = self.get_tokenizer(pretrained_name)
+                if tokenizer_r.backend == "custom":
+                    self.skipTest(reason="Custom backend tokenizer")
 
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name)
                 self._check_no_pad_token_padding(tokenizer_r, conversations)
 
                 tokenizer_r.padding_side = "right"
@@ -1166,10 +1166,9 @@ Hey how are you doing"""
 
         for tokenizer, pretrained_name, _ in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                if not self.is_fast:
-                    self.skipTest(reason="No fast tokenizer defined")
-
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name)
+                tokenizer_r = self.get_tokenizer(pretrained_name)
+                if tokenizer_r.backend == "custom":
+                    self.skipTest(reason="Custom backend tokenizer")
 
                 # Find where to truncate, as the amount of tokens is different for different tokenizers and I want the
                 # truncation to happen in the middle of the assistant content.
@@ -2394,7 +2393,7 @@ Hey how are you doing"""
 
                     with self.subTest("Saving tokenizer locally and reloading"):
                         tokenizer = self.tokenizer_class.from_pretrained(tmp_dir)
-                        self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
+                        self.assertTrue(str(new_eos) not in tokenizer.extra_special_tokens)
                         # Check that the token content is present (may not preserve all AddedToken attributes)
                         self.assertIn(str(new_eos), [str(t) for t in tokenizer.added_tokens_decoder.values()])
                         self.assertEqual(str(tokenizer.added_tokens_decoder[tokenizer.eos_token_id]), str(new_eos))

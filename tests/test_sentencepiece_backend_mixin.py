@@ -316,27 +316,27 @@ class SentencePieceBackendTesterMixin:
 
     def test_special_token_addition(self):
         tokenizer = self.get_tokenizer()
-        # Create tokenizer and add an additional special token
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<tok>"]})
-        self.assertEqual(tokenizer.additional_special_tokens, ["<tok>"])
+        # Create tokenizer and add an extra special token
+        tokenizer.add_special_tokens({"extra_special_tokens": ["<tok>"]})
+        self.assertEqual(tokenizer.extra_special_tokens, ["<tok>"])
         with tempfile.TemporaryDirectory() as tmp_dir:
             tokenizer.save_pretrained(tmp_dir)
             # Load the above tokenizer and add the same special token a second time
             tokenizer_2 = self.tokenizer_class.from_pretrained(tmp_dir)
-            tokenizer_2.add_special_tokens({"additional_special_tokens": ["<tok>"]})
-            self.assertEqual(tokenizer_2.additional_special_tokens, ["<tok>"])
+            tokenizer_2.add_special_tokens({"extra_special_tokens": ["<tok>"]})
+            self.assertEqual(tokenizer_2.extra_special_tokens, ["<tok>"])
 
-            tokenizer_2.add_special_tokens({"additional_special_tokens": ["<tok>", "<other>"]})
-            self.assertEqual(tokenizer_2.additional_special_tokens, ["<tok>", "<other>"])
+            tokenizer_2.add_special_tokens({"extra_special_tokens": ["<tok>", "<other>"]})
+            self.assertEqual(tokenizer_2.extra_special_tokens, ["<tok>", "<other>"])
 
-            tokenizer_2.add_special_tokens({"additional_special_tokens": ["<other>", "<another>"]})
-            self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>"])
+            tokenizer_2.add_special_tokens({"extra_special_tokens": ["<other>", "<another>"]})
+            self.assertEqual(tokenizer_2.extra_special_tokens, ["<other>", "<another>"])
 
             tokenizer_2.add_special_tokens(
-                {"additional_special_tokens": ["<tok>"]},
-                replace_additional_special_tokens=False,
+                {"extra_special_tokens": ["<tok>"]},
+                replace_extra_special_tokens=False,
             )
-            self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
+            self.assertEqual(tokenizer_2.extra_special_tokens, ["<other>", "<another>", "<tok>"])
 
     def test_alignment_methods(self):
         tokenizer_r = self.get_tokenizer()

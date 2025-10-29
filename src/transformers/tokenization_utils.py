@@ -447,7 +447,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
 
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
-        # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
+        # V5: the order of addition follows self.SPECIAL_TOKENS_ATTRIBUTES, then extra special tokens
         # Note: _add_tokens will automatically skip tokens that are already in the base vocab
         self._add_tokens(
             [token for token in self.all_special_tokens if token not in self._added_tokens_encoder],
@@ -583,7 +583,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 token_index = current_vocab[token.content]
 
             if token.special and str(token) not in self.all_special_tokens:
-                self._special_tokens_map["additional_special_tokens"].append(token)
+                self._extra_special_tokens.append(token)
             # the setter automatically updates the reverse map
             self._added_tokens_decoder[token_index] = token
             self._added_tokens_encoder[token.content] = token_index

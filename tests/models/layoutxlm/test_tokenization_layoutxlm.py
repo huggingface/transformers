@@ -294,7 +294,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_tokenizer(
-                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                    pretrained_name, extra_special_tokens=[special_token], split_special_tokens=True, **kwargs
                 )
 
                 # For LayoutXLM, tokenize works with strings (not requiring boxes)
@@ -1415,7 +1415,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                    pretrained_name, extra_special_tokens=added_tokens, **kwargs
                 )
                 words = "Hey this is a <special> token".split()
                 boxes = [[1000, 1000, 1000, 1000] for _ in range(len(words))]
@@ -1485,7 +1485,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Create a new mapping from the special tokens defined in the original tokenizer
         special_tokens_list = PreTrainedTokenizerBase.SPECIAL_TOKENS_ATTRIBUTES.copy()
-        special_tokens_list.remove("additional_special_tokens")
         special_tokens_map = {}
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.

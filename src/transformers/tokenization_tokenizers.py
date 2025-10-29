@@ -134,7 +134,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         elif not slow_tokenizer:
             # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
             self.vocab_file = kwargs.get("vocab_file")
-            self.additional_special_tokens = kwargs.get("additional_special_tokens", [])
+            # V5: Set _extra_special_tokens directly for converter
+            self._extra_special_tokens = kwargs.get("extra_special_tokens", [])
             fast_tokenizer = convert_slow_tokenizer(self, from_tiktoken=True)
             slow_tokenizer = None
         else:
@@ -189,27 +190,29 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         ]
         encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
         # if some of the special tokens are not already in the tokenizer, add them
-        # we iterate over _special_tokens_map to preserve AddedToken properties (lstrip, rstrip, etc.)
+        # V5: Check both named special tokens and extra special tokens
+        # Iterate over _special_tokens_map to preserve AddedToken properties (lstrip, rstrip, etc.)
         for special_token_value in self._special_tokens_map.values():
             if special_token_value is None:
                 continue
-            # Handle both single tokens and lists of tokens (for additional_special_tokens)
-            special_tokens_to_check = (
-                special_token_value if isinstance(special_token_value, (list, tuple)) else [special_token_value]
-            )
-            for token in special_tokens_to_check:
-                if str(token) not in encoder and token not in tokens_to_add:
-                    tokens_to_add.append(token)
+            if str(special_token_value) not in encoder and special_token_value not in tokens_to_add:
+                tokens_to_add.append(special_token_value)
+        
+        # Also check extra special tokens
+        for token in self._extra_special_tokens:
+            if str(token) not in encoder and token not in tokens_to_add:
+                tokens_to_add.append(token)
 
         if len(tokens_to_add) > 0:
             tokens = []
+            all_named_tokens = [str(t) for t in self._special_tokens_map.values() if t]
             for token in tokens_to_add:
                 if isinstance(token, str):
                     # Convert string to AddedToken, assuming it's special
                     token = AddedToken(token, special=True)
                 elif isinstance(token, AddedToken):
                     # Ensure the special flag is set correctly for special tokens
-                    if not token.special and str(token) in [str(t) for t in self._special_tokens_map.values() if t]:
+                    if not token.special and str(token) in all_named_tokens:
                         token.special = True
                 tokens.append(token)
             if tokens:
@@ -299,21 +302,25 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         Child classes should call super()._post_init() if they override this method.
         """
         tokens_to_add = []
+        # V5: Check named special tokens
         for token_value in self._special_tokens_map.values():
-            if isinstance(token_value, (list, tuple)):
-                for token in token_value:
-                    if isinstance(token, AddedToken):
-                        if self._tokenizer.token_to_id(str(token)) is None:
-                            tokens_to_add.append(token)
-                    elif isinstance(token, str):
-                        if self._tokenizer.token_to_id(token) is None:
-                            tokens_to_add.append(AddedToken(token, special=True, normalized=False))
-            elif isinstance(token_value, AddedToken):
+            if token_value is None:
+                continue
+            if isinstance(token_value, AddedToken):
                 if self._tokenizer.token_to_id(str(token_value)) is None:
                     tokens_to_add.append(token_value)
             elif isinstance(token_value, str):
                 if self._tokenizer.token_to_id(token_value) is None:
                     tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
+        
+        # V5: Check extra special tokens
+        for token in self._extra_special_tokens:
+            if isinstance(token, AddedToken):
+                if self._tokenizer.token_to_id(str(token)) is None:
+                    tokens_to_add.append(token)
+            elif isinstance(token, str):
+                if self._tokenizer.token_to_id(token) is None:
+                    tokens_to_add.append(AddedToken(token, special=True, normalized=False))
 
         if tokens_to_add:
             self.add_tokens(tokens_to_add)
@@ -940,10 +947,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
         kwargs = self.init_kwargs.copy()
-        # Map pad/cls/mask token at the Transformers level
-        special_tokens_list = PreTrainedTokenizerBase.SPECIAL_TOKENS_ATTRIBUTES.copy()
-        special_tokens_list.remove("additional_special_tokens")
-        for token in special_tokens_list:
+        # V5: Map pad/cls/mask token at the Transformers level (named tokens only)
+        for token in PreTrainedTokenizerBase.SPECIAL_TOKENS_ATTRIBUTES:
             if getattr(self, token) is not None:
                 special_token = getattr(self, token)
                 if special_tokens_map is not None and special_token in special_tokens_map:
@@ -963,11 +968,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 else:
                     kwargs[token] = special_token
 
-        additional_special_tokens = self.additional_special_tokens
+        # V5: Handle extra special tokens
+        extra_special_tokens = self.extra_special_tokens.copy() if self.extra_special_tokens else []
         if new_special_tokens is not None:
-            additional_special_tokens.extend(new_special_tokens)
-        if len(additional_special_tokens) > 0:
-            kwargs["additional_special_tokens"] = additional_special_tokens
+            extra_special_tokens.extend(new_special_tokens)
+        if len(extra_special_tokens) > 0:
+            kwargs["extra_special_tokens"] = extra_special_tokens
 
         # Check if the class accepts tokenizer_object parameter
         class_signature = inspect.signature(self.__class__.__init__)

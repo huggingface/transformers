@@ -297,10 +297,10 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         before_len = len(tokenizer)
         sample_ids = [0, 1, 4, 8, 9, 0, 12, before_len, before_len + 1, before_len + 2]
         tokenizer.add_tokens(["?", "!"])
-        additional_special_tokens = tokenizer.additional_special_tokens
-        additional_special_tokens.append("&")
+        extra_special_tokens = tokenizer.extra_special_tokens
+        extra_special_tokens.append("&")
         tokenizer.add_special_tokens(
-            {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+            {"extra_special_tokens": extra_special_tokens}, replace_extra_special_tokens=False
         )
         before_tokens = tokenizer.decode(sample_ids)
         before_vocab = tokenizer.get_vocab()
