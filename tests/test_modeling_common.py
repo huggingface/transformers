@@ -832,7 +832,15 @@ class ModelTesterMixin:
             # Gradient checkpointing is implemented via GradientCheckpointingLayer, if none is present this is likely
             # an implementation issue. Note we exclude xlstm and zamba* for now since they are still not using
             # GradientCheckpointingLayer.
-            if config.model_type not in ["xlstm", "zamba", "zamba2"]:
+            if config.model_type not in [
+                "xlstm",
+                "zamba",
+                "zamba2",
+                "swiftformer",
+                "janus_vqgan",
+                "clvp_encoder",
+                "clvp_decoder",
+            ]:
                 self.assertTrue([m for m in model.modules() if isinstance(m, GradientCheckpointingLayer)])
 
             # check enable works
@@ -1160,15 +1168,14 @@ class ModelTesterMixin:
                 config.use_cache = False
                 config.return_dict = True
 
-                # FIXME
                 if config.model_type in ["xlstm", "zamba", "zamba2", "swiftformer", "janus", "clvp"]:
-                    self.skipTest("These don't support GradientCheckpointingLayer yet.")
+                    self.skipTest(f"Model {config.model_type} doesn't support GradientCheckpointingLayer yet.")
 
                 # make sure that test runs are consistent by disabling dropout
                 #
-                # TODO I don't understand why attention_probs_dropout_prob influences classifier.bias in
-                # BertForMultipleChoice (and other Bert derived models). Sometimes classifier.bias is None
-                # when attention_probs_dropout_prob > 0. This might indicate a bug somewhere.
+                # Note: attention_probs_dropout_prob seem to influence classifier.bias in BertForMultipleChoice
+                # (and other Bert derived models). Sometimes classifier.bias is None when
+                # attention_probs_dropout_prob > 0. This might indicate a bug somewhere.
                 if hasattr(config, "hidden_dropout_prob"):
                     config.hidden_dropout_prob = 0.0
                 if hasattr(config, "attention_probs_dropout_prob"):
