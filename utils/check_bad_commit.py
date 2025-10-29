@@ -97,7 +97,17 @@ def is_bad_commit(target_test, commit):
     # Restore to original commit
     repo.git.checkout(original_head)
 
-    return result.returncode != 0
+    n_passed = 0
+    o = re.findall(r"====.* (\d+) passed", result.stdout)
+    if len(o) > 0:
+        n_passed = int(o[0])
+
+    n_failed = 0
+    o = re.findall(r"====.* (\d+) failed", result.stdout)
+    if len(o) > 0:
+        n_failed = int(o[0])
+
+    return result.returncode != 0, n_failed, n_passed
 
 
 def find_bad_commit(target_test, start_commit, end_commit):
@@ -113,7 +123,8 @@ def find_bad_commit(target_test, start_commit, end_commit):
     """
 
     # check if `end_commit` fails the test
-    failed_before = is_bad_commit(target_test, end_commit)
+    # (we only need one failure to conclude the test is flaky on the previous run with `end_commit`)
+    failed_before, _, _ = is_bad_commit(target_test, end_commit)
     if failed_before:
         return (
             None,
@@ -130,8 +141,9 @@ def find_bad_commit(target_test, start_commit, end_commit):
 
     # Now, we are (almost) sure `target_test` is not failing at `end_commit`
     # check if `start_commit` fail the test
-    failed_now = is_bad_commit(target_test, start_commit)
-    if not failed_now:
+    # **IMPORTANT** we only need one pass to conclude the test is flaky on the current run with `start_commit`!
+    _, n_failed, n_passed = is_bad_commit(target_test, start_commit)
+    if n_passed > 0:
         # failed on CI run, but not reproducible here --> don't report
         return None, f"flaky: test fails on the current CI run (commit: {start_commit}) but passes during the check."
 
@@ -194,12 +206,13 @@ def get_commit_info(commit):
         if pr_for_commit["merged_by"] is not None:
             merged_author = pr_for_commit["merged_by"]["login"]
 
+    url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
+    commit_info = requests.get(url).json()
+    parent = commit_info["parents"][0]["sha"]
     if author is None:
-        url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
-        commit_info = requests.get(url).json()
         author = commit_info["author"]["login"]
 
-    return {"commit": commit, "pr_number": pr_number, "author": author, "merged_by": merged_author}
+    return {"commit": commit, "pr_number": pr_number, "author": author, "merged_by": merged_author, "parent": parent}
 
 
 if __name__ == "__main__":
