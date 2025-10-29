@@ -1,4 +1,4 @@
-# Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Baidu and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Qwen2.5-VL model."""
+"""Testing suite for the PyTorch Ernie 4.5 VL model."""
 
 import copy
 import tempfile
@@ -200,6 +200,8 @@ class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         if is_torch_available()
         else ()
     )
+    model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
+    test_all_params_have_gradient = False  # e score correction bias + moe
     _is_composite = True
 
     def setUp(self):
@@ -248,6 +250,27 @@ class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         text_gen_config.forced_eos_token_id = None
 
         return config, filtered_inputs_dict
+
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+            del inputs["image_grid_thw"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            torch.testing.assert_close(out_embeds, out_ids)
 
 
 @require_torch

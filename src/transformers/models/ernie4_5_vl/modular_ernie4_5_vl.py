@@ -50,6 +50,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
@@ -355,6 +356,11 @@ class Ernie4_5_VLPreTrainedModel(Qwen2_5_VLPreTrainedModel):
         "attentions": Ernie4_5_VLTextAttention,
     }
     _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
+
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Ernie4_5_VLMoeStatics):
+            module.e_score_correction_bias.data.zero_()
 
 
 class Ernie4_5_VLTextModel(Ernie4_5_MoeModel):

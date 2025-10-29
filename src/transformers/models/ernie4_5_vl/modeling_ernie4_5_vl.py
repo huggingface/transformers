@@ -507,6 +507,11 @@ class Ernie4_5_VLPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Ernie4_5_VLMoeStatics):
+            module.e_score_correction_bias.data.zero_()
+
 
 @auto_docstring
 class Ernie4_5_VLTextModel(Ernie4_5_VLPreTrainedModel):
