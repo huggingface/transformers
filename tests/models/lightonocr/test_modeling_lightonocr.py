@@ -17,6 +17,7 @@ import copy
 import unittest
 
 from transformers import (
+    AutoProcessor,
     LightOnOCRConfig,
     LightOnOCRForConditionalGeneration,
     LightOnOCRModel,
@@ -40,7 +41,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    pass  # May be needed for future integration tests
+    from transformers.image_utils import load_image
 
 
 class LightOnOCRVisionText2TextModelTester:
@@ -519,6 +520,65 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
+
+    @slow
+    def test_lightonocr_ocr_integration(self):
+        """
+        Integration test for LightOnOCR OCR capabilities.
+        Tests that the model can perform OCR on a real image and produce expected output.
+
+        """
+
+        model_id = "lightonai/LightOnOCR-1B-1025"
+
+        # Load processor and model from Hub
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = LightOnOCRForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        model.eval()
+
+        # Load a test OCR image
+        # This is a standard OCR test image from HuggingFace fixtures
+        image = load_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_ocr/resolve/main/SROIE-receipt.jpeg"
+        )
+
+        # Process image and prepare inputs
+        # Using chat template as shown in the model's usage pattern
+        chat = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": image},
+                ],
+            }
+        ]
+
+        inputs = processor.apply_chat_template(
+            chat, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+
+        # Generate OCR output
+        with torch.no_grad():
+            generated_ids = model.generate(
+                **inputs,
+                max_new_tokens=50,
+                do_sample=False,
+                num_beams=1,
+            )
+
+        # Decode output, excluding the input prompt
+        decoded_output = processor.decode(generated_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+        # Check that the model generated non-empty text
+        # The exact output depends on the trained model, but it should contain some OCR text
+        self.assertIsNotNone(decoded_output)
+        self.assertIsInstance(decoded_output, str)
+        self.assertGreater(len(decoded_output.strip()), 0, "Model should generate non-empty OCR output")
+
+        # Check that the model correctly extracted the date from the receipt
+        self.assertIn(
+            "25/12/2018", decoded_output, "Model should extract the date '25/12/2018' from the receipt image"
+        )
 
     def test_model_can_generate_without_images(self):
         """
