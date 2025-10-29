@@ -383,14 +383,14 @@ class Siglip2Encoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class Siglip2VisionTransformer(nn.Module):
+class Siglip2VisionTransformer(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Siglip2EncoderLayer,
         "attentions": Siglip2Attention,
     }
 
     def __init__(self, config: Siglip2VisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
 

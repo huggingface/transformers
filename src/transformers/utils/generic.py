@@ -836,7 +836,7 @@ def check_model_inputs(tie_last_hidden_states=True):
                     all_args[k] = v
 
             # _can_record_outputs is None by default
-            capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__)) or getattr(self, "_can_record_outputs", {})
+            capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__)) or {} # there is a weak ref for executorch
             recordable_keys = {
                 f"output_{k}": all_args.get(
                     f"output_{k}",
