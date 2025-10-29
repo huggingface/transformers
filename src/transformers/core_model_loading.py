@@ -565,12 +565,12 @@ class ConversionEntry:
 
 
 # Tune these to your storage:
-GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
+GLOBAL_WORKERS = min(32, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 PER_FILE_LIMIT = 4  # concurrent reads per file
 
-# Global executor + per-file semaphores
-EXEC = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
-_file_sems = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
+# # Global executor + per-file semaphores
+# EXEC = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
+# _file_sems = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
 
 
 def _materialize_copy(x):
@@ -579,22 +579,22 @@ def _materialize_copy(x):
 
 
 def spawn_materialize(file_id, t) -> Future:
-    sem = _file_sems[file_id]
+    return t[:]
+#     sem = _file_sems[file_id]
+#     def _job():
+#         with sem:
+#             return _materialize_copy(t)
 
-    def _job():
-        with sem:
-            return _materialize_copy(t)
+#     return EXEC.submit(_job)
 
-    return EXEC.submit(_job)
+# def spawn_tp_materialize(file_id, t, sharding_method) -> Future:
+#     sem = _file_sems[file_id]
 
-def spawn_tp_materialize(file_id, t, sharding_method) -> Future:
-    sem = _file_sems[file_id]
+#     def _job():
+#         with sem:
+#             return sharding_method(t)
 
-    def _job():
-        with sem:
-            return sharding_method(t)
-
-    return EXEC.submit(_job)
+#     return EXEC.submit(_job)
 
 
 def convert_and_load_state_dict_in_model(
@@ -618,6 +618,9 @@ def convert_and_load_state_dict_in_model(
     weight_mapping = weight_mapping or {}  # {glob_pattern: WeightConverter}
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
+    if model.config.tie_word_embeddings:
+        missing_keys.remove("lm_head.weight")
+
     misc = {}
     mismatch_keys = set()
     unexpected_keys = set()
@@ -675,7 +678,9 @@ def convert_and_load_state_dict_in_model(
             for layer_name, tensors_for_this_layer in group.collected_tensors.items():
                 concrete_target_keys = layer_name.split("|")
                 if bool(set(concrete_target_keys) - unexpected_keys):
-                    values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
+                    # values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
+                    values = list(tensors_for_this_layer.values())
+
                     if op := converter.distributed_operation:
                         try:
                             values = op(values)
@@ -723,7 +728,7 @@ def convert_and_load_state_dict_in_model(
         if progress_bar is not None:
             progress_bar.close()
     model.inverse_converters = inverse_converters
-    EXEC.shutdown(wait=True)
+    # EXEC.shutdown(wait=True)
     return missing_keys, unexpected_keys, mismatch_keys, misc
 
 
