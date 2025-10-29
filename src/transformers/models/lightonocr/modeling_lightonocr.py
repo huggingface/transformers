@@ -67,26 +67,26 @@ class LightOnOCRPatchMerger(nn.Module):
             (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
         ]
 
-        tokens_per_image = [h * w for h, w in image_sizes_in_patches]
-        d = image_features.shape[-1]
+        tokens_per_image = [patch_height * patch_width for patch_height, patch_width in image_sizes_in_patches]
+        hidden_dim = image_features.shape[-1]
 
         permuted_tensor = []
         for image_index, image_tokens in enumerate(image_features.split(tokens_per_image)):
             # reshape image_tokens into a 2D grid
-            h, w = image_sizes_in_patches[image_index]
-            # shape [num_patches, d] -> [1, d, h, w]
-            image_grid = image_tokens.view(h, w, d).permute(2, 0, 1).unsqueeze(0)
-            # shape [1, d, h, w] -> [h // sms * w // sms, d * sms**2]
+            patch_height, patch_width = image_sizes_in_patches[image_index]
+            # shape [num_patches, hidden_dim] -> [1, hidden_dim, patch_height, patch_width]
+            image_grid = image_tokens.view(patch_height, patch_width, hidden_dim).permute(2, 0, 1).unsqueeze(0)
+            # shape [1, hidden_dim, patch_height, patch_width] -> [patch_height // sms * patch_width // sms, hidden_dim * sms**2]
             # sms = spatial_merge_size
-            # Note: h and w are guaranteed to be divisible by sms because the image processor
+            # Note: patch_height and patch_width are guaranteed to be divisible by sms because the image processor
             # resizes images to multiples of effective_patch_size (patch_size * spatial_merge_size)
             grid = torch.nn.functional.unfold(
                 image_grid,
                 kernel_size=self.spatial_merge_size,
                 stride=self.spatial_merge_size,
             )
-            # shape [h // sms * w // sms, d * sms**2] -> [h // sms * w // sms, d * sms**2]
-            grid = grid.view(d * self.spatial_merge_size**2, -1).t()
+            # shape [patch_height // sms * patch_width // sms, hidden_dim * sms**2] -> [patch_height // sms * patch_width // sms, hidden_dim * sms**2]
+            grid = grid.view(hidden_dim * self.spatial_merge_size**2, -1).t()
             permuted_tensor.append(grid)
 
         image_features = torch.cat(permuted_tensor, dim=0)
