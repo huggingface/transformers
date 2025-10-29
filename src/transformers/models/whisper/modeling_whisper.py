@@ -529,6 +529,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
     config: WhisperConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
+    input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["WhisperEncoderLayer", "WhisperDecoderLayer"]
     _supports_flash_attn = True

@@ -773,6 +773,7 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
     config_class = EdgeTamVideoConfig
     base_model_prefix = "edgetam_video"
     main_input_name = "pixel_values"
+    input_modalities = "video"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
@@ -1975,6 +1976,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 
 @auto_docstring
 class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
+    input_modalities = ["video", "text"]
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]

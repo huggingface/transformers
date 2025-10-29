@@ -2302,11 +2302,7 @@ class OneFormerTransformerDecoder(nn.Module):
 
         return outputs_class, outputs_mask, attention_mask
 
-    @torch.jit.unused
     def _get_aux_predictions(self, outputs_class, outputs_seg_masks):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         aux_list = [
             {"class_queries_logits": a, "masks_queries_logits": b}
             for a, b in zip(outputs_class[:-1], outputs_seg_masks[:-1])
@@ -2768,6 +2764,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     config: OneFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
