@@ -1112,10 +1112,6 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         Returns:
             List of image feature tensors, one per image
         """
-        # Convert image_sizes to tensor if it's a list
-        if isinstance(image_sizes, list):
-            image_sizes = torch.tensor(image_sizes, device=pixel_values.device)
-
         # Convert image_sizes tensor to list of tuples for compatibility with vision encoder
         image_sizes_list = [(int(h), int(w)) for h, w in image_sizes]
 
