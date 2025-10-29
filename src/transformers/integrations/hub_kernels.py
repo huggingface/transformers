@@ -51,10 +51,13 @@ try:
             )
         },
         "RMSNorm": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/liger_kernels",
-                layer_name="LigerRMSNorm",
-            ),
+            "cuda": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/liger_kernels",
+                    layer_name="LigerRMSNorm",
+                    # revision="pure-layer-test",
+                ),
+            },
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
