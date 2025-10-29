@@ -340,9 +340,7 @@ class LightOnOCRPatchMerger(nn.Module):
             (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
         ]
 
-        tokens_per_image = [
-            patch_height * patch_width for patch_height, patch_width in image_sizes_in_patches
-        ]
+        tokens_per_image = [patch_height * patch_width for patch_height, patch_width in image_sizes_in_patches]
         hidden_dim = image_features.shape[-1]
 
         permuted_tensor = []
@@ -740,9 +738,6 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
