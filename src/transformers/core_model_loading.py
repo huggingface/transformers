@@ -255,12 +255,13 @@ class Concatenate(ConversionOps):
 
         with torch.no_grad():  # we use staging buffers
             out = self._ensure_buffer(torch.Size(out_shape), dtype=tensors[0].dtype, device=tensors[0].device)
-            offset = 0
-            for tensor in tensors:
-                index = [slice(None)] * tensor.ndim
-                index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
-                out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
-                offset += tensor.shape[self.dim]
+            torch.cat(tuple(tensors),dim =self.dim, out=out)
+            # offset = 0
+            # for tensor in tensors:
+            #     index = [slice(None)] * tensor.ndim
+            #     index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
+            #     out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
+            #     offset += tensor.shape[self.dim]
         # torch.testing.assert_close(out, torch.cat(value, dim=self.dim))
         return out.clone()  # need to say I can overwrite this storage now
 
@@ -277,13 +278,17 @@ class MergeModulelist(Concatenate):
         self._inverse_op = SplitModulelist
 
     def convert(self, value: Sequence[torch.Tensor]) -> list[torch.Tensor]:
-        if not isinstance(value, Sequence):
-            raise TypeError(f"MergeModulelist expects a sequence of sequences of tensors. It received {value}.")
-        merged: list[torch.Tensor] = []
-        for group in value:
-            if not isinstance(group, Sequence) or len(group) == 0:
-                raise ValueError("MergeModulelist requires non-empty sub-sequences.")
-            merged.append(torch.stack(tuple(group), dim=self.dim))  # TODO have a single staging tensor here as well!
+        merged = []
+        with torch.no_grad():  # we use staging buffers
+            for group in value:
+                if not isinstance(group, Sequence) or len(group) == 0:
+                    raise ValueError("MergeModulelist requires non-empty sub-sequences.")
+                out_shape = list(group[0].shape)
+                # group = [k.unsqueeze(self.dim) for k in group]
+                out_shape.insert(self.dim, len(group))
+                out = self._ensure_buffer(torch.Size(out_shape), dtype=group[0].dtype, device=group[0].device)
+                torch.stack(tuple(group), dim=self.dim, out=out)
+                merged.append(out.clone())  # This is bound to be slow...
         return merged
 
 
@@ -568,33 +573,31 @@ class ConversionEntry:
 GLOBAL_WORKERS = min(32, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 PER_FILE_LIMIT = 4  # concurrent reads per file
 
-# # Global executor + per-file semaphores
-# EXEC = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
-# _file_sems = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
+# Global executor + per-file semaphores
+EXEC = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
+_file_sems = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
 
 
 def _materialize_copy(x):
     # PyTorch: this runs in C and releases the GIL; good for threads.
-    return x[:]  # contiguous, real copy
-
+    return x[:] #.contiguous()  needed????
 
 def spawn_materialize(file_id, t) -> Future:
-    return t[:]
-#     sem = _file_sems[file_id]
-#     def _job():
-#         with sem:
-#             return _materialize_copy(t)
+    sem = _file_sems[file_id]
+    def _job():
+        with sem:
+            return _materialize_copy(t)
 
-#     return EXEC.submit(_job)
+    return EXEC.submit(_job)
 
-# def spawn_tp_materialize(file_id, t, sharding_method) -> Future:
-#     sem = _file_sems[file_id]
+def spawn_tp_materialize(file_id, t, sharding_method) -> Future:
+    sem = _file_sems[file_id]
 
-#     def _job():
-#         with sem:
-#             return sharding_method(t)
+    def _job():
+        with sem:
+            return sharding_method(t)
 
-#     return EXEC.submit(_job)
+    return EXEC.submit(_job)
 
 
 def convert_and_load_state_dict_in_model(
@@ -678,8 +681,7 @@ def convert_and_load_state_dict_in_model(
             for layer_name, tensors_for_this_layer in group.collected_tensors.items():
                 concrete_target_keys = layer_name.split("|")
                 if bool(set(concrete_target_keys) - unexpected_keys):
-                    # values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
-                    values = list(tensors_for_this_layer.values())
+                    values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
 
                     if op := converter.distributed_operation:
                         try:
