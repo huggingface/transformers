@@ -186,10 +186,16 @@ class Gemma3TextConfig(PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        if rope_scaling is not None:
-            rope_parameters = {"sliding_attention": {"rope_type": "default"}, "full_attention": rope_scaling}
+        if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
+            if rope_parameters is None:
+                rope_parameters = {"sliding_attention": {"rope_type": "default"}, "full_attention": rope_scaling}
+            elif "full_attention" in rope_parameters:
+                rope_parameters["full_attention"].update(rope_scaling)
+            else:
+                rope_parameters.update(rope_scaling)
+
         self.rope_parameters = rope_parameters
         self.use_bidirectional_attention = use_bidirectional_attention
         if use_bidirectional_attention:
