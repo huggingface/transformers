@@ -9,12 +9,14 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.8.0'
+ARG PYTORCH='2.9.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 
 # This needs to be compatible with the above `PYTORCH`.
-ARG TORCHCODEC='0.7.0'
+ARG TORCHCODEC='0.8.0'
+
+ARG FLASH_ATTN='false'
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
@@ -90,7 +92,7 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 RUN python3 -m pip install --no-cache-dir quanto
 
 # After using A10 as CI runner, let's run FA2 tests
-RUN [ "$PYTORCH" != "pre" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
+RUN [ "$FLASH_ATTN" != "false" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
 
 # TODO (ydshieh): check this again
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
