@@ -112,7 +112,125 @@ New models are constantly released and if you want to implement a new model, ple
 
 If you are willing to contribute the model yourself, let us know so we can help you add it to 🤗 Transformers!
 
-We have a technical guide for [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/add_new_model).
+We have a technical guide for [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/modular_transformers).
+
+### Vision-Language Model Contribution Checklist
+
+If you're contributing a **vision-language model** (or any multimodal model that processes images/videos), please follow this checklist. Maintainers will use this to review your PR, and completing these steps will significantly increase the likelihood of your PR being merged quickly.
+
+**Required checklist for all vision-language model contributions:**
+
+☐ **1. Implement a modular file**
+
+All new models should use the modular architecture pattern. Create a `modular_<model_name>.py` file using the modular model converter:
+
+- Use the CLI, [`transformers add-new-model-like`](https://github.com/huggingface/transformers/blob/main/src/transformers/cli/add_new_model_like.py) to generate a modular skeleton and get started
+- All code should be in the modular file if possible. Modeling must be in it, it's better if configuration is in it as well. 
+- Reuse existing patterns from similar models as much as possible
+
+To verify your modular file is correct, run:
+
+```bash
+python utils/modular_model_converter.py <model_name>
+```
+
+This will generate the separate files (`modeling_*.py`, `configuration_*.py`, etc.) from your modular file. The CI will enforce that these generated files match your modular file.
+
+☐ **2. Add a fast image processor (for image models)**
+
+If your model processes images, implement a fast image processor that uses `torch` and `torchvision` instead of PIL/numpy for better inference performance:
+
+- See the detailed guide in [#36978](https://github.com/huggingface/transformers/issues/36978)
+- Fast processors inherit from `BaseImageProcessorFast`
+- Examples: `LlavaOnevisionImageProcessorFast`, `Idefics2ImageProcessorFast`
+
+☐ **3. Create a weight conversion script**
+
+Add a `convert_<model_name>_to_hf.py` script that converts the original model weights to the HuggingFace format:
+
+- Script should handle checkpoint loading, key mapping, and saving in HF format
+- Include usage examples and documentation in the script
+- Examples: [`convert_llava_onevision_weights_to_hf.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llava_onevision/convert_llava_onevision_weights_to_hf.py), [`convert_idefics2_weights_to_hf.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/idefics2/convert_idefics2_weights_to_hf.py)
+
+☐ **4. Add integration tests with exact output matching**
+
+At minimum, add an `IntegrationTest` class that tests end-to-end generation (processing and modelling) with **exact** output matching:
+
+- For generative models: test that generated text matches expected output exactly
+- For non-generative models: test that output logits match expected values
+- Tests should use real checkpoints (load in 4-bit or half precision if the checkpoint is too big to fit in our CI runners) and real inputs
+- Example pattern:
+
+```python
+class MyModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_model_integration(self):
+        model = MyModelForConditionalGeneration.from_pretrained("org/model-name")
+        processor = AutoProcessor.from_pretrained("org/model-name")
+
+        inputs = processor(images=image, text=prompt, return_tensors="pt")
+        output = model.generate(**inputs, max_new_tokens=20)
+
+        EXPECTED_TEXT = "exact expected output"
+        self.assertEqual(processor.decode(output[0]), EXPECTED_TEXT)
+```
+
+See `tests/models/llava_onevision/test_modeling_llava_onevision.py` for complete examples.
+
+☐ **5. Update documentation**
+
+Add or update model documentation:
+
+- Create if the cli hasn't `docs/source/en/model_doc/<model_name>.md` with usage examples
+- Include model description, paper link, and basic usage with `Pipeline` and `AutoModel`
+- Add the model to the appropriate TOC files
+
+☐ **6. Look for reusable patterns**
+
+The library has 400+ models with many established patterns:
+
+- Search for similar models (e.g., other vision-language models)
+- Reuse attention mechanisms, layer implementations, and processing patterns
+- Check models like LLaVA, Idefics2, Fuyu for vision-language patterns
+- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `check_model_inputs` and `_can_record_outputs`) where relevant. 
+- Don't reinvent the wheel
+
+☐ **7. Run quality checks and read the output**
+
+Before submitting your PR, install quality dependencies and run the full check suite:
+
+```bash
+pip install -e ".[quality]"
+make fixup
+```
+
+**Important**: Take time to read the output of `make fixup`. It will:
+- Lint and format your code automatically
+- Run consistency checks (imports, docstrings, etc.)
+- Show any remaining issues that need manual fixes
+
+All checks must pass before your PR can be merged.
+
+**If this checklist is complete, your PR has a very high likelihood of being merged!** Following these steps makes the maintainers' work much easier and will reduce the number of review iterations, getting your important work out there faster.
+
+#### Copy-pastable checklist for maintainers
+
+Here's a condensed version maintainers can copy into PRs:
+
+```markdown
+## Multimodal Model Addition Checklist
+
+Please ensure your PR completes all following items. See the [full checklist](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#vision-language-model-contribution-checklist) for details.
+
+- [ ] **Modular file**: `modular_<model_name>.py` implemented and verified with `python utils/modular_model_converter.py <model_name>`
+- [ ] **Fast image processor**: Implemented using `BaseImageProcessorFast` (see [#36978](https://github.com/huggingface/transformers/issues/36978))
+- [ ] **Conversion script**: `convert_<model_name>_to_hf.py` added with usage examples
+- [ ] **Integration tests**: End-to-end tests with exact output matching (text or logits)
+- [ ] **Documentation**: Model docs added/updated in `docs/source/en/model_doc/`
+- [ ] **Pattern reuse**: Verified against similar models (LLaVA, Idefics2, etc.)
+- [ ] **Quality checks**: `make fixup` passes with no errors
+
+```
 
 ## Do you want to add documentation?
 
