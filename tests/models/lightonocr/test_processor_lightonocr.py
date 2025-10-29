@@ -63,15 +63,20 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
         tokenizer.add_special_tokens(special_tokens_dict)
 
+        # Set special token attributes on the tokenizer for multimodal processing
+        tokenizer.image_token = "<|image_pad|>"
+        tokenizer.image_break_token = "<|vision_pad|>"
+        tokenizer.image_end_token = "<|vision_end|>"
+        tokenizer.image_token_id = tokenizer.convert_tokens_to_ids(tokenizer.image_token)
+        tokenizer.image_break_token_id = tokenizer.convert_tokens_to_ids(tokenizer.image_break_token)
+        tokenizer.image_end_token_id = tokenizer.convert_tokens_to_ids(tokenizer.image_end_token)
+
         # Create and save processor
         processor = LightOnOCRProcessor(
             image_processor=image_processor,
             tokenizer=tokenizer,
             patch_size=14,
             spatial_merge_size=2,
-            image_token="<|image_pad|>",
-            image_break_token="<|vision_pad|>",
-            image_end_token="<|vision_end|>",
         )
         processor.save_pretrained(self.tmpdirname)
 
