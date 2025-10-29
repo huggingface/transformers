@@ -1183,6 +1183,7 @@ class ModelTesterMixin:
 
                 inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
+                torch.manual_seed(0)
                 model = model_class(config)
                 model.to(torch_device)
                 model.train()
@@ -1195,6 +1196,7 @@ class ModelTesterMixin:
                 # grads here to collect a reference set of modules that have non-zero gradients (to filter layers like
                 # MoE that drop out parts of the model).
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+                torch.manual_seed(0)
                 loss = model(**inputs).loss
                 loss.backward()
                 grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
@@ -1212,6 +1214,7 @@ class ModelTesterMixin:
                 with unittest.mock.patch.object(
                     checkpointing_layer, "forward", wraps=checkpointing_layer.forward
                 ) as forward_mock:
+                    torch.manual_seed(0)
                     loss = model(**inputs).loss
                     loss.backward()
                     optimizer.step()
