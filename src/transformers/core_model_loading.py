@@ -29,6 +29,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Optional, Union
+from torch.distributed.tensor import DTensor
 
 import torch
 from torch import Tensor
@@ -283,12 +284,15 @@ class MergeModulelist(Concatenate):
             for group in value:
                 if not isinstance(group, Sequence) or len(group) == 0:
                     raise ValueError("MergeModulelist requires non-empty sub-sequences.")
+                group = [k for k in group if k.ndim]
                 out_shape = list(group[0].shape)
-                # group = [k.unsqueeze(self.dim) for k in group]
                 out_shape.insert(self.dim, len(group))
                 out = self._ensure_buffer(torch.Size(out_shape), dtype=group[0].dtype, device=group[0].device)
                 torch.stack(tuple(group), dim=self.dim, out=out)
-                merged.append(out.clone())  # This is bound to be slow...
+                # for off, tensor in enumerate(group):
+                #     out[off].copy_(tensor, non_blocking=tensor.is_cuda)
+                # torch.as_tensor(numpy.stack(batch))
+                merged.append(out.clone())  # TODO have a single staging tensor here as well!
         return merged
 
 
@@ -430,39 +434,72 @@ class Fp8Quantize(QuantizationOp):
         self._inverse_op = Fp8Dequantize
 
     def convert(self, input_dict: torch.Tensor, *, quant_config: dict[str, Any]) -> dict[str, torch.Tensor]:
+        # Unpack single key/value (value may be wrapped in a list)
         target_keys, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
-        block_size = quant_config.weight_block_size
-        if block_size is None and quant_config is not None:
-            block_size = getattr(quant_config, "weight_block_size", None)
+
+        # Resolve block size (support dict-like or attr-like quant_config)
+        block_size = None
+        if quant_config is not None:
+            if isinstance(quant_config, dict):
+                block_size = quant_config.get("weight_block_size")
+            else:
+                block_size = getattr(quant_config, "weight_block_size", None)
         if block_size is None:
             block_size = (value.shape[-2], value.shape[-1])
 
         block_m, block_n = block_size
-        rows, cols = value.shape[-2:]
+        rows, cols = value.shape[-2], value.shape[-1]
+
+        # Enforce exact tiling like your original
         if rows % block_m != 0 or cols % block_n != 0:
             raise ValueError(
                 f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n}). for {target_keys}"
             )
-        else:
-            original_shape = value.shape
-            value_fp32 = value.to(torch.float32)
-            reshaped = value_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
-            max_abs = reshaped.abs().amax(dim=(2, 4))
-            safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
-            scales = _FP8_MAX / safe_max_abs
-            scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))
-            scales_reshaped = scales.unsqueeze(-1).unsqueeze(2)
-            scaled = reshaped * scales_reshaped
-            if _FP8_IS_INT:
-                quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-            else:
-                quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-            quantized = quantized.reshape(original_shape)
-            inv_scales = (1.0 / scales).reshape(-1, rows // block_m, cols // block_n).to(torch.float32)
 
+        # Leading dims can be empty (2D) or include num_experts/... (3D+)
+        leading_shape = value.shape[:-2]
+        rows_tiles = rows // block_m
+        cols_tiles = cols // block_n
+
+        original_shape = value.shape
+        value_fp32 = value.to(torch.float32)
+
+        # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
+        reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
+
+        # Per-tile max-abs over the block dims
+        # dims: block_m is at -3, block_n is at -1 after the reshape
+        max_abs = reshaped.abs().amax(dim=(-3, -1))
+        safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
+
+        # Tile scale (we store inverse scale like your Linear: weight_scale_inv)
+        scales = _FP8_MAX / safe_max_abs
+        scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
+
+        # Broadcast scales back over the block dims and quantize
+        # max_abs/scales shape: (..., rows_tiles, cols_tiles)
+        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
+        scaled = reshaped * scales_broadcast
+
+        if _FP8_IS_INT:
+            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        else:
+            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+
+        quantized = quantized.reshape(original_shape)
+
+        inv_scales = (1.0 / scales).to(torch.float32)  # shape: (*leading, rows_tiles, cols_tiles)
+        if target_keys.endswith("weight"):
             scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
-            return {target_keys: quantized, scale_key: inv_scales[0]}
+        else:
+            scale_key = target_keys + "_scales_inv"
+
+        # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
+        return {
+            target_keys: quantized,
+            scale_key: inv_scales,
+        }
 
 
 class Fp8Dequantize(QuantizationOp):
@@ -509,7 +546,7 @@ class Fp8Dequantize(QuantizationOp):
         return dequantized.reshape(quantized_fp32.shape)
 
 
-@dataclass(slots=True, weakref_slot=True)
+@dataclass(slots=True)
 class WeightConverter:
     r"""
     A weight convert that acts on a pattern of source keys.
@@ -546,21 +583,28 @@ class WeightConverter:
         self._regex_pat = build_glob_alt(self.source_keys)
 
 
-def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc):
+def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc, distributed_operation):
     try:
         module_path, _, param_name = k.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
         param_value = v[0] if isinstance(v, list) else v[:]
-        if not isinstance(param_value, torch.nn.Parameter):
-            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
         ref = meta_model_state_dict.get(k, empty_tensor)
+
+        if not isinstance(param_value, torch.nn.Parameter):
+            if distributed_operation != {} and distributed_operation.use_dtensor:
+                param_value = DTensor.from_local(
+                    param_value, distributed_operation.device_mesh, distributed_operation.shard, run_check=False, shape=ref.size(), stride=ref.stride()
+                )
+            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+
         if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((k, param_value.shape, ref.shape))
         if k in missing_keys:
             missing_keys.remove(k)
+
         setattr(module_obj, param_name, param_value)
     except Exception as e:
-        misc[k] = f"{e} for {k} on {list(model.state_dict().keys())}"
+        misc[k] = f"{e} for {k} on {list(module_obj.state_dict().keys())}"
 
 
 @dataclass(slots=True)
@@ -590,12 +634,13 @@ def spawn_materialize(file_id, t) -> Future:
 
     return EXEC.submit(_job)
 
-def spawn_tp_materialize(file_id, t, sharding_method) -> Future:
+
+def spawn_tp_materialize(file_id, t, sharding_method, empty_tensor, tensor_idx) -> Future:
     sem = _file_sems[file_id]
 
     def _job():
         with sem:
-            return sharding_method(t)
+            return sharding_method.shard_tensor(t, empty_tensor, tensor_idx=tensor_idx)[0]
 
     return EXEC.submit(_job)
 
@@ -650,13 +695,22 @@ def convert_and_load_state_dict_in_model(
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
+        first_target_key = target_key.split("|")[0]
+        fut = None
         if device_mesh:
-            if matched_tp_pattern := match_glob(target_key.split('|')[0], tp_plan_alt, tp_plan_by_group_name):
-                if getattr(converter, "distributed_operation", None) is None:
-                    converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
-                fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation)
-        else: # If not TP, async move tensors
+            if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
+                empty_tensor = meta_model_state_dict.get(first_target_key)
+                if getattr(converter, "distributed_operation", {}) == {}:
+                    converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]]
+                    converter.distributed_operation.device_mesh = device_mesh
+                    converter.distributed_operation.rank = device_map[""].index
+                    converter.distributed_operation.empty_tensor = empty_tensor.clone()
+                shard_index=len(entry.collected_tensors[target_key].get(converter_key, []))
+                fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation, empty_tensor, shard_index)
+
+        if fut is None:  # If not TP, async move tensors
             fut = spawn_materialize(file_id, tensor)
+
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
         for t in target_key.split("|"):
             empty_tensor = meta_model_state_dict.get(t)
@@ -708,7 +762,7 @@ def convert_and_load_state_dict_in_model(
                                     op.convert({k: realized_value.pop(k)}, quant_config=quantizer.quantization_config)
                                 )
                             except Exception as e:
-                                misc[layer_name] = f"Failed to quantize with {op.__class__.__name__}: {e}"
+                                misc[layer_name] = f"{op.__class__.__name__}: {e}"
 
                     for k, output_value in realized_value.items():
                         matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
@@ -719,7 +773,7 @@ def convert_and_load_state_dict_in_model(
                         for src in converter.source_keys:  # what should happen to k when we meet k at saving
                             inverse_converters[k] = {src: converter}
                         set_param_for_module(
-                            model, k, output_value, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc
+                            model, k, output_value, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc, converter.distributed_operation
                         )
                         if progress_bar is not None:
                             progress_bar.update()

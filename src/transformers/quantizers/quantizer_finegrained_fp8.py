@@ -140,10 +140,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _load_parameter_into_model(model, param_name.rsplit(".", 1)[0] + ".weight_scale_inv", scale)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from ..integrations.finegrained_fp8 import FP8Linear
+        from ..integrations.finegrained_fp8 import FP8Expert, FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, FP8Linear):
+        if isinstance(module, (FP8Linear, FP8Expert)):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:

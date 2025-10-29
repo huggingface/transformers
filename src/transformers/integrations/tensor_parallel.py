@@ -18,6 +18,7 @@ import operator
 import os
 import re
 from functools import partial, reduce
+from typing import Optional
 
 import torch
 import torch.distributed as dist
@@ -270,6 +271,8 @@ def repack_weights(
             "Num blocks different from 2 is not supported yet. This is most likely a bug in your implementation as we only pack gate and up projections together."
         )
 
+
+
     actual_sharded_dim = sharded_dim if sharded_dim >= 0 else sharded_dim + packed_parameter.ndim
     total_size_on_sharded_dim = packed_parameter.shape[actual_sharded_dim]
     original_block_size_on_dim = total_size_on_sharded_dim // num_blocks
@@ -306,7 +309,7 @@ def repack_weights(
     return final_ordered_tensor
 
 
-def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
+def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: Optional[int]=None):
     """
     Generalized tensor sharding across a multi-dimensional device mesh.
     Extract only the fraction of the parameter owned by the given `rank` when the parameter would have gone sharding at provided `dim`.
@@ -358,35 +361,60 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
         rank (int): Global rank of the current process/device.
         dim (int): Dimension along which to shard the tensor.
     """
-    param_dim = empty_param.dim()
-
-    if dim < 0:
-        dim = param_dim + dim
-    if dim >= param_dim:
-        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param_dim}")
-
+    param_dim = empty_param.ndim
     # Flatten the mesh to get the total number of devices
     mesh_shape = device_mesh.shape
     world_size = reduce(operator.mul, mesh_shape)
+    if dim < 0:
+        dim = param_dim + dim
+    if empty_param.dim() == 3 and dim == 1 and len(param.get_shape()) == 2:
+        dim = 0
+    elif empty_param.dim() == 3 and dim == 2 and len(param.get_shape()) == 2:
+        dim = 0
+
+    shard_size = math.ceil(empty_param.size(dim) / world_size)
+    start = rank * shard_size
+    end = min(start + shard_size, empty_param.size(dim))
+
+    if dim >= param_dim:
+        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param_dim}")
 
     if rank >= world_size:
         raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
 
-    shard_size = math.ceil(empty_param.shape[dim] / world_size)
-    start = rank * shard_size
 
-    # Construct slicing index dynamically
-    end = min(start + shard_size, empty_param.shape[dim])
-    slice_indices = [slice(None)] * param_dim
-    if start < empty_param.shape[dim]:
+    # we have the full tensor not 1 part of it.
+    # in that case, we just assume that the weight was properly saved
+    # and thus because we TP if the layer is colwise it should not use this. Layer should be packed_colwise
+    # to inform that it needs to read form a packed tensor. It will also take care of the module list thingy.
+    # here we take care of potential chunking / layer split / layer chunking. 
+    # The only "hard" case is? if we collect q,k,v -> merge it into qkv. In that case 
+    # actually we still shard dim=0 does not change
+    # so only case is if the dim of the empty param is 3 and the shard dim is 0 -> we put the 
+    # tensor on a certain device (with the input tensor_index)
+    dimensions = param.get_shape()
+
+    if empty_param.dim() == 3 and dim ==0 and len(param.get_shape()) == 2:
+        # special case we don't "shard" just send this entire tensor to the correct rank.
+        if start <=tensor_idx < end:
+            # this tensor does need to be materialized on this device:
+            return param[:]
+        else:
+            return torch.empty([], dtype=torch.int64, device=rank)
+
+    slice_indices = [slice(None)] * len(param.get_shape())
+
+
+    if start < param.get_shape()[dim]:
         slice_indices[dim] = slice(start, end)
         param = param[tuple(slice_indices)]
-        if isinstance(param, list):
+        if isinstance(param, list):  # TODO handle the modulelist case!
             param = [p[:] for p in param]
         return param
-    dimensions = list(param.shape)
+
+
     dimensions[dim] = 0
-    return torch.empty(tuple(dimensions), dtype=torch.int64)
+    return torch.empty(tuple(dimensions), dtype=torch.int64) # empty allocates memory....
 
 
 def distribute_module(
@@ -413,6 +441,8 @@ class TensorParallelLayer:
     """
 
     use_dtensor = True
+    device_mes = None
+    rank = None
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh): ...
@@ -584,13 +614,16 @@ class ColwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
-    def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+    def shard_tensor(self, param, empty_param, param_type=None, tensor_idx=None):
+        device_mesh = self.device_mesh
+        rank = self.rank
         if param_type == "bias":
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1, tensor_idx)
             shard = [Shard(-1)]
         else:
             shard = [Shard(-2)]
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2, tensor_idx)
+        self.shard = shard
         return parameter, shard
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -620,12 +653,13 @@ class ColwiseParallel(TensorParallelLayer):
 
 class PackedColwiseParallel(ColwiseParallel):
     def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        return get_packed_weights(param, empty_param, device_mesh, rank, -2)
+        return get_packed_weights(param, empty_param, device_mesh, rank, -2), [Shard(-2)]
 
     def create_nn_parameter(
         self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh
     ):
         return nn.Parameter(param, requires_grad=param.is_floating_point())
+
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
@@ -672,6 +706,18 @@ class RowwiseParallel(TensorParallelLayer):
         self.output_layouts = (output_layouts or Replicate(),)
         self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
+
+    def shard_tensor(self, param, empty_param, param_type=None, tensor_idx=None):
+        device_mesh = self.device_mesh
+        rank = self.rank
+        if param_type == "bias":
+            shard = [Replicate()]
+            parameter = param[:]
+        else:
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1, tensor_idx=tensor_idx)
+            shard = [Shard(-1)]
+        self.shard = shard
+        return parameter, shard
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # Rowwise shard weight to Shard(1), bias to Replicate(), weight be Shard(1)
@@ -744,6 +790,9 @@ class RowwiseParallel(TensorParallelLayer):
 
 
 class PackedRowwiseParallel(RowwiseParallel):
+    def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        return get_packed_weights(param, empty_param, device_mesh, rank, -1), [Shard(-1)]
+
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
@@ -935,6 +984,9 @@ class RouterParallel(TensorParallelLayer):
             router_indices == -1, num_local_experts
         )  # masking class for one hot
         return router_scores, router_indices
+
+    def shard_tensor(self, param, *args, **kwargs):
+        return param[:], None
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # TODO: i'd like for this to be the default

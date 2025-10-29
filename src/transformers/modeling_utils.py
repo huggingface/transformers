@@ -2618,29 +2618,34 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.MultiheadAttention):
-            # This uses torch's original init
-            module._reset_parameters()
-        # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
-        # between modelings (because they are prefixed with the model name)
-        elif (
-            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
-            or "LayerNorm" in module.__class__.__name__
-            or "RMSNorm" in module.__class__.__name__
-        ):
-            # Norms can exist without weights (in which case they are None from torch primitives)
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(1.0)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
+        try:
+            if isinstance(
+                module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)
+            ):
+                module.weight.data.normal_(mean=0.0, std=std)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            elif isinstance(module, nn.Embedding):
+                module.weight.data.normal_(mean=0.0, std=std)
+                if module.padding_idx is not None:
+                    module.weight.data[module.padding_idx].zero_()
+            elif isinstance(module, nn.MultiheadAttention):
+                # This uses torch's original init
+                module._reset_parameters()
+            # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
+            # between modelings (because they are prefixed with the model name)
+            elif (
+                isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+                or "LayerNorm" in module.__class__.__name__
+                or "RMSNorm" in module.__class__.__name__
+            ):
+                # Norms can exist without weights (in which case they are None from torch primitives)
+                if hasattr(module, "weight") and module.weight is not None:
+                    module.weight.data.fill_(1.0)
+                if hasattr(module, "bias") and module.bias is not None:
+                    module.bias.data.zero_()
+        except Exception as e:
+            logger.warning_once(f"Failed to init: {str(e)}")
 
     def _initialize_weights(self, module):
         """
@@ -4708,7 +4713,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
         for k, v in sharded_metadata["weight_map"].items():
             key = pattern.match(k).group(1)
-            if key is not None and key != '':
+            if key is not None and key != "":
                 device = device_map[key]
             else:
                 device = device_map[""]
@@ -4735,6 +4740,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 hf_quantizer,
                 device_map,
                 keep_in_dtype,
+                device_mesh=device_mesh,
                 profile=profile_weight_conversion,
             )
 
@@ -5017,7 +5023,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
                 else:
-                    hf_quantizer.create_quantized_param(self, value, key, "cpu")
+                    # hf_quantizer.create_quantized_param(self, value, key, "cpu")
+                    pass
 
     def _initialize_missing_keys(self, missing_keys: list[str], is_quantized: bool) -> None:
         """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
