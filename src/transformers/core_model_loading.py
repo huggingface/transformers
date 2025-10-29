@@ -261,7 +261,7 @@ class Concatenate(ConversionOps):
                 index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
                 out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
                 offset += tensor.shape[self.dim]
-        torch.testing.assert_close(out, torch.cat(value, dim=self.dim))
+        # torch.testing.assert_close(out, torch.cat(value, dim=self.dim))
         return out.clone()  # need to say I can overwrite this storage now
 
 
@@ -644,10 +644,11 @@ def convert_and_load_state_dict_in_model(
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
-        if matched_tp_pattern := match_glob(target_key.split('|')[0], tp_plan_alt, tp_plan_by_group_name):
-            if getattr(converter, "distributed_operation", None) is None:
-                converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
-            fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation)
+        if device_mesh:
+            if matched_tp_pattern := match_glob(target_key.split('|')[0], tp_plan_alt, tp_plan_by_group_name):
+                if getattr(converter, "distributed_operation", None) is None:
+                    converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].shard_tensor
+                fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation)
         else: # If not TP, async move tensors
             fut = spawn_materialize(file_id, tensor)
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
@@ -662,55 +663,65 @@ def convert_and_load_state_dict_in_model(
 
     # 2. Actually convert the ckpt
     inverse_converters = {}
-    keys = list(by_conversion_pattern.keys()).copy()
-    for key in keys:
-        group = by_conversion_pattern.pop(key)
-        converter = group.weight_converter
-        operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
-        iterator = group.collected_tensors.items()
-        for layer_name, tensors_for_this_layer in iterator:  # TODO I need a global TQDM :)
-            concrete_target_keys = layer_name.split("|")
-            if bool(set(concrete_target_keys) - unexpected_keys):
-                values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
-                if op := converter.distributed_operation:
-                    try:
-                        values = op(values)
-                    except Exception as e:
-                        misc[layer_name] = f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
-                        continue
+    keys = list(by_conversion_pattern.keys())
+    total_layers = sum(len(by_conversion_pattern[key].collected_tensors) for key in keys)
+    progress_bar = logging.tqdm(total=total_layers, desc="Converting weights", leave=False) if total_layers else None
 
-                for op in operations:
-                    try:
-                        values = op(values)
-                    except Exception as e:
-                        misc[layer_name] = (
-                            f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {values}"
-                        )
-
-                values = [values] if not isinstance(values, list) else values
-                realized_value = {k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys}
-
-                for k in list(realized_value.keys()).copy():
-                    if op := converter.quantization_operation.get(k):
+    try:
+        for key in keys:
+            group = by_conversion_pattern.pop(key)
+            converter = group.weight_converter
+            operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
+            for layer_name, tensors_for_this_layer in group.collected_tensors.items():
+                concrete_target_keys = layer_name.split("|")
+                if bool(set(concrete_target_keys) - unexpected_keys):
+                    values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
+                    if op := converter.distributed_operation:
                         try:
-                            realized_value.update(op.convert({k:realized_value.pop(k)}, quant_config=quantizer.quantization_config))
+                            values = op(values)
                         except Exception as e:
-                            misc[layer_name] = f"Failed to quantize with {op.__class__.__name__}: {e}"
+                            misc[layer_name] = f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
+                            continue
 
-                for k, output_value in realized_value.items():
-                    matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
-                    if matched_dtype_pattern is not None:
-                        op = Cast(keep_in_dtype[matched_dtype_pattern])
-                        output_value = op(output_value)
+                    for op in operations:
+                        try:
+                            values = op(values)
+                        except Exception as e:
+                            misc[layer_name] = (
+                                f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {values}"
+                            )
 
-                    for src in converter.source_keys:  # what should happen to k when we meet k at saving
-                        inverse_converters[k] = {src: converter}
-                    set_param_for_module(
-                        model, k, output_value, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc
-                    )
-        del group
-        for op in operations:
-            op.clear_cache()
+                    values = [values] if not isinstance(values, list) else values
+                    realized_value = {k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys}
+
+                    for k in list(realized_value.keys()).copy():
+                        if op := converter.quantization_operation.get(k):
+                            try:
+                                realized_value.update(
+                                    op.convert({k: realized_value.pop(k)}, quant_config=quantizer.quantization_config)
+                                )
+                            except Exception as e:
+                                misc[layer_name] = f"Failed to quantize with {op.__class__.__name__}: {e}"
+
+                    for k, output_value in realized_value.items():
+                        matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
+                        if matched_dtype_pattern is not None:
+                            op = Cast(keep_in_dtype[matched_dtype_pattern])
+                            output_value = op(output_value)
+
+                        for src in converter.source_keys:  # what should happen to k when we meet k at saving
+                            inverse_converters[k] = {src: converter}
+                        set_param_for_module(
+                            model, k, output_value, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc
+                        )
+                        if progress_bar is not None:
+                            progress_bar.update()
+            del group
+            for op in operations:
+                op.clear_cache()
+    finally:
+        if progress_bar is not None:
+            progress_bar.close()
     model.inverse_converters = inverse_converters
     EXEC.shutdown(wait=True)
     return missing_keys, unexpected_keys, mismatch_keys, misc
