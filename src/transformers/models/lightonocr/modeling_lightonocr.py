@@ -1166,13 +1166,16 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
 
         # If pixel_values is provided, process vision encoder
         if pixel_values is not None:
-            # Process image through the vision encoder and projection
+            # Convert pixel_values to match device and dtype before processing
+            pixel_values = pixel_values.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            # Process image through the vision encoder and projection using get_image_features
             # Returns a list of image features, one per image
             # Note: image_sizes is automatically expanded by the generation framework during beam search
-            image_features = self.get_image_features(pixel_values, image_sizes)
+            image_features_list = self.get_image_features(pixel_values, image_sizes)
 
             # Concatenate all image features into a single tensor
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features_list, dim=0)
 
             # Get mask for image tokens using get_placeholder_mask
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
