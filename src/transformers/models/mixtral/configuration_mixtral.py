@@ -117,6 +117,7 @@ class MixtralConfig(PreTrainedConfig):
         "layers.*.mlp.gate": "ep_router",  # we need to replicate here to correctly route experts
         "layers.*.mlp.experts.gate_up_proj": "local_colwise",
         "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
         # "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise" ? if you load from
     }
     base_model_pp_plan = {

@@ -597,7 +597,7 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, misma
                 )
             param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
-        if ref is not None and ref.shape != param_value.shape:
+        if ref is not None and ref.shape != param_value.shape and distributed_operation.use_dtensor:
             mismatch_keys.add((k, param_value.shape, ref.shape))
         if k in missing_keys:
             missing_keys.remove(k)
