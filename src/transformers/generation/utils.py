@@ -3387,6 +3387,7 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         this_peer_finished = False
+        is_first_iteration = True
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
@@ -3500,11 +3501,17 @@ class GenerationMixin(ContinuousMixin):
             if generate_output["output_attentions"]:
                 if self.config.is_encoder_decoder:
                     cross_attention_chunks = _split_model_outputs(
-                        outputs.cross_attentions, cur_len, is_decoder_attention=False
+                        outputs.cross_attentions,
+                        cur_len,
+                        n_matches + 1,
+                        is_prefill_pass=is_first_iteration,
+                        is_decoder_attention=False,
                     )
                 decoder_attention_chunks = _split_model_outputs(
                     outputs.decoder_attentions if self.config.is_encoder_decoder else outputs.attentions,
                     cur_len,
+                    n_matches + 1,
+                    is_prefill_pass=is_first_iteration,
                     is_decoder_attention=True,
                 )
 
@@ -3512,12 +3519,26 @@ class GenerationMixin(ContinuousMixin):
                 hidden_states = (
                     outputs.decoder_hidden_states if self.config.is_encoder_decoder else outputs.hidden_states
                 )
-                decoder_hidden_state_chunks = _split_model_outputs(hidden_states, cur_len, is_decoder_attention=False)
+                decoder_hidden_state_chunks = _split_model_outputs(
+                    hidden_states,
+                    cur_len,
+                    n_matches + 1,
+                    is_prefill_pass=is_first_iteration,
+                    is_decoder_attention=False,
+                )
 
+            score_tensors = (
+                tuple(new_logits[:, i, :] for i in range(n_matches + 1)) if generate_output["output_scores"] else None
+            )
+            logits_tensors = (
+                tuple(next_token_logits[:, i, :] for i in range(n_matches + 1))
+                if generate_output["output_logits"]
+                else None
+            )
             self._accumulate_optional_generate_output(
                 generate_output,
-                score_tensors=torch.unbind(new_logits, dim=1),
-                logits_tensors=torch.unbind(next_token_logits, dim=1),
+                score_tensors=score_tensors,
+                logits_tensors=logits_tensors,
                 decoder_attentions_chunks=decoder_attention_chunks,
                 cross_attentions_chunks=cross_attention_chunks,
                 decoder_hidden_states_chunks=decoder_hidden_state_chunks,
@@ -3525,6 +3546,7 @@ class GenerationMixin(ContinuousMixin):
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, generate_output["scores"])
             this_peer_finished = unfinished_sequences.max() == 0
+            is_first_iteration = False
 
         if streamer is not None:
             streamer.end()
@@ -3863,7 +3885,9 @@ def _speculative_sampling(
     return valid_tokens, n_matches
 
 
-def _split_model_outputs(new_outputs: tuple, cur_len: int, is_decoder_attention: bool):
+def _split_model_outputs(
+    new_outputs: tuple, cur_len: int, added_len: int, is_prefill_pass: bool, is_decoder_attention: bool
+):
     """
     Given the (decoder/cross attentions)/(decoder hidden states) for multiple generated tokens, splits it into a tuple
     where each member corresponds to a single generated token.
@@ -3872,10 +3896,6 @@ def _split_model_outputs(new_outputs: tuple, cur_len: int, is_decoder_attention:
     # - Decoder attentions: (batch_size, num_heads, att_query_len, cur_len + added_len)
     # - Cross attentions: (batch_size, num_heads, att_query_len, enc_seq_len)
     # - Hidden states: (..., batch_size, att_query_len, hidden_size)
-    att_query_len = new_outputs[0].shape[-2]  # Take tensor length from first layer
-    # att_query_len is cur_len + added_len - 1 in prefill, added_len afterwards
-    added_len = att_query_len - cur_len + 1 if att_query_len > cur_len else att_query_len
-    is_prefill_pass = att_query_len > added_len
     outputs = ()
     if is_prefill_pass:
         prompt_block = ()
@@ -3887,7 +3907,7 @@ def _split_model_outputs(new_outputs: tuple, cur_len: int, is_decoder_attention:
         cur_len += 1
         added_len -= 1
 
-    for i in range(att_query_len - added_len, att_query_len):
+    for i in range(added_len):
         new_tuple = ()
         for layer in new_outputs:
             last_dim_size = cur_len + i if is_decoder_attention else layer.shape[-1]
