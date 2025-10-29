@@ -679,6 +679,11 @@ class SiglipTextModel(SiglipPreTrainedModel):
 
 
 class SiglipVisionTransformer(PreTrainedModel):
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
     _can_record_outputs = {
         "hidden_states": SiglipEncoderLayer,
         "attentions": SiglipAttention,
