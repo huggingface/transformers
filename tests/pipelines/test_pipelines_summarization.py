@@ -20,7 +20,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import is_pipeline_test, require_torch, slow, torch_device
-from transformers.tokenization_utils import TruncationStrategy
+from transformers.tokenization_python import TruncationStrategy
 
 from .test_pipelines_common import ANY
 

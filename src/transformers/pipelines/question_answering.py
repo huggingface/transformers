@@ -8,7 +8,7 @@ import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from ..modelcard import ModelCard
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     PaddingStrategy,
     add_end_docstrings,

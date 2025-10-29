@@ -18,7 +18,7 @@ from typing import Optional
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
-from ...tokenization_utils import AddedToken, BatchEncoding
+from ...tokenization_python import AddedToken, BatchEncoding
 from ...tokenization_tokenizers import TokenizersBackend
 from ...utils import logging
 

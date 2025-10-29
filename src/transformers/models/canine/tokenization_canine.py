@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -152,10 +152,6 @@ class CanineTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         return "".join(tokens)
-
-    # CanineTokenizer has no vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
-        return ()
 
 
 __all__ = ["CanineTokenizer"]

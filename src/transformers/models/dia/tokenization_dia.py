@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -63,6 +63,10 @@ class DiaTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             pad_token=pad_token,
             max_length=max_length,
+            offset=offset,
+            token_type_ids_pattern="all_zeros",
+            token_type_ids_include_special_tokens=True,
+            special_tokens_pattern="none",
             **kwargs,
         )
 
@@ -109,10 +113,6 @@ class DiaTokenizer(PreTrainedTokenizer):
             bstring += tok_string
         string = bstring.decode("utf-8", errors="ignore")
         return string
-
-    # No vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        return ()
 
 
 __all__ = ["DiaTokenizer"]

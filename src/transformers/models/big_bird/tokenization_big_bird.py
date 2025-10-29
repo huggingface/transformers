@@ -18,7 +18,7 @@ import os
 from shutil import copyfile
 from typing import Optional
 
-from ...tokenization_utils import AddedToken
+from ...tokenization_python import AddedToken
 from ...utils import is_sentencepiece_available, logging
 from ...tokenization_tokenizers import TokenizersBackend
 from tokenizers import Tokenizer, Regex, normalizers, pre_tokenizers, processors, decoders

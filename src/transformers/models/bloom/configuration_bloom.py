@@ -22,7 +22,7 @@ from packaging import version
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizer
+    from ... import PythonBackend
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
@@ -183,7 +183,7 @@ class BloomOnnxConfig(OnnxConfigWithPast):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: "PreTrainedTokenizer",
+        tokenizer: "PythonBackend",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,

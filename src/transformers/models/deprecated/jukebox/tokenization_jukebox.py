@@ -24,7 +24,7 @@ from typing import Any, Optional, Union
 import numpy as np
 import regex
 
-from ....tokenization_utils import AddedToken, PreTrainedTokenizer
+from ....tokenization_python import AddedToken, PreTrainedTokenizer
 from ....tokenization_utils_base import BatchEncoding
 from ....utils import TensorType, is_torch_available, logging
 from ....utils.generic import _is_numpy

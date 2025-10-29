@@ -18,7 +18,7 @@ import unittest
 from transformers import SPIECE_UNDERLINE
 from transformers.models.speecht5 import SpeechT5Tokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_python import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

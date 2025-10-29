@@ -22,7 +22,7 @@ from functools import cached_property
 from transformers import (
     MarkupLMProcessor,
     MarkupLMTokenizer,
-    PreTrainedTokenizer,
+    PythonBackend,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
 )
@@ -69,7 +69,7 @@ class MarkupLMProcessorTest(unittest.TestCase):
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
+    def get_tokenizer(self, **kwargs) -> PythonBackend:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:

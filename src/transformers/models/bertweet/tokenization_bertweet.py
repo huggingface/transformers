@@ -18,12 +18,11 @@
 import html
 import os
 import re
-from shutil import copyfile
 from typing import Optional
 
 import regex
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -296,29 +295,6 @@ class BertweetTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-        out_merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-        elif not os.path.isfile(self.vocab_file):
-            with open(out_vocab_file, "wb") as fi:
-                content_spiece_model = self.sp_model.serialized_model_proto()
-                fi.write(content_spiece_model)
-
-        if os.path.abspath(self.merges_file) != os.path.abspath(out_merge_file):
-            copyfile(self.merges_file, out_merge_file)
-
-        return out_vocab_file, out_merge_file
-
     # def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
     #     filtered_tokens = ' '.join(self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens))
     #     tokens_generated_so_far = re.sub('(@@ )', '', string=filtered_tokens)
@@ -548,7 +524,6 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
         remove_illegal (bool):
             If `True`, entities that can't be converted are removed. Otherwise, entities that can't be converted are
             kept "as is".
-
     Returns: A unicode string with the entities removed.
 
     See https://github.com/scrapy/w3lib/blob/master/w3lib/html.py

@@ -32,7 +32,7 @@ from parameterized import parameterized
 from transformers import (
     AutoTokenizer,
     BertTokenizer,
-    PreTrainedTokenizer,
+    PythonBackend,
     PreTrainedTokenizerBase,
     TokenizersBackend,
     is_mlx_available,
@@ -45,7 +45,7 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
 )
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_python import AddedToken
 
 from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
 from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
@@ -122,9 +122,9 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 def merge_model_tokenizer_mappings(
     model_mapping: dict["PretrainedConfig", "PreTrainedModel"],
-    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "TokenizersBackend"]],
+    tokenizer_mapping: dict["PretrainedConfig", tuple["PythonBackend", "TokenizersBackend"]],
 ) -> dict[
-    Union["PreTrainedTokenizer", "TokenizersBackend"],
+    Union["PythonBackend", "TokenizersBackend"],
     tuple["PretrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
@@ -147,7 +147,7 @@ def merge_model_tokenizer_mappings(
 
 
 def check_subword_sampling(
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PythonBackend,
     text: Optional[str] = None,
     test_sentencepiece_ignore_case: bool = True,
 ) -> None:
@@ -291,7 +291,7 @@ Hey how are you doing"""
         return [self.get_tokenizer(**kwargs)]
 
     @classmethod
-    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizer:
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PythonBackend:
         """Get a tokenizer instance from pretrained."""
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)

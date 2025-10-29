@@ -23,7 +23,7 @@ from typing import Optional, Union
 import regex as re
 
 from ....file_utils import ExplicitEnum, PaddingStrategy, TensorType, add_end_docstrings, is_pandas_available
-from ....tokenization_utils import AddedToken, PreTrainedTokenizer
+from ....tokenization_python import AddedToken, PreTrainedTokenizer
 from ....tokenization_utils_base import ENCODE_KWARGS_DOCSTRING, BatchEncoding, TextInput, TruncationStrategy
 from ....utils import logging
 

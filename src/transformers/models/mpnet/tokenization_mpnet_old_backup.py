@@ -20,7 +20,7 @@ from typing import Optional
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
 
-from ...tokenization_utils import AddedToken
+from ...tokenization_python import AddedToken
 from ...tokenizers_backend import TokenizersBackend
 from ...utils import logging
 

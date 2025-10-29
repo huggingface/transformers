@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any, Optional
 
-from ... import PreTrainedTokenizer, is_torch_available
+from ... import PythonBackend, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
@@ -170,7 +170,7 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,

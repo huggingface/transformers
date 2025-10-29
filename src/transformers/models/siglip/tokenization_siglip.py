@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Optional
 import sentencepiece as spm
 
 from ...convert_slow_tokenizer import import_protobuf
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken
 
 

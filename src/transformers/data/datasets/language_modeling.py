@@ -24,7 +24,7 @@ import torch
 from filelock import FileLock
 from torch.utils.data import Dataset
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 

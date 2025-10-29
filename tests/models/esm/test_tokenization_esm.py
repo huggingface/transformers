@@ -19,7 +19,7 @@ import unittest
 
 from transformers.models.esm.tokenization_esm import VOCAB_FILES_NAMES, EsmTokenizer
 from transformers.testing_utils import require_tokenizers
-from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_python import PreTrainedTokenizer
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 

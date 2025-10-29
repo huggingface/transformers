@@ -21,7 +21,7 @@ from typing import Optional
 
 import regex as re
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from .number_normalizer import EnglishNormalizer
 

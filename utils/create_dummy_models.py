@@ -38,7 +38,7 @@ from transformers import (
     TOKENIZER_MAPPING,
     AutoTokenizer,
     LayoutLMv3TokenizerFast,
-    PreTrainedTokenizer,
+    PythonBackend,
     PreTrainedTokenizerFast,
     logging,
 )
@@ -991,7 +991,7 @@ def get_config_overrides(config_class, processors):
         if isinstance(processor, PreTrainedTokenizerFast):
             tokenizer = processor
             break
-        elif isinstance(processor, PreTrainedTokenizer):
+        elif isinstance(processor, PythonBackend):
             tokenizer = processor
 
     if tokenizer is None:

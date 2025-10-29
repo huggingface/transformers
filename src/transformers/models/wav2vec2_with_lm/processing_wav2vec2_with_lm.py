@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from pyctcdecode import BeamSearchDecoderCTC
 
     from ...feature_extraction_utils import FeatureExtractionMixin
-    from ...tokenization_utils import PreTrainedTokenizerBase
+    from ...tokenization_python import PreTrainedTokenizerBase
 
 
 ListOfDict = list[dict[str, Union[int, str]]]

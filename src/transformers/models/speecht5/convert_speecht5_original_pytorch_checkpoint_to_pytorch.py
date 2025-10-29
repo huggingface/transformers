@@ -28,7 +28,7 @@ from transformers import (
     SpeechT5Tokenizer,
     logging,
 )
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_python import AddedToken
 
 
 logging.set_verbosity_info()

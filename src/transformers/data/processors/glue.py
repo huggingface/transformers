@@ -20,7 +20,7 @@ import warnings
 from enum import Enum
 from typing import Optional, Union
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 from .utils import DataProcessor, InputExample, InputFeatures
 

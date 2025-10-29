@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 import sentencepiece as spm
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import SPIECE_UNDERLINE, logging
 from ...utils.import_utils import requires
 

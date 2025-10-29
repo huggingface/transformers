@@ -21,7 +21,7 @@ from tokenizers import Tokenizer, normalizers, pre_tokenizers, processors, decod
 from tokenizers.models import WordPiece
 
 from ...tokenization_tokenizers import TokenizersBackend
-from ...tokenization_utils import AddedToken
+from ...tokenization_python import AddedToken
 from ...utils import logging
 
 

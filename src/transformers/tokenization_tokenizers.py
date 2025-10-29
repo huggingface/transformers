@@ -33,7 +33,7 @@ from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, Wo
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_python import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     AddedToken,

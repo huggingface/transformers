@@ -29,7 +29,7 @@ from transformers import (
     BertTokenizer,
     BertTokenizerFast,
     LlamaTokenizerFast,
-    PreTrainedTokenizer,
+    PythonBackend,
     PreTrainedTokenizerFast,
     TensorType,
     TokenSpan,
@@ -58,7 +58,7 @@ class TokenizerUtilsTest(unittest.TestCase):
             tokenizer = tokenizer_class.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, tokenizer_class)
-            self.assertIsInstance(tokenizer, PreTrainedTokenizer)
+            self.assertIsInstance(tokenizer, PythonBackend)
 
             for special_tok in tokenizer.all_special_tokens:
                 self.assertIsInstance(special_tok, str)

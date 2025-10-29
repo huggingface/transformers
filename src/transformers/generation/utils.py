@@ -43,7 +43,7 @@ from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
 from ..pytorch_utils import isin_mps_friendly
-from ..tokenization_utils import ExtensionsTrie
+from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     TransformersKwargs,

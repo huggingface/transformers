@@ -33,7 +33,7 @@ from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 from transformers import (
     AutoTokenizer,
     GenerationConfig,
-    PreTrainedTokenizer,
+    PythonBackend,
 )
 from transformers.commands import BaseTransformersCLICommand
 from transformers.commands.serving import ServeArguments, ServeCommand
@@ -507,7 +507,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
     @staticmethod
     def parse_eos_tokens(
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         generation_config: GenerationConfig,
         eos_tokens: Optional[str],
         eos_token_ids: Optional[str],

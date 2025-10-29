@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any, Optional
 
-from ... import PretrainedConfig, PreTrainedTokenizer
+from ... import PretrainedConfig, PythonBackend
 from ...onnx import OnnxConfig, PatchingSpec
 from ...utils import is_torch_available, logging
 
@@ -150,7 +150,7 @@ class LayoutLMOnnxConfig(OnnxConfig):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,

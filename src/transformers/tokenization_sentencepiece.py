@@ -24,7 +24,7 @@ from typing import Any, Optional, Union, overload
 
 import sentencepiece as spm
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_python import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     AddedToken,

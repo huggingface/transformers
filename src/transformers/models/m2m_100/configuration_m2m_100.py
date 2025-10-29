@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any
 
-from ... import PreTrainedTokenizer
+from ... import PythonBackend
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
@@ -185,7 +185,7 @@ class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
     # was done for BART so that it can be updated if need be.
     def _generate_dummy_inputs_for_sequence_classification_and_question_answering(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -211,7 +211,7 @@ class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
     # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_default_and_seq2seq_lm
     def _generate_dummy_inputs_for_default_and_seq2seq_lm(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,

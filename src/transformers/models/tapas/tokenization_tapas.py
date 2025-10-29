@@ -28,7 +28,7 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_python import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     VERY_LARGE_INTEGER,

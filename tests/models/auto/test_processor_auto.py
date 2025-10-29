@@ -40,7 +40,7 @@ from transformers import (
     Wav2Vec2Processor,
 )
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
-from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
+from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
     PROCESSOR_NAME,

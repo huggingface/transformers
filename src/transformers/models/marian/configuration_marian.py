@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any
 
-from ... import PreTrainedTokenizer
+from ... import PythonBackend
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
@@ -226,7 +226,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
     def _generate_dummy_inputs_for_default_and_seq2seq_lm(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -299,7 +299,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
     def _generate_dummy_inputs_for_causal_lm(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -341,7 +341,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
     # We renamed this function because Marian models do not have a sequence classification or question answering head
     def _generate_dummy_inputs_for_encoder_and_decoder(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -366,7 +366,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,

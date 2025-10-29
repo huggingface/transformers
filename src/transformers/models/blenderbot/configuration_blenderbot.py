@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any
 
-from ... import PreTrainedTokenizer
+from ... import PythonBackend
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import is_torch_available
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
@@ -224,7 +224,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
     def _generate_dummy_inputs_for_default_and_seq2seq_lm(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -280,7 +280,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
     def _generate_dummy_inputs_for_causal_lm(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -316,7 +316,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
     # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_sequence_classification_and_question_answering
     def _generate_dummy_inputs_for_sequence_classification_and_question_answering(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -342,7 +342,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
     # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig.generate_dummy_inputs
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PythonBackend,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,

@@ -18,7 +18,7 @@ import os
 from shutil import copyfile
 from typing import Any, Optional
 
-from ....tokenization_utils import PreTrainedTokenizer
+from ....tokenization_python import PreTrainedTokenizer
 from ....utils import logging
 
 

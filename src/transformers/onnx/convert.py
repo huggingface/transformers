@@ -36,7 +36,7 @@ if is_torch_available():
 if TYPE_CHECKING:
     from ..feature_extraction_utils import FeatureExtractionMixin
     from ..processing_utils import ProcessorMixin
-    from ..tokenization_utils import PreTrainedTokenizer
+    from ..tokenization_python import PreTrainedTokenizer
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

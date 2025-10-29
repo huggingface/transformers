@@ -4,8 +4,8 @@ import shutil
 import tempfile
 from typing import TYPE_CHECKING
 
-from transformers import AutoTokenizer, PreTrainedTokenizer, TokenizersBackend
-from transformers.tokenization_utils import AddedToken
+from transformers import AutoTokenizer, PythonBackend, TokenizersBackend
+from transformers.tokenization_python import AddedToken
 
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ class SentencePieceBackendTesterMixin:
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @classmethod
-    def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
+    def get_tokenizer(cls, **kwargs) -> PythonBackend:
         merged_kwargs = {}
         if cls.from_pretrained_kwargs is not None:
             merged_kwargs.update(cls.from_pretrained_kwargs)

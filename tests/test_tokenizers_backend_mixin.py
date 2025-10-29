@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from parameterized import parameterized
 
 from transformers import TokenizersBackend
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_python import AddedToken
 
 SMALL_TRAINING_CORPUS = [
     ["This is the first sentence.", "This is the second one."],

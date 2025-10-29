@@ -19,7 +19,7 @@ import os
 import re
 from typing import Any, Optional, Union
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import is_phonemizer_available, is_uroman_available, logging
 
 
