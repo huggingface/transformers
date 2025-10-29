@@ -260,6 +260,10 @@ class LightOnOCRProcessor(ProcessorMixin):
             mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
+        # Convert image_sizes to tensor if return_tensors is specified
+        if image_inputs.get("image_sizes") is not None and return_tensors == "pt":
+            image_inputs["image_sizes"] = torch.tensor(image_inputs["image_sizes"])
+
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
@@ -618,10 +622,6 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         Returns:
             List of image feature tensors, one per image
         """
-        # Convert image_sizes to tensor if it's a list
-        if isinstance(image_sizes, list):
-            image_sizes = torch.tensor(image_sizes, device=pixel_values.device)
-
         # Convert image_sizes tensor to list of tuples for compatibility with vision encoder
         image_sizes_list = [(int(h), int(w)) for h, w in image_sizes]
 
