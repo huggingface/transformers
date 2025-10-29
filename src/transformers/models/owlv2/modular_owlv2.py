@@ -52,7 +52,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
     crop_size = None
     do_center_crop = None
 
-    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
+    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.0) -> "torch.Tensor":
         """
         Pad an image with zeros to the given size.
         """
@@ -69,7 +69,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         disable_grouping: Optional[bool],
-        constant_value: float = 0.5,
+        constant_value: float = 0.0,
         **kwargs,
     ) -> list["torch.Tensor"]:
         """
