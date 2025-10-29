@@ -29,6 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -249,8 +250,6 @@ class Qwen3Attention(nn.Module):
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-
-        from ...integrations.hub_kernels import lazy_load_kernel
 
         rotary_kernel = lazy_load_kernel("rotary_emb")
         self.rotary_fn = rotary_kernel.apply_rotary_transformers if rotary_kernel is not None else apply_rotary_pos_emb
