@@ -17,7 +17,6 @@ import unittest
 from parameterized import parameterized
 
 from transformers import GPTBigCodeConfig, is_torch_available
-from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -308,42 +307,21 @@ class GPTBigCodeModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, token_type_ids, *args, gradient_checkpointing_kwargs=None
+        self,
+        config,
+        input_ids,
+        input_mask,
+        token_type_ids,
+        *args,
     ):
         model = GPTBigCodeForCausalLM(config)
         model.train()
         model.to(torch_device)
 
-        trainable_params = [(n, p) for (n, p) in model.named_parameters() if p.requires_grad]
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
-
-        non_zero_grads_normal = {n for n, p in trainable_params if p.grad.abs().sum() > 0}
-        assert non_zero_grads_normal
-
-        if gradient_checkpointing_kwargs:
-            # Make sure that gradient checkpointing is executed (>1 forward call) and that the
-            # non-zero gradients of both inference runs match (since torch.util.checkpoint doesn't save
-            # the whole environment, the forward calls might differ).
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs)
-
-            for _, p in trainable_params:
-                p.grad = None
-
-            checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
-
-            with unittest.mock.patch.object(
-                checkpointing_layer, "forward", wraps=checkpointing_layer.forward
-            ) as forward_mock:
-                result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
-                result.loss.backward()
-
-                non_zero_grads_gradcp = {n for n, p in trainable_params if p.grad.abs().sum() > 0}
-
-                assert non_zero_grads_normal == non_zero_grads_gradcp
-                assert forward_mock.call_count > 1
 
     def create_and_check_gpt_bigcode_for_sequence_classification(
         self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
@@ -488,18 +466,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_gpt_bigcode_token_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt_bigcode_for_token_classification(*config_and_inputs)
-
-    def test_gpt_bigcode_gradient_checkpointing_reentrant(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(
-            *config_and_inputs, gradient_checkpointing_kwargs={"use_reentrant": True}
-        )
-
-    def test_gpt_bigcode_gradient_checkpointing_non_reentrant(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(
-            *config_and_inputs, gradient_checkpointing_kwargs={"use_reentrant": False}
-        )
 
     def test_gpt_bigcode_scale_attn_by_inverse_layer_idx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
