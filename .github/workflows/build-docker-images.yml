@@ -44,7 +44,7 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}-test
+          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
 
   flash-attn-ci-image:
     name: "PyTorch with Flash Attn [dev]"
@@ -74,4 +74,4 @@ jobs:
             TORCHCODEC=0.7.0
             FLASH_ATTN=yes
           push: true
-          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}-test:flash-attn
+          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}:flash-attn
