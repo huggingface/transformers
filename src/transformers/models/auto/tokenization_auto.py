@@ -1134,7 +1134,18 @@ class AutoTokenizer:
             tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
 
             if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
-                return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                try:
+                    return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                except (OSError, ValueError, ImportError) as e:
+                    if tokenizer_class_py is not None:
+                        logger.warning(
+                            f"Failed to load fast tokenizer from {pretrained_model_name_or_path}. "
+                            f"Error: {e}. Falling back to slow tokenizer."
+                        )
+                        return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                    else:
+                        # No slow tokenizer available, re-raise the exception
+                        raise
             else:
                 if tokenizer_class_py is not None:
                     return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
