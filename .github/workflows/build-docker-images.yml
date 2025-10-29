@@ -200,6 +200,37 @@ jobs:
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
+  cache-latest-pytorch-amd:
+    name: "Cache Latest Pytorch (AMD) Image"
+    needs: latest-pytorch-amd
+    runs-on:
+      group: amd-mi325-1gpu
+    steps:
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+        
+      - 
+        name: Pull and save docker image to cache
+        run: |
+          image="huggingface/transformers-pytorch-amd-gpu"
+          final_path="/mnt/image-cache/transformers-pytorch-amd-gpu.tar"
+          tmp_path="${final_path}.tmp"
+
+          echo "Pulling image: ${image}"
+          docker pull "${image}"
+
+          echo "Saving to temp file: ${tmp_path}"
+          docker save "${image}" -o "${tmp_path}"
+
+          echo "Moving to final path: ${final_path}"
+          mv -f "${tmp_path}" "${final_path}"
+
+          echo "Cache populated successfully at ${final_path}"
+
   latest-pytorch-deepspeed-amd:
     name: "PyTorch + DeepSpeed (AMD) [dev]"
     runs-on:
