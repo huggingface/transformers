@@ -334,8 +334,8 @@ class FP8Linear(nn.Linear):
             return F.linear(input, self.weight, self.bias)
         else:
             if isinstance(self.weight, torch.distributed.tensor.DTensor):
-                weight = self.weight._local_tensor
-                scale_inv = self.weight_scale_inv._local_tensor
+                weight = self.weight._local_tensor.contiguous()
+                scale_inv = self.weight_scale_inv._local_tensor.contiguous()
             else:
                 weight = self.weight
                 scale_inv = self.weight_scale_inv
