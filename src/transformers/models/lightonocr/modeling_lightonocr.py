@@ -1101,10 +1101,32 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.Tensor, image_sizes: list[tuple[int, int]]):
-        visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
+    def get_image_features(self, pixel_values: torch.Tensor, image_sizes: Union[torch.Tensor, list]):
+        """
+        Obtains image features from the vision encoder and projection.
 
-        image_features = self.vision_projection(visual_features.squeeze(0), image_sizes)
+        Args:
+            pixel_values: Image tensors
+            image_sizes: Tensor or list of (height, width) pairs for each image
+
+        Returns:
+            List of image feature tensors, one per image
+        """
+        # Convert image_sizes to tensor if it's a list
+        if isinstance(image_sizes, list):
+            image_sizes = torch.tensor(image_sizes, device=pixel_values.device)
+
+        # Convert image_sizes tensor to list of tuples for compatibility with vision encoder
+        image_sizes_list = [(int(h), int(w)) for h, w in image_sizes]
+
+        visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes_list).last_hidden_state
+
+        image_features = self.vision_projection(visual_features.squeeze(0), image_sizes_list)
+
+        # Split features per image based on the effective patch size
+        downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
+        split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
+        image_features = torch.split(image_features, split_sizes)
 
         return image_features
 
@@ -1113,6 +1135,11 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
 
     def get_decoder(self):
         return self.language_model
+
+    @property
+    def vision_model(self):
+        """Alias for vision_encoder to match standard composite model naming."""
+        return self.vision_encoder
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -1144,7 +1171,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
-        image_sizes: Optional[list[tuple[int, int]]] = None,
+        image_sizes: Optional[Union[torch.Tensor, list]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[torch.Tensor] = None,
@@ -1162,16 +1189,18 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         # If pixel_values is provided, process vision encoder
         if pixel_values is not None:
             # Process image through the vision encoder and projection
-            projected_visual = self.get_image_features(pixel_values, image_sizes)
+            # Returns a list of image features, one per image
+            # Note: image_sizes is automatically expanded by the generation framework during beam search
+            image_features = self.get_image_features(pixel_values, image_sizes)
 
-            # Convert to same dtype and device
-            # projected_visual = projected_visual.to(inputs_embeds.dtype, inputs_embeds.device)
+            # Concatenate all image features into a single tensor
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Get mask for image tokens using get_placeholder_mask
-            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, projected_visual)
+            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
 
             # Replace image tokens with visual embeddings using masked_scatter
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, projected_visual)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
         # Get language model outputs
         outputs = self.language_model(
@@ -1220,7 +1249,7 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
         self,
         input_ids: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
-        image_sizes: Optional[list[tuple[int, int]]] = None,
+        image_sizes: Optional[Union[torch.Tensor, list]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[torch.Tensor] = None,
@@ -1291,6 +1320,11 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
 
     @property
     def vision_encoder(self):
+        return self.model.vision_encoder
+
+    @property
+    def vision_model(self):
+        """Alias for vision_encoder to match standard composite model naming."""
         return self.model.vision_encoder
 
 

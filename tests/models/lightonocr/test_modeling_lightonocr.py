@@ -156,8 +156,10 @@ class LightOnOCRVisionText2TextModelTester:
 
         attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
-        # Create image_sizes - must match batch size
-        image_sizes = [(self.image_size, self.image_size)] * self.batch_size
+        # Create image_sizes as tensor - must match batch size
+        image_sizes = torch.tensor(
+            [[self.image_size, self.image_size]] * self.batch_size, dtype=torch.long, device=torch_device
+        )
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -196,8 +198,10 @@ class LightOnOCRVisionText2TextModelTester:
 
         attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
-        # Create image_sizes - must match batch size
-        image_sizes = [(self.image_size, self.image_size)] * batch_size
+        # Create image_sizes as tensor - must match batch size
+        image_sizes = torch.tensor(
+            [[self.image_size, self.image_size]] * batch_size, dtype=torch.long, device=torch_device
+        )
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -290,7 +294,7 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_sizes = image_sizes + image_sizes
+            image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
 
     def test_spatial_merge_size(self):
@@ -336,15 +340,19 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             ).to(torch_device)
 
             # Different image sizes (but still need to be divisible by patch_size)
-            image_sizes = [
-                (self.model_tester.image_size, self.model_tester.image_size),
-                (self.model_tester.image_size, self.model_tester.image_size),
-            ]
+            image_sizes = torch.tensor(
+                [[self.model_tester.image_size, self.model_tester.image_size]] * batch_size,
+                dtype=torch.long,
+                device=torch_device,
+            )
 
             num_patches = (self.model_tester.image_size // self.model_tester.patch_size) ** 2
             num_image_tokens = num_patches // (config.spatial_merge_size**2)
 
             input_ids = ids_tensor([batch_size, 10 + num_image_tokens], config.text_config.vocab_size - 1) + 1
+            # Ensure no tokens accidentally equal image_token_id
+            input_ids[input_ids == config.image_token_id] = config.image_token_id + 1
+            # Now place image tokens at the beginning
             input_ids[:, :num_image_tokens] = config.image_token_id
             input_ids = input_ids.to(torch_device)
 
@@ -460,17 +468,23 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         model = LightOnOCRModel(config).to(torch_device)
         model.eval()
 
+        # Convert image_sizes to list for vision_encoder
+        if isinstance(input_dict["image_sizes"], torch.Tensor):
+            image_sizes_list = [(int(h), int(w)) for h, w in input_dict["image_sizes"]]
+        else:
+            image_sizes_list = input_dict["image_sizes"]
+
         with torch.no_grad():
             # Get vision features
             vision_outputs = model.vision_encoder(
                 pixel_values=input_dict["pixel_values"].to(torch_device),
-                image_sizes=input_dict["image_sizes"],
+                image_sizes=image_sizes_list,
             )
 
             # Project vision features
             projected = model.vision_projection(
                 vision_outputs.last_hidden_state.squeeze(0),
-                input_dict["image_sizes"],
+                image_sizes_list,
             )
 
             # Check output dimensions - should match text hidden size
@@ -486,13 +500,17 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         model.eval()
 
         with torch.no_grad():
-            image_features = model.get_image_features(
+            image_features_list = model.get_image_features(
                 pixel_values=input_dict["pixel_values"].to(torch_device),
                 image_sizes=input_dict["image_sizes"],
             )
 
-            # Check that features are returned and have correct shape
-            self.assertIsNotNone(image_features)
+            # Check that features are returned as a list
+            self.assertIsNotNone(image_features_list)
+            self.assertIsInstance(image_features_list, (list, tuple))
+
+            # Concatenate features and check shape
+            image_features = torch.cat(image_features_list, dim=0)
             self.assertEqual(image_features.shape[-1], config.text_config.hidden_size)
 
 
@@ -573,7 +591,7 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
         batch_size = 2
         image_size = 112
         pixel_values = torch.randn(batch_size, 3, image_size, image_size, device=torch_device)
-        image_sizes = [(image_size, image_size)] * batch_size
+        image_sizes = torch.tensor([[image_size, image_size]] * batch_size, dtype=torch.long, device=torch_device)
 
         # Calculate number of image tokens
         num_patches = (image_size // 14) ** 2  # patch_size = 14
