@@ -176,22 +176,35 @@ class LightOnOCRProcessor(ProcessorMixin):
         patch_size: int = 14,
         spatial_merge_size: int = 2,
         chat_template=None,
-        image_token="<|image_pad|>",
-        image_break_token="<|vision_pad|>",
-        image_end_token="<|vision_end|>",
         **kwargs,
     ):
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         # Calculate effective patch size for image processing
         self.effective_patch_size = patch_size * spatial_merge_size
-        self.image_token = image_token
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        self.image_break_token = image_break_token
-        self.image_end_token = image_end_token
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
-        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+
+        # Get special tokens from tokenizer attributes
+        # These should be set on the tokenizer before creating the processor
+        self.image_token = getattr(tokenizer, "image_token", "<|image_pad|>")
+        self.image_break_token = getattr(tokenizer, "image_break_token", "<|vision_pad|>")
+        self.image_end_token = getattr(tokenizer, "image_end_token", "<|vision_end|>")
+
+        # Get token IDs from tokenizer special attributes or convert from token strings
+        if hasattr(tokenizer, "image_token_id"):
+            self.image_token_id = tokenizer.image_token_id
+        else:
+            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+
+        if hasattr(tokenizer, "image_break_token_id"):
+            self.image_break_token_id = tokenizer.image_break_token_id
+        else:
+            self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
+
+        if hasattr(tokenizer, "image_end_token_id"):
+            self.image_end_token_id = tokenizer.image_end_token_id
+        else:
+            self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+
         self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
         # Set the default patch_size for images_kwargs
