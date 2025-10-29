@@ -817,6 +817,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
