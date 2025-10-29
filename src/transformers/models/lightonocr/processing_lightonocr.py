@@ -202,7 +202,10 @@ class LightOnOCRProcessor(ProcessorMixin):
 
         # Convert image_sizes to tensor if return_tensors is specified
         if image_inputs.get("image_sizes") is not None and return_tensors == "pt":
-            image_inputs["image_sizes"] = torch.tensor(image_inputs["image_sizes"])
+            if not isinstance(image_inputs["image_sizes"], torch.Tensor):
+                image_inputs["image_sizes"] = torch.tensor(image_inputs["image_sizes"])
+            else:
+                image_inputs["image_sizes"] = image_inputs["image_sizes"].clone()
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
