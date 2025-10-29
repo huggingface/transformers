@@ -1,0 +1,60 @@
+name: Nvidia CI - Flash Attn
+
+on:
+  repository_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+  push:
+    branches:
+      - run_nvidia_ci_flash_attn*
+  workflow_dispatch:
+    inputs:
+      prev_workflow_run_id:
+        description: 'previous workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+      other_workflow_run_id:
+        description: 'other workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+
+
+# Used for `push` to easily modify the target workflow runs to compare against
+env:
+    prev_workflow_run_id: ""
+    other_workflow_run_id: ""
+
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Setup
+        run: |
+          mkdir "setup_values"
+          echo "${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/prev_workflow_run_id.txt"
+          echo "${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}" > "setup_values/other_workflow_run_id.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup_values
+          path: setup_values
+
+
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-flash-attn"
+      docker: huggingface/transformers-all-latest-gpu
+      ci_event: Daily CI
+      runner_type: "a10"
+      report_repo_id: hf-internal-testing/transformers_flash_attn_ci
+      commit_sha: ${{ github.sha }}
+      pytest_marker: "flash_attn_test or flash_attn_3_test"
+    secrets: inherit
