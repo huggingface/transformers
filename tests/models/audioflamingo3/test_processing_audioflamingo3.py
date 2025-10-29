@@ -18,15 +18,17 @@ import shutil
 import tempfile
 import unittest
 
+from parameterized import parameterized
+
 from transformers import (
     AudioFlamingo3Processor,
     AutoProcessor,
     AutoTokenizer,
     WhisperFeatureExtractor,
 )
-from transformers.testing_utils import require_torch, require_torchaudio
+from transformers.testing_utils import require_librosa, require_torch, require_torchaudio
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 
 class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -150,3 +152,13 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         formatted = processor.tokenizer.apply_chat_template(conversations, tokenize=False, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted)
+
+    # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
+    @require_librosa
+    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
+        if return_tensors == "np":
+            self.skipTest("AudioFlamingo3 only supports PyTorch tensors")
+        self._test_apply_chat_template(
+            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
+        )

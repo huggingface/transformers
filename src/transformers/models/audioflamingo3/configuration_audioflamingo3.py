@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AudioFlamingo3 model configuration"""
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -60,7 +58,7 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by dividing by sqrt(d_model).
@@ -104,7 +102,7 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         dropout=0.0,
         attention_dropout=0.0,
         activation_dropout=0.0,
-        init_std=0.02,
+        initializer_range=0.02,
         scale_embedding=False,
         max_source_positions=1500,
         **kwargs,
@@ -120,10 +118,10 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.activation_function = activation_function
-        self.init_std = init_std
+        self.initializer_range = initializer_range
         self.layerdrop = layerdrop
         self.num_hidden_layers = num_hidden_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.scale_embedding = scale_embedding
         self.max_source_positions = max_source_positions
 
 

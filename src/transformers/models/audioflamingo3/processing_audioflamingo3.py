@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Processor class for AudioFlamingo3.
-"""
-
 from typing import Optional, Union
 
 import numpy as np
@@ -26,7 +22,11 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import logging
+from ...utils import is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -40,7 +40,7 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
         },
         "audio_kwargs": {
-            "sound_token": "<sound>",  # Placeholder token used in text for audio expansion.
+            "sound_token": "<sound>",
             "return_attention_mask": True,
             "padding": "max_length",
         },
@@ -103,7 +103,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         Returns:
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
-            audio features (`input_features`, `feature_attention_mask`).
+            audio features (`input_features`, `input_features_mask`).
         """
 
         # Merge defaults with user kwargs
@@ -116,6 +116,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
         text_kwargs = call_kwargs["text_kwargs"]
         audio_kwargs = call_kwargs["audio_kwargs"]
         return_tensors = text_kwargs.pop("return_tensors", None)
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         # Handle text
         if isinstance(text, str):
@@ -163,31 +165,37 @@ class AudioFlamingo3Processor(ProcessorMixin):
                     start = i * window_size
                     end = min((i + 1) * window_size, T_cap)
                     flat_chunks.append(wav[start:end])
-            # feature extraction
+
+            # Feature extraction
             audio_inputs = self.feature_extractor(
                 flat_chunks,
                 sampling_rate=sampling_rate,
                 **audio_kwargs,
             )
-            audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
+            padding_mask = audio_inputs.pop("attention_mask")
 
-            # Post-pool frame counts per window (match encoder schedule)
-            feat_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
-            frames_per_window: list[int] = []
-            for L_mel in feat_lengths:
-                L1 = (int(L_mel) - 1) // 2 + 1
-                K = (L1 - 2) // 2 + 1
-                frames_per_window.append(max(1, K))
+            # Compute sequence lengths for attention mask and token counting
+            batch_size = audio_inputs["input_features"].shape[0]
+            seq_len = (audio_inputs["input_features"].shape[-1] - 1) // 2 + 1
+            mel_lengths = padding_mask.sum(-1).to(dtype=torch.long)
+            conv_output_lengths = ((mel_lengths - 1) // 2) + 1  # After conv2 downsampling
 
-            # Expand text per sample
+            # Create attention mask for encoder transformer layers (after conv2, before avgpool)
+            seq_range = torch.arange(seq_len).unsqueeze(0).expand(batch_size, seq_len)
+            audio_inputs["input_features_mask"] = seq_range < conv_output_lengths.unsqueeze(1)
+
+            # Compute final output lengths after full encoder processing (conv2 + transformer + avgpool)
+            # This determines how many sound tokens each audio window will produce
+            post_pool_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
+            frames_per_window = [max(1, int(length)) for length in post_pool_lengths.tolist()]
+
+            # Expand text per sample according to `frames_per_window`
             expanded_texts = []
             w_ptr = 0
-            for idx, t in enumerate(texts):
+            for idx, sample in enumerate(texts):
                 n_win = per_sample_windows[idx]
                 total_tokens = sum(frames_per_window[w_ptr : w_ptr + n_win])
                 w_ptr += n_win
-
-                sample = t
                 n_placeholders = sample.count(sound_token)
 
                 if n_placeholders == 1:
@@ -224,7 +232,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
     def model_input_names(self) -> list[str]:
         tok_names = self.tokenizer.model_input_names
         fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["feature_attention_mask"]))
+        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask"]))
 
 
 __all__ = ["AudioFlamingo3Processor"]

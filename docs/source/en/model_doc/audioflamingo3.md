@@ -246,7 +246,7 @@ print(texts)
 ### Processor-level alignment
 
 1. Each raw waveform is split into fixed-length windows based on the feature extractor’s `chunk_length` (seconds) and `sampling_rate` (Hz).
-2. For each window, the processor computes the number of post-pool frames `K` that the encoder will output (matching the conv/pool schedule).
+2. For each window, the processor computes the number of post-pool frames `post_pool_len` that the encoder will output (matching the conv/pool schedule).
 3. The processor expands the audio placeholder token by the total number of post-pool frames across all windows.
 
    * If the prompt contains no `<sound>`, all expanded tokens are inserted at the start of the user message in the chat template (or prepended to plain text if no template is used).
@@ -288,10 +288,10 @@ Notes:
 * The processor caps the total number of windows per sample to a practical limit (about 10 minutes by default).
 * For each window:
 
-  * `L_mel` is the padded mel length.
-  * A conv stack reduces time as `L1 = (L_mel - 1) // 2 + 1`.
-  * Post-pool frames per window: `K = (L1 - 2) // 2 + 1`.
-  * A single `<sound>` placeholder is expanded to the sum of `K` across all windows.
+  * `mel_len` is the padded mel length.
+  * A conv stack reduces time as `conv_output_len = (mel_len - 1) // 2 + 1`.
+  * Post-pool frames per window: `post_pool_len = (conv_output_len - 2) // 2 + 1`.
+  * A single `<sound>` placeholder is expanded to the sum of `post_pool_len` across all windows.
 
 ## Padding, attention, and caching
 

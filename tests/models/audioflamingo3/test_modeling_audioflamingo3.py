@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Testing suite for the PyTorch AudioFlamingo3 model."""
 
 import json
@@ -74,26 +73,26 @@ class AudioFlamingo3ModelTester:
                 "intermediate_size": 36,
                 "initializer_range": 0.02,
                 "hidden_size": 32,
-                "max_position_embeddings": 64,
+                "max_position_embeddings": 52,
                 "num_hidden_layers": 2,
                 "num_attention_heads": 4,
                 "num_key_value_heads": 2,
+                "use_labels": True,
                 "use_mrope": False,
                 "vocab_size": 99,
+                "pad_token_id": 1,  # Ensure pad token != audio token
             }
         # Small audio encoder (AF3 Whisper-style)
         if audio_config is None:
             audio_config = {
                 "model_type": "audioflamingo3_encoder",
-                "d_model": 16,
-                "encoder_attention_heads": 4,
-                "encoder_ffn_dim": 16,
-                "encoder_layers": 2,
+                "hidden_size": 16,
+                "num_attention_heads": 4,
+                "intermediate_size": 16,
+                "num_hidden_layers": 2,
                 "num_mel_bins": 80,
                 "max_source_positions": 30,
-                "init_std": 0.02,
-                "avg_pool_kernel_size": 2,
-                "avg_pool_stride": 2,
+                "initializer_range": 0.02,
             }
 
         self.text_config = text_config
@@ -120,23 +119,22 @@ class AudioFlamingo3ModelTester:
         )
         config = self.get_config()
         # Per-window mel validity (all ones => full length)
-        feature_attention_mask = torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.long).to(torch_device)
-        return config, input_features_values, feature_attention_mask
+        input_features_mask = torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
+        return config, input_features_values, input_features_mask
 
     def _post_pool_tokens_per_window(self, T_mel):
         # Mirror AF3 processor math:
-        # pre = (L_mel - 1)//2 + 1, post = (pre - 2)//2 + 1
         pre = (T_mel - 1) // 2 + 1
         post = (pre - 2) // 2 + 1
         return post
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_features_values, feature_attention_mask = self.prepare_config_and_inputs()
+        config, input_features_values, input_features_mask = self.prepare_config_and_inputs()
         # Every window has same T_mel here
         num_audio_tokens_per_sample = self._post_pool_tokens_per_window(input_features_values.shape[-1])
 
-        # Build token ids with left padding sentinel and K <sound> tokens
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        # Build token ids with valid range and K <sound> tokens
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=torch_device)
         attention_mask[:, :1] = 0  # left padding sentinel
 
@@ -145,45 +143,53 @@ class AudioFlamingo3ModelTester:
 
         inputs_dict = {
             "input_features": input_features_values,
-            "feature_attention_mask": feature_attention_mask,
+            "input_features_mask": input_features_mask,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
 
 
+@require_torch
 class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `AudioFlamingo3ForConditionalGeneration`.
     """
 
     all_model_classes = (AudioFlamingo3ForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
+    pipeline_model_mapping = (
+        {
+            "text-to-speech": AudioFlamingo3ForConditionalGeneration,
+            "audio-text-to-text": AudioFlamingo3ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     _is_composite = True
 
-    @require_torch
     def setUp(self):
         self.model_tester = AudioFlamingo3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AudioFlamingo3Config, has_text_modality=False)
 
-    @require_torch
+    @unittest.skip(
+        reason="This test does not apply to AudioFlamingo3 since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
+    )
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="Compile not yet supported for AudioFlamingo3 models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @require_torch
     @unittest.skip(reason="Compile not yet supported for AudioFlamingo3 models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @require_torch
     @unittest.skip(reason="AudioFlamingo3 tests avoid right-padding equivalence; fusion is in-place.")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @require_torch
     def test_sdpa_can_dispatch_composite_models(self):
         # AF3 is audio+text composite; verify SDPA toggles propagate to submodules.
         if not self.has_attentions:
@@ -223,6 +229,7 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
                         raise ValueError("The eager model should not have SDPA attention layers")
 
 
+@require_torch
 class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
     Slow tests against the public checkpoint to validate processor-model alignment and in-place fusion.
@@ -231,13 +238,11 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "nvidia/audio-flamingo-3-hf"
         self.processor = AutoProcessor.from_pretrained(self.checkpoint)
-        self.model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint, device_map="auto")
+        self.model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint, device_map=torch_device)
 
-    @require_torch
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @require_torch
     @slow
     def test_fixture_single_matches(self):
         """
@@ -260,7 +265,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
         batch = self.processor.apply_chat_template(
             conversation, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(self.model.device)
+        ).to(torch_device)
         seq = self.model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
@@ -269,7 +274,6 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
 
-    @require_torch
     @slow
     def test_fixture_batched_matches(self):
         """
@@ -309,7 +313,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
         batch = self.processor.apply_chat_template(
             conversations, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(self.model.device)
+        ).to(torch_device)
         seq = self.model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
