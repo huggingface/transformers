@@ -4711,7 +4711,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if key is not None and key != '':
                 device = device_map[key]
             else:
-                device = device_map[""].index
+                device = device_map[""]
+                if isinstance(device, torch.device):
+                    device = device.index # safetensors only
             file_pointer = safe_open(
                 os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
             )
