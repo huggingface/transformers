@@ -288,9 +288,9 @@ class MergeModulelist(Concatenate):
                 out_shape = list(group[0].shape)
                 out_shape.insert(self.dim, len(group))
                 out = self._ensure_buffer(torch.Size(out_shape), dtype=group[0].dtype, device=group[0].device)
-                torch.stack(tuple(group), dim=self.dim, out=out)
-                # for off, tensor in enumerate(group):
-                #     out[off].copy_(tensor, non_blocking=tensor.is_cuda)
+                # torch.stack(tuple(group), dim=self.dim, out=out)
+                for off, tensor in enumerate(group):
+                    out[off].copy_(tensor, non_blocking=tensor.is_cuda)
                 # torch.as_tensor(numpy.stack(batch))
                 merged.append(out.clone())  # TODO have a single staging tensor here as well!
         return merged
