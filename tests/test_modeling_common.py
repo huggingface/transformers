@@ -833,7 +833,6 @@ class ModelTesterMixin:
             # an implementation issue. Note we exclude xlstm and zamba* for now since they are still not using
             # GradientCheckpointingLayer.
             if config.model_type not in [
-                "swiftformer",
                 "janus_vqgan",
                 "clvp_encoder",
                 "clvp_decoder",
@@ -1165,7 +1164,7 @@ class ModelTesterMixin:
                 config.use_cache = False
                 config.return_dict = True
 
-                if config.model_type in ["swiftformer", "janus", "clvp"]:
+                if config.model_type in ["clvp"]:
                     self.skipTest(f"Model {config.model_type} doesn't support GradientCheckpointingLayer yet.")
 
                 # make sure that test runs are consistent by disabling dropout
