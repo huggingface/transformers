@@ -32,7 +32,7 @@ line-length = 119
 ignore = ["C901", "E501", "E741", "F402", "F823", "SIM1", "SIM300", "SIM212", "SIM905", "UP009", "UP015", "UP031", "UP028", "UP004", "UP045", "UP007"]
 # RUF013: Checks for the use of implicit Optional
 #  in type annotations when the default parameter value is None.
-select = ["C", "E", "F", "I", "W", "RUF013", "PERF102", "PLC1802", "PLC0208", "SIM", "UP", "PIE794"]
+select = ["C", "E", "F", "I", "W", "RUF013", "PERF102", "PLC1802", "PLC0208", "SIM", "UP", "PIE794", "FURB"]
 extend-safe-fixes = ["UP006"]
 
 # Ignore import violations in all `__init__.py` files.

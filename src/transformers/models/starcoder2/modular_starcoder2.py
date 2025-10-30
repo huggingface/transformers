@@ -42,7 +42,6 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralModel,
-    MistralRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -136,10 +135,6 @@ class Starcoder2DecoderLayer(MistralDecoderLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 
 
-class Starcoder2RotaryEmbedding(MistralRotaryEmbedding):
-    pass
-
-
 class Starcoder2Model(MistralModel):
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)
@@ -193,9 +188,8 @@ class Starcoder2Model(MistralModel):
         hidden_states = nn.functional.dropout(
             hidden_states, p=self.embedding_dropout, training=self.training
         )  # main diff with Llama
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,

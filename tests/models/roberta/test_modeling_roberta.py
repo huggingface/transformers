@@ -393,7 +393,6 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False  # won't be maintained
     model_split_percents = [0.5, 0.8, 0.9]
 
     # Overwriting to add `is_decoder` flag

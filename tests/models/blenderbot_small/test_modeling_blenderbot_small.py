@@ -216,7 +216,6 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False
     test_missing_keys = False
 
     # TODO: Fix the failed tests when this model gets more usage
@@ -275,7 +274,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:

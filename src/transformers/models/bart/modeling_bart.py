@@ -538,12 +538,12 @@ class BartEncoder(BartPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        self.embed_tokens = BartScaledWordEmbedding(
-            config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
-        )
-
         if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
+            self.embed_tokens = embed_tokens
+        else:
+            self.embed_tokens = BartScaledWordEmbedding(
+                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -682,12 +682,12 @@ class BartDecoder(BartPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = BartScaledWordEmbedding(
-            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
-        )
-
         if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
+            self.embed_tokens = embed_tokens
+        else:
+            self.embed_tokens = BartScaledWordEmbedding(
+                config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -920,11 +920,11 @@ class BartModel(BartPreTrainedModel):
             if self.shared.weight.device == torch.device(
                 "meta"
             ) and self.decoder.embed_tokens.weight.device != torch.device("meta"):
-                self._tie_or_clone_weights(self.encoder.embed_tokens, self.decoder.embed_tokens)
-                self._tie_or_clone_weights(self.shared, self.decoder.embed_tokens)
+                self._tie_embedding_weights(self.encoder.embed_tokens, self.decoder.embed_tokens)
+                self._tie_embedding_weights(self.shared, self.decoder.embed_tokens)
             else:
-                self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-                self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+                self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
+                self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
 
     def get_input_embeddings(self):
         return self.shared
@@ -1089,7 +1089,7 @@ class BartForConditionalGeneration(BartPreTrainedModel, GenerationMixin):
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self.model._tie_weights()
-            self._tie_or_clone_weights(self.lm_head, self.model.shared)
+            self._tie_embedding_weights(self.lm_head, self.model.shared)
 
     @auto_docstring
     def forward(

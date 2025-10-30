@@ -31,7 +31,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_torch_flex_attn_available, is_torch_fx_proxy, is_torchdynamo_compiling, logging
+from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
 from .configuration_pop2piano import Pop2PianoConfig
 
 
@@ -56,7 +56,6 @@ except ImportError:
     pass
 except Exception:
     logger.warning("Discovered apex but it failed to load, falling back to Pop2PianoLayerNorm")
-    pass
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pop2Piano
@@ -593,15 +592,9 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
                 "self.model.config.decoder_start_token_id has to be defined. In Pop2Piano it is usually set to the pad_token_id."
             )
 
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
             raise ValueError("self.model.config.pad_token_id has to be defined.")

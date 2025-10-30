@@ -31,7 +31,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Optional, Union
+from typing import Any
 
 from packaging import version
 
@@ -44,9 +44,10 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
 
-def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[tuple[bool, str], bool]:
+def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str] | bool:
     """Check if `pkg_name` exist, and optionally try to get its version"""
-    package_exists = importlib.util.find_spec(pkg_name) is not None
+    spec = importlib.util.find_spec(pkg_name)
+    package_exists = spec is not None
     package_version = "N/A"
     if package_exists and return_version:
         try:
@@ -183,7 +184,7 @@ def is_habana_gaudi1() -> bool:
 
 
 @lru_cache
-def is_torch_mps_available(min_version: Optional[str] = None) -> bool:
+def is_torch_mps_available(min_version: str | None = None) -> bool:
     if is_torch_available():
         import torch
 
@@ -355,9 +356,7 @@ def is_torch_hpu_available() -> bool:
 
     original_take_along_dim = torch.take_along_dim
 
-    def patched_take_along_dim(
-        input: torch.Tensor, indices: torch.LongTensor, dim: Optional[int] = None
-    ) -> torch.Tensor:
+    def patched_take_along_dim(input: torch.Tensor, indices: torch.LongTensor, dim: int | None = None) -> torch.Tensor:
         if input.dtype == torch.int64 and input.device.type == "hpu":
             return original_take_along_dim(input.to(torch.int32), indices, dim).to(torch.int64)
         else:
@@ -1135,6 +1134,11 @@ def is_jinja_available() -> bool:
 
 
 @lru_cache
+def is_jmespath_available() -> bool:
+    return _is_package_available("jmespath")
+
+
+@lru_cache
 def is_mlx_available() -> bool:
     return _is_package_available("mlx")
 
@@ -1261,6 +1265,25 @@ def is_torch_fx_proxy(x):
         return isinstance(x, torch.fx.Proxy)
     except Exception:
         return False
+
+
+def is_jit_tracing() -> bool:
+    try:
+        import torch
+
+        return torch.jit.is_tracing()
+    except Exception:
+        return False
+
+
+def is_tracing(tensor=None) -> bool:
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, or torch.fx"""
+    # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
+    # only checks export)
+    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing()
+    if tensor is not None:
+        _is_tracing |= is_torch_fx_proxy(tensor)
+    return _is_tracing
 
 
 @lru_cache
@@ -1776,9 +1799,9 @@ class _LazyModule(ModuleType):
         name: str,
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
-        module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Optional[dict[str, object]] = None,
-        explicit_import_shortcut: Optional[dict[str, list[str]]] = None,
+        module_spec: importlib.machinery.ModuleSpec | None = None,
+        extra_objects: dict[str, object] | None = None,
+        explicit_import_shortcut: dict[str, list[str]] | None = None,
     ):
         super().__init__(name)
 
@@ -2145,7 +2168,7 @@ def create_import_structure_from_path(module_path):
     {
         'albert': {
             frozenset(): {
-                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+                'configuration_albert': {'AlbertConfig'}
             },
             frozenset({'tokenizers'}): {
                 'tokenization_albert_fast': {'AlbertTokenizerFast'}
@@ -2321,7 +2344,7 @@ def spread_import_structure(nested_import_structure):
     {
         'albert': {
             frozenset(): {
-                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+                'configuration_albert': {'AlbertConfig'}
             },
             frozenset({'tokenizers'}): {
                 'tokenization_albert_fast': {'AlbertTokenizerFast'}
@@ -2348,7 +2371,7 @@ def spread_import_structure(nested_import_structure):
             'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
         },
         frozenset(): {
-            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'albert.configuration_albert': {'AlbertConfig'},
             'align.processing_align': {'AlignProcessor'},
             'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
             'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
@@ -2438,7 +2461,7 @@ def spread_import_structure(nested_import_structure):
 
 
 @lru_cache
-def define_import_structure(module_path: str, prefix: Optional[str] = None) -> IMPORT_STRUCTURE_T:
+def define_import_structure(module_path: str, prefix: str | None = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
 
@@ -2449,7 +2472,7 @@ def define_import_structure(module_path: str, prefix: Optional[str] = None) -> I
             'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
         },
         frozenset(): {
-            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'albert.configuration_albert': {'AlbertConfig'},
             'align.processing_align': {'AlignProcessor'},
             'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
             'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
