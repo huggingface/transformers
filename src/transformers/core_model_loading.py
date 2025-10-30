@@ -288,9 +288,9 @@ class MergeModulelist(Concatenate):
                 out_shape = list(group[0].shape)
                 out_shape.insert(self.dim, len(group))
                 out = self._ensure_buffer(torch.Size(out_shape), dtype=group[0].dtype, device=group[0].device)
-                # torch.stack(tuple(group), dim=self.dim, out=out)
-                for off, tensor in enumerate(group):
-                    out[off].copy_(tensor, non_blocking=tensor.is_cuda)
+                torch.stack(tuple(group), dim=self.dim, out=out)
+                # for off, tensor in enumerate(group):
+                #     out[off].copy_(tensor, non_blocking=tensor.is_cuda)
                 # torch.as_tensor(numpy.stack(batch))
                 merged.append(out.clone())  # TODO have a single staging tensor here as well!
         return merged
@@ -350,7 +350,7 @@ class To(ConversionOps):
 
     def convert(self, realized_value):
         with torch.device(self.device):
-            out = [[x[:] for x in inner] if isinstance(inner, list) else inner[:] for inner in realized_value]
+            out = [[x[...] for x in inner] if isinstance(inner, list) else inner[...] for inner in realized_value]
         return out
 
 
@@ -652,6 +652,13 @@ def spawn_tp_materialize(EXEC, _file_sems, file_id, t, sharding_method, empty_te
 
     return EXEC.submit(_job)
 
+def dot_natural_key(s: str):
+    parts = s.split('.')
+    for i, p in enumerate(parts):
+        # whole-segment digits -> int; otherwise leave as str
+        if p.isdigit():
+            parts[i] = int(p)
+    return parts
 
 def convert_and_load_state_dict_in_model(
     model,
@@ -690,9 +697,10 @@ def convert_and_load_state_dict_in_model(
     tp_plan_alt, tp_plan_by_group_name = build_glob_alt(list(tp_plan.keys()))
     dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(keep_in_dtype.keys()))
 
+    state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     # 1. Create the conversion entries
     by_conversion_pattern: dict[str, ConversionEntry] = {}
-    for original_key, (file_id, tensor) in state_dict.items():
+    for original_key, (file_id, tensor) in state_dict:
         matched_pattern = match_glob(original_key, weight_pattern_alt, weight_pattern_by_group_name)
         if matched_pattern is not None:
             converter = source_to_target[matched_pattern]  # TODO make sure its the ref
