@@ -764,6 +764,9 @@ def convert_and_load_state_dict_in_model(
                             except Exception as e:
                                 misc[layer_name] = f"{op.__class__.__name__}: {e}"
 
+                    if progress_bar is not None:
+                        progress_bar.update()
+
                     for k, output_value in realized_value.items():
                         matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
                         if matched_dtype_pattern is not None:
@@ -775,14 +778,14 @@ def convert_and_load_state_dict_in_model(
                         set_param_for_module(
                             model, k, output_value, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc, converter.distributed_operation
                         )
-                        if progress_bar is not None:
-                            progress_bar.update()
+
             del group
             for op in operations:
                 op.clear_cache()
     finally:
-        if progress_bar is not None:
-            progress_bar.close()
+        pass
+        # if progress_bar is not None:
+        #     progress_bar.close()
     model.inverse_converters = inverse_converters
     # EXEC.shutdown(wait=True)
     return missing_keys, unexpected_keys, mismatch_keys, misc
