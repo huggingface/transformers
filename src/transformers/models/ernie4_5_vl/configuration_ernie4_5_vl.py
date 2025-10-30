@@ -233,7 +233,8 @@ class Ernie4_5_VLConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`Ernie4_5_VLModel`]. It is used to instantiate a
     Ernie4.5-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    TODO [TODO](TODO) <-- 28B models hf style.
+    Ernie 4.5 VL 28B A3B [baidu/baidu/ERNIE-4.5-VL-28B-A3B-PT](https://huggingface.co/baidu/ERNIE-4.5-VL-28B-A3B-PT).
+    (TODO: check if repo stays, new -HF repo?)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
