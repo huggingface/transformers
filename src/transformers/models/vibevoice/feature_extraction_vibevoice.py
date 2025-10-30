@@ -12,15 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for VibeVoice."""
 
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
-from ...utils import logging, TensorType, PaddingStrategy
+from ...feature_extraction_utils import BatchFeature
+from ...utils import PaddingStrategy, TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -55,22 +55,13 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
     ):
         super().__init__(feature_size=n_channels, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
-        self.sampling_rate = sampling_rate
         self.normalize_audio = normalize_audio
         self.target_dB_FS = target_dB_FS
         self.eps = eps
 
-        # Save config
-        self.feature_extractor_dict = {
-            "sampling_rate": sampling_rate,
-            "normalize_audio": normalize_audio,
-            "target_dB_FS": target_dB_FS,
-            "eps": eps,
-        }
-
     def __call__(
         self,
-        audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        audio: AudioInput,
         sampling_rate: Optional[int] = None,
         padding: Optional[Union[bool, str, PaddingStrategy]] = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -105,44 +96,41 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched = bool(
-            isinstance(audio, (list, tuple)) and (isinstance(audio[0], (np.ndarray, tuple, list)))
-        )
-
-        # Ensure numpy, float32 arrays
-        if is_batched:
-            audio = [np.asarray(a, dtype=np.float32) for a in audio]
-        elif not is_batched and not isinstance(audio, np.ndarray):
-            audio = np.asarray(audio, dtype=np.float32)
-        elif isinstance(audio, np.ndarray) and audio.dtype is np.dtype(np.float64):
-            audio = audio.astype(np.float32)
-
         # Ensure batch
-        if not is_batched:
-            audio = [np.asarray(audio)]
+        audio = make_list_of_audio(audio)
 
-        # Ensure mono
+        # Ensure numpy arrays and mono
         for idx, example in enumerate(audio):
-            if len(example.shape) == 2:
-                if example.shape[0] == 2:  # (2, time)
-                    audio[idx] = np.mean(example, axis=0)
-                elif example.shape[1] == 2:  # (time, 2)
-                    audio[idx] = np.mean(example, axis=1)
-                else:
-                    # If one dimension is 1, squeeze it
-                    if example.shape[0] == 1:
-                        audio[idx] = example.squeeze(0)
-                    elif example.shape[1] == 1:
-                        audio[idx] = example.squeeze(1)
-                    else:
-                        raise ValueError(f"Unexpected audio shape: {example.shape}")
-            elif len(example.shape) != 1:
+            # Convert to numpy array if needed
+            if not isinstance(example, np.ndarray):
+                example = np.asarray(example, dtype=np.float32)
+            elif example.dtype != np.float32:
+                example = example.astype(np.float32)
+
+            if example.ndim == 1:
+                audio[idx] = example  # Already mono
+            elif example.ndim == 2:
+                # Convert to mono by averaging across channels (works for any channel dimension)
+                audio[idx] = np.mean(example, axis=0 if example.shape[0] <= 2 else 1)
+            else:
                 raise ValueError(f"Audio should be 1D or 2D, got shape: {example.shape}")
 
         # Normalize
         if self.normalize_audio:
-            audio = [normalize_audio(a, self.target_dB_FS, self.eps) for a in audio]
+            for idx, example in enumerate(audio):
+                # Adjust to target dB FS
+                rms = np.sqrt(np.mean(example**2))
+                scalar = 10 ** (self.target_dB_FS / 20) / (rms + self.eps)
+                example = example * scalar
 
+                # Avoid clipping
+                max_val = np.max(np.abs(example))
+                if max_val > 1.0:
+                    example = example / (max_val + self.eps)
+
+                audio[idx] = example
+
+        # Pad into batch
         output_values = BatchFeature({"audio": audio})
         if padding:
             output_values = self.pad(
@@ -153,38 +141,6 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
             output_values["padding_mask"] = output_values.pop("attention_mask")
 
         return output_values
-
-    # Override to_dict method for configuration saving
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Convert the object to a dict containing all attributes needed for serialization.
-        """
-        return self.feature_extractor_dict
-    
-
-def normalize_audio(audio: np.ndarray, target_dB_FS: float = -25, eps: float = 1e-6) -> np.ndarray:
-    """
-    Normalize audio to target dB FS level and avoid clipping.
-    
-    Args:
-        audio (np.ndarray): Input audio signal
-        target_dB_FS (float): Target dB FS level for the audio. Default: -25
-        eps (float): Small value to avoid division by zero. Default: 1e-6
-        
-    Returns:
-        np.ndarray: Normalized audio signal
-    """
-    # Adjust to target dB FS
-    rms = np.sqrt(np.mean(audio**2))
-    scalar = 10 ** (target_dB_FS / 20) / (rms + eps)
-    audio = audio * scalar
-
-    # Avoid clipping
-    max_val = np.max(np.abs(audio))
-    if max_val > 1.0:
-        audio = audio / (max_val + eps)
-
-    return audio
 
 
 __all__ = ["VibeVoiceFeatureExtractor"]
