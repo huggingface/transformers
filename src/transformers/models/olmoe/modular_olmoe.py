@@ -34,8 +34,8 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralModel
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
 from .configuration_olmoe import OlmoeConfig
 
 
@@ -119,8 +119,10 @@ class OlmoeAttention(LlamaAttention):
 class OlmoeExperts(MixtralExperts):
     pass
 
+
 class OlmoeTopKRouter(Qwen2MoeTopKRouter):
     pass
+
 
 class OlmoeSparseMoeBlock(nn.Module):
     def __init__(self, config):

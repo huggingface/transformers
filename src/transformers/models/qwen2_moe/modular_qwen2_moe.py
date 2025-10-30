@@ -88,6 +88,7 @@ class Qwen2MoeExperts(MixtralExperts):
         self.num_experts = config.num_experts
         self.intermediate_dim = config.moe_intermediate_size
 
+
 class Qwen2MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -107,6 +108,7 @@ class Qwen2MoeTopKRouter(nn.Module):
         router_top_value = router_top_value.to(router_logits.dtype)
         router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
         return router_scores, router_indices
+
 
 class Qwen2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):

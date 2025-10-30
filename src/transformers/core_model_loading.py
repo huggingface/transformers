@@ -652,13 +652,15 @@ def spawn_tp_materialize(EXEC, _file_sems, file_id, t, sharding_method, empty_te
 
     return EXEC.submit(_job)
 
+
 def dot_natural_key(s: str):
-    parts = s.split('.')
+    parts = s.split(".")
     for i, p in enumerate(parts):
         # whole-segment digits -> int; otherwise leave as str
         if p.isdigit():
             parts[i] = int(p)
     return parts
+
 
 def convert_and_load_state_dict_in_model(
     model,
@@ -759,7 +761,7 @@ def convert_and_load_state_dict_in_model(
     progress_bar = logging.tqdm(total=total_layers, desc="Converting weights", leave=False) if total_layers else None
 
     try:
-        for key in keys[::-1]: # revert to process simple keys first
+        for key in keys[::-1]:  # revert to process simple keys first
             group = by_conversion_pattern.pop(key)
             converter = group.weight_converter
             operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
