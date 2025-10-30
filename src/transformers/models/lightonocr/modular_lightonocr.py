@@ -2,8 +2,6 @@ from collections.abc import Callable
 from typing import Any, Optional, Union
 
 import numpy as np
-import torch
-from torch import nn
 
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -19,7 +17,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, can_return_tuple, is_vision_available
+from ...utils import auto_docstring, can_return_tuple, is_torch_available, is_vision_available
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..pixtral.configuration_pixtral import PixtralVisionConfig
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
@@ -33,6 +31,10 @@ from ..qwen3.modeling_qwen3 import (
     Qwen3RMSNorm,
 )
 
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 if is_vision_available():
     from ..pixtral.image_processing_pixtral import get_resize_output_image_size
@@ -595,11 +597,11 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
     def __init__(self, config: LightOnOCRConfig):
         super().__init__(config)
 
-        self.vision_encoder = LightOnOCRVisionModel(config.vision_config)
+        self.vision_encoder = LightOnOCRVisionModel._from_config(config.vision_config)
 
         self.vision_projection = LightOnOCRVisionProjector(config)
 
-        self.language_model = LightOnOCRTextModel(config.text_config)
+        self.language_model = LightOnOCRTextModel._from_config(config.text_config)
 
         self.post_init()
 
