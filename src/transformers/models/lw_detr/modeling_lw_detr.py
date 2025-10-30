@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_lw_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import copy
 import math
 import warnings
 from collections.abc import Callable
@@ -1303,10 +1302,6 @@ class LwDetrMLPPredictionHead(nn.Module):
         return x
 
 
-def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
-
-
 @auto_docstring(
     custom_intro="""
     Deformable DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
@@ -1323,9 +1318,6 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         self.model = LwDetrModel(config)
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
         self.bbox_embed = LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
-
-        self.model.enc_out_bbox_embed = _get_clones(self.bbox_embed, config.group_detr)
-        self.model.enc_out_class_embed = _get_clones(self.class_embed, config.group_detr)
 
         self.post_init()
 

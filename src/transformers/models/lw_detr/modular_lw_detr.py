@@ -27,7 +27,6 @@ from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrMLPPredictionHead,
     DeformableDetrModel,
     DeformableDetrMultiscaleDeformableAttention,
-    _get_clones,
 )
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..rt_detr.configuration_rt_detr import CONFIG_MAPPING, verify_backbone_config_arguments
@@ -1095,9 +1094,6 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         self.model = LwDetrModel(config)
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
         self.bbox_embed = LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
-
-        self.model.enc_out_bbox_embed = _get_clones(self.bbox_embed, config.group_detr)
-        self.model.enc_out_class_embed = _get_clones(self.class_embed, config.group_detr)
 
         self.post_init()
 
