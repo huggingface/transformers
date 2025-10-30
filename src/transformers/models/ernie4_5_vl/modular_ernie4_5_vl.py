@@ -266,16 +266,12 @@ class Ernie4_5_VLMoeBlock(nn.Module):
             token_type_ids_router = mm_token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
             token_type_ids_states = mm_token_type_ids[..., None].expand(-1, -1, hidden_dim)
 
-            # Extract and separate tokens into their modalities
-            text_hidden_states = hidden_states[~token_type_ids_states].reshape(batch_size, -1, hidden_dim)
-            vision_hidden_states = hidden_states[token_type_ids_states].reshape(batch_size, -1, hidden_dim)
-
             # Run moe on each modality and assign their results to the original token positions
             final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.text_moe(
-                text_hidden_states
+                hidden_states[~token_type_ids_states]
             )
             final_hidden_states[token_type_ids_states], router_logits[token_type_ids_router] = self.vision_moe(
-                vision_hidden_states
+                hidden_states[token_type_ids_states]
             )
         else:
             final_hidden_states, router_logits = self.text_moe(hidden_states)
