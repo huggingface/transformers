@@ -261,12 +261,17 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 model_kwargs["audio_input_ids"] = next_tokens
 
             # For batches with audio stream EOS, set next token to audio_eos_token_id
-            next_tokens_flat = (
-                torch.ones(batch_size, device=input_ids.device, dtype=torch.long) * self.config.audio_out_token_idx
-            )
+            next_tokens_flat = input_ids.new_ones(batch_size) * self.config.audio_out_token_idx
             next_tokens_flat[has_audio_stream_eos] = self.config.audio_eos_token_id
             next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
             next_tokens = next_tokens_flat
+
+            audio_input_ids_mask = model_kwargs.get("audio_input_ids_mask")
+            if audio_input_ids_mask is not None:
+                next_audio_input_ids_mask = audio_input_ids_mask.new_ones(batch_size, 1)
+                next_audio_input_ids_mask[has_audio_stream_eos] = 0
+                audio_input_ids_mask = torch.cat([audio_input_ids_mask, next_audio_input_ids_mask], dim=1)
+                model_kwargs["audio_input_ids_mask"] = audio_input_ids_mask
             # ============================
 
             # update generated ids, model inputs, and length for next step

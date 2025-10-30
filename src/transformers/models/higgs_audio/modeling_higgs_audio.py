@@ -352,9 +352,9 @@ class HiggsAudioEmbeddings(nn.Module):
         )
 
     def forward(self, input_ids):
-        input_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
-        input_embeds = input_embeds.sum(dim=2)
-        return input_embeds
+        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = inputs_embeds.sum(dim=1)
+        return inputs_embeds
 
 
 class HiggsAudioRotaryEmbedding(nn.Module):
@@ -419,6 +419,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         audio_input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.BoolTensor] = None,
+        audio_input_ids_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -437,13 +438,9 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
             if audio_input_ids is not None:
-                audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids)
+                audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids[audio_input_ids_mask.bool()])
                 audio_inputs_embeds = audio_inputs_embeds.to(inputs_embeds.device)
-                inputs_embeds = torch.where(
-                    audio_token_mask.unsqueeze(-1),
-                    audio_inputs_embeds,
-                    inputs_embeds
-                )
+                inputs_embeds[audio_token_mask] = audio_inputs_embeds
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -507,7 +504,13 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
 
         self.post_init()
 
-    def prepare_inputs_for_generation(self, *args, audio_input_ids: Optional[torch.LongTensor] = None, **kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        *args,
+        audio_input_ids: Optional[torch.LongTensor] = None,
+        audio_input_ids_mask: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ):
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
         # Handle audio_input_ids slicing for generation with past_key_values
@@ -521,6 +524,17 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
             audio_input_ids = audio_input_ids.clone(memory_format=torch.contiguous_format)
             model_inputs["audio_input_ids"] = audio_input_ids
 
+        # Handle audio_input_ids_mask slicing for generation with past_key_values
+        if audio_input_ids_mask is not None and model_inputs.get("past_key_values") is not None:
+            current_input_length = (
+                model_inputs["inputs_embeds"].shape[1]
+                if model_inputs.get("inputs_embeds") is not None
+                else model_inputs["input_ids"].shape[1]
+            )
+            audio_input_ids_mask = audio_input_ids_mask[:, -current_input_length:]
+            audio_input_ids_mask = audio_input_ids_mask.clone(memory_format=torch.contiguous_format)
+            model_inputs["audio_input_ids_mask"] = audio_input_ids_mask
+
         return model_inputs
 
     @auto_docstring
@@ -530,6 +544,7 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.BoolTensor] = None,
         audio_input_ids: Optional[torch.LongTensor] = None,
+        audio_input_ids_mask: Optional[torch.LongTensor] = None,
         audio_in_ids_start: Optional[torch.LongTensor] = None,
         audio_out_ids: Optional[torch.LongTensor] = None,
         audio_out_ids_start: Optional[torch.LongTensor] = None,
@@ -545,6 +560,7 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
             input_ids=input_ids,
             attention_mask=attention_mask,
             audio_input_ids=audio_input_ids,
+            audio_input_ids_mask=audio_input_ids_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,

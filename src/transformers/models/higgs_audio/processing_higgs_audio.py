@@ -16,6 +16,7 @@
 
 from dataclasses import dataclass
 from typing import Optional, Union
+from itertools import islice
 
 import numpy as np
 
@@ -210,12 +211,27 @@ class HiggsAudioProcessor(ProcessorMixin):
             text = expanded_text
 
         encoding = self.tokenizer(text, **text_kwargs)
+        audio_ids_list_iter = iter(audio_ids_list)
         data = {}
         data.update(encoding)
         if audio is not None:
+            audio_ids_list_iter = iter(audio_ids_list)
+            audio_ids_list = [list(islice(audio_ids_list_iter, length)) for length in n_audio_in_text]
+            audio_ids_list = [torch.cat(batch_el, dim=0) for batch_el in audio_ids_list]
+            
+            lenghts = [audio_ids.shape[0] for audio_ids in audio_ids_list]
+            max_length = max(lenghts)
+            audio_ids_list = [
+                torch.nn.functional.pad(audio_ids, (0, 0, 0, max_length - audio_ids.shape[0]), value=1025)
+                for audio_ids in audio_ids_list
+            ]
+
+            audio_input_ids_mask = torch.arange(max_length)[None, :] < torch.tensor(lenghts)[:, None]
+
             data.update(
                 {
                     "audio_input_ids": torch.stack(audio_ids_list, dim=0),
+                    "audio_input_ids_mask": audio_input_ids_mask.to(torch.int64),
                 }
             )
 
