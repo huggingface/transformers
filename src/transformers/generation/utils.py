@@ -51,7 +51,6 @@ from ..utils import (
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
-    is_torchdynamo_exporting,
     logging,
 )
 from .candidate_generator import (
@@ -502,17 +501,20 @@ class GenerationMixin(ContinuousMixin):
         The current implementation does not rely on ``self`` and could be
         a class method. It is left as a standard method to be easily rewritten.
         """
-        if is_torchdynamo_exporting():
-            return self._cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
         if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+            # Initial embeddings case first forward pass with only embeddings
             inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+        elif inputs_embeds is not None and cache_position[0] > 0:
+            # After first iteration, stop using embeddings and switch to input_ids
+            inputs_embeds = None
+            input_ids = input_ids[:, -cache_position.shape[0] :]
         elif (
             inputs_embeds is not None  # Exception 1
             or (cache_position[-1] >= input_ids.shape[1])  # Exception 3
         ):
+            # Original logic for other cases
             input_ids = input_ids[:, -cache_position.shape[0] :]
-        elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-            input_ids = input_ids[:, cache_position]
+
         return inputs_embeds, input_ids
 
     def _cache_dependant_input_preparation_exporting(

@@ -2387,16 +2387,26 @@ class Trainer:
         grad_norm: Optional[float] = None
         learning_rate = None
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
-
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
         _steps_in_current_epoch = 0
+        epoch_dataloader = train_dataloader
+        epoch_iterator = iter(epoch_dataloader)
+        if len_dataloader is not None:
+            steps_in_epoch = len(epoch_iterator)
+        else:
+            steps_in_epoch = args.max_steps * args.gradient_accumulation_steps
+        # We chunkify the epoch iterator into gradient accumulation steps `n` batches
+        remainder = steps_in_epoch % args.gradient_accumulation_steps
+        if remainder == 0:
+            remainder = args.gradient_accumulation_steps
         for epoch in range(epochs_trained, num_train_epochs):
-            epoch_dataloader = train_dataloader
-            epoch_iterator = iter(epoch_dataloader)
-
             if len_dataloader is None and epoch > epochs_trained and _steps_in_current_epoch > 0:
                 steps_in_epoch = _steps_in_current_epoch
+            remainder = steps_in_epoch % args.gradient_accumulation_steps
+            if remainder == 0:
+                remainder = args.gradient_accumulation_steps
+            if len_dataloader is None:
                 _steps_in_current_epoch = 0
             if hasattr(epoch_dataloader, "set_epoch"):
                 epoch_dataloader.set_epoch(epoch)
@@ -2416,16 +2426,6 @@ class Trainer:
                     self._load_rng_state(resume_from_checkpoint)
 
             epoch_iterator = iter(epoch_dataloader)
-            if len_dataloader is not None:
-                steps_in_epoch = len(epoch_iterator)
-            else:
-                # For iterable datasets without __len__
-                steps_in_epoch = args.max_steps * args.gradient_accumulation_steps
-            # We chunkify the epoch iterator into gradient accumulation steps `n` batches
-
-            remainder = steps_in_epoch % args.gradient_accumulation_steps
-            if remainder == 0:
-                remainder = args.gradient_accumulation_steps
             update_step = -1
             total_updates = steps_in_epoch // args.gradient_accumulation_steps + int(
                 remainder < args.gradient_accumulation_steps
@@ -2561,7 +2561,7 @@ class Trainer:
                         if len_dataloader is None:
                             _steps_in_current_epoch += 1
 
-                        self.state.epoch = epoch + (step + 1 + _steps_in_current_epoch) / steps_in_epoch
+                        self.state.epoch = epoch + (step + 1 + steps_trained_in_current_epoch) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
                         self._maybe_log_save_evaluate(
                             tr_loss,
