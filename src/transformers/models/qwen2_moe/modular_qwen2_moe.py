@@ -46,7 +46,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralModel,
     MixtralPreTrainedModel,
-    MixtralSparseMoeBlock,
 )
 from .configuration_qwen2_moe import Qwen2MoeConfig
 

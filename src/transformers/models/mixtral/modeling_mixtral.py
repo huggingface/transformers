@@ -116,7 +116,6 @@ class MixtralTopKRouter(nn.Module):
 class MixtralSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
         self.jitter_noise = config.router_jitter_noise
         self.gate = MixtralTopKRouter(config)
         self.experts = MixtralExperts(config)
