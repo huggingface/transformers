@@ -48,6 +48,25 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Ernie4_5_VLTextConfig
 
+## Ernie4_5_VLImageProcessor
+
+[[autodoc]] Ernie4_5_VLImageProcessor
+    - preprocess
+
+## Ernie4_5_VLVideoProcessor
+
+[[autodoc]] Ernie4_5_VLVideoProcessor
+    - preprocess
+
+## Ernie4_5_VLImageProcessorFast
+
+[[autodoc]] Ernie4_5_VLImageProcessorFast
+    - preprocess
+
+## Ernie4_5_VLProcessor
+
+[[autodoc]] Ernie4_5_VLProcessor
+
 ## Ernie4_5_VLTextModel
 
 [[autodoc]] Ernie4_5_VLTextModel
