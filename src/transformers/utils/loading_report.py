@@ -138,6 +138,7 @@ def log_state_dict_report(
     missing_keys=None,
     mismatched_keys=None,
     mismatched_shapes=None,
+    ignore_mismatched_sizes=True,
     misc=None,
     limit_rows=50,  # safety for huge checkpoints
     color=True,  # allow disabling for plain logs
@@ -227,3 +228,5 @@ def log_state_dict_report(
     )
 
     print(prelude + table + "" + tips)
+    if ignore_mismatched_sizes and mismatched_keys:
+        raise RuntimeError("You set `ignore_mismatched_sizes` to `False`, thus raising an error. For details look at the above report!")

@@ -1157,102 +1157,6 @@ def _get_dtype(
     return config, dtype, dtype_orig
 
 
-def _find_missing_and_unexpected_keys(
-    model: "PreTrainedModel",
-    original_checkpoint_keys: list[str],
-    checkpoint_keys: list[str],
-    loading_base_model_from_task_state_dict: bool,
-    hf_quantizer: Optional[HfQuantizer],
-) -> tuple[list[str], list[str]]:
-    """Find missing keys (keys that are part of the model parameters but were NOT found in the loaded state dict keys) and unexpected keys
-    (keys found in the loaded state dict keys, but that are NOT part of the model parameters)
-    """
-    prefix = model.base_model_prefix
-
-    # Compute expected keys, i.e. keys that the full model expects
-    expected_keys = list(model.state_dict().keys())
-    if hf_quantizer is not None:
-        expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, checkpoint_keys)
-
-    # Adjust prefix of the keys to make them match loaded keys before removing them
-    missing_keys = sorted(set(expected_keys) - set(checkpoint_keys))
-    unexpected_keys = set(checkpoint_keys) - set(expected_keys)
-    # If a module has the same name under the base and task specific model, we have to re-add it to unexpected keys
-    if loading_base_model_from_task_state_dict:
-        task_specific_keys = [k for k in original_checkpoint_keys if not k.startswith(f"{prefix}.")]
-        unexpected_keys.update(task_specific_keys)
-
-    # Remove nonpersistent buffers from unexpected keys: they are not in the expected keys (model state dict), but
-    # may be in the loaded keys. Note that removing all buffers does the job, as they were part of the expected keys anyway
-    model_buffers = {n for n, _ in model.named_buffers()}
-    unexpected_keys = sorted(unexpected_keys - model_buffers)
-
-    tied_params = find_tied_parameters(model)
-    for group in tied_params:
-        missing_in_group = [k for k in missing_keys if k in group]
-        if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
-            missing_keys = [k for k in missing_keys if k not in missing_in_group]
-
-    if hf_quantizer is not None:
-        missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
-        unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys)
-
-    return missing_keys, unexpected_keys
-
-
-def _find_mismatched_keys(
-    model: "PreTrainedModel",
-    state_dict: Optional[dict],
-    new_state_dict: Optional[dict],
-    checkpoint_files: Optional[list[str]],
-    ignore_mismatched_sizes: bool,
-    keys_to_rename_mapping: dict[str, str],
-    is_quantized: bool,
-    weights_only: bool,
-) -> tuple[list[str], list[tuple[int, int]]]:
-    """
-    Find potential shape mismatch between the different state dicts and the model parameters, but only if `ignore_mismatched_sizes`
-    is True. Otherwise, return immediately and any shape mismatch that may exist will be raised later on. This avoids checking
-    every parameter in advance, as shape mismatch are extremely rare in practice. If we want to ignore them however, we do
-    need to check in advance as we need to know which parameters we need to move back from meta to cpu, and initialize
-    correctly. Indeed, as our model initialization takes place at the module level, and not the weight level, in the
-    case of a sharded checkpoint we cannot correctly initialize the weights according to `model._init_weights()` if we perform
-    this check on each state dict at loading time (after the first loaded checkpoint, there are no way to initialize only the
-    mismatched weights if any, without overwriting the previously loaded weights as well because all the module will be
-    initialized, not only the weights that are mismatched).
-    """
-
-    # An error will be raised later on anyway if there is a mismatch - this avoids running the rest of this function
-    # if there are no mismatch (which is almost always the case)
-    if not ignore_mismatched_sizes:
-        return [], []
-
-    if state_dict is not None:
-        checkpoint_files = [""]
-
-    model_state_dict = model.state_dict()
-    mismatched_keys = []
-    mismatched_shapes = []
-    for shard_file in checkpoint_files:
-        # If shard_file is "", we use the existing state_dict instead of loading it
-        if shard_file != "":
-            state_dict = load_state_dict(
-                shard_file, is_quantized=is_quantized, map_location="meta", weights_only=weights_only
-            )
-
-        for key, tensor in new_state_dict.items():
-            if key in model_state_dict and tensor.shape != model_state_dict[key].shape:
-                # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
-                # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
-                if not (
-                    is_quantized and tensor.shape[-1] == 1 and tensor.numel() * 2 == model_state_dict[key].numel()
-                ):
-                    mismatched_keys.append(key)
-                    mismatched_shapes.append((tensor.shape, model_state_dict[key].shape))
-
-    return mismatched_keys, mismatched_shapes
-
-
 class PipelineParallel(Enum):
     inputs = 0
     outputs = 1
@@ -3835,7 +3739,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
-                # joyfulness), but for now this enough.
+                # joyfulness), but for now this enough. # TODO: we should def parallelize this we are otherwise just waiting
+                # too much before scheduling the next write when its on a different 
                 safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
@@ -4709,29 +4614,42 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         merged_state_dict = {}
         all_pointer = set()
 
+        if device_map is None:
+            device_map = {"":"cpu"}
         keys = sorted(device_map.keys(), key=len, reverse=True)
-        pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
-        for k, v in sharded_metadata["weight_map"].items():
-            key = pattern.match(k).group(1)
-            if key is not None and key != "":
-                device = device_map[key]
-            else:
-                device = device_map[""]
-                if isinstance(device, torch.device):
-                    device = device.index # safetensors only
-            file_pointer = safe_open(
-                os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
-            )
-            all_pointer.add(file_pointer)
-            merged_state_dict[k] = (v, file_pointer.get_slice(k))  # don't meterialize yet
-            tp_plan = getattr(model, "_tp_plan", None)
-
+        tp_plan = getattr(model, "_tp_plan", None)
         keep_in_dtype = None
         error_msgs = []
         misc = {}
+
         if is_deepspeed_zero3_enabled() and not is_quantized:
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
         else:
+            if checkpoint_files is not None:
+                pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
+                if sharded_metadata is None:
+                    k_v_iterator = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), "model.safetensors").items()
+                else:
+                    k_v_iterator = sharded_metadata["weight_map"].items()
+
+                for k, v in k_v_iterator:
+                    key = pattern.match(k).group(1)
+                    if key is not None and key != "":
+                        device = device_map[key]
+                    else:
+                        device = device_map[""]
+                        if isinstance(device, torch.device):
+                            device = device.index # safetensors only
+                    file_pointer = safe_open(
+                        os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
+                    )
+                    all_pointer.add(file_pointer)
+                    merged_state_dict[k] = (v, file_pointer.get_slice(k))  # don't meterialize yet
+            elif state_dict is not None:
+                merged_state_dict = {k: ("", v) for k,v in state_dict.items()}
+            else:
+                raise ValueError("Neither a state dict nor checkpoint files were found.")
+
             missing_keys, unexpected_keys, mismatched_keys, misc = convert_and_load_state_dict_in_model(
                 model,
                 merged_state_dict,
@@ -4812,6 +4730,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             mismatched_keys=mismatched_keys,
             mismatched_shapes=mismatched_keys,
             misc=misc,
+            ignore_mismatched_sizes=ignore_mismatched_sizes
         )
         disk_offload_index = None
         return model, missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, error_msgs

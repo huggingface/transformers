@@ -765,6 +765,7 @@ def convert_and_load_state_dict_in_model(
                                 misc[layer_name] = f"{op.__class__.__name__}: {e}"
 
                     if progress_bar is not None:
+                        progress_bar.set_postfix_str(layer_name, refresh=False)
                         progress_bar.update()
 
                     for k, output_value in realized_value.items():
