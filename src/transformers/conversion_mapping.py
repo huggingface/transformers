@@ -60,3 +60,18 @@ _checkpoint_conversion_mapping = {
     ],
 }
 _checkpoint_conversion_mapping["phimoe"] = _checkpoint_conversion_mapping["mixtral"].copy()
+_checkpoint_conversion_mapping["deepseek_v2"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["deepseek_v3"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["dot1"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["ernie_4_5_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["glm4_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["glm4v_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["jamba"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["lfm2_moe"] = _checkpoint_conversion_mapping["mixtral"].copy()
+_checkpoint_conversion_mapping["long_cat_flash"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["qwen3_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["qwen3_omni_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["qwen3_next"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["qwen3_vl_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["hunyuan_v1_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
+_checkpoint_conversion_mapping["minimax"] = _checkpoint_conversion_mapping["mixtral"].copy()
