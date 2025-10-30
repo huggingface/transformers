@@ -16,15 +16,18 @@
 import unittest
 
 import numpy as np
+import pytest
+from packaging import version
 
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
 
 
 if is_torch_available():
+    import torch
     from PIL import Image
 
 if is_vision_available():
@@ -332,9 +335,28 @@ class Ernie4_5_VlVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             if prev_max_resolution is not None:
                 self.video_processor_tester.max_resolution = prev_max_resolution
 
-    @unittest.skip(
-        reason="Ernie 4.5 VL draws on images with PIL which is not tracable by torch. "
-        "See `_render_image_with_timestamp` for the concrete function."
-    )
+    @slow
+    @require_torch_accelerator
+    @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_video_processor(self):
-        pass
+        if self.fast_video_processing_class is None:
+            self.skipTest("Skipping compilation test as fast video processor is not defined")
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        torch.compiler.reset()
+        video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
+        video_processor = self.fast_video_processing_class(**self.video_processor_dict)
+        output_eager = video_processor(
+            video_inputs, device=torch_device, draw_on_frames=False, do_sample_frames=False, return_tensors="pt"
+        )
+
+        video_processor = torch.compile(video_processor, mode="reduce-overhead")
+        output_compiled = video_processor(
+            video_inputs, device=torch_device, draw_on_frames=False, do_sample_frames=False, return_tensors="pt"
+        )
+
+        torch.testing.assert_close(
+            output_eager[self.input_name], output_compiled[self.input_name], rtol=1e-4, atol=1e-4
+        )

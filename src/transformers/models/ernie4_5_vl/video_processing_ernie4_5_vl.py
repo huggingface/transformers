@@ -74,6 +74,7 @@ class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
+    draw_on_frames: bool
 
 
 @add_start_docstrings(
@@ -94,6 +95,10 @@ class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
             The minimum number of frames that can be sampled.
         max_frames (`int`, *optional*, defaults to 180):
             The maximum number of frames that can be sampled.
+        draw_on_frames (`bool`, *optional*, defaults to `True`):
+            Whether to draw timestamps on each frame or not.
+            This does not work with `torch.compile` but resembles
+            the performance of he original model.
     """,
 )
 @requires(backends=("torchvision",))
@@ -115,6 +120,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     min_frames = 16
     max_frames = 180
     do_sample_frames = True
+    draw_on_frames = True
     valid_kwargs = Ernie4_5_VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
@@ -232,6 +238,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional[str] = None,
         video_metadata: Optional[list[VideoMetadata]] = None,
+        draw_on_frames: bool = True,
     ) -> list["torch.Tensor"]:
         """
         Prepare the input videos for processing.
@@ -260,11 +267,12 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             if input_data_format == ChannelDimension.LAST:
                 video = video.permute(0, 3, 1, 2).contiguous()
 
-            # specific to ernie, draws timestamps on each frame
-            for idx, frame in enumerate(video):
-                video[idx] = self._render_image_with_timestamp(
-                    frame, self._convert_timestamp(metadata.timestamps[idx])
-                )
+            # specific to ernie, draws timestamps on each frame (if enabled)
+            if draw_on_frames:
+                for idx, frame in enumerate(video):
+                    video[idx] = self._render_image_with_timestamp(
+                        frame, self._convert_timestamp(metadata.timestamps[idx])
+                    )
 
             # last frame is copied if uneven (mitigating issues for temporal patch size)
             if video.shape[0] % 2 != 0:
@@ -397,6 +405,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         do_sample_frames = kwargs.pop("do_sample_frames")
         device = kwargs.pop("device")
         video_metadata = kwargs.pop("video_metadata")
+        draw_on_frames = kwargs.pop("draw_on_frames")
 
         sample_indices_fn = partial(self.sample_frames, **kwargs) if do_sample_frames else None
         videos, video_metadata = self._decode_and_sample_videos(
@@ -406,7 +415,11 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             sample_indices_fn=sample_indices_fn,
         )
         videos = self._prepare_input_videos(
-            videos=videos, input_data_format=input_data_format, device=device, video_metadata=video_metadata
+            videos=videos,
+            input_data_format=input_data_format,
+            device=device,
+            video_metadata=video_metadata,
+            draw_on_frames=draw_on_frames,
         )
 
         kwargs = self._further_process_kwargs(**kwargs)

@@ -13,14 +13,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch Ernie 4.5 VL model."""
 
-import copy
-import tempfile
 import unittest
 
-import requests
-
 from transformers import (
-    AutoProcessor,
     Ernie4_5_VLConfig,
     Ernie4_5_VLForConditionalGeneration,
     Ernie4_5_VLModel,
@@ -28,13 +23,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
-    cleanup,
-    is_flaky,
-    require_cv2,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
-    slow,
     torch_device,
 )
 from transformers.utils import is_cv2_available
@@ -43,20 +32,19 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
 
 
 if is_cv2_available():
-    import cv2
+    pass
 
 if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Ernie4_5_VLVisionText2TextModelTester:
@@ -108,7 +96,7 @@ class Ernie4_5_VLVisionText2TextModelTester:
                 "max_position_embeddings": 512,
                 "tie_word_embeddings": True,
                 "rope_parameters": {"type": "ernie_3d", "freq_allocation": 2},
-                "moe_intermediate_size":[22, 22],
+                "moe_intermediate_size": [22, 22],
                 "moe_k": 2,
                 "moe_num_experts": 8,
                 "moe_num_shared_experts": 2,
@@ -153,10 +141,7 @@ class Ernie4_5_VLVisionText2TextModelTester:
         config = self.get_config()
         patch_size = config.vision_config.patch_size
         pixel_values = floats_tensor(
-            [
-                self.batch_size * (self.image_size**2) // (patch_size**2),
-                self.num_channels * (patch_size**2)
-            ]
+            [self.batch_size * (self.image_size**2) // (patch_size**2), self.num_channels * (patch_size**2)]
         )
 
         return config, pixel_values
@@ -183,7 +168,9 @@ class Ernie4_5_VLVisionText2TextModelTester:
 
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, patches_per_side, patches_per_side]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor(
+                [[1, patches_per_side, patches_per_side]] * self.batch_size, device=torch_device
+            ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
