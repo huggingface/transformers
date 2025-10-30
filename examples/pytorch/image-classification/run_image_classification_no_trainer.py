@@ -116,6 +116,12 @@ def parse_args():
         type=int,
         default=8,
         help="Batch size (per device) for the training dataloader.",
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="Number of updates steps to accumulate before performing a backward/update pass.",
+    )
     )
     parser.add_argument(
         "--per_device_eval_batch_size",
