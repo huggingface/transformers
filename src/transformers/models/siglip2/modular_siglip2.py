@@ -231,6 +231,10 @@ class Siglip2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+class Siglip2PreTrainedModel(SiglipPreTrainedModel):
+    pass
+
+
 class Siglip2VisionTransformer(SiglipVisionTransformer):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
@@ -279,10 +283,6 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-
-class Siglip2PreTrainedModel(SiglipPreTrainedModel):
-    pass
 
 
 class Siglip2TextModel(SiglipTextModel):

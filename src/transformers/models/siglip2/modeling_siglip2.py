@@ -349,40 +349,6 @@ class Siglip2EncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Siglip2Encoder(nn.Module):
-    """
-    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`Siglip2EncoderLayer`].
-
-    Args:
-        config: Siglip2Config
-    """
-
-    def __init__(self, config: Siglip2Config):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([Siglip2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    # Ignore copy
-    @auto_docstring
-    def forward(
-        self,
-        inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
-            hidden_states = encoder_layer(
-                hidden_states,
-                attention_mask,
-                **kwargs,
-            )
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
-
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
@@ -474,108 +440,6 @@ def lecun_normal_(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
 
 
-class Siglip2VisionTransformer(PreTrainedModel):
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    _can_record_outputs = {
-        "hidden_states": Siglip2EncoderLayer,
-        "attentions": Siglip2Attention,
-    }
-
-    def __init__(self, config: Siglip2VisionConfig):
-        super().__init__(config)
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = Siglip2VisionEmbeddings(config)
-        self.encoder = Siglip2Encoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
-        if self.use_head:
-            self.head = Siglip2MultiheadAttentionPoolingHead(config)
-
-    def _init_weights(self, module):
-        if isinstance(module, Siglip2VisionEmbeddings):
-            width = self.config.hidden_size
-            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
-        elif isinstance(module, Siglip2Attention):
-            nn.init.xavier_uniform_(module.q_proj.weight)
-            nn.init.xavier_uniform_(module.k_proj.weight)
-            nn.init.xavier_uniform_(module.v_proj.weight)
-            nn.init.xavier_uniform_(module.out_proj.weight)
-            nn.init.zeros_(module.q_proj.bias)
-            nn.init.zeros_(module.k_proj.bias)
-            nn.init.zeros_(module.v_proj.bias)
-            nn.init.zeros_(module.out_proj.bias)
-        elif isinstance(module, Siglip2MLP):
-            nn.init.xavier_uniform_(module.fc1.weight)
-            nn.init.xavier_uniform_(module.fc2.weight)
-            nn.init.normal_(module.fc1.bias, std=1e-6)
-            nn.init.normal_(module.fc2.bias, std=1e-6)
-        elif "MultiheadAttentionPoolingHead" in module.__class__.__name__:
-            if hasattr(module, "probe"):
-                nn.init.xavier_uniform_(module.probe.data)
-            if hasattr(module, "attention"):
-                nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
-                nn.init.zeros_(module.attention.in_proj_bias.data)
-        elif isinstance(module, nn.LayerNorm):
-            nn.init.ones_(module.weight)
-            nn.init.zeros_(module.bias)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        attention_mask: torch.Tensor,
-        spatial_shapes: torch.LongTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
-            Tensor containing the spatial dimensions (height, width) of the input images.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        hidden_states = self.embeddings(pixel_values, spatial_shapes)
-
-        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
-            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
-        else:
-            encoder_attention_mask = attention_mask
-
-        encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        last_hidden_state = encoder_outputs.last_hidden_state
-        last_hidden_state = self.post_layernorm(last_hidden_state)
-
-        pooler_output = self.head(last_hidden_state, attention_mask) if self.use_head else None
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooler_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
 def default_flax_embed_init(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
@@ -648,6 +512,105 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+
+class Siglip2Encoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`Siglip2EncoderLayer`].
+
+    Args:
+        config: Siglip2Config
+    """
+
+    def __init__(self, config: Siglip2Config):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([Siglip2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    # Ignore copy
+    @auto_docstring
+    def forward(
+        self,
+        inputs_embeds,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask,
+                **kwargs,
+            )
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
+class Siglip2VisionTransformer(Siglip2PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Siglip2EncoderLayer,
+        "attentions": Siglip2Attention,
+    }
+
+    def __init__(self, config: Siglip2VisionConfig):
+        super().__init__(config)
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = Siglip2VisionEmbeddings(config)
+        self.encoder = Siglip2Encoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
+        if self.use_head:
+            self.head = Siglip2MultiheadAttentionPoolingHead(config)
+
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        attention_mask: torch.Tensor,
+        spatial_shapes: torch.LongTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        hidden_states = self.embeddings(pixel_values, spatial_shapes)
+
+        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
+            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
+            encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+        else:
+            encoder_attention_mask = attention_mask
+
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            attention_mask=encoder_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        pooler_output = self.head(last_hidden_state, attention_mask) if self.use_head else None
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooler_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class Siglip2TextEmbeddings(nn.Module):
