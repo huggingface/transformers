@@ -27,7 +27,6 @@ from transformers import (
     AutoTokenizer,
     Ernie4_5_VLConfig,
     Ernie4_5_VLImageProcessor,
-    # Ernie4_5_VLImageProcessorFast,
     Ernie4_5_VLProcessor,
     Ernie4_5_VLVideoProcessor,
     LlamaTokenizer,
@@ -328,7 +327,7 @@ def convert_text_config_to_hf(text_config, original_config):
 
 
 def convert_config(model_path, save_dir):
-    checkpoint_path = snapshot_download(repo_id=model_path, allow_patterns=["*.config"])
+    checkpoint_path = snapshot_download(repo_id=model_path, allow_patterns=["*config*"])
     for filename in sorted(os.listdir(checkpoint_path)):
         if filename == CONFIG_NAME:
             hf_config = Ernie4_5_VLConfig()
@@ -424,9 +423,10 @@ def convert_processor(model_path, save_dir):
     tokenizer = AutoTokenizer.from_pretrained(save_dir)
 
     processor = Ernie4_5_VLProcessor(
-        # TODO: switch to fast processor, slightly changes output on larger models tho
-        image_processor=Ernie4_5_VLImageProcessor(),
+        # Intentionally use the slow image processor as the fast processor
+        # creates too much fluctuation affecting the model output
         # image_processor=Ernie4_5_VLImageProcessorFast(),
+        image_processor=Ernie4_5_VLImageProcessor(),
         tokenizer=tokenizer,
         video_processor=Ernie4_5_VLVideoProcessor(),
         chat_template=tokenizer.chat_template,

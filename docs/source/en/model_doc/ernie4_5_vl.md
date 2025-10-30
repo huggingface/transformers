@@ -48,19 +48,23 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Ernie4_5_VLTextConfig
 
+## Ernie4_5_VLVisionConfig
+
+[[autodoc]] Ernie4_5_VLVisionConfig
+
 ## Ernie4_5_VLImageProcessor
 
 [[autodoc]] Ernie4_5_VLImageProcessor
     - preprocess
 
-## Ernie4_5_VLVideoProcessor
-
-[[autodoc]] Ernie4_5_VLVideoProcessor
-    - preprocess
-
 ## Ernie4_5_VLImageProcessorFast
 
 [[autodoc]] Ernie4_5_VLImageProcessorFast
+    - preprocess
+
+## Ernie4_5_VLVideoProcessor
+
+[[autodoc]] Ernie4_5_VLVideoProcessor
     - preprocess
 
 ## Ernie4_5_VLProcessor
@@ -70,6 +74,16 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## Ernie4_5_VLTextModel
 
 [[autodoc]] Ernie4_5_VLTextModel
+    - forward
+
+## Ernie4_5_VLVisionTransformerPretrainedModel
+
+[[autodoc]] Ernie4_5_VLVisionTransformerPretrainedModel
+    - forward
+
+## Ernie4_5_VLVariableResolutionResamplerModel
+
+[[autodoc]] Ernie4_5_VLVariableResolutionResamplerModel
     - forward
 
 ## Ernie4_5_VLModel
