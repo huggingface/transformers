@@ -536,8 +536,6 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = MiniMaxAttention(config, layer_idx)
-
-        self.mlp = MiniMaxSparseMoeBlock(config)
         self.input_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -545,7 +543,7 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
-
+        self.block_sparse_moe = MiniMaxSparseMoeBlock(config)
         if self.layer_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor

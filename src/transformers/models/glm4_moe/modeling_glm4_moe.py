@@ -334,10 +334,13 @@ class Glm4MoeNaiveMoe(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
-        nn.ModuleList.__init__(self)
+        super().__init__()
         self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(Glm4MoeMLP(config, intermediate_size=config.moe_intermediate_size))
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
         self,

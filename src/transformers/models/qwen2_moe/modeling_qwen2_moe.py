@@ -310,7 +310,7 @@ class Qwen2MoeExperts(nn.Module):
         final_hidden_states = torch.zeros_like(hidden_states)
 
         num_experts = top_k_weights.shape[1]
-        expert_mask = F.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
@@ -319,10 +319,12 @@ class Qwen2MoeExperts(nn.Module):
             with torch.no_grad():
                 _, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = F.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = F.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states *  top_k_weights[token_idx, expert_idx].unsqueeze(-1)
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+
+            routing_weights = top_k_weights[token_idx, expert_idx].unsqueeze(-1)
+            current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
@@ -338,13 +340,15 @@ class Qwen2MoeTopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
         router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_top_value = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).to(hidden_states.dtype)
-        return router_top_value, router_indices
+        router_top_value = router_top_value.to(router_logits.dtype)
+        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
+        return router_scores, router_indices
 
 
 class Qwen2MoeSparseMoeBlock(nn.Module):
