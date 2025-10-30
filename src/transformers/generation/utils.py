@@ -3493,55 +3493,15 @@ class GenerationMixin(ContinuousMixin):
             if synced_gpus and this_peer_finished:
                 continue
 
-            # Store scores, attentions and hidden_states when required
-            # Assistant: modified to append one tuple element per token, as in the other generation methods.
-            # ... after computing new_logits, next_token_logits, and valid_tokens
-            decoder_attention_chunks = cross_attention_chunks = decoder_hidden_state_chunks = None
-
-            if generate_output["output_attentions"]:
-                if self.config.is_encoder_decoder:
-                    cross_attention_chunks = _split_model_outputs(
-                        outputs.cross_attentions,
-                        cur_len,
-                        n_matches + 1,
-                        is_prefill_pass=is_first_iteration,
-                        is_decoder_attention=False,
-                    )
-                decoder_attention_chunks = _split_model_outputs(
-                    outputs.decoder_attentions if self.config.is_encoder_decoder else outputs.attentions,
-                    cur_len,
-                    n_matches + 1,
-                    is_prefill_pass=is_first_iteration,
-                    is_decoder_attention=True,
-                )
-
-            if generate_output["output_hidden_states"]:
-                hidden_states = (
-                    outputs.decoder_hidden_states if self.config.is_encoder_decoder else outputs.hidden_states
-                )
-                decoder_hidden_state_chunks = _split_model_outputs(
-                    hidden_states,
-                    cur_len,
-                    n_matches + 1,
-                    is_prefill_pass=is_first_iteration,
-                    is_decoder_attention=False,
-                )
-
-            score_tensors = (
-                tuple(new_logits[:, i, :] for i in range(n_matches + 1)) if generate_output["output_scores"] else None
-            )
-            logits_tensors = (
-                tuple(next_token_logits[:, i, :] for i in range(n_matches + 1))
-                if generate_output["output_logits"]
-                else None
-            )
             self._accumulate_optional_generate_output(
                 generate_output,
-                score_tensors=score_tensors,
-                logits_tensors=logits_tensors,
-                decoder_attentions_chunks=decoder_attention_chunks,
-                cross_attentions_chunks=cross_attention_chunks,
-                decoder_hidden_states_chunks=decoder_hidden_state_chunks,
+                score_tensors=new_logits,
+                logits_tensors=next_token_logits,
+                cur_len=cur_len,
+                added_len=int(n_matches + 1),
+                split_outputs=True,
+                is_first_iteration=is_first_iteration,
+                **outputs,
             )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, generate_output["scores"])
@@ -3671,16 +3631,15 @@ class GenerationMixin(ContinuousMixin):
         generate_output: dict[str, Any],
         score_tensors: Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]] = None,
         logits_tensors: Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]] = None,
-        # standard path: unpack a ModelOutput with **outputs
         attentions: Optional[tuple[torch.FloatTensor, ...]] = None,
         decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None,
         cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None,
         hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None,
         decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None,
-        # assisted path: pre-split, token-wise chunks
-        decoder_attentions_chunks: Optional[tuple[Any, ...]] = None,
-        cross_attentions_chunks: Optional[tuple[Any, ...]] = None,
-        decoder_hidden_states_chunks: Optional[tuple[Any, ...]] = None,
+        cur_len: Optional[int] = None,
+        added_len: int = 1,
+        split_outputs=False,
+        is_first_iteration=False,
         **kwargs: Any,
     ) -> None:
         """
@@ -3715,6 +3674,67 @@ class GenerationMixin(ContinuousMixin):
         if not generate_output["return_dict_in_generate"]:
             return
 
+        # Multiple tokens generated (e.g. assisted generation)
+        # Store scores, attentions and hidden_states when required
+        # Assistant: modified to append one tuple element per token, as in the other generation methods.
+        if split_outputs:
+            if generate_output["output_attentions"]:
+                if self.config.is_encoder_decoder:
+                    cross_attentions = _split_model_outputs(
+                        cross_attentions,
+                        cur_len,
+                        added_len,
+                        # is_prefill_pass=len(generate_output["decoder_attentions"]) == 0,
+                        is_prefill_pass=is_first_iteration,
+                        is_decoder_attention=False,
+                    )
+                    decoder_attentions = _split_model_outputs(
+                        decoder_attentions,
+                        cur_len,
+                        added_len,
+                        is_prefill_pass=is_first_iteration,
+                        is_decoder_attention=True,
+                    )
+                else:
+                    attentions = _split_model_outputs(
+                        attentions,
+                        cur_len,
+                        added_len,
+                        is_prefill_pass=is_first_iteration,
+                        is_decoder_attention=True,
+                    )
+
+            if generate_output["output_hidden_states"]:
+                if self.config.is_encoder_decoder:
+                    decoder_hidden_states = _split_model_outputs(
+                        decoder_hidden_states,
+                        cur_len,
+                        added_len,
+                        is_prefill_pass=is_first_iteration,
+                        is_decoder_attention=False,
+                    )
+                else:
+                    hidden_states = _split_model_outputs(
+                        hidden_states,
+                        cur_len,
+                        added_len,
+                        is_prefill_pass=is_first_iteration,
+                        is_decoder_attention=False,
+                    )
+
+            score_tensors = (
+                tuple(score_tensors[:, i, :] for i in range(added_len)) if generate_output["output_scores"] else None
+            )
+            logits_tensors = (
+                tuple(logits_tensors[:, i, :] for i in range(added_len)) if generate_output["output_logits"] else None
+            )
+        else:
+            decoder_attentions = (decoder_attentions,)
+            cross_attentions = (cross_attentions,)
+            attentions = (attentions,)
+            decoder_hidden_states = (decoder_hidden_states,)
+            hidden_states = (hidden_states,)
+
         # Normalize scores/logits to tuples (inline, no helper)
         if generate_output["output_scores"] and score_tensors is not None:
             if isinstance(score_tensors, (tuple, list)):
@@ -3728,47 +3748,27 @@ class GenerationMixin(ContinuousMixin):
             else:
                 generate_output["raw_logits"] = generate_output["raw_logits"] + (logits_tensors,)
 
-        # Assisted path: append pre-split chunks (many per step)
-        if generate_output["output_attentions"]:
-            if decoder_attentions_chunks is not None:
-                generate_output["decoder_attentions"] = generate_output["decoder_attentions"] + tuple(
-                    decoder_attentions_chunks
-                )
-            if self.config.is_encoder_decoder and cross_attentions_chunks is not None:
-                generate_output["cross_attentions"] = generate_output["cross_attentions"] + tuple(
-                    cross_attentions_chunks
-                )
-
-        if generate_output["output_hidden_states"] and decoder_hidden_states_chunks is not None:
-            generate_output["decoder_hidden_states"] = generate_output["decoder_hidden_states"] + tuple(
-                decoder_hidden_states_chunks
-            )
-
         # Standard path: single-step append from ModelOutput (**outputs)
         # Prefer decoder_* keys when present; fall back to decoder-only keys.
         if generate_output["output_attentions"]:
             if self.config.is_encoder_decoder:
                 if decoder_attentions is not None:
-                    generate_output["decoder_attentions"] = generate_output["decoder_attentions"] + (
-                        decoder_attentions,
-                    )
+                    generate_output["decoder_attentions"] = generate_output["decoder_attentions"] + decoder_attentions
                 if cross_attentions is not None:
-                    generate_output["cross_attentions"] = generate_output["cross_attentions"] + (cross_attentions,)
+                    generate_output["cross_attentions"] = generate_output["cross_attentions"] + cross_attentions
             else:
                 if attentions is not None:
-                    generate_output["decoder_attentions"] = generate_output["decoder_attentions"] + (attentions,)
+                    generate_output["decoder_attentions"] = generate_output["decoder_attentions"] + attentions
 
         if generate_output["output_hidden_states"]:
             if self.config.is_encoder_decoder:
                 if decoder_hidden_states is not None:
-                    generate_output["decoder_hidden_states"] = generate_output["decoder_hidden_states"] + (
-                        decoder_hidden_states,
+                    generate_output["decoder_hidden_states"] = (
+                        generate_output["decoder_hidden_states"] + decoder_hidden_states
                     )
             else:
                 if hidden_states is not None:
-                    generate_output["decoder_hidden_states"] = generate_output["decoder_hidden_states"] + (
-                        hidden_states,
-                    )
+                    generate_output["decoder_hidden_states"] = generate_output["decoder_hidden_states"] + hidden_states
 
     def _finalize_generate_output(
         self,
