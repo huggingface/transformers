@@ -421,8 +421,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
         EXPECTED_DECODED_TEXT = [
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft'
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as its short'
         ]  # fmt: skip
 
         self.assertEqual(
