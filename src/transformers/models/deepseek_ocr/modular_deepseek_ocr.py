@@ -40,6 +40,7 @@ from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2DecoderLayer,
     DeepseekV2Model,
+    DeepseekV2PreTrainedModel,
     DeepseekV2RMSNorm,
 )
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
@@ -727,6 +728,10 @@ class DeepseekOcrTextRMSNorm(DeepseekV2RMSNorm):
     pass
 
 
+class DeepseekOcrTextPreTrainedModel(DeepseekV2PreTrainedModel):
+    pass
+
+
 class DeepseekOcrTextModel(DeepseekV2Model):
     config: DeepseekOcrTextConfig
     base_model_prefix = "model"
@@ -1172,6 +1177,8 @@ __all__ = [
     "DeepseekOcrProjectorConfig",
     "DeepseekOcrModelOutputWithPast",
     "DeepseekOcrCausalLMOutputWithPast",
+    "DeepseekOcrTextModel",
+    "DeepseekOcrTextPreTrainedModel",
     "DeepseekOcrModel",
     "DeepseekOcrForConditionalGeneration",
     "DeepseekOcrPreTrainedModel",

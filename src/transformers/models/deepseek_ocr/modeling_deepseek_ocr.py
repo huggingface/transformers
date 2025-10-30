@@ -2093,6 +2093,8 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
 __all__ = [
     "DeepseekOcrModelOutputWithPast",
     "DeepseekOcrCausalLMOutputWithPast",
+    "DeepseekOcrTextModel",
+    "DeepseekOcrTextPreTrainedModel",
     "DeepseekOcrModel",
     "DeepseekOcrForConditionalGeneration",
     "DeepseekOcrPreTrainedModel",
