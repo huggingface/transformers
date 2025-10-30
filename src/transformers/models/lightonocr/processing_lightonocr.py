@@ -26,9 +26,6 @@ class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {
-            "patch_size": 14,
-        },
         "common_kwargs": {
             "return_tensors": "pt",
         },
@@ -138,9 +135,6 @@ class LightOnOCRProcessor(ProcessorMixin):
 
         self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
-        # Set the default patch_size for images_kwargs
-        LightOnOCRProcessorKwargs._defaults["images_kwargs"]["patch_size"] = self.effective_patch_size
-
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -158,6 +152,8 @@ class LightOnOCRProcessor(ProcessorMixin):
         )
 
         if images is not None:
+            # Like pixtral
+            output_kwargs["images_kwargs"]["patch_size"] = self.effective_patch_size
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
