@@ -2390,18 +2390,17 @@ class Trainer:
 
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
-
+        _steps_in_current_epoch = 0
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
             epoch_iterator = iter(epoch_dataloader)
-    
+
             if len_dataloader is None and epoch > epochs_trained and _steps_in_current_epoch > 0:
                 steps_in_epoch = _steps_in_current_epoch
                 _steps_in_current_epoch = 0
             if hasattr(epoch_dataloader, "set_epoch"):
                 epoch_dataloader.set_epoch(epoch)
 
-           
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
             step = -1
@@ -2423,7 +2422,7 @@ class Trainer:
                 # For iterable datasets without __len__
                 steps_in_epoch = args.max_steps * args.gradient_accumulation_steps
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
-            _steps_in_current_epoch = 0
+
             remainder = steps_in_epoch % args.gradient_accumulation_steps
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
