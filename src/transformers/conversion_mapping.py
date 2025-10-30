@@ -42,5 +42,17 @@ _checkpoint_conversion_mapping = {
         # ),
         # Testing for now, this one is wrong!
         WeightConverter("*.block_sparse_moe.", "*.mlp."),
+    ],
+        "qwen2_moe": [
+        WeightConverter(
+            source_keys=["mlp.experts.*.gate_proj.weight","mlp.experts.*.up_proj.weight",],
+            target_keys="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        ),
+        WeightConverter(
+            source_keys=["mlp.experts.*.down_proj.weight"],
+            target_keys="mlp.experts.down_proj",
+            operations=[MergeModulelist(dim=0)],
+        ),
     ]
 }
