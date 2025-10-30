@@ -213,7 +213,9 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
 
             # ===========================
+            # BELOW DIFFERENCES WITH GenerationMixin._sample()
             next_token_logits = next_token_logits.reshape(-1, self.config.num_codebooks, self.config.codebook_size)
+            next_tokens = next_tokens.reshape(batch_size, self.config.num_codebooks)
             ras_win_len = 7
             ras_win_max_num_repeat = 2
             if ras_win_len is not None:
@@ -228,49 +230,43 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 cut_idx = min(consecutive_counts.max(), ras_win_len)
                 if cut_idx > 0:
                     generated_audio_inputs_ids = model_kwargs["audio_input_ids"][:, -cut_idx:, :]
-                    # Create mask to exclude counting when equality is 1024
-                    equality_mask = generated_audio_inputs_ids[:, -ras_win_len:, :] == next_tokens[None, :]
-                    not_1024_mask = generated_audio_inputs_ids[:, -ras_win_len:, :] != 1024
-                    rep_num = (equality_mask & not_1024_mask).sum(dim=1)
+                    # Create mask to exclude counting when equality is 1024, audio_stream_eos_id, or audio_stream_bos_id
+                    equality_mask = generated_audio_inputs_ids[:, -ras_win_len:, :] == next_tokens[:, None, :]
+                    not_excluded_mask = (
+                        (generated_audio_inputs_ids[:, -ras_win_len:, :] != 1024) &
+                        (generated_audio_inputs_ids[:, -ras_win_len:, :] != 1025)
+                    )
+                    rep_num = (equality_mask & not_excluded_mask).sum(dim=1)
 
                     row_indices = rep_num >= ras_win_max_num_repeat
-                    resampled_next_tokens = (
-                        next_token_logits[row_indices].softmax(dim=-1).multinomial(1, replacement=True).squeeze(1)
-                    )
-                    next_tokens[row_indices.flatten()] = resampled_next_tokens
-
-            # ===========================
+                    if row_indices.any():
+                        resampled_next_tokens = (
+                            next_token_logits[row_indices].softmax(dim=-1).multinomial(1, replacement=True).squeeze(1)
+                        )
+                        next_tokens[row_indices] = resampled_next_tokens
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+                next_tokens = next_tokens * unfinished_sequences[:, None] + self.config.audio_stream_eos_id * (1 - unfinished_sequences[:, None])
 
-            # ============================
-            if input_ids[..., -1] == 271:
-                next_tokens = torch.tensor([128013], device=input_ids.device)
-            elif input_ids[..., -1] == 128013:
-                next_tokens = torch.tensor([128016], device=input_ids.device)
-                model_kwargs["audio_input_ids"] = torch.cat(
-                    [model_kwargs["audio_input_ids"], torch.tensor([[[1024] * 8]], device=input_ids.device)], dim=1
-                )
-            else:
-                next_tokens = next_tokens.reshape(batch_size, self.config.num_codebooks)
+            # Check which batch elements have audio stream EOS tokens
+            has_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).any(dim=-1)
+            # Check which batch elements have all audio stream EOS tokens
+            has_all_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).all(dim=-1)
 
-                # Check which batch elements have audio stream EOS tokens
-                has_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).any(dim=-1)
-                # Check which batch elements have all audio stream EOS tokens
-                has_all_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).all(dim=-1)
-
-                next_tokens = next_tokens[:, None, :]
+            next_tokens = next_tokens[:, None, :]
+            if model_kwargs.get("audio_input_ids") is not None:
                 model_kwargs["audio_input_ids"] = torch.cat([model_kwargs["audio_input_ids"], next_tokens], dim=1)
+            else:
+                model_kwargs["audio_input_ids"] = next_tokens
 
-                # For batches with audio stream EOS, set next token to audio_eos_token_id
-                next_tokens_flat = (
-                    torch.ones(batch_size, device=input_ids.device, dtype=torch.long) * self.config.audio_out_token_idx
-                )
-                next_tokens_flat[has_audio_stream_eos] = self.config.audio_eos_token_id
-                next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
-                next_tokens = next_tokens_flat
+            # For batches with audio stream EOS, set next token to audio_eos_token_id
+            next_tokens_flat = (
+                torch.ones(batch_size, device=input_ids.device, dtype=torch.long) * self.config.audio_out_token_idx
+            )
+            next_tokens_flat[has_audio_stream_eos] = self.config.audio_eos_token_id
+            next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
+            next_tokens = next_tokens_flat
             # ============================
 
             # update generated ids, model inputs, and length for next step

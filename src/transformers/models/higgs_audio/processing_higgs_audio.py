@@ -34,18 +34,16 @@ logger = logging.get_logger(__name__)
 
 class HiggsAudioProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "left",
+        },
         "audio_kwargs": {
             "sampling_rate": 24000,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
 
-
-@dataclass
-class HiggsAudioResponse:
-    audio: Optional[np.ndarray] = None
-    generated_text: str = ""
-    sampling_rate: Optional[int] = None
 
 
 def revert_delay_pattern(data):
@@ -235,7 +233,7 @@ class HiggsAudioProcessor(ProcessorMixin):
         self,
         decoder_audio_ids: list["torch.Tensor"],
         **kwargs: Unpack[HiggsAudioProcessorKwargs],
-    ) -> HiggsAudioResponse:
+    ):
         output_kwargs = self._merge_kwargs(
             HiggsAudioProcessorKwargs,
             **kwargs,
@@ -253,10 +251,7 @@ class HiggsAudioProcessor(ProcessorMixin):
         else:
             wv_numpy = None
 
-        return HiggsAudioResponse(
-            audio=wv_numpy,
-            sampling_rate=24000
-        )
+        return wv_numpy
 
     def build_delay_pattern_mask(
         self,

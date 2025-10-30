@@ -429,18 +429,21 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        audio_in_token_mask = input_ids == self.config.audio_in_token_idx
+        audio_out_token_mask = input_ids == self.config.audio_out_token_idx
+        audio_token_mask = audio_in_token_mask | audio_out_token_mask
+
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
             if audio_input_ids is not None:
                 audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids)
                 audio_inputs_embeds = audio_inputs_embeds.to(inputs_embeds.device)
-
-                audio_in_token_mask = input_ids == self.config.audio_in_token_idx
-                audio_out_token_mask = input_ids == self.config.audio_out_token_idx
-
-                audio_token_mask = audio_in_token_mask | audio_out_token_mask
-                inputs_embeds = inputs_embeds.masked_scatter(audio_token_mask.unsqueeze(-1), audio_inputs_embeds)
+                inputs_embeds = torch.where(
+                    audio_token_mask.unsqueeze(-1),
+                    audio_inputs_embeds,
+                    inputs_embeds
+                )
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
