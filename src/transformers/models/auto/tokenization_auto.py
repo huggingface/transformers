@@ -1134,24 +1134,22 @@ class AutoTokenizer:
 
         if model_type is not None:
             tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
-
-        if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
-            return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        else:
-            if tokenizer_class_py is not None:
-                # Check for Mistral/Voxtral models before loading
-                if "Mistral" in tokenizer_class_py.__name__:
-                    if importlib.util.find_spec("mistral_common") is None:
+            if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
+                return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            else:
+                if tokenizer_class_py is not None:
+                    # Check for Mistral/Voxtral models before loading
+                    if "Mistral" in tokenizer_class_py.__name__ and importlib.util.find_spec("mistral_common") is None:
                         raise ImportError(
                             "The tokenizer for Voxtral or Mistral models requires the `mistral-common` package.\n"
                             "Please install it with:\n\n    pip install mistral-common\n"
                         )
-                return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                    return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            raise ValueError(
-                "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
-                "in order to use this tokenizer."
-            )
+        raise ValueError(
+            "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
+            "in order to use this tokenizer."
+        )
 
     @staticmethod
     def register(config_class, slow_tokenizer_class=None, fast_tokenizer_class=None, exist_ok=False):
