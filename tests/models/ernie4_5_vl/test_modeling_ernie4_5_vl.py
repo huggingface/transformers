@@ -415,8 +415,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
         EXPECTED_DECODED_TEXT = [
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as its short'
+            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft'
         ]  # fmt: skip
 
         self.assertEqual(
@@ -475,7 +475,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nthere are no dogs here, there are 2 cats\nI am an AI assistant. User will you give you a task.',
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nthere are no dogs here, there are 2 cats\nI am an AI assistant. I will benefit from learning by comparing what',
         ]  # fmt: skip
 
         self.assertEqual(
@@ -510,7 +510,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nthere are no dogs here, there are 2 cats\nI am an AI visual assistant. Here is my analysis of the image'
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nthere are no dogs here, there are 2 cats\nI am an AI assistant. I will benefit from learning by comparing what',
         ]  # fmt: skip
 
         self.assertEqual(
@@ -548,7 +548,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            "User: Who are you?\nAssistant: \n\n\n\nI am an AI assistant designed to help answer questions, provide information, and assist with tasks. I don't have personal experiences or a physical form"
+            "User: Who are you?\nAssistant: \n\n\n\nI'm an AI assistant created to help answer questions and provide information on a wide range of topics! I don't have personal experiences or a"
         ]  # fmt: skip
 
         self.assertEqual(
