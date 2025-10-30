@@ -48,7 +48,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-CHECKPOINT = "stevenbucaille/lwdetr_tiny_30e_objects365"
+CHECKPOINT = {
+    "tiny": "stevenbucaille/lwdetr_tiny_30e_objects365",
+    "xlarge": "stevenbucaille/lwdetr_xlarge_30e_objects365",
+}
 
 
 def prepare_img():
@@ -483,13 +486,20 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class LwDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return DeformableDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        if is_vision_available():
+            return {
+                "tiny": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["tiny"]),
+                "xlarge": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["xlarge"]),
+            }
 
     @slow
-    def test_inference_object_detection_head(self):
-        model = LwDetrForObjectDetection.from_pretrained(CHECKPOINT, attn_implementation="eager").to(torch_device)
+    def test_inference_object_detection_head_tiny(self):
+        size = "tiny"
+        model = LwDetrForObjectDetection.from_pretrained(CHECKPOINT[size], attn_implementation="eager").to(
+            torch_device
+        )
 
-        image_processor = self.default_image_processor
+        image_processor = self.default_image_processor[size]
         image = prepare_img()
         encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
         pixel_values = encoding["pixel_values"].to(torch_device)
@@ -520,4 +530,98 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=2e-4, atol=2e-4)
 
-        # TODO: Add postprocessing tests
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0.0, target_sizes=[image.size[::-1]]
+        )[0]
+
+        expectations = Expectations(
+            {
+                (None, None): [0.8676, 0.7526, 0.7177, 0.4391],
+            }
+        )
+        expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        expected_labels = [140, 133, 140, 133]
+
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [4.8948, 56.5549, 319.8077, 474.7936],
+                    [40.5620, 73.1059, 176.2996, 116.8567],
+                    [340.3327, 25.1024, 640.3193, 368.6755],
+                    [334.2945, 76.9876, 371.2914, 189.8221],
+                ],
+            }
+        )
+        expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
+        self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
+
+    @slow
+    def test_inference_object_detection_head_xlarge(self):
+        size = "xlarge"
+        model = LwDetrForObjectDetection.from_pretrained(CHECKPOINT[size], attn_implementation="eager").to(
+            torch_device
+        )
+
+        image_processor = self.default_image_processor[size]
+        image = prepare_img()
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        pixel_values = encoding["pixel_values"].to(torch_device)
+        pixel_mask = encoding["pixel_mask"].to(torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values, pixel_mask)
+
+        expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_logits_shape)
+
+        expectations = Expectations(
+            {
+                (None, None): [-11.92917, -4.33070, -4.40749, -5.02067, -6.92108],
+            }
+        )
+        expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=2e-4, atol=2e-4)
+
+        expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
+
+        expectations = Expectations(
+            {
+                (None, None): [0.76880, 0.41065, 0.46179, 0.72450, 0.25261],
+            }
+        )
+        expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=2e-4, atol=2e-4)
+
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0.0, target_sizes=[image.size[::-1]]
+        )[0]
+
+        expectations = Expectations(
+            {
+                (None, None): [0.9745, 0.9715, 0.9339, 0.8163],
+            }
+        )
+        expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        expected_labels = [140, 140, 133, 133]
+
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [7.4487, 54.2930, 315.8945, 474.8726],
+                    [344.2597, 23.2305, 639.8083, 370.9894],
+                    [40.4780, 73.3095, 175.6083, 116.9673],
+                    [333.9890, 77.1452, 370.4069, 186.1300],
+                ],
+            }
+        )
+        expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
+        self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
