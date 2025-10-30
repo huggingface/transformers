@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -366,7 +367,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.assertNotIn("reference_compile", config_dict)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_flash_attention_dispatches_by_default(self):
         "ModernBert should dispatch to FA2 by default, not SDPA"

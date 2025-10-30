@@ -33,6 +33,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -623,7 +624,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT[self.cuda_compute_capability_major_version])
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):

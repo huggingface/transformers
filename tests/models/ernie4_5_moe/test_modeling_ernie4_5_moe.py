@@ -25,9 +25,10 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torch_large_accelerator,
     require_torch_multi_accelerator,
+    require_deterministic_for_xpu,
     slow,
     torch_device,
 )
@@ -56,10 +57,11 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Ernie4_5_MoeModelTester
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @is_flaky()
     @slow
+    @require_deterministic_for_xpu
     def test_flash_attn_2_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn:

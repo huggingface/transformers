@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -324,7 +323,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             )  # missing "factor"
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @require_read_token
@@ -364,7 +363,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.assertListEqual(output_native, output_fa_2)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     @pytest.mark.flash_attn_test
     def test_use_flash_attention_2_true(self):
@@ -379,7 +378,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                 new_model = DiffLlamaForCausalLM.from_pretrained(
                     tmp_dir, attn_implementation="flash_attention_2", dtype=torch.float16
-                ).to("cuda")
+                ).to(torch_device)
 
                 self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
 
