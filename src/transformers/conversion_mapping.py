@@ -1,9 +1,17 @@
-# FILE to store the default conversion mapping that we use in `transformers`.
+# coding=utf-8
+# Copyright (C) 2025 the HuggingFace Inc. team. All rights reserved.
 #
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-#
-# Either we keep it here, or we move it to the config, but for newcomers, seeing this is kinda weird no?
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from .core_model_loading import Concatenate, MergeModulelist, WeightConverter
 
@@ -26,7 +34,7 @@ _checkpoint_conversion_mapping = {
         WeightConverter(
             source_keys=[
                 "block_sparse_moe.experts.*.w2.weight",
-            ],  # you give me a list of 2 keys, I collect a list of tensors
+            ],
             target_keys="mlp.experts.down_proj",  # target key gets the list of two tensors
             operations=[
                 MergeModulelist(
@@ -34,13 +42,11 @@ _checkpoint_conversion_mapping = {
                 ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
             ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
         ),
-        # TODO: this one is flag dependant!
         # WeightConverter(
         #     ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
         #     "self_attn.qkv_proj",
         #     Concatenate(dim=0),  # more like stack?
         # ),
-        # Testing for now, this one is wrong!
         WeightConverter("*.block_sparse_moe.", "*.mlp."),
     ],
     "qwen2_moe": [
