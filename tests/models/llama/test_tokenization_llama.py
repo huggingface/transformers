@@ -1,22 +1,17 @@
 import unittest
 
 from tests.test_tokenization_common import TokenizerTesterMixin
-from transformers import AutoTokenizer
 from transformers.models.llama.tokenization_llama import LlamaTokenizer
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
 )
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
 
-
-@require_sentencepiece
 @require_tokenizers
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # TokenizerTesterMixin configuration
     from_pretrained_id = ["hf-internal-testing/llama-tokenizer"]
     tokenizer_class = LlamaTokenizer
-    test_sentencepiece = True
     from_pretrained_kwargs = {}
 
     # Integration test data - expected outputs for the default input string
@@ -33,16 +28,6 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = LlamaTokenizer.from_pretrained(from_pretrained_id)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(cls.tmpdirname)
-
-        # Build backend for slow tokenizer from the fast tokenizer's SentencePiece model
-        vocab_file = getattr(tokenizer, "vocab_file", None)
-
-        extractor = SentencePieceExtractor(vocab_file)
-        vocab_ids, vocab_scores, merges = extractor.extract()
-        tokenizer_from_vocab = LlamaTokenizer(vocab=vocab_ids, merges=merges)
-        tokenizer_from_vocab.pad_token = tokenizer_from_vocab.eos_token
-
-        cls.tokenizers = [tokenizer, tokenizer_from_vocab]
 
     def get_tokenizers(self, **kwargs):
         kwargs.setdefault("pad_token", "<PAD>")

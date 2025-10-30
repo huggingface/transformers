@@ -99,7 +99,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
-        added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
+        # Note: added_tokens_decoder is NOT popped - it's passed to super().__init__() for processing
+        added_tokens_decoder = kwargs.get("added_tokens_decoder", {})
         # Store add_prefix_space before super().__init__() to ensure it's not overridden
         add_prefix_space = kwargs.get("add_prefix_space", False)
 
@@ -197,7 +198,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 continue
             if str(special_token_value) not in encoder and special_token_value not in tokens_to_add:
                 tokens_to_add.append(special_token_value)
-        
+
         # Also check extra special tokens
         for token in self._extra_special_tokens:
             if str(token) not in encoder and token not in tokens_to_add:
@@ -312,7 +313,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             elif isinstance(token_value, str):
                 if self._tokenizer.token_to_id(token_value) is None:
                     tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
-        
+
         # V5: Check extra special tokens
         for token in self._extra_special_tokens:
             if isinstance(token, AddedToken):
@@ -772,7 +773,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     ) -> str:
         # Removed: use_source_tokenizer parameter (unused)
         kwargs.pop("use_source_tokenizer", None)  # Pop if present to avoid errors
-        
+
         if isinstance(token_ids, int):
             token_ids = [token_ids]
         return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
@@ -985,3 +986,94 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             new_tokenizer = self.__class__(**kwargs)
             new_tokenizer._tokenizer = tokenizer
             return new_tokenizer
+
+
+class TokenizersExtractor:
+    """
+    Extractor implementation for tokenizers library tokenizer.json files.
+
+    This class extracts vocab and merges from a tokenizer.json file, similar to
+    SentencePieceExtractor for .model files.
+
+    Example:
+        ```python
+        from transformers import TokenizersExtractor
+
+        extractor = TokenizersExtractor("path/to/tokenizer.json")
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        ```
+    """
+
+    def __init__(self, tokenizer_file: str):
+        """
+        Initialize the extractor with a tokenizer.json file.
+
+        Args:
+            tokenizer_file (str): Path to the tokenizer.json file
+        """
+        with open(tokenizer_file, "r", encoding="utf-8") as f:
+            self.tokenizer_data = json.load(f)
+
+        if "model" not in self.tokenizer_data:
+            raise ValueError(f"Invalid tokenizer.json file: missing 'model' key in {tokenizer_file}")
+
+        self.model_data = self.tokenizer_data["model"]
+        self.model_type = self.model_data.get("type", "Unknown")
+
+    def extract(self) -> tuple[dict[str, int], list[tuple[str, float]], list[tuple[str, str]], list[dict]]:
+        """
+        Extract vocabulary, scores, merges, and added_tokens from the tokenizer.json file.
+
+        Returns:
+            tuple containing:
+                - vocab_ids (dict[str, int]): Mapping from token string to token ID
+                - vocab_scores (list[tuple[str, float]]): List of (token, score) tuples.
+                  Note: tokenizer.json doesn't store scores, so all scores are 0.0
+                - merges (list[tuple[str, str]]): List of merge pairs for BPE tokenizers
+                - added_tokens (list[dict]): List of added token dicts with 'id', 'content', 'special', etc.
+
+        Raises:
+            ValueError: If the tokenizer type is not supported or vocab is missing
+        """
+        # Extract vocabulary
+        if "vocab" not in self.model_data:
+            raise ValueError(f"Tokenizer model type '{self.model_type}' does not have a 'vocab' field")
+
+        vocab_dict = self.model_data["vocab"]
+
+        # Convert vocab dict to the expected format
+        # tokenizer.json stores {token: id}, we want to keep it as-is
+        vocab_ids = dict(vocab_dict)
+
+        # tokenizer.json doesn't store scores like SentencePiece, so we set them all to 0.0
+        # Sort by ID to maintain consistent order
+        vocab_scores = sorted([(token, 0.0) for token, idx in vocab_dict.items()], key=lambda x: vocab_dict[x[0]])
+
+        # Extract merges (for BPE tokenizers)
+        merges = []
+        if "merges" in self.model_data:
+            # tokenizer.json can store merges as either:
+            # 1. Lists like ["▁", "t"]
+            # 2. Strings like "▁ t"
+            for merge_item in self.model_data["merges"]:
+                if isinstance(merge_item, list):
+                    # Already in list format
+                    if len(merge_item) == 2:
+                        merges.append((merge_item[0], merge_item[1]))
+                    else:
+                        logger.warning(f"Invalid merge format (expected 2 items): {merge_item}, skipping")
+                elif isinstance(merge_item, str):
+                    # String format - split on first space
+                    parts = merge_item.split(" ", 1)
+                    if len(parts) == 2:
+                        merges.append((parts[0], parts[1]))
+                    else:
+                        logger.warning(f"Invalid merge format: '{merge_item}', skipping")
+                else:
+                    logger.warning(f"Unknown merge type: {type(merge_item)}, skipping")
+
+        # Extract added_tokens from tokenizer.json
+        # These are tokens that should not be split by the tokenization algorithm
+        added_tokens = self.tokenizer_data.get("added_tokens", [])
+
+        return vocab_ids, vocab_scores, merges, added_tokens

@@ -32,7 +32,7 @@ from parameterized import parameterized
 from transformers import (
     AutoTokenizer,
     BertTokenizer,
-    PythonBackend,
+    PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     TokenizersBackend,
     is_mlx_available,
@@ -46,6 +46,7 @@ from transformers.testing_utils import (
     require_torch,
 )
 from transformers.tokenization_python import AddedToken
+from transformers.tokenization_tokenizers import TokenizersExtractor
 
 from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
 from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
@@ -122,9 +123,9 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 def merge_model_tokenizer_mappings(
     model_mapping: dict["PretrainedConfig", "PreTrainedModel"],
-    tokenizer_mapping: dict["PretrainedConfig", tuple["PythonBackend", "TokenizersBackend"]],
+    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "TokenizersBackend"]],
 ) -> dict[
-    Union["PythonBackend", "TokenizersBackend"],
+    Union["PreTrainedTokenizer", "TokenizersBackend"],
     tuple["PretrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
@@ -147,7 +148,7 @@ def merge_model_tokenizer_mappings(
 
 
 def check_subword_sampling(
-    tokenizer: PythonBackend,
+    tokenizer: PreTrainedTokenizer,
     text: Optional[str] = None,
     test_sentencepiece_ignore_case: bool = True,
 ) -> None:
@@ -243,6 +244,17 @@ Hey how are you doing"""
             cls._data = f_data.read().replace("\n\n", "\n").strip()
 
         cls.tmpdirname = tempfile.mkdtemp()
+        
+        # save the first pretrained tokenizer to tmpdirname for tests to use
+        if cls.from_pretrained_id and cls.tokenizer_class is not None:
+            try:
+                tokenizer = cls.tokenizer_class.from_pretrained(
+                    cls.from_pretrained_id[0],
+                    **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {})
+                )
+                tokenizer.save_pretrained(cls.tmpdirname)
+            except Exception:
+                pass
 
     @classmethod
     def tearDownClass(cls):
@@ -282,19 +294,72 @@ Hey how are you doing"""
 
     def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:
         """
-        If cls.tokenizers is set (e.g., for vocab-based tokenizers like Llama), returns that list.
-        Otherwise, returns a single tokenizer from get_tokenizer().
+        Returns a list containing a single tokenizer from get_tokenizer().
+        Subclasses can override this method to return multiple tokenizers for testing.
         """
-        tokenizers = getattr(self, "tokenizers", None)
-        if tokenizers is not None:
-            return tokenizers
         return [self.get_tokenizer(**kwargs)]
 
     @classmethod
-    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PythonBackend:
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizer:
         """Get a tokenizer instance from pretrained."""
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+    def get_extracted_tokenizer(self, reference_tokenizer=None):
+        """
+        Build a tokenizer from extracted vocab/merges using TokenizersExtractor.
+        
+        Args:
+            reference_tokenizer: Optional tokenizer to copy special tokens from.
+                                If None, uses get_tokenizer().
+        
+        Returns:
+            Tokenizer built from extracted vocab/merges, or None if extraction fails.
+        """
+        from transformers.tokenization_tokenizers import TokenizersExtractor
+        
+        if reference_tokenizer is None:
+            reference_tokenizer = self.get_tokenizer()
+        
+        try:
+            tokenizer_json_path = os.path.join(self.tmpdirname, "tokenizer.json")
+            if not os.path.exists(tokenizer_json_path):
+                return None
+            
+            extractor = TokenizersExtractor(tokenizer_json_path)
+            vocab_ids, vocab_scores, merges, added_tokens = extractor.extract()
+            
+            # Convert added_tokens list to added_tokens_decoder dict format
+            # This matches the format used by from_pretrained() from tokenizer_config.json
+            tokenizer_from_extractor = self.tokenizer_class(
+                vocab=vocab_ids, 
+                merges=merges, 
+                added_tokens_decoder={token_id: token_info for token_id, token_info in added_tokens_decoder.items()}
+            )
+            
+            return tokenizer_from_extractor
+        except (TypeError, Exception):
+            return None
+
+    def get_extracted_tokenizer_from_sentencepiece(self, reference_tokenizer=None):
+        """
+        Build a tokenizer from extracted vocab/merges using SentencePieceExtractor.
+        """
+        from transformers.tokenization_sentencepiece import SentencePieceExtractor
+        
+        try:
+            sentencepiece_model_path = os.path.join(self.tmpdirname, "tokenizer.model")
+            if not os.path.exists(sentencepiece_model_path):
+                return None
+            
+            extractor = SentencePieceExtractor(sentencepiece_model_path)
+            vocab_ids, vocab_scores, merges = extractor.extract()
+            
+            tokenizer_from_extractor = self.tokenizer_class(vocab=vocab_ids, merges=merges)
+            
+            return tokenizer_from_extractor
+        except (TypeError, Exception):
+            return None
 
     def tokenizer_integration_test_util(
         self,
@@ -421,9 +486,7 @@ Hey how are you doing"""
 
         # Both methods should add the token to `_extra_special_tokens` and `added_tokens_decoder`
         tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
-        tokenizer.add_special_tokens(
-            {"extra_special_tokens": [SPECIAL_TOKEN_2]}, replace_extra_special_tokens=False
-        )
+        tokenizer.add_special_tokens({"extra_special_tokens": [SPECIAL_TOKEN_2]}, replace_extra_special_tokens=False)
 
         token_1 = tokenizer.tokenize(SPECIAL_TOKEN_1)
         token_2 = tokenizer.tokenize(SPECIAL_TOKEN_2)
@@ -610,55 +673,6 @@ Hey how are you doing"""
 
         shutil.rmtree(tmpdirname)
 
-    # def test_integration_expected_tokens(self):
-    #     """Test that tokenization produces expected tokens for a comprehensive test string."""
-    #     if input_string is None or self.integration_expected_tokens is None:
-    #         self.skipTest("No integration test data provided")
-
-    #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
-    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
-    #             tokens = tokenizer.tokenize(input_string)
-    #             self.assertEqual(tokens, self.integration_expected_tokens)
-
-    # def test_integration_expected_token_ids(self):
-    #     """Test that encoding produces expected token IDs for a comprehensive test string."""
-    #     if input_string is None or self.integration_expected_token_ids is None:
-    #         self.skipTest("No integration test data provided")
-
-    #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
-    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
-    #             token_ids = tokenizer.encode(input_string)
-    #             self.assertEqual(token_ids, self.integration_expected_token_ids)
-
-    # def test_integration_decode_roundtrip(self):
-    #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
-    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
-    #             token_ids = tokenizer.encode(input_string)
-    #             decoded_text = tokenizer.decode(token_ids)
-    #             self.assertEqual(decoded_text, self.integration_expected_decoded_tokens)
-
-    # def test_integration_save_and_reload(self):
-    #     """Test that tokenizer produces same results after save and reload with integration test data."""
-    #     if input_string is None:
-    #         self.skipTest("No integration test data provided")
-
-    #     for tokenizer in self.get_tokenizers(do_lower_case=False, keep_accents=True):
-    #         with self.subTest(f"{tokenizer.__class__.__name__}"):
-    #             original_tokens = tokenizer.tokenize(input_string)
-    #             original_ids = tokenizer.encode(input_string)
-
-    #             with tempfile.TemporaryDirectory() as tmp_dir:
-    #                 tokenizer.save_pretrained(tmp_dir)
-
-    #                 reloaded_tokenizer = tokenizer.__class__.from_pretrained(tmp_dir)
-
-    #                 # Test that reloaded tokenizer produces same results
-    #                 reloaded_tokens = reloaded_tokenizer.tokenize(input_string)
-    #                 reloaded_ids = reloaded_tokenizer.encode(input_string)
-
-    #                 self.assertEqual(original_tokens, reloaded_tokens)
-    #                 self.assertEqual(original_ids, reloaded_ids)
-
     def test_integration(self):
         """
         Comprehensive test that verifies the entire tokenization pipeline:
@@ -669,6 +683,7 @@ Hey how are you doing"""
         5. convert_tokens_to_string produces consistent text
 
         This test uses the integration test data defined in subclasses.
+        Tests are run on both the original tokenizer and one built from TokenizersExtractor.
         """
         # Skip if no integration test data is provided
         if not hasattr(self, "integration_test_input_string") or self.integration_test_input_string is None:
@@ -680,16 +695,33 @@ Hey how are you doing"""
         if not hasattr(self, "integration_expected_decoded_text") or self.integration_expected_decoded_text is None:
             self.skipTest("No integration expected decoded text provided")
 
-        for tokenizer in [
-            AutoTokenizer.from_pretrained(self.from_pretrained_id[0], do_lower_case=False, keep_accents=True)
-        ]:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
+        # Build list of tokenizers to test
+        tokenizers_to_test = []
+        
+        # 1. Original tokenizer
+        tokenizer_original = AutoTokenizer.from_pretrained(
+            self.from_pretrained_id[0], do_lower_case=False, keep_accents=True
+        )
+        tokenizers_to_test.append(("original", tokenizer_original))
+        
+        # # 2. Try to build tokenizer from TokenizersExtractor
+        tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
+        if tokenizer_from_extractor is not None:
+            tokenizers_to_test.append(("from_extractor", tokenizer_from_extractor))
+
+        # 3. Try to build tokenizer from SentencePieceExtractor
+        # tokenizer_from_sentencepiece = self.get_extracted_tokenizer_from_sentencepiece(reference_tokenizer=tokenizer_original)
+        # if tokenizer_from_sentencepiece is not None:
+        #     tokenizers_to_test.append(("from_sentencepiece", tokenizer_from_sentencepiece))
+
+        for tokenizer_type, tokenizer in tokenizers_to_test:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({tokenizer_type})"):
                 # Test 1: Tokens match expected
                 tokens = tokenizer.tokenize(self.integration_test_input_string)
                 self.assertEqual(
                     tokens,
                     self.integration_expected_tokens,
-                    f"Tokenized tokens don't match expected for {tokenizer.__class__.__name__}",
+                    f"Tokenized tokens don't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
                 )
 
                 # Test 2: IDs from encode match expected (without special tokens)
@@ -697,7 +729,7 @@ Hey how are you doing"""
                 self.assertEqual(
                     ids_from_encode,
                     self.integration_expected_token_ids,
-                    f"Encoded IDs don't match expected for {tokenizer.__class__.__name__}",
+                    f"Encoded IDs don't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
                 )
 
                 # Test 3: Round-trip decode produces expected text (if provided)
@@ -707,7 +739,7 @@ Hey how are you doing"""
                 self.assertEqual(
                     decoded_text,
                     self.integration_expected_decoded_text,
-                    f"Decoded text doesn't match expected for {tokenizer.__class__.__name__}",
+                    f"Decoded text doesn't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
                 )
 
     def test_internal_consistency(self):

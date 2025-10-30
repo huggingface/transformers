@@ -14,10 +14,6 @@
 # limitations under the License
 """Tokenization classes for Camembert model."""
 
-import os
-from shutil import copyfile
-from typing import Optional
-
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
@@ -156,7 +152,7 @@ class CamembertTokenizer(TokenizersBackend):
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
-       
+
         tokenizer_object = self._tokenizer
 
         super().__init__(

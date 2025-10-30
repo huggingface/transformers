@@ -17,9 +17,8 @@ from typing import Optional
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
 from ...tokenization_tokenizers import TokenizersBackend
-
+from ...tokenization_utils_base import generate_merges
 from ...utils import logging
 
 
@@ -45,6 +44,8 @@ class GemmaTokenizer(TokenizersBackend):
             The end of sequence token.
         pad_token (`str`, optional, defaults to "<pad>"):
             The padding token.
+        mask_token (`str`, optional, defaults to "<mask>"):
+            The mask token.
         add_bos_token (`bool`, optional, defaults to True):
             Whether or not to add a `bos_token` at the start of sequences.
         add_eos_token (`bool`, optional, defaults to False):
@@ -64,6 +65,7 @@ class GemmaTokenizer(TokenizersBackend):
         bos_token: str = "<bos>",
         eos_token: str = "<eos>",
         pad_token: str = "<pad>",
+        mask_token: str = "<mask>",
         add_bos_token: bool = True,
         add_eos_token: bool = False,
         vocab: Optional[dict] = None,
@@ -83,13 +85,18 @@ class GemmaTokenizer(TokenizersBackend):
                 str(eos_token): 1,
                 str(bos_token): 2,
                 str(unk_token): 3,
+                str(mask_token): 4,
             }
 
         filtered_vocab = {t: i for t, i in (vocab or {}).items() if t not in special_tokens}
         self._merges = merges if merges is not None else generate_merges(filtered_vocab)
-        self._tokenizer = Tokenizer(BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None))
-        
-        self._tokenizer.decoder = decoders.Sequence([decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()])
+        self._tokenizer = Tokenizer(
+            BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, unk_token=str(unk_token), dropout=None, byte_fallback=True)
+        )
+
+        self._tokenizer.decoder = decoders.Sequence(
+            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
+        )
         self._tokenizer.normalizer = normalizers.Replace(" ", "▁")
         self._tokenizer.pre_tokenizer = pre_tokenizers.Split(" ", "merged_with_previous")
         tokenizer_object = self._tokenizer
@@ -100,12 +107,11 @@ class GemmaTokenizer(TokenizersBackend):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
+            mask_token=mask_token,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             **kwargs,
         )
-        
-        self._post_init()
 
     def _unk_id(self) -> int:
         # Align with historical Gemma convention: pad, eos, bos, unk

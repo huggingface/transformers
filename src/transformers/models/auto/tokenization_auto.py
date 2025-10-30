@@ -494,7 +494,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         ValueError: If tokenizer could not be loaded with tokenizers backend
     """
     files_loaded = []
-    
+
     # Try tokenizer.json first
     try:
         tokenizer_json_exists = has_file(

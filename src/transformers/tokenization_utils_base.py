@@ -993,7 +993,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         self._pad_token_type_id = 0
         self.verbose = kwargs.pop("verbose", False)
-        
+
         # V5: Separate storage for named special tokens and extra special tokens
         self._special_tokens_map = dict.fromkeys(self.SPECIAL_TOKENS_ATTRIBUTES)
         self._extra_special_tokens = []  # List of extra model-specific special tokens
@@ -1013,9 +1013,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 value = kwargs.pop(key)
                 if value is None:
                     continue
-                if not isinstance(value, (list, tuple)) or not all(
-                    isinstance(t, (str, AddedToken)) for t in value
-                ):
+                if not isinstance(value, (list, tuple)) or not all(isinstance(t, (str, AddedToken)) for t in value):
                     raise TypeError("extra_special_tokens must be a list/tuple of str or AddedToken")
                 self._extra_special_tokens = list(value)
 
@@ -1217,8 +1215,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
 
         # Check if this is a named special token
-        if (self.__dict__.get("_special_tokens_map", None) is not None and 
-            key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES):
+        if (
+            self.__dict__.get("_special_tokens_map", None) is not None
+            and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES
+        ):
             if key_is_special_id:
                 if value is not None:
                     value = self.convert_ids_to_tokens(value)
@@ -1228,13 +1228,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise ValueError(f"Cannot set a non-string value as the {key}")
             self._special_tokens_map[key] = value
         # Check if this is extra_special_tokens or extra_special_tokens_ids
-        elif (self.__dict__.get("_extra_special_tokens", None) is not None and 
-              key_without_id == "extra_special_tokens"):
+        elif self.__dict__.get("_extra_special_tokens", None) is not None and key_without_id == "extra_special_tokens":
             if key_is_special_id:
                 if value is not None:
                     value = [self.convert_ids_to_tokens(val) for val in value]
                 key = key_without_id
-            
+
             if key == "extra_special_tokens":
                 if value is None:
                     self._extra_special_tokens = []
@@ -1252,8 +1251,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
 
         # Check if this is a named special token
-        if (self.__dict__.get("_special_tokens_map", None) is not None and 
-            key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES):
+        if (
+            self.__dict__.get("_special_tokens_map", None) is not None
+            and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES
+        ):
             _special_tokens_map = self.__dict__["_special_tokens_map"]
             if not key_is_special_id:
                 if _special_tokens_map[key_without_id] is None:
@@ -1265,7 +1266,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             else:
                 attr_as_tokens = getattr(self, key_without_id)
                 return self.convert_tokens_to_ids(attr_as_tokens) if attr_as_tokens is not None else None
-        
+
         # Check if this is extra_special_tokens or extra_special_tokens_ids
         elif key_without_id == "extra_special_tokens":
             if self.__dict__.get("_extra_special_tokens", None) is not None:
@@ -1285,13 +1286,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     def special_tokens_map(self) -> dict[str, str]:
         """
         `dict[str, str]`: A flat dictionary mapping named special token attributes to their string values.
-        
+
         Only includes the standard named special tokens (bos_token, eos_token, etc.), not extra_special_tokens.
         This provides a clean, flat structure without mixed types.
-        
+
         Returns:
             A dictionary with keys like 'bos_token', 'eos_token', etc., and string values.
-        
+
         **V5 Change**: This now returns only named tokens. Use `extra_special_tokens` for the additional tokens.
         """
         return {
@@ -1299,7 +1300,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             for attr in self.SPECIAL_TOKENS_ATTRIBUTES
             if self._special_tokens_map.get(attr) is not None
         }
-    
+
     # Note: extra_special_tokens and extra_special_tokens_ids are handled by __getattr__ and __setattr__
     # We don't define them as @property to keep the implementation simpler
 
@@ -1313,7 +1314,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         """
         seen = set()
         all_toks = []
-        
+
         # Add named special tokens
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
             value = self._special_tokens_map.get(attr)
@@ -1322,14 +1323,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if token_str not in seen:
                     all_toks.append(token_str)
                     seen.add(token_str)
-        
+
         # Add extra special tokens
         for token in self._extra_special_tokens:
             token_str = str(token)
             if token_str not in seen:
                 all_toks.append(token_str)
                 seen.add(token_str)
-        
+
         return all_toks
 
     @property
@@ -1342,10 +1343,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     def _set_model_specific_special_tokens(self, special_tokens: dict[str, Union[str, AddedToken]]):
         """
         Adds new model-specific special tokens (e.g., for multimodal models).
-        
+
         These tokens are added to the named special tokens map and will be saved in tokenizer config.
         For example: if the model tokenizer is multimodal, we can support special image or audio tokens.
-        
+
         Args:
             special_tokens: Dictionary of {token_name: token_value}
         """
@@ -1874,7 +1875,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 for key in cls.SPECIAL_TOKENS_ATTRIBUTES:
                     if key in init_kwargs and init_kwargs[key] is not None:
                         special_tokens.append(str(init_kwargs[key]))
-                
+
                 # Handle extra_special_tokens
                 if "extra_special_tokens" in init_kwargs and init_kwargs["extra_special_tokens"] is not None:
                     special_tokens += [str(token) for token in init_kwargs["extra_special_tokens"]]
@@ -1914,12 +1915,24 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Track which files were loaded (if not already set by AutoTokenizer)
         if "files_loaded" not in init_kwargs:
             files_loaded = []
-            for file_key, file_path in resolved_vocab_files.items():
-                if file_path and file_key not in ["tokenizer_config_file", "special_tokens_map_file", "added_tokens_file"]:
-                    # Extract just the filename from the path
-                    files_loaded.append(os.path.basename(file_path))
+            # Check which files this tokenizer class actually uses based on vocab_files_names
+            tokenizer_needs_files = set(cls.vocab_files_names.keys()) if hasattr(cls, "vocab_files_names") else set()
+
+            # If tokenizer_file is in the class's vocab_files_names and exists, prioritize it (TokenizersBackend)
+            if "tokenizer_file" in tokenizer_needs_files and resolved_vocab_files.get("tokenizer_file"):
+                files_loaded.append(os.path.basename(resolved_vocab_files["tokenizer_file"]))
+            else:
+                # Otherwise, add the actual vocab files that were used by this tokenizer class
+                for file_key, file_path in resolved_vocab_files.items():
+                    if (
+                        file_path
+                        and file_key not in ["tokenizer_config_file", "special_tokens_map_file", "added_tokens_file"]
+                        and file_key in tokenizer_needs_files
+                    ):
+                        # Extract just the filename from the path
+                        files_loaded.append(os.path.basename(file_path))
             init_kwargs["files_loaded"] = files_loaded
-        
+
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)

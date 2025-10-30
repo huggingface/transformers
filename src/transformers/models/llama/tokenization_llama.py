@@ -16,8 +16,8 @@
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
 from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
 from ...utils import logging
 
 
@@ -61,12 +61,6 @@ class LlamaTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`, *optional*):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
-        tokenizer_file (`str`, *optional*):
-            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
-            contains everything needed to load the tokenizer.
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
             extra spaces.
@@ -113,7 +107,6 @@ class LlamaTokenizer(TokenizersBackend):
         add_prefix_space=None,
         vocab=None,
         merges=None,
-        vocab_file=None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
@@ -126,14 +119,18 @@ class LlamaTokenizer(TokenizersBackend):
                 str(bos_token): 1,
                 str(eos_token): 2,
             }
-        
+
         special_tokens = {str(eos_token), str(bos_token), str(unk_token)}
 
         filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
-        self._merges = merges if merges is not None else generate_merges(filtered_vocab)        
-        self._tokenizer = Tokenizer(BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None))
+        self._merges = merges if merges is not None else generate_merges(filtered_vocab)
+        self._tokenizer = Tokenizer(
+            BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
+        )
         self._tokenizer.normalizer = None
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False)
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+            replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
+        )
 
         sequence = [
             decoders.Replace("▁", " "),
@@ -163,7 +160,6 @@ class LlamaTokenizer(TokenizersBackend):
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.use_default_system_prompt = use_default_system_prompt
-        self.vocab_file = vocab_file
 
         self._post_init()
 
