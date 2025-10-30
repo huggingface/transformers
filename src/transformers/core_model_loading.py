@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import itertools
-import math
 import os
 import re
 import threading
@@ -31,34 +30,14 @@ from functools import partial
 from typing import Any, Optional, Union
 
 import torch
-from torch import Tensor
 from torch.distributed.tensor import DTensor
 
+from .integrations.finegrained_fp8 import Fp8Quantize
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-try:
-    _FP8_DTYPE = torch.float8_e4m3fn
-    _FP8_MIN = torch.finfo(_FP8_DTYPE).min
-    _FP8_MAX = torch.finfo(_FP8_DTYPE).max
-    _FP8_IS_INT = False
-except AttributeError:
-    _FP8_DTYPE = torch.int8
-    _FP8_MIN, _FP8_MAX = -127, 127
-    _FP8_IS_INT = True
-    logger.warning_once(
-        "torch.float8_e4m3fn not available; falling back to int8 emulation for Fp8Quantize operations."
-    )
-
-try:
-    from torch.profiler import ProfilerActivity
-    from torch.profiler import profile as torch_profile
-except (ImportError, AttributeError):
-    ProfilerActivity = None
-    torch_profile = None
 
 
 def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
@@ -263,7 +242,6 @@ class Concatenate(ConversionOps):
             #     index[self.dim] = slice(offset, offset + tensor.shape[self.dim])
             #     out[tuple(index)].copy_(tensor, non_blocking=tensor.is_cuda)
             #     offset += tensor.shape[self.dim]
-        # torch.testing.assert_close(out, torch.cat(value, dim=self.dim))
         return out.clone()  # need to say I can overwrite this storage now
 
 
@@ -352,198 +330,6 @@ class To(ConversionOps):
         with torch.device(self.device):
             out = [[x[...] for x in inner] if isinstance(inner, list) else inner[...] for inner in realized_value]
         return out
-
-
-class DistributedOp(ConversionOps):  # all `distributed_operation` need to respect this
-    pass
-
-
-class Shard(DistributedOp):
-    """Shard tensors along a specific dimension.
-
-    The operation supports two modes:
-
-    - ``return_all=False`` (default): behaves like classical tensor parallel sharding and returns only the shard for the
-      current ``rank``.
-    - ``return_all=True``: returns a list containing the shards for all ranks. This mode is handy when the conversion
-      needs to materialize every shard in a single pass (for instance when round-tripping in tests).
-    """
-
-    _inverse_op: type[ConversionOps] = Concatenate
-
-    def __init__(
-        self,
-        dim: int,
-        *,
-        world_size: Optional[int] = None,
-        rank: Optional[int] = None,
-        return_all: bool = False,
-    ):
-        self.dim = dim
-        self.world_size = world_size
-        self.rank = rank
-        self.return_all = return_all
-
-    def convert(self, value: Union[Tensor, Sequence], *, context: dict[str, Any]) -> Union[Tensor, list[Tensor]]:
-        """
-        This is akin to a normal sharding, BUT we handle a list of tensor inputs (which are gonna be merged later on)
-        """
-
-        def _shard_tensor(tensor: Tensor, rank: int) -> Tensor:
-            dim_size = tensor.shape[self.dim]
-            local_world_size = max(world_size, 1)
-            slice_size = math.ceil(dim_size / local_world_size)
-            start = min(rank * slice_size, dim_size)
-            end = min(start + slice_size, dim_size)
-            index = [slice(None)] * tensor.ndim
-            index[self.dim] = slice(start, end)
-            return tensor[tuple(index)]
-
-        world_size = self.world_size or context.get("tp_world_size") or 1
-        rank = self.rank if self.rank is not None else context.get("tp_rank", 0)
-
-        if isinstance(value, torch.Tensor):
-            if self.return_all and world_size > 1:
-                return [_shard_tensor(value, r) for r in range(world_size)]
-            return _shard_tensor(value, rank)
-
-        if isinstance(value, (list, tuple)):
-            return [self.convert(item, context=context) for item in value]
-
-        if isinstance(value, dict):
-            return {k: self.convert(v, context=context) for k, v in value.items()}
-
-        raise TypeError("Shard only supports tensors, sequences of tensors or dicts of tensors.")
-
-
-class QuantizationOp(ConversionOps):
-    """Base class for quantization operations."""
-
-    pass
-
-
-class Fp8Quantize(QuantizationOp):
-    """
-    A quantization operation that creates two tensors, weight and scale out of a weight.
-    """
-
-    _inverse_op: type[ConversionOps]
-
-    def __init__(self, block_size: Optional[tuple[int, int]] = None):
-        self.block_size = block_size
-        self._inverse_op = Fp8Dequantize
-
-    def convert(self, input_dict: torch.Tensor, *, quant_config: dict[str, Any]) -> dict[str, torch.Tensor]:
-        # Unpack single key/value (value may be wrapped in a list)
-        target_keys, value = tuple(input_dict.items())[0]
-        value = value[0] if isinstance(value, list) else value
-
-        # Resolve block size (support dict-like or attr-like quant_config)
-        block_size = None
-        if quant_config is not None:
-            if isinstance(quant_config, dict):
-                block_size = quant_config.get("weight_block_size")
-            else:
-                block_size = getattr(quant_config, "weight_block_size", None)
-        if block_size is None:
-            block_size = (value.shape[-2], value.shape[-1])
-
-        block_m, block_n = block_size
-        rows, cols = value.shape[-2], value.shape[-1]
-
-        # Enforce exact tiling like your original
-        if rows % block_m != 0 or cols % block_n != 0:
-            raise ValueError(
-                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n}). for {target_keys}"
-            )
-
-        # Leading dims can be empty (2D) or include num_experts/... (3D+)
-        leading_shape = value.shape[:-2]
-        rows_tiles = rows // block_m
-        cols_tiles = cols // block_n
-
-        original_shape = value.shape
-        value_fp32 = value.to(torch.float32)
-
-        # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
-        reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
-
-        # Per-tile max-abs over the block dims
-        # dims: block_m is at -3, block_n is at -1 after the reshape
-        max_abs = reshaped.abs().amax(dim=(-3, -1))
-        safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
-
-        # Tile scale (we store inverse scale like your Linear: weight_scale_inv)
-        scales = _FP8_MAX / safe_max_abs
-        scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
-
-        # Broadcast scales back over the block dims and quantize
-        # max_abs/scales shape: (..., rows_tiles, cols_tiles)
-        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
-        scaled = reshaped * scales_broadcast
-
-        if _FP8_IS_INT:
-            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-        else:
-            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-
-        quantized = quantized.reshape(original_shape)
-
-        inv_scales = (1.0 / scales).to(torch.float32)  # shape: (*leading, rows_tiles, cols_tiles)
-        if target_keys.endswith("weight"):
-            scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
-        else:
-            scale_key = target_keys + "_scales_inv"
-
-        # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
-        return {
-            target_keys: quantized,
-            scale_key: inv_scales,
-        }
-
-
-class Fp8Dequantize(QuantizationOp):
-    """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
-
-    def __init__(self, block_size: Optional[tuple[int, int]] = None):
-        self.block_size = block_size
-        self._inverse_op = Fp8Quantize
-
-    def convert(
-        self,
-        value: Union[Sequence[torch.Tensor], dict[str, torch.Tensor]],
-        *,
-        context: dict[str, Any],
-    ) -> torch.Tensor:
-        if isinstance(value, dict):
-            tensors = list(value.values())
-        else:
-            tensors = list(value) if isinstance(value, Sequence) else [value]
-        if len(tensors) != 2:
-            raise ValueError("Fp8Dequantize expects exactly two tensors: quantized weights and scales.")
-        quantized, scales = tensors
-        if not isinstance(quantized, torch.Tensor) or not isinstance(scales, torch.Tensor):
-            raise TypeError("Fp8Dequantize expects tensors as inputs.")
-
-        quantized_fp32 = quantized.to(torch.float32)
-        rows, cols = quantized_fp32.shape[-2:]
-        block_size = self.block_size
-        if block_size is None:
-            quant_config = context.get("quantization_config")
-            block_size = getattr(quant_config, "weight_block_size", None)
-        if block_size is None:
-            block_size = (rows, cols)
-        block_m, block_n = block_size
-        if rows % block_m != 0 or cols % block_n != 0:
-            raise ValueError(
-                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
-            )
-
-        reshaped = quantized_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
-        expanded_scales = scales.to(torch.float32).reshape(-1, rows // block_m, cols // block_n)
-        expanded_scales = expanded_scales.unsqueeze(-1).unsqueeze(2)
-        dequantized = reshaped * expanded_scales
-        return dequantized.reshape(quantized_fp32.shape)
 
 
 @dataclass(slots=True)
@@ -769,15 +555,6 @@ def convert_and_load_state_dict_in_model(
                 concrete_target_keys = layer_name.split("|")
                 if bool(set(concrete_target_keys) - unexpected_keys):
                     values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
-
-                    if op := converter.distributed_operation:
-                        try:
-                            values = op(values)
-                        except Exception as e:
-                            misc[layer_name] = (
-                                f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
-                            )
-                            continue
 
                     for op in operations:
                         try:

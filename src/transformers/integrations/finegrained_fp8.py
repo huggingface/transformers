@@ -14,8 +14,10 @@
 # limitations under the License.
 
 import re
-from typing import Optional
+from collections.abc import Sequence
+from typing import Any, Optional, Union
 
+from ..core_model_loading import ConversionOps
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
 
 
@@ -31,6 +33,18 @@ if is_accelerate_available():
 
 
 logger = logging.get_logger(__name__)
+try:
+    _FP8_DTYPE = torch.float8_e4m3fn
+    _FP8_MIN = torch.finfo(_FP8_DTYPE).min
+    _FP8_MAX = torch.finfo(_FP8_DTYPE).max
+    _FP8_IS_INT = False
+except AttributeError:
+    _FP8_DTYPE = torch.int8
+    _FP8_MIN, _FP8_MAX = -127, 127
+    _FP8_IS_INT = True
+    logger.warning_once(
+        "torch.float8_e4m3fn not available; falling back to int8 emulation for Fp8Quantize operations."
+    )
 
 
 # Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
@@ -553,3 +567,133 @@ def replace_with_fp8_linear(
         )
 
     return model
+
+
+class QuantizationOp(ConversionOps):
+    """Base class for quantization operations."""
+
+    pass
+
+
+class Fp8Quantize(QuantizationOp):
+    """
+    A quantization operation that creates two tensors, weight and scale out of a weight.
+    """
+
+    _inverse_op: type[ConversionOps]
+
+    def __init__(self, block_size: Optional[tuple[int, int]] = None):
+        self.block_size = block_size
+        self._inverse_op = Fp8Dequantize
+
+    def convert(self, input_dict: torch.Tensor, *, quant_config: dict[str, Any]) -> dict[str, torch.Tensor]:
+        # Unpack single key/value (value may be wrapped in a list)
+        target_keys, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        # Resolve block size (support dict-like or attr-like quant_config)
+        block_size = None
+        if quant_config is not None:
+            if isinstance(quant_config, dict):
+                block_size = quant_config.get("weight_block_size")
+            else:
+                block_size = getattr(quant_config, "weight_block_size", None)
+        if block_size is None:
+            block_size = (value.shape[-2], value.shape[-1])
+
+        block_m, block_n = block_size
+        rows, cols = value.shape[-2], value.shape[-1]
+
+        # Enforce exact tiling like your original
+        if rows % block_m != 0 or cols % block_n != 0:
+            raise ValueError(
+                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n}). for {target_keys}"
+            )
+
+        # Leading dims can be empty (2D) or include num_experts/... (3D+)
+        leading_shape = value.shape[:-2]
+        rows_tiles = rows // block_m
+        cols_tiles = cols // block_n
+
+        original_shape = value.shape
+        value_fp32 = value.to(torch.float32)
+
+        # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
+        reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
+
+        # Per-tile max-abs over the block dims
+        # dims: block_m is at -3, block_n is at -1 after the reshape
+        max_abs = reshaped.abs().amax(dim=(-3, -1))
+        safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
+
+        # Tile scale (we store inverse scale like your Linear: weight_scale_inv)
+        scales = _FP8_MAX / safe_max_abs
+        scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
+
+        # Broadcast scales back over the block dims and quantize
+        # max_abs/scales shape: (..., rows_tiles, cols_tiles)
+        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
+        scaled = reshaped * scales_broadcast
+
+        if _FP8_IS_INT:
+            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        else:
+            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+
+        quantized = quantized.reshape(original_shape)
+
+        inv_scales = (1.0 / scales).to(torch.float32)  # shape: (*leading, rows_tiles, cols_tiles)
+        if target_keys.endswith("weight"):
+            scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
+        else:
+            scale_key = target_keys + "_scales_inv"
+
+        # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
+        return {
+            target_keys: quantized,
+            scale_key: inv_scales,
+        }
+
+
+class Fp8Dequantize(QuantizationOp):
+    """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
+
+    def __init__(self, block_size: Optional[tuple[int, int]] = None):
+        self.block_size = block_size
+        self._inverse_op = Fp8Quantize
+
+    def convert(
+        self,
+        value: Union[Sequence[torch.Tensor], dict[str, torch.Tensor]],
+        *,
+        context: dict[str, Any],
+    ) -> torch.Tensor:
+        if isinstance(value, dict):
+            tensors = list(value.values())
+        else:
+            tensors = list(value) if isinstance(value, Sequence) else [value]
+        if len(tensors) != 2:
+            raise ValueError("Fp8Dequantize expects exactly two tensors: quantized weights and scales.")
+        quantized, scales = tensors
+        if not isinstance(quantized, torch.Tensor) or not isinstance(scales, torch.Tensor):
+            raise TypeError("Fp8Dequantize expects tensors as inputs.")
+
+        quantized_fp32 = quantized.to(torch.float32)
+        rows, cols = quantized_fp32.shape[-2:]
+        block_size = self.block_size
+        if block_size is None:
+            quant_config = context.get("quantization_config")
+            block_size = getattr(quant_config, "weight_block_size", None)
+        if block_size is None:
+            block_size = (rows, cols)
+        block_m, block_n = block_size
+        if rows % block_m != 0 or cols % block_n != 0:
+            raise ValueError(
+                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
+            )
+
+        reshaped = quantized_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
+        expanded_scales = scales.to(torch.float32).reshape(-1, rows // block_m, cols // block_n)
+        expanded_scales = expanded_scales.unsqueeze(-1).unsqueeze(2)
+        dequantized = reshaped * expanded_scales
+        return dequantized.reshape(quantized_fp32.shape)
