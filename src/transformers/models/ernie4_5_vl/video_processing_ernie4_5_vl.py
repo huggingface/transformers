@@ -12,14 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
+import io
 from functools import partial
-from pathlib import Path
 from typing import Optional, Union
 
 import numpy as np
-import requests
 import torch
+from huggingface_hub import hf_hub_download
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from ...image_processing_utils import BatchFeature
@@ -52,18 +51,60 @@ from .image_processing_ernie4_5_vl import smart_resize
 
 
 if is_vision_available():
-    from PIL import ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont
     from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 
 
 logger = logging.get_logger(__name__)
+DEFAULT_FONT_PATH = "AntonV/ernie4_5_fonts"
 
 
-# TODO: how do we move this
-FONT_PATH = os.path.join(Path(__file__).parent.absolute(), "Roboto-Regular.ttf")
-if not os.path.exists(FONT_PATH):
-    ttf = requests.get("https://paddlenlp.bj.bcebos.com/vision-language-models/materials/Roboto-Regular.ttf")
-    open(FONT_PATH, "wb").write(ttf.content)
+@requires(backends=("vision",))
+def render_text_on_image(
+    image: Image.Image,
+    text: str,
+    font_bytes: Optional[bytes] = None,
+    font_path: Optional[str] = None,
+    size_factor: float = 0.1,
+) -> Image.Image:
+    """
+    Draws a black text with a white border on the corner of the image.
+
+    Args:
+        image (`PIL.Image.Image`):
+            Image to draw on.
+        text (`str`):
+            Text to render.
+        font_bytes (`bytes`, *optional*):
+            Bytes of the font to use. If `None`, the default font will be used.
+        font_path (`str`, *optional*):
+            Path to the font to use. If `None`, the default font will be used.
+        size_factor (`float`, defaults to 0.1):
+            The portion of the font to take over the image itself.
+    """
+    if font_bytes is not None and font_path is None:
+        font = io.BytesIO(font_bytes)
+    elif font_path is not None:
+        font = font_path
+    else:
+        font = hf_hub_download(DEFAULT_FONT_PATH, "Roboto-Regular.ttf")
+
+    font_size = int(min(*image.size) * size_factor)
+    outline_size = int(font_size * size_factor)
+    font = ImageFont.truetype(font, font_size)
+
+    # Draw a black text with a white border
+    draw = ImageDraw.Draw(image)
+    draw.text(
+        (0, 0),
+        text,
+        font=font,
+        fill=(0, 0, 0),
+        stroke_width=outline_size,
+        stroke_fill=(255, 255, 255),
+    )
+
+    return image
 
 
 class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -213,23 +254,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
 
     def _render_image_with_timestamp(self, image: torch.Tensor, timestamp: str):
         """Draws a black timestamp with a white border on the corner of the frame"""
-        image = to_pil_image(image)
-
-        font_size = int(min(*image.size) * 0.1)
-        outline_size = int(font_size * 0.1)
-        font = ImageFont.truetype(FONT_PATH, font_size)
-
-        # Draw a black timestamp with a white border
-        draw = ImageDraw.Draw(image)
-        draw.text(
-            (0, 0),
-            timestamp,
-            font=font,
-            fill=(0, 0, 0),
-            stroke_width=outline_size,
-            stroke_fill=(255, 255, 255),
-        )
-
+        image = render_text_on_image(to_pil_image(image), timestamp)
         return pil_to_tensor(image)
 
     def _prepare_input_videos(
