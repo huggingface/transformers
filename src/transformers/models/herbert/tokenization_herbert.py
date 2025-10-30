@@ -76,9 +76,8 @@ class HerbertTokenizer(TokenizersBackend):
         merges_file: Optional[str] = None,
         **kwargs,
     ):
-       
         if vocab is not None:
-            self._vocab = vocab
+            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             self._vocab = {}
 
@@ -98,10 +97,12 @@ class HerbertTokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = normalizers.BertNormalizer(lowercase=False, strip_accents=False, clean_text=True, handle_chinese_chars=True)
+        self._tokenizer.normalizer = normalizers.BertNormalizer(
+            lowercase=False, strip_accents=False, clean_text=True, handle_chinese_chars=True
+        )
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
-      
+
         tokenizer_object = self._tokenizer
 
         self.vocab_file = vocab_file
@@ -117,13 +118,10 @@ class HerbertTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-          
         self._tokenizer.post_processor = processors.BertProcessing(
             sep=(self.sep_token, 2),
             cls=(self.cls_token, 0),
         )
 
 
-
 __all__ = ["HerbertTokenizer"]
-

@@ -137,7 +137,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
             additional_special_tokens += [token] if token is not None else []
 
         if vocab is not None:
-            self._vocab = vocab
+            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             self._vocab = {
                 str(unk_token): 0,
@@ -159,20 +159,11 @@ class CodeLlamaTokenizer(TokenizersBackend):
                 unk_token=str(unk_token),
             )
         )
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Prepend(prepend="▁"),
-                normalizers.Replace(pattern=" ", content="▁"),
-            ]
+        self._tokenizer.normalizer = None
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+            replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
         )
-        self._tokenizer.pre_tokenizer = None
-
-        sequence = [
-            decoders.Replace("▁", " "),
-            decoders.ByteFallback(),
-            decoders.Fuse(),
-        ]
-
+        
         if self.add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
 

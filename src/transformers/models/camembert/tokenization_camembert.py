@@ -104,28 +104,15 @@ class CamembertTokenizer(TokenizersBackend):
         self.vocab_file = vocab_file
         self.add_prefix_space = add_prefix_space
 
-        # Mask token behave like a normal word, i.e. include the space before it. Will have normalized = False
         mask_token = AddedToken(mask_token, lstrip=True, special=True) if isinstance(mask_token, str) else mask_token
 
-        # Set default additional_special_tokens if not provided
         if additional_special_tokens is None:
             additional_special_tokens = ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
 
-        if vocab is not None:
-            # Transform vocab following CamembertConverter.vocab() pattern:
-            # 1. Prepend special tokens
-            # 2. Add pieces from vocab (skip first piece which is <unk> in SentencePiece)
-            # 3. Append mask token
-            self._vocab = [
-                ("<s>NOTUSED", 0.0),
-                (str(pad_token), 0.0),
-                ("</s>NOTUSED", 0.0),
-                (str(unk_token), 0.0),
-                ("<unk>NOTUSED", -100),
-            ]
-            # Skip first element (index 0) from provided vocab and add the rest
-            self._vocab += vocab[1:]
-            self._vocab += [(str(mask_token), 0.0)]
+        if vocab is not None and isinstance(vocab, list):
+            self._vocab = list(vocab)
+            unk_index = next(i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token))
+            self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=unk_index, byte_fallback=False))
         else:
             self._vocab = [
                 ("<s>NOTUSED", 0.0),
@@ -135,17 +122,15 @@ class CamembertTokenizer(TokenizersBackend):
                 ("<unk>NOTUSED", -100),
                 (str(mask_token), 0.0),
             ]
-
-        self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
+            self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
         self._tokenizer.normalizer = normalizers.Sequence(
             [
                 normalizers.Replace("\n", " "),
                 normalizers.Replace("\r", " "),
                 normalizers.Replace("\t", " "),
-                normalizers.Replace(Regex(r" {2,}"), " "),
-                normalizers.NFC(),
                 normalizers.Strip(left=False, right=True),
+                normalizers.Replace(Regex(" {2,}"), "▁"),
             ]
         )
 

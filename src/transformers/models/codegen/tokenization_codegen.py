@@ -102,7 +102,6 @@ class CodeGenTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        errors="replace",
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
@@ -116,12 +115,12 @@ class CodeGenTokenizer(TokenizersBackend):
     ):
         self.return_token_type_ids = return_token_type_ids
         if self.return_token_type_ids:
-            self.model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
+            self.model_input_names.append("token_type_ids")
 
         self.add_prefix_space = add_prefix_space
 
         if vocab is not None:
-            self._vocab = vocab
+            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             self._vocab = {}
 
@@ -143,7 +142,7 @@ class CodeGenTokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-        self._tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+        self._tokenizer.post_processor = processors.ByteLevel(add_prefix_space=True, use_regex=True, trim_offsets=False)
 
         tokenizer_object = self._tokenizer
 
@@ -153,7 +152,6 @@ class CodeGenTokenizer(TokenizersBackend):
 
         super().__init__(
             tokenizer_object=tokenizer_object,
-            errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -163,6 +161,11 @@ class CodeGenTokenizer(TokenizersBackend):
             return_token_type_ids=return_token_type_ids,
             **kwargs,
         )
+
+        self._post_init()
+
+    def _post_init(self):
+        self._tokenizer.post_processor = processors.ByteLevel(add_prefix_space=True, use_regex=True, trim_offsets=False)
 
     def decode(
         self,

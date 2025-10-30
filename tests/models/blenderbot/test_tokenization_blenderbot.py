@@ -25,7 +25,7 @@ class BlenderbotTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     def test_tokenization_for_chat(self):
-        tok = self.tokenizers[0]
+        tok = self.get_tokenizer()
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
             [

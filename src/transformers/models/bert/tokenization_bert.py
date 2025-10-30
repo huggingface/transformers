@@ -85,7 +85,7 @@ class BertTokenizer(TokenizersBackend):
     def __init__(
         self,
         vocab_file: Optional[str] = None,
-        do_lower_case: bool = True,
+        do_lower_case: bool = False,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
         pad_token: str = "[PAD]",
@@ -101,9 +101,7 @@ class BertTokenizer(TokenizersBackend):
         self.strip_accents = strip_accents
 
         if vocab is not None:
-            self._vocab = vocab
-        elif vocab_file is not None:
-            self._vocab = load_vocab(vocab_file)
+            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             self._vocab = {
                 str(pad_token): 0,

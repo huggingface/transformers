@@ -1076,15 +1076,22 @@ class TokenizersExtractor:
         if "vocab" not in self.model_data:
             raise ValueError(f"Tokenizer model type '{self.model_type}' does not have a 'vocab' field")
 
-        vocab_dict = self.model_data["vocab"]
+        vocab_field = self.model_data["vocab"]
 
-        # Convert vocab dict to the expected format
-        # tokenizer.json stores {token: id}, we want to keep it as-is
-        vocab_ids = dict(vocab_dict)
-
-        # tokenizer.json doesn't store scores like SentencePiece, so we set them all to 0.0
-        # Sort by ID to maintain consistent order
-        vocab_scores = sorted([(token, 0.0) for token, idx in vocab_dict.items()], key=lambda x: vocab_dict[x[0]])
+        # Support both dict-based (BPE/WordPiece/WordLevel) and list-based (Unigram) vocabs
+        if isinstance(vocab_field, dict):
+            # {token: id}
+            vocab_ids = dict(vocab_field)
+            # tokenizer.json doesn't store scores for these types; default to 0.0 and sort by id
+            vocab_scores = sorted(
+                [(token, 0.0) for token in vocab_field.keys()], key=lambda x: vocab_field[x[0]]
+            )
+        elif isinstance(vocab_field, list):
+            # [[token, score], ...] — ids are the list indices
+            vocab_ids = {token: idx for idx, (token, _score) in enumerate(vocab_field)}
+            vocab_scores = [(token, float(score)) for token, score in vocab_field]
+        else:
+            raise ValueError(f"Unsupported vocab type in tokenizer.json: {type(vocab_field)}")
 
         # Extract merges (for BPE tokenizers)
         merges = []
@@ -1111,6 +1118,22 @@ class TokenizersExtractor:
 
         # Extract added_tokens from tokenizer.json
         # These are tokens that should not be split by the tokenization algorithm
-        added_tokens = self.tokenizer_data.get("added_tokens", [])
+        added_tokens_list = self.tokenizer_data.get("added_tokens", [])
+        # Convert to decoder-style mapping: id -> token dict
+        added_tokens_decoder = {}
+        for item in added_tokens_list:
+            if not isinstance(item, dict) or "id" not in item:
+                continue
+            token_id = item["id"]
+            token_kwargs = {k: v for k, v in item.items() if k != "id"}
+            try:
+                added_token_obj = AddedToken(**token_kwargs)
+            except Exception:
+                # Fallback: at minimum require content
+                content = token_kwargs.get("content")
+                if content is None:
+                    continue
+                added_token_obj = AddedToken(content, special=bool(token_kwargs.get("special", True)))
+            added_tokens_decoder[token_id] = added_token_obj
 
-        return vocab_ids, vocab_scores, merges, added_tokens
+        return vocab_ids, vocab_scores, merges, added_tokens_decoder

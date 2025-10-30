@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
-
-from transformers import AutoTokenizer, PegasusTokenizer
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow, require_torch, get_tests_dir
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
-
 from functools import cached_property
 
+from transformers import PegasusTokenizer
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
+from transformers.tokenization_sentencepiece import SentencePieceExtractor
+
 from ...test_tokenization_common import TokenizerTesterMixin
+
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_no_bos.model")
 
@@ -32,11 +31,10 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # TokenizerTesterMixin configuration
     from_pretrained_id = ["google/pegasus-xsum"]
     tokenizer_class = PegasusTokenizer
-    test_sentencepiece = True
-
-    # Integration test data - expected outputs for the default input string
-    integration_expected_tokens = ['▁This', '▁is', '▁a', '▁test', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '.', '▁', '生活的真谛是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '▁', '<', 's', '>', '▁hi', '<', 's', '>', 'there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '▁But', '▁i', 'rd', '▁and', '▁', 'ปี', '▁i', 'rd', '▁', 'ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
-    integration_expected_token_ids = [182, 117, 114, 804, 125, 140, 1723, 115, 950, 15337, 108, 111, 136, 117, 54154, 116, 5371, 107, 110, 105, 4451, 8087, 4451, 8087, 8087, 110, 105, 116, 2314, 9800, 105, 116, 2314, 7731, 139, 645, 4211, 246, 129, 2023, 33041, 151, 8087, 107, 343, 532, 2007, 111, 110, 105, 532, 2007, 110, 105, 10532, 199, 127, 119, 557, 1]
+    
+    integration_expected_tokens = ['▁This', '▁is', '▁a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '.', '▁', '生活的真谛是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '▁', '<', 's', '>', '▁hi', '<', 's', '>', 'there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '▁But', '▁i', 'rd', '▁and', '▁', 'ปี', '▁i', 'rd', '▁', 'ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
+    integration_expected_token_ids = [182, 117, 114, 804, 110, 105, 125, 140, 1723, 115, 950, 15337, 108, 111, 136, 117, 54154, 116, 5371, 107, 110, 105, 4451, 8087, 4451, 8087, 8087, 110, 105, 116, 2314, 9800, 105, 116, 2314, 7731, 139, 645, 4211, 246, 129, 2023, 33041, 151, 8087, 107, 343, 532, 2007, 111, 110, 105, 532, 2007, 110, 105, 10532, 199, 127, 119, 557]
+    expected_tokens_from_ids = ['▁This', '▁is', '▁a', '▁test', '▁', '<unk>', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '.', '▁', '<unk>', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '▁', '<unk>', 's', '>', '▁hi', '<unk>', 's', '>', 'there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '▁But', '▁i', 'rd', '▁and', '▁', '<unk>', '▁i', 'rd', '▁', '<unk>', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
     integration_expected_decoded_text = 'This is a test <unk> I was born in 92000, and this is falsé. <unk> Hi Hello Hi Hello Hello <unk>s> hi<unk>s>there The following string should be properly encoded: Hello. But ird and <unk> ird <unk> Hey how are you doing'
 
     @classmethod
@@ -108,7 +106,8 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tgt_texts = ["not super long but more than 5 tokens", "tiny"]
         batch = self._large_tokenizer(src_texts, padding=True, truncation=True, return_tensors="pt")
         targets = self._large_tokenizer(
-            text_target=tgt_texts, max_length=5, padding=True, truncation=True, return_tensors="pt")
+            text_target=tgt_texts, max_length=5, padding=True, truncation=True, return_tensors="pt"
+        )
 
         assert batch.input_ids.shape == (2, 1024)
         assert batch.attention_mask.shape == (2, 1024)

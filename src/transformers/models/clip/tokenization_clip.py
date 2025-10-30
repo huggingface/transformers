@@ -76,7 +76,7 @@ class CLIPTokenizer(TokenizersBackend):
         self.merges_file = merges_file
 
         if vocab is not None:
-            _vocab = vocab
+            _vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             _vocab = {
                 str(bos_token): 0,
@@ -108,7 +108,7 @@ class CLIPTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Split(
-                    Regex(r"""'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"""),
+                    Regex(r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"""),
                     behavior="removed",
                     invert=True,
                 ),
@@ -140,6 +140,9 @@ class CLIPTokenizer(TokenizersBackend):
         )
 
 
+        if hasattr(self, "_post_init"):
+            self._post_init()
+
     def _post_init(self):
         super()._post_init()
         self._wrap_decode_method_backend_tokenizer()
@@ -158,6 +161,7 @@ class CLIPTokenizer(TokenizersBackend):
             return text
 
         self.backend_tokenizer.decode = new_decode_method
+
 
 
 __all__ = ["CLIPTokenizer"]

@@ -139,7 +139,7 @@ class CohereTokenizer(TokenizersBackend):
         self.tool_use_template = kwargs.pop("tool_use_template", None)
 
         if vocab is not None:
-            self._vocab = vocab
+            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             self._vocab = {
                 str(pad_token): 0,

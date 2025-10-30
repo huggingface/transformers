@@ -69,7 +69,7 @@ class OpenAIGPTTokenizer(TokenizersBackend):
     ):
         # Initialize vocabulary
         if vocab is not None:
-            self._vocab = vocab
+            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             # Initialize minimal vocabulary with unk token
             self._vocab = {str(unk_token): 0}

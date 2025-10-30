@@ -26,83 +26,13 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "facebook/nougat-base"
-    slow_tokenizer_class = None
     tokenizer_class = NougatTokenizer
-    test_slow_tokenizer = False
-    from_pretrained_vocab_key = "tokenizer_file"
-    special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
 
-
-    # Integration test data - expected outputs for the default input string
-    integration_expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶ', 'Ł', 'æ', '´', '»', 'çļĦ', 'ç', 'ľ', 'Ł', 'è', '°', 'Ľ', 'æ', 'ĺ', '¯', 'Ċ', 'Hi', 'Ġ', 'ĠH', 'ello', 'Ċ', 'Hi', 'ĠĠ', 'ĠH', 'ello', 'Ċ', 'Ċ', 'Ġ', 'Ċ', 'ĠĠ', 'Ċ', 'ĠH', 'ello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠH', 'ello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸', 'µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸', 'Ķ', 'Ċ', 'H', 'ey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
-    integration_expected_token_ids = [0, 2113, 343, 281, 1185, 221, 63, 435, 8613, 301, 243, 47, 40, 38, 38, 38, 34, 312, 495, 343, 34500, 2230, 36, 221, 33239, 276, 185, 135, 142, 31778, 186, 273, 276, 187, 131, 272, 185, 269, 130, 221, 33719, 243, 414, 13716, 221, 33719, 304, 414, 13716, 221, 221, 243, 221, 304, 221, 414, 13716, 221, 0, 221, 2197, 0, 10158, 221, 592, 1093, 4935, 1502, 391, 10651, 10033, 48, 414, 13716, 36, 221, 11847, 243, 2326, 312, 243, 12043, 272, 12043, 136, 304, 243, 2326, 304, 243, 12043, 265, 221, 62, 1220, 1905, 417, 2589, 10671, 2]
+    integration_expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'Ġ', 'ð', 'Ł', 'ĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶ', 'Ł', 'æ', '´', '»', 'çļĦ', 'ç', 'ľ', 'Ł', 'è', '°', 'Ľ', 'æ', 'ĺ', '¯', 'Ċ', 'Hi', 'Ġ', 'ĠH', 'ello', 'Ċ', 'Hi', 'ĠĠ', 'ĠH', 'ello', 'Ċ', 'Ċ', 'Ġ', 'Ċ', 'ĠĠ', 'Ċ', 'ĠH', 'ello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠH', 'ello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸', 'µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸', 'Ķ', 'Ċ', 'H', 'ey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
+    integration_expected_token_ids = [2113, 343, 281, 1185, 243, 195, 276, 269, 255, 221, 63, 435, 8613, 301, 243, 47, 40, 38, 38, 38, 34, 312, 495, 343, 34500, 2230, 36, 221, 33239, 276, 185, 135, 142, 31778, 186, 273, 276, 187, 131, 272, 185, 269, 130, 221, 33719, 243, 414, 13716, 221, 33719, 304, 414, 13716, 221, 221, 243, 221, 304, 221, 414, 13716, 221, 0, 221, 2197, 0, 10158, 221, 592, 1093, 4935, 1502, 391, 10651, 10033, 48, 414, 13716, 36, 221, 11847, 243, 2326, 312, 243, 12043, 272, 12043, 136, 304, 243, 2326, 304, 243, 12043, 265, 221, 62, 1220, 1905, 417, 2589, 10671]
+    expected_tokens_from_ids = ['This', 'Ġis', 'Ġa', 'Ġtest', 'Ġ', 'ð', 'Ł', 'ĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶ', 'Ł', 'æ', '´', '»', 'çļĦ', 'ç', 'ľ', 'Ł', 'è', '°', 'Ľ', 'æ', 'ĺ', '¯', 'Ċ', 'Hi', 'Ġ', 'ĠH', 'ello', 'Ċ', 'Hi', 'ĠĠ', 'ĠH', 'ello', 'Ċ', 'Ċ', 'Ġ', 'Ċ', 'ĠĠ', 'Ċ', 'ĠH', 'ello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠH', 'ello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸', 'µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸', 'Ķ', 'Ċ', 'H', 'ey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
     integration_expected_decoded_text = 'This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing'
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        
-        tokenizer = NougatTokenizer.from_pretrained("facebook/nougat-base")
-        tokenizer.save_pretrained(cls.tmpdirname)
-
-    def test_padding(self, max_length=6):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-                # Simple input
-                sentence1 = "This is a simple input"
-                sentence2 = ["This is a simple input 1", "This is a simple input 2"]
-                pair1 = ("This is a simple input", "This is a pair")
-                pair2 = [
-                    ("This is a simple input 1", "This is a simple input 2"),
-                    ("This is a simple pair 1", "This is a simple pair 2"),
-                ]
-
-                # Simple input tests
-                try:
-                    tokenizer_r.encode(sentence1, max_length=max_length)
-                    tokenizer_r(sentence1, max_length=max_length)
-
-                    tokenizer_r(sentence2, max_length=max_length)
-                    tokenizer_r.encode(pair1, max_length=max_length)
-                    tokenizer_r(pair2, max_length=max_length)
-                except ValueError:
-                    self.fail("Nougat Tokenizer should be able to deal with padding")
-
-                tokenizer_r.pad_token = None  # Hotfixing padding = None
-                self.assertRaises(
-                    ValueError, tokenizer_r.encode, sentence1, max_length=max_length, padding="max_length"
-                )
-
-                # Simple input
-                self.assertRaises(
-                    ValueError, tokenizer_r, sentence1, max_length=max_length, padding="max_length"
-                )
-
-                # Simple input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r,
-                    sentence2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
-
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, pair1, max_length=max_length, padding="max_length")
-
-                # Pair input
-                self.assertRaises(
-                    ValueError, tokenizer_r, pair1, max_length=max_length, padding="max_length"
-                )
-
-                # Pair input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r,
-                    pair2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
+    
 
 class MarkdownCompatibleTest(unittest.TestCase):
     def test_equation_tag(self):

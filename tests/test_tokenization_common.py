@@ -327,19 +327,23 @@ Hey how are you doing"""
                 return None
             
             extractor = TokenizersExtractor(tokenizer_json_path)
-            vocab_ids, vocab_scores, merges, added_tokens = extractor.extract()
+            vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
             
             # Convert added_tokens list to added_tokens_decoder dict format
             # This matches the format used by from_pretrained() from tokenizer_config.json
             tokenizer_from_extractor = self.tokenizer_class(
-                vocab=vocab_ids, 
-                merges=merges, 
-                added_tokens_decoder={token_id: token_info for token_id, token_info in added_tokens_decoder.items()}
+                vocab=vocab_scores, 
+                merges=merges,
+                do_lower_case = False,
+                keep_accents = True,
+                added_tokens_decoder={token_id: token_info for token_id, token_info in added_tokens_decoder.items()},
+                **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {})
             )
             
             return tokenizer_from_extractor
         except (TypeError, Exception):
-            return None
+            # fail and raise the error
+            raise
 
     def get_extracted_tokenizer_from_sentencepiece(self, reference_tokenizer=None):
         """
@@ -700,19 +704,18 @@ Hey how are you doing"""
         
         # 1. Original tokenizer
         tokenizer_original = AutoTokenizer.from_pretrained(
-            self.from_pretrained_id[0], do_lower_case=False, keep_accents=True
+            self.from_pretrained_id[0], do_lower_case=False, keep_accents=True,
+            **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {})
         )
         tokenizers_to_test.append(("original", tokenizer_original))
         
-        # # 2. Try to build tokenizer from TokenizersExtractor
+        #2. Try to build tokenizer from TokenizersExtractor
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
         if tokenizer_from_extractor is not None:
             tokenizers_to_test.append(("from_extractor", tokenizer_from_extractor))
 
-        # 3. Try to build tokenizer from SentencePieceExtractor
-        # tokenizer_from_sentencepiece = self.get_extracted_tokenizer_from_sentencepiece(reference_tokenizer=tokenizer_original)
-        # if tokenizer_from_sentencepiece is not None:
-        #     tokenizers_to_test.append(("from_sentencepiece", tokenizer_from_sentencepiece))
+        else:
+            self.skipTest("No tokenizer from TokenizersExtractor provided")
 
         for tokenizer_type, tokenizer in tokenizers_to_test:
             with self.subTest(f"{tokenizer.__class__.__name__} ({tokenizer_type})"):

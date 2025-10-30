@@ -114,7 +114,7 @@ class DebertaTokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
 
         if vocab is not None:
-            self._vocab = vocab
+            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             self._vocab = {
                 str(unk_token): 0,

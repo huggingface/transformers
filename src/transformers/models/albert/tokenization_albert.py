@@ -103,7 +103,9 @@ class AlbertTokenizer(TokenizersBackend):
         self.keep_accents = keep_accents
 
         if vocab is not None:
-             self._vocab_scores = [(token, 0.0) for token in vocab.keys()]
+             self._vocab_scores = (
+                 [(token, 0.0) for token in vocab.keys()] if isinstance(vocab, dict) else list(vocab)
+             )
         else:
             self._vocab_scores = [
                 (str(pad_token), 0.0),
