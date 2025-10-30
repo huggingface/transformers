@@ -1145,10 +1145,15 @@ class AutoTokenizer:
                             "Please install it with:\n\n    pip install mistral-common\n"
                         )
                     return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                else:
+                    raise ValueError(
+                        "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
+                        "in order to use this tokenizer."
+                    )
 
         raise ValueError(
-            "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
-            "in order to use this tokenizer."
+            f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING)}."
         )
 
     @staticmethod
