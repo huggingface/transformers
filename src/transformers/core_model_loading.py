@@ -597,7 +597,7 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, misma
                 )
             param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
-        if ref is not None and ref.shape != param_value.shape:
+        if ref is not None and ref.shape != param_value.shape and distributed_operation.use_dtensor:
             mismatch_keys.add((k, param_value.shape, ref.shape))
         if k in missing_keys:
             missing_keys.remove(k)
@@ -617,16 +617,13 @@ class ConversionEntry:
 GLOBAL_WORKERS = min(32, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 PER_FILE_LIMIT = 4  # concurrent reads per file
 
-# Global executor + per-file semaphores
-EXEC = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
-_file_sems = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
 
 
 def _materialize_copy(x):
     # PyTorch: this runs in C and releases the GIL; good for threads.
     return x[:] #.contiguous()  needed????
 
-def spawn_materialize(file_id, t) -> Future:
+def spawn_materialize(EXEC, _file_sems, file_id, t) -> Future:
     sem = _file_sems[file_id]
     def _job():
         with sem:
@@ -635,7 +632,7 @@ def spawn_materialize(file_id, t) -> Future:
     return EXEC.submit(_job)
 
 
-def spawn_tp_materialize(file_id, t, sharding_method, empty_tensor, tensor_idx) -> Future:
+def spawn_tp_materialize(EXEC, _file_sems, file_id, t, sharding_method, empty_tensor, tensor_idx) -> Future:
     sem = _file_sems[file_id]
 
     def _job():
@@ -672,6 +669,9 @@ def convert_and_load_state_dict_in_model(
     misc = {}
     mismatch_keys = set()
     unexpected_keys = set()
+    # Global executor + per-file semaphores
+    EXEC = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
+    _file_sems = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
 
     _patterns = list(itertools.chain.from_iterable([k.source_keys for k in weight_mapping]))
     source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
@@ -706,10 +706,10 @@ def convert_and_load_state_dict_in_model(
                     converter.distributed_operation.rank = device_map[""].index
                     converter.distributed_operation.empty_tensor = empty_tensor.clone()
                 shard_index=len(entry.collected_tensors[target_key].get(converter_key, []))
-                fut = spawn_tp_materialize(file_id, tensor, converter.distributed_operation, empty_tensor, shard_index)
+                fut = spawn_tp_materialize(EXEC, _file_sems, file_id, tensor, converter.distributed_operation, empty_tensor, shard_index)
 
         if fut is None:  # If not TP, async move tensors
-            fut = spawn_materialize(file_id, tensor)
+            fut = spawn_materialize(EXEC, _file_sems, file_id, tensor)
 
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
         for t in target_key.split("|"):

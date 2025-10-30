@@ -110,13 +110,15 @@ class MixtralConfig(PreTrainedConfig):
     model_type = "mixtral"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        # "layers.*.self_attn.q_proj": "colwise",
-        # "layers.*.self_attn.k_proj": "colwise",
-        # "layers.*.self_attn.v_proj": "colwise",
-        # "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "local_colwise",
+        "layers.*.self_attn.k_proj": "local_colwise",
+        "layers.*.self_attn.v_proj": "local_colwise",
+        "layers.*.self_attn.o_proj": "local_rowwise",
+        "layers.*.self_attn": "gather",
         "layers.*.mlp.gate": "ep_router",  # we need to replicate here to correctly route experts
         "layers.*.mlp.experts.gate_up_proj": "local_colwise",
         "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
         # "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise" ? if you load from
     }
     base_model_pp_plan = {

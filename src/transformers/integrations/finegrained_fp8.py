@@ -334,8 +334,8 @@ class FP8Linear(nn.Linear):
             return F.linear(input, self.weight, self.bias)
         else:
             if isinstance(self.weight, torch.distributed.tensor.DTensor):
-                weight = self.weight._local_tensor
-                scale_inv = self.weight_scale_inv._local_tensor
+                weight = self.weight._local_tensor.contiguous()
+                scale_inv = self.weight_scale_inv._local_tensor.contiguous()
             else:
                 weight = self.weight
                 scale_inv = self.weight_scale_inv
@@ -417,6 +417,8 @@ class FP8Expert(nn.Module):
         # Keep a handle here; actual usage happens in forward of your MoE block
         self.act_fn = ACT2FN[config.hidden_act]
 
+
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -426,15 +428,16 @@ class FP8Expert(nn.Module):
         final_hidden_states = torch.zeros_like(hidden_states)
 
         num_experts = top_k_weights.shape[1]
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).flatten()
-        for expert_idx in expert_hit.tolist():
-            expert_selection = expert_mask[expert_idx].squeeze(0)
-            top_indices, token_positions = torch.where(expert_selection)
-            if token_positions.numel() == 0 or expert_idx == num_experts:
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts+1).permute(2, 1, 0)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == num_experts:
                 continue
-
-            current_state = hidden_states.index_select(0, token_positions)
+            with torch.no_grad():
+                _, token_idx = torch.where(expert_mask[expert_idx])
+            # current_state = hidden_states[token_idx]
+            current_state = hidden_states.index_select(0, token_idx)
             gate, up = self.linear(
                 current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scales_inv[expert_idx]
             ).chunk(2, dim=-1)
@@ -443,9 +446,9 @@ class FP8Expert(nn.Module):
                 current_hidden_states, self.down_proj[expert_idx], self.down_proj_scales_inv[expert_idx]
             )
 
-            routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
+            routing_weights = top_k_weights[token_idx, expert_idx].unsqueeze(-1)
             current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
-            final_hidden_states.index_add_(0, token_positions, current_hidden_states.to(final_hidden_states.dtype))
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
 
