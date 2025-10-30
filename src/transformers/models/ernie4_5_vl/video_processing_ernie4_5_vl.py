@@ -39,7 +39,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from ...utils.import_utils import requires
+from ...utils.import_utils import is_tracing, requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
@@ -269,6 +269,12 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
 
             # specific to ernie, draws timestamps on each frame (if enabled)
             if draw_on_frames:
+                if is_tracing(video):
+                    raise RuntimeError(
+                        "Using `torch.compile` is not compatible with drawing on frames. "
+                        "Either don't use `torch.compile` or don't draw on frames via the kwarg `draw_on_frames=False`."
+                    )
+
                 for idx, frame in enumerate(video):
                     video[idx] = self._render_image_with_timestamp(
                         frame, self._convert_timestamp(metadata.timestamps[idx])
