@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for SAM2.
+Processor class for SAM3.
 """
 
 from copy import deepcopy
@@ -145,7 +145,7 @@ class Sam3Processor(ProcessorMixin):
                 The labels for the points.
             input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
                 The bounding boxes to add to the frame.
-            input_boxes_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
+            input_boxes_labels (`list[list[int]]`, `torch.Tensor`, *optional*):
                 The labels for the boxes.
             original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
                 The original sizes of the images.
@@ -185,9 +185,15 @@ class Sam3Processor(ProcessorMixin):
             raise ValueError(
                 "original_sizes must be of length 1 or len(images). If you are passing a single image, you must pass a single original_size."
             )
+        if text is None:
+            if input_points:
+                text = "geometric"
+            elif input_boxes:
+                text = "visual"
 
-        if text is not None:
-            encoding_image_processor.update(self.tokenizer(text, return_tensors=return_tensors))
+        encoding_image_processor.update(
+            self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)
+        )
 
         # Process input points, labels, and boxes if provided
         if input_points is not None or input_points_labels is not None or input_boxes is not None:
@@ -265,7 +271,8 @@ class Sam3Processor(ProcessorMixin):
             if processed_boxes is not None:
                 final_boxes = torch.tensor(processed_boxes, dtype=torch.float32)
                 self._normalize_tensor_coordinates(final_boxes, original_sizes, is_bounding_box=True)
-                final_boxes = box_xyxy_to_cxcywh(final_boxes)
+                # TODO: Uncomment this when we fix the input boxes format
+                # final_boxes = box_xyxy_to_cxcywh(final_boxes)
                 encoding_image_processor.update({"input_boxes": final_boxes})
 
             if processed_boxes_labels is not None:
