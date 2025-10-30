@@ -308,9 +308,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_small_model_integration_test(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
+        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
 
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -346,9 +344,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batch(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
+        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         batch_messages = [self.message] * 2
         inputs = self.processor.apply_chat_template(
             batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -408,9 +404,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_expand(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
+        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
@@ -431,9 +425,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
+        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
         ]
@@ -464,9 +456,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
+        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
             batched_messages,
