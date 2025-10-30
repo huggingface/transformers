@@ -20,7 +20,6 @@ import itertools
 import os
 import re
 import threading
-import time
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
@@ -89,54 +88,13 @@ def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[
     return name_map.get(m.lastgroup)
 
 
-def glob_to_re(glob: str, *, digits_only: bool = True, allow_prefix: bool = True) -> str:
-    """
-    Build a regex for a single glob that captures each '*' so we can extract per-layer identifiers.
-    """
-    star = r"\d+" if digits_only else r".+"
-    src = glob.replace("*", star)
-    return rf"{src}"
-
-
-def _apply_star_subst(pattern: str, star_values: list[str]) -> str:
-    """
-    Replace each '*' in 'pattern' with the next value from 'star_values' (in order).
-    """
-    it = iter(star_values)
-    out = []
-    for ch in pattern:
-        if ch == "*":
-            out.append(str(next(it)))
-        else:
-            out.append(ch)
-    return "".join(out)
-
-
 class ConversionOps:
-    """Base class for weight conversion operations.
-
-    If you chain operations, they need to be ordered properly.
-    Some flags will help. Probably "typing" them ( TP op, Quant OP, Other OP)?
-
-    Tricky part is you can go from
-
-    model.layers.0.a                      -> [model.layers.0.a | model.layers.0.b]  # ex: chunk when saving, or quantization
-    [model.layers.0.a | model.layers.0.b] ->          model.layers.0.a
-    model.layers.0.a                      ->          model.layers.0.b
-
-    and before everything, you have to do the renaming!
-    1. weight rename (because the tp plan will be defined only for the renamed weights)
-      -> you get many keys with the same tensor
-      -> use default dict list
-    """
+    """Base class for weight conversion operations."""
 
     # Reusable scratch buffer to avoid reallocations.
     _buffer: Optional[torch.Tensor] = None
     # The inverse operation class, will be used when saving the checkpoint
     _inverse_op: type[ConversionOps]
-    # Latest runtime/profiling information for introspection.
-    last_runtime_seconds: Optional[float] = None
-    last_profile_summary: Optional[str] = None
 
     def _ensure_buffer(
         self,
@@ -172,22 +130,6 @@ class ConversionOps:
     @abstractmethod
     def convert(self, value: Union[Sequence[torch.Tensor], torch.Tensor], *args, **kwargs) -> torch.Tensor:
         raise NotImplementedError
-
-    def __call__(
-        self,
-        value: Union[Sequence[torch.Tensor], torch.Tensor, dict[str, torch.Tensor]],
-        *,
-        profile: bool = False,
-    ) -> Any:
-        """
-        Execute the conversion while measuring runtime and optionally profiling the call.
-        """
-        start = time.perf_counter()
-        result = self.convert(value)
-        elapsed = time.perf_counter() - start
-        if profile:
-            print(elapsed)
-        return result
 
 
 class Chunk(ConversionOps):
@@ -512,8 +454,22 @@ def convert_and_load_state_dict_in_model(
             new_target_key.append(t)
         target_key = "|".join(new_target_key)
 
+        for t in target_key.split("|"):
+            empty_tensor = meta_model_state_dict.get(t)
+            if empty_tensor is None:
+                unexpected_keys.add(t)
+                continue
+            if (
+                quantizer is not None
+                and quantizer.param_needs_quantization(model, t)
+                and quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer"
+            ):
+                converter.quantization_operation[t] = Fp8Quantize()  # TODO support other methods
+            else:
+                raise ValueError("This quantization method is gonna be supported SOOOON")
+
         first_target_key = target_key.split("|")[0]
-        fut = None
+        future = None
         if device_mesh:
             if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
                 empty_tensor = meta_model_state_dict.get(first_target_key)
@@ -523,22 +479,13 @@ def convert_and_load_state_dict_in_model(
                     converter.distributed_operation.rank = device_map[""].index
                     converter.distributed_operation.empty_tensor = empty_tensor.clone()
                 shard_index = len(entry.collected_tensors[target_key].get(converter_key, []))
-                fut = spawn_tp_materialize(
+                future = spawn_tp_materialize(
                     EXEC, _file_sems, file_id, tensor, converter.distributed_operation, empty_tensor, shard_index
                 )
 
-        if fut is None:  # If not TP, async move tensors
-            fut = spawn_materialize(EXEC, _file_sems, file_id, tensor)
-
-        entry.collected_tensors[target_key].setdefault(converter_key, []).append(fut)
-        for t in target_key.split("|"):
-            empty_tensor = meta_model_state_dict.get(t)
-            if empty_tensor is None:
-                unexpected_keys.add(t)
-                continue
-            if quantizer is not None and quantizer.param_needs_quantization(model, t):
-                # converter.quantization_operation[target_key] = quantizer.quantize_tensor
-                converter.quantization_operation[t] = Fp8Quantize()
+        if future is None:  # If not TP, async move tensors
+            future = spawn_materialize(EXEC, _file_sems, file_id, tensor)
+        entry.collected_tensors[target_key].setdefault(converter_key, []).append(future)
 
     # 2. Actually convert the ckpt
     inverse_converters = {}
@@ -558,7 +505,7 @@ def convert_and_load_state_dict_in_model(
 
                     for op in operations:
                         try:
-                            values = op(values)
+                            values = op.convert(values)
                         except Exception as e:
                             misc[layer_name] = (
                                 f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {values}"
