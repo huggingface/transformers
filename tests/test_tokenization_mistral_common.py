@@ -960,7 +960,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 },
             ]
 
-            output = self.tokenizer.apply_chat_template(conversation, tokenize=True).input_ids
+            output = self.tokenizer.apply_chat_template(conversation).input_ids
             self.assertEqual(output, expected_tokenized.tokens)
 
         output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True)
