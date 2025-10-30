@@ -2865,7 +2865,7 @@ class ModelTesterMixin:
                     new_model.to(torch_device)
                     inputs = self._prepare_for_class(inputs_dict, model_class)
                     logits = new_model(**inputs).logits
-                    self.assertEqual(logits.shape[1], 2) # we still want to load :)
+                    self.assertEqual(logits.shape[1], 2)  # we still want to load :)
 
                     with CaptureLogger(logger) as cl:
                         new_model_without_prefix = AutoModel.from_pretrained(

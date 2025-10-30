@@ -271,8 +271,6 @@ def repack_weights(
             "Num blocks different from 2 is not supported yet. This is most likely a bug in your implementation as we only pack gate and up projections together."
         )
 
-
-
     actual_sharded_dim = sharded_dim if sharded_dim >= 0 else sharded_dim + packed_parameter.ndim
     total_size_on_sharded_dim = packed_parameter.shape[actual_sharded_dim]
     original_block_size_on_dim = total_size_on_sharded_dim // num_blocks
@@ -309,7 +307,7 @@ def repack_weights(
     return final_ordered_tensor
 
 
-def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: Optional[int]=None):
+def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: Optional[int] = None):
     """
     Generalized tensor sharding across a multi-dimensional device mesh.
     Extract only the fraction of the parameter owned by the given `rank` when the parameter would have gone sharding at provided `dim`.
@@ -382,28 +380,26 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: Opt
     if rank >= world_size:
         raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
 
-
     # we have the full tensor not 1 part of it.
     # in that case, we just assume that the weight was properly saved
     # and thus because we TP if the layer is colwise it should not use this. Layer should be packed_colwise
     # to inform that it needs to read form a packed tensor. It will also take care of the module list thingy.
-    # here we take care of potential chunking / layer split / layer chunking. 
-    # The only "hard" case is? if we collect q,k,v -> merge it into qkv. In that case 
+    # here we take care of potential chunking / layer split / layer chunking.
+    # The only "hard" case is? if we collect q,k,v -> merge it into qkv. In that case
     # actually we still shard dim=0 does not change
-    # so only case is if the dim of the empty param is 3 and the shard dim is 0 -> we put the 
+    # so only case is if the dim of the empty param is 3 and the shard dim is 0 -> we put the
     # tensor on a certain device (with the input tensor_index)
     dimensions = param.get_shape()
 
-    if empty_param.dim() == 3 and dim ==0 and len(param.get_shape()) == 2:
+    if empty_param.dim() == 3 and dim == 0 and len(param.get_shape()) == 2:
         # special case we don't "shard" just send this entire tensor to the correct rank.
-        if start <=tensor_idx < end:
+        if start <= tensor_idx < end:
             # this tensor does need to be materialized on this device:
             return param[:]
         else:
             return torch.empty([], dtype=torch.int64, device=rank)
 
     slice_indices = [slice(None)] * len(param.get_shape())
-
 
     if start < param.get_shape()[dim]:
         slice_indices[dim] = slice(start, end)
@@ -412,9 +408,8 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: Opt
             param = [p[:] for p in param]
         return param
 
-
     dimensions[dim] = 0
-    return torch.empty(tuple(dimensions), dtype=torch.int64) # empty allocates memory....
+    return torch.empty(tuple(dimensions), dtype=torch.int64)  # empty allocates memory....
 
 
 def distribute_module(
@@ -659,7 +654,6 @@ class PackedColwiseParallel(ColwiseParallel):
         self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh
     ):
         return nn.Parameter(param, requires_grad=param.is_floating_point())
-
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)

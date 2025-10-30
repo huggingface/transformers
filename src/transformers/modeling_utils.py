@@ -56,7 +56,6 @@ from .integrations.accelerate import (
     accelerate_dispatch,
     check_and_set_device_map,
     expand_device_map,
-    find_tied_parameters,
     init_empty_weights,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -1735,9 +1734,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
 
         if self._keep_in_fp32_modules is not None:
-            self._dtype_per_modules = {
-                k: torch.float32 for k in self._keep_in_fp32_modules.keys()
-            } # TODO finish this
+            self._dtype_per_modules = dict.fromkeys(
+                self._keep_in_fp32_modules.keys(), torch.float32
+            )  # TODO finish this
 
         self._no_split_modules = self._no_split_modules or []
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
@@ -3747,7 +3746,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough. # TODO: we should def parallelize this we are otherwise just waiting
-                # too much before scheduling the next write when its on a different 
+                # too much before scheduling the next write when its on a different
                 safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
@@ -4622,10 +4621,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         all_pointer = set()
 
         if device_map is None:
-            device_map = {"":"cpu"}
+            device_map = {"": "cpu"}
         keys = sorted(device_map.keys(), key=len, reverse=True)
         tp_plan = getattr(model, "_tp_plan", None)
-        keep_in_dtype = None # TODO use keep_in
+        keep_in_dtype = None  # TODO use keep_in
         error_msgs = []
         misc = {}
 
@@ -4635,7 +4634,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if checkpoint_files is not None:
                 pattern = re.compile(r"(" + "|".join(map(re.escape, keys)) + r")")
                 if sharded_metadata is None:
-                    k_v_iterator = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), "model.safetensors").items()
+                    k_v_iterator = dict.fromkeys(
+                        safe_open(checkpoint_files[0], framework="pt").keys(), "model.safetensors"
+                    ).items()
                 else:
                     k_v_iterator = sharded_metadata["weight_map"].items()
 
@@ -4646,14 +4647,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     else:
                         device = device_map[""]
                         if isinstance(device, torch.device):
-                            device = device.index # safetensors only
+                            device = device.index  # safetensors only
                     file_pointer = safe_open(
                         os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
                     )
                     all_pointer.add(file_pointer)
                     merged_state_dict[k] = (v, file_pointer.get_slice(k))  # don't meterialize yet
             elif state_dict is not None:
-                merged_state_dict = {k: ("", v) for k,v in state_dict.items()}
+                merged_state_dict = {k: ("", v) for k, v in state_dict.items()}
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
@@ -4737,7 +4738,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             mismatched_keys=mismatched_keys,
             mismatched_shapes=mismatched_keys,
             misc=misc,
-            ignore_mismatched_sizes=ignore_mismatched_sizes
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
         )
         disk_offload_index = None
         return model, missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, error_msgs

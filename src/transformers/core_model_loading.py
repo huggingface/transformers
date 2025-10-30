@@ -29,10 +29,10 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Optional, Union
-from torch.distributed.tensor import DTensor
 
 import torch
 from torch import Tensor
+from torch.distributed.tensor import DTensor
 
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import logging
@@ -256,7 +256,7 @@ class Concatenate(ConversionOps):
 
         with torch.no_grad():  # we use staging buffers
             out = self._ensure_buffer(torch.Size(out_shape), dtype=tensors[0].dtype, device=tensors[0].device)
-            torch.cat(tuple(tensors),dim =self.dim, out=out)
+            torch.cat(tuple(tensors), dim=self.dim, out=out)
             # offset = 0
             # for tensor in tensors:
             #     index = [slice(None)] * tensor.ndim
@@ -583,7 +583,9 @@ class WeightConverter:
         self._regex_pat = build_glob_alt(self.source_keys)
 
 
-def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc, distributed_operation):
+def set_param_for_module(
+    model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc, distributed_operation
+):
     try:
         module_path, _, param_name = k.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
@@ -593,10 +595,15 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, misma
         if not isinstance(param_value, torch.nn.Parameter):
             if distributed_operation != {} and use_dtensor:
                 param_value = DTensor.from_local(
-                    param_value, distributed_operation.device_mesh, distributed_operation.shard, run_check=False, shape=ref.size(), stride=ref.stride()
+                    param_value,
+                    distributed_operation.device_mesh,
+                    distributed_operation.shard,
+                    run_check=False,
+                    shape=ref.size(),
+                    stride=ref.stride(),
                 )
             else:
-                pass # TODO for "local" stuff, it will trigger missmatched no?
+                pass  # TODO for "local" stuff, it will trigger missmatched no?
             param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         if ref is not None and ref.shape != param_value.shape:
@@ -621,13 +628,14 @@ GLOBAL_WORKERS = min(32, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 PER_FILE_LIMIT = 4  # concurrent reads per file
 
 
-
 def _materialize_copy(x):
     # PyTorch: this runs in C and releases the GIL; good for threads.
     return x[...]
 
+
 def spawn_materialize(EXEC, _file_sems, file_id, t) -> Future:
     sem = _file_sems[file_id]
+
     def _job():
         with sem:
             return _materialize_copy(t)
@@ -700,7 +708,7 @@ def convert_and_load_state_dict_in_model(
 
         prefix = model.base_model_prefix
         new_target_key = []
-        for t in target_key.split("|"): # let's correct the keys
+        for t in target_key.split("|"):  # let's correct the keys
             if t.startswith(prefix) and meta_model_state_dict.get(t.replace(f"{prefix}.", "")) is not None:
                 t = t.replace(f"{prefix}.", "")
             elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
@@ -718,8 +726,10 @@ def convert_and_load_state_dict_in_model(
                     converter.distributed_operation.device_mesh = device_mesh
                     converter.distributed_operation.rank = device_map[""].index
                     converter.distributed_operation.empty_tensor = empty_tensor.clone()
-                shard_index=len(entry.collected_tensors[target_key].get(converter_key, []))
-                fut = spawn_tp_materialize(EXEC, _file_sems, file_id, tensor, converter.distributed_operation, empty_tensor, shard_index)
+                shard_index = len(entry.collected_tensors[target_key].get(converter_key, []))
+                fut = spawn_tp_materialize(
+                    EXEC, _file_sems, file_id, tensor, converter.distributed_operation, empty_tensor, shard_index
+                )
 
         if fut is None:  # If not TP, async move tensors
             fut = spawn_materialize(EXEC, _file_sems, file_id, tensor)
@@ -754,7 +764,9 @@ def convert_and_load_state_dict_in_model(
                         try:
                             values = op(values)
                         except Exception as e:
-                            misc[layer_name] = f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
+                            misc[layer_name] = (
+                                f"Failed to apply {converter.distributed_operation.__class__.__name__}: {e}"
+                            )
                             continue
 
                     for op in operations:
@@ -790,7 +802,15 @@ def convert_and_load_state_dict_in_model(
                         for src in converter.source_keys:  # what should happen to k when we meet k at saving
                             inverse_converters[k] = {src: converter}
                         set_param_for_module(
-                            model, k, output_value, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc, converter.distributed_operation
+                            model,
+                            k,
+                            output_value,
+                            meta_model_state_dict,
+                            empty_tensor,
+                            mismatch_keys,
+                            missing_keys,
+                            misc,
+                            converter.distributed_operation,
                         )
 
             del group

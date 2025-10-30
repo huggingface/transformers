@@ -22,8 +22,8 @@
 from typing import Optional, Union
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
@@ -153,7 +153,7 @@ class MixtralExperts(nn.Module):
         final_hidden_states = torch.zeros_like(hidden_states)
 
         num_experts = top_k_weights.shape[1]
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts+1).permute(2, 1, 0)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
@@ -208,7 +208,6 @@ class MixtralSparseMoeBlock(nn.Module):
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights.to(hidden_states.dtype))
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
-
 
 
 class MixtralRMSNorm(MistralRMSNorm):

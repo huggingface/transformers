@@ -231,4 +231,6 @@ def log_state_dict_report(
 
     logger.warning(prelude + table + tips)
     if not ignore_mismatched_sizes and mismatched_keys:
-        raise RuntimeError("You set `ignore_mismatched_sizes` to `False`, thus raising an error. For details look at the above report!")
+        raise RuntimeError(
+            "You set `ignore_mismatched_sizes` to `False`, thus raising an error. For details look at the above report!"
+        )

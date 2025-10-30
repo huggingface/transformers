@@ -417,8 +417,6 @@ class FP8Expert(nn.Module):
         # Keep a handle here; actual usage happens in forward of your MoE block
         self.act_fn = ACT2FN[config.hidden_act]
 
-
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -428,7 +426,7 @@ class FP8Expert(nn.Module):
         final_hidden_states = torch.zeros_like(hidden_states)
 
         num_experts = top_k_weights.shape[1]
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts+1).permute(2, 1, 0)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
