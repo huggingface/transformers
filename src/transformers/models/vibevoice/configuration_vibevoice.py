@@ -148,7 +148,7 @@ class VibeVoiceConfig(PretrainedConfig):
     @property
     def acoustic_hidden_size(self) -> int:
         return self.acoustic_tokenizer_config.hidden_size
-    
+
     @property
     def semantic_hidden_size(self) -> int:
         return self.semantic_tokenizer_config.hidden_size

@@ -15,6 +15,7 @@
 """ VibeVoice Semantic Tokenizer model configuration"""
 
 import numpy as np
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 

@@ -14,20 +14,21 @@
 # limitations under the License.
 
 import argparse
-import torch
 import gc
-import os
-from safetensors.torch import load_file
 import json
+
+import torch
+from safetensors.torch import load_file
+
 from transformers import (
+    VibeVoiceAcousticTokenizerConfig,
+    VibeVoiceAcousticTokenizerModel,
     VibeVoiceConfig,
-    VibeVoiceForConditionalGeneration,
-    VibeVoiceAcousticTokenizerModel, 
-    VibeVoiceSemanticTokenizerModel, 
-    VibeVoiceAcousticTokenizerConfig, 
-    VibeVoiceSemanticTokenizerConfig,
-    VibeVoiceProcessor,
     VibeVoiceFeatureExtractor,
+    VibeVoiceForConditionalGeneration,
+    VibeVoiceProcessor,
+    VibeVoiceSemanticTokenizerConfig,
+    VibeVoiceSemanticTokenizerModel,
     VibeVoiceTokenizer,
 )
 
@@ -37,10 +38,10 @@ def update_state_dict_for_hf_model(state_dict):
     Update the state_dict to match the HuggingFace model structure.
     """
     updated_state_dict = {}
-    
+
     for key, value in state_dict.items():
         new_key = key
-        
+
         # Handle conv.conv -> conv mapping for semantic tokenizer SConv1d layers
         # This removes one level of .conv nesting
         if "semantic_tokenizer" in key:
@@ -53,7 +54,7 @@ def update_state_dict_for_hf_model(state_dict):
             # Handle general conv.conv -> conv mapping (after mixer handling to avoid conflicts)
             elif ".conv.conv." in key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
-        
+
         # Handle conv.conv -> conv mapping for acoustic tokenizer encoder layers
         # This removes one level of .conv nesting for the updated TokenizerEncoder
         if "acoustic_tokenizer.encoder" in key:
@@ -66,7 +67,7 @@ def update_state_dict_for_hf_model(state_dict):
             # Handle general conv.conv -> conv mapping (after mixer handling to avoid conflicts)
             elif ".conv.conv." in key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
-        
+
         # Handle conv.conv -> conv mapping for acoustic tokenizer decoder layers
         # This removes one level of .conv nesting for the updated TokenizerDecoder
         if "acoustic_tokenizer.decoder" in key:
@@ -83,35 +84,35 @@ def update_state_dict_for_hf_model(state_dict):
             # Original Block1D had: mixer.conv.conv.conv.* -> VibeVoiceAcousticTokenizerConvNext1dLayer has: mixer.*
             elif "stages." in key and "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
-        
+
         # Handle prediction_head -> diffusion_head mapping
         if "prediction_head." in key:
             key = key.replace("prediction_head.", "diffusion_head.")
             new_key = new_key.replace("prediction_head.", "diffusion_head.")
-        
+
         # Handle TimestepEmbedder MLP Sequential -> individual layers mapping
         if "diffusion_head.t_embedder.mlp." in key:
             if "diffusion_head.t_embedder.mlp.0." in key:
                 new_key = new_key.replace("diffusion_head.t_embedder.mlp.0.", "diffusion_head.timestep_embedder.layer_1.")
             elif "diffusion_head.t_embedder.mlp.2." in key:
                 new_key = new_key.replace("diffusion_head.t_embedder.mlp.2.", "diffusion_head.timestep_embedder.layer_2.")
-        
+
         # Handle FinalLayer linear -> linear_2 mapping
         if "diffusion_head.final_layer.linear." in key and "adaLN_modulation" not in key:
             new_key = new_key.replace("diffusion_head.final_layer.linear.", "diffusion_head.final_layer.linear_2.")
-        
+
         # Handle FinalLayer adaLN_modulation Sequential -> individual layers mapping
         if "diffusion_head.final_layer.adaLN_modulation." in key:
             if ".adaLN_modulation.1." in key:
                 new_key = new_key.replace(".adaLN_modulation.1.", ".linear_1.")
-        
+
         # Handle HeadLayer adaLN_modulation Sequential -> individual layers mapping
         if "diffusion_head.layers." in key and ".adaLN_modulation." in key:
             if ".adaLN_modulation.1." in key:
                 new_key = new_key.replace(".adaLN_modulation.1.", ".linear.")
 
         updated_state_dict[new_key] = value
-    
+
     return updated_state_dict
 
 
@@ -238,7 +239,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if "num_hidden_layers" in model_config:
         del model_config["num_hidden_layers"]
     model_config["dtype"] = model_config.pop("torch_dtype")
-    
+
     # 3) Update state dict to match HF model structure
     updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
 
@@ -294,7 +295,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
             processor_config = json.load(f)
         audio_config = processor_config.get("audio_processor", {})
         language_model_pretrained_name = processor_config.get("language_model_pretrained_name", None)
-    
+
     # Default to 1.5B model: https://huggingface.co/microsoft/VibeVoice-1.5B/blob/main/preprocessor_config.json
     if "sampling_rate" not in audio_config:
         audio_config["sampling_rate"] = 24000
@@ -306,7 +307,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         audio_config["eps"] = 1e-6
     if language_model_pretrained_name is None:
         language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
-    
+
     processor = VibeVoiceProcessor(
         feature_extractor=VibeVoiceFeatureExtractor(**audio_config),
         tokenizer=VibeVoiceTokenizer.from_pretrained(language_model_pretrained_name),
@@ -339,14 +340,14 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     # add lm_head weights
     # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L123
     updated_state_dict["lm_head.weight"] = updated_state_dict["model.language_model.embed_tokens.weight"]
-    
+
     missing, unexpected = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
     if len(unexpected) != 0:
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
         raise ValueError(f"missing keys found: {missing}")
     vibevoice_model.save_pretrained(output_dir)
-    
+
     # -- push to hub
     if push_to_hub is not None:
         print(f"------ Pushing full VibeVoice model to hub as {push_to_hub} ------")

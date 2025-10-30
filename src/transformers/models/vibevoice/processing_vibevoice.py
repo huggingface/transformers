@@ -21,9 +21,9 @@ import numpy as np
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import logging, is_soundfile_available, is_torch_available
+from ...utils import is_soundfile_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -53,7 +53,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
             # "bos_token_id": 1026,
             # "delay_pattern": [0, 8, 9, 10, 11, 12, 13, 14, 15],
             # "generation": True,
-            
+
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
@@ -85,7 +85,7 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-        
+
         # Pre-compute common token sequences
         self.system_prompt = " Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n"
         self._prompt_tokens = self.tokenizer.encode(self.system_prompt)
@@ -249,7 +249,7 @@ class VibeVoiceProcessor(ProcessorMixin):
 
         input_ids = []
         speech_input_masks = []
-        
+
         for i, _script in enumerate(scripts):
             # Initialize with prompt
             full_tokens = self._prompt_tokens.copy()
@@ -267,18 +267,18 @@ class VibeVoiceProcessor(ProcessorMixin):
                 vae_tok_lens = processed_audio["speech_masks"][script_speakers].sum(dim=-1).int().tolist()
                 for speaker_id, vae_tok_len in zip(script_speakers, vae_tok_lens):
                     prefix_tokens = speaker_prefix_cache[speaker_id]
-                    
+
                     # Build tokens in one go
                     speaker_tokens = (prefix_tokens +
                                     [self.tokenizer.speech_start_id] +
                                     [self.tokenizer.speech_diffusion_id] * vae_tok_len +
                                     [self.tokenizer.speech_end_id] +
                                     self._newline_tokens)
-                    
+
                     # Build mask in one go
                     vae_input_mask = ([False] * len(prefix_tokens) +
                                     [False] +  # speech_start_id
-                                    [True] * vae_tok_len +  # speech tokens  
+                                    [True] * vae_tok_len +  # speech tokens
                                     [False] +  # speech_end_id
                                     [False] * len(self._newline_tokens))
 
@@ -288,7 +288,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             # Add text input section
             full_tokens.extend(self._text_input_tokens)
             speech_input_mask.extend([False] * len(self._text_input_tokens))
-            
+
             # Batch encode all speaker text at once
             speaker_texts = [f" Speaker {speaker_id}:{speaker_text}\n" for speaker_id, speaker_text in _script]
             if speaker_texts:
@@ -304,7 +304,7 @@ class VibeVoiceProcessor(ProcessorMixin):
 
             input_ids.append(full_tokens)
             speech_input_masks.append(speech_input_mask)
-        
+
         # Pad/truncate tokenizer input for batch
         batch_encoding = self.tokenizer.pad(
             BatchFeature({"input_ids": input_ids}),
@@ -314,13 +314,13 @@ class VibeVoiceProcessor(ProcessorMixin):
             return_tensors=return_tensors,
             return_attention_mask=return_attention_mask,
         )
-        
+
         # Manually align speech_input_mask with padded input_ids
         padded_length = batch_encoding["input_ids"].shape[1]
         padded_speech_masks = []
         for mask in speech_input_masks:
             if len(mask) < padded_length:
-                # Pad on the left (same as input_ids padding_side="left") 
+                # Pad on the left (same as input_ids padding_side="left")
                 padding_needed = padded_length - len(mask)
                 padded_mask = [False] * padding_needed + mask
             else:
@@ -439,7 +439,7 @@ class VibeVoiceProcessor(ProcessorMixin):
                 audio_np = audio.detach().to(torch.float32).cpu().numpy()
             else:
                 audio_np = np.array(audio)
-            
+
             # Handle different shapes
             if audio_np.ndim == 1:
                 audio_arrays = [audio_np]
@@ -454,7 +454,7 @@ class VibeVoiceProcessor(ProcessorMixin):
                 audio_arrays = [audio_np[i].mean(axis=0) for i in range(audio_np.shape[0])]
             else:
                 raise ValueError(f"Unsupported audio shape: {audio_np.shape}")
-        
+
         # Save audio(s)
         if len(audio_arrays) == 1:
             # Single audio file

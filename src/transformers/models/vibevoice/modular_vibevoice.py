@@ -21,19 +21,17 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .configuration_vibevoice import VibeVoiceDiffusionHeadConfig, VibeVoiceConfig
 from ...activations import ACT2FN
-
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
-from ..auto import AutoModel
-from ...utils import logging, is_diffusers_available, auto_docstring, can_return_tuple
-from ...utils.import_utils import requires_backends
-from .generation_vibevoice import VibeVoiceGenerationMixin
 from ...modeling_utils import PreTrainedModel
-
+from ...utils import auto_docstring, can_return_tuple, is_diffusers_available, logging
+from ...utils.import_utils import requires_backends
+from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
+from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceDiffusionHeadConfig
+from .generation_vibevoice import VibeVoiceGenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -76,18 +74,18 @@ class VibeVoiceTokenizer(Qwen2TokenizerFast):
             pad_token=pad_token,
             **kwargs,
         )
-        
+
         # Add VibeVoice-specific special tokens (using vision tokens as model was trained on them)
         vibevoice_special_tokens = [
             speech_start_token,
-            speech_end_token, 
+            speech_end_token,
             speech_diffusion_token,
         ]
-        
+
         # Add special tokens to the tokenizer
         special_tokens_dict = {"additional_special_tokens": vibevoice_special_tokens}
         self.add_special_tokens(special_tokens_dict)
-        
+
         # Store token strings for property access
         self._speech_start_token = speech_start_token
         self._speech_end_token = speech_end_token
@@ -163,7 +161,7 @@ class TimestepEmbedder(nn.Module):
             downscale_freq_shift=0,
             scale=1.0,
             max_period=10000,
-        ).to(timesteps.dtype)   
+        ).to(timesteps.dtype)
         return self.layer_2(self.act(self.layer_1(t_freq)))
 
 
@@ -221,7 +219,7 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
-    
+
 
 @auto_docstring(
     custom_intro="""
@@ -375,7 +373,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
             speech_embeds = self.get_speech_features(speech_tensors.to(self.dtype), speech_masks)
             if speech_input_mask is not None:
                 inputs_embeds[speech_input_mask] = speech_embeds
-        
+
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -444,7 +442,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     @property
     def language_model(self):
         return self.model.language_model
-    
+
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
 
@@ -565,7 +563,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             # "The custom CE loss with masking is calculated in the training script.
             # We leave the standard loss calculation here as None."
             pass
-        
+
         # Diffusion loss
         diffusion_loss = None
         # TODO (ebezzam) for now, copy from original implementation: https://github.com/vibevoice-community/VibeVoice/blob/db4cad072368df79f628cb4a6a3cd7bf3d60b685/vibevoice/modular/modeling_vibevoice.py#L415
