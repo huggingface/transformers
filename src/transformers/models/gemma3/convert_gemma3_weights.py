@@ -191,7 +191,10 @@ _VARIANTS = {
             num_hidden_layers=34,
             num_key_value_heads=4,
             sliding_window=1024,
-            rope_parameters={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_parameters={
+                "full_attention": {"rope_type": "linear", "factor": 8.0},
+                "sliding_attention": {"rope_type": "default"},
+            },
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -209,7 +212,10 @@ _VARIANTS = {
             num_hidden_layers=48,
             num_key_value_heads=8,
             sliding_window=1024,
-            rope_parameters={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_parameters={
+                "full_attention": {"rope_type": "linear", "factor": 8.0},
+                "sliding_attention": {"rope_type": "default"},
+            },
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -227,7 +233,10 @@ _VARIANTS = {
             num_key_value_heads=16,
             head_dim=128,
             sliding_window=1024,
-            rope_parameters={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_parameters={
+                "full_attention": {"rope_type": "linear", "factor": 8.0},
+                "sliding_attention": {"rope_type": "default"},
+            },
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -447,7 +456,7 @@ def convert_transformer_weights(
             return zip([], [])
         else:
             raise ValueError(f"Unexpected member, {prop}, in Embedder.")
-    elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
+    elif f"{_TRANSFORMER_EMBEDDER}/mm_" in path:
         if not _INCLUDE_VISION_ENCODER.value:
             return zip([], [])
 
@@ -553,7 +562,7 @@ def convert(
                 continue
 
             path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
-            update_tree(path, weights, config.vision_config.dtype)
+            update_tree(f"model.{path}", weights, config.vision_config.dtype)
         else:
             for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
                 if not _INCLUDE_VISION_ENCODER.value:
