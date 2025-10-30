@@ -1562,6 +1562,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # to also prevent bfloat16 casting, use the _keep_in_fp32_modules_strict flag
     _keep_in_fp32_modules_strict = None
 
+    _dtype_per_modules: Optional[dict[str, torch.dtype]] = None
+
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
     _keys_to_ignore_on_load_missing = None
@@ -1731,6 +1733,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
+
+        if self._keep_in_fp32_modules is not None:
+            self._dtype_per_modules = {
+                k: torch.float32 for k in self._keep_in_fp32_modules.keys()
+            } # TODO finish this
 
         self._no_split_modules = self._no_split_modules or []
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
@@ -4618,7 +4625,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             device_map = {"":"cpu"}
         keys = sorted(device_map.keys(), key=len, reverse=True)
         tp_plan = getattr(model, "_tp_plan", None)
-        keep_in_dtype = None
+        keep_in_dtype = None # TODO use keep_in
         error_msgs = []
         misc = {}
 

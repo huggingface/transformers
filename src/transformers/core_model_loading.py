@@ -624,7 +624,7 @@ PER_FILE_LIMIT = 4  # concurrent reads per file
 
 def _materialize_copy(x):
     # PyTorch: this runs in C and releases the GIL; good for threads.
-    return x[:] #.contiguous()  needed????
+    return x[...]
 
 def spawn_materialize(EXEC, _file_sems, file_id, t) -> Future:
     sem = _file_sems[file_id]
@@ -666,7 +666,7 @@ def convert_and_load_state_dict_in_model(
     weight_mapping = weight_mapping or {}  # {glob_pattern: WeightConverter}
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
-    if model.config.tie_word_embeddings:
+    if model.config.tie_word_embeddings and "lm_head.weight" in missing_keys:
         missing_keys.remove("lm_head.weight")
 
     misc = {}
