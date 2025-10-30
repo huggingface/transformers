@@ -1967,22 +1967,19 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         else:
             from .utils import has_file
 
-            try:
-                spm_exists = has_file(
-                    pretrained_model_name_or_path,
-                    "tokenizer.model",
-                    revision=kwargs.get("revision"),
-                    token=kwargs.get("token"),
-                    cache_dir=kwargs.get("cache_dir"),
-                    local_files_only=kwargs.get("local_files_only", False),
-                )
-            except Exception:
-                spm_exists = False
-            if spm_exists:
+            spm_filename = find_sentencepiece_model_file(
+                pretrained_model_name_or_path,
+                revision=kwargs.get("revision"),
+                token=kwargs.get("token"),
+                cache_dir=kwargs.get("cache_dir"),
+                local_files_only=kwargs.get("local_files_only", False),
+                subfolder=kwargs.get("subfolder", ""),
+            )
+            if spm_filename is not None:
                 try:
                     resolved_spm = cached_file(
                         pretrained_model_name_or_path,
-                        "tokenizer.model",
+                        spm_filename,
                         cache_dir=kwargs.get("cache_dir"),
                         force_download=kwargs.get("force_download", False),
                         proxies=kwargs.get("proxies"),
@@ -1995,19 +1992,70 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     resolved_spm = None
                 if resolved_spm is not None:
                     try:
-                        from ...create_fast_tokenizer import SentencePieceExtractor
+                        # Mirror AutoTokenizer fallback: extract vocab/merges from SentencePiece
+                        from .tokenization_sentencepiece import SentencePieceExtractor
+                        import inspect as _inspect
 
-                        fast_sig = inspect.signature(getattr(fast_tokenizer_class, "__init__", fast_tokenizer_class))
-                        if "vocab" in fast_sig.parameters and "merges" in fast_sig.parameters:
-                            try:
-                                vocab, merges = SentencePieceExtractor(resolved_spm).extract()
-                                return fast_tokenizer_class.from_pretrained(
-                                    pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
-                                )
-                            except Exception:
-                                pass
+                        class_sig = _inspect.signature(getattr(cls, "__init__", cls))
+                        vocab_ids, vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
+                        files_loaded = [spm_filename]
+                        init_kwargs["backend"] = "tokenizers"
+                        init_kwargs["files_loaded"] = files_loaded
+                        # If tokenizer needs merges too (BPE), pass both; unigram models only need vocab
+                        if "merges" in class_sig.parameters:
+                            return cls.from_pretrained(
+                                pretrained_model_name_or_path,
+                                *init_inputs,
+                                vocab=vocab_scores,
+                                merges=merges,
+                                **init_kwargs,
+                            )
+                        elif "vocab" in class_sig.parameters:
+                            return cls.from_pretrained(
+                                pretrained_model_name_or_path,
+                                *init_inputs,
+                                vocab=vocab_scores,
+                                **init_kwargs,
+                            )
                     except Exception:
                         pass
+            # Fallback to vocab.json + merges.txt (BPE) or just vocab.json (WordLevel/WordPiece)
+            vocab, merges, files_loaded = load_vocab_and_merges(
+                pretrained_model_name_or_path,
+                cache_dir=kwargs.get("cache_dir"),
+                force_download=kwargs.get("force_download", False),
+                proxies=kwargs.get("proxies"),
+                token=kwargs.get("token"),
+                revision=kwargs.get("revision"),
+                local_files_only=kwargs.get("local_files_only", False),
+                subfolder=kwargs.get("subfolder", ""),
+            )
+
+            if vocab is not None:
+                try:
+                    import inspect as _inspect
+
+                    class_sig = _inspect.signature(getattr(cls, "__init__", cls))
+                    init_kwargs["backend"] = "tokenizers"
+                    init_kwargs["files_loaded"] = files_loaded
+
+                    if merges is not None and "merges" in class_sig.parameters:
+                        return cls.from_pretrained(
+                            pretrained_model_name_or_path,
+                            *init_inputs,
+                            vocab=vocab,
+                            merges=merges,
+                            **init_kwargs,
+                        )
+                    elif "vocab" in class_sig.parameters:
+                        return cls.from_pretrained(
+                            pretrained_model_name_or_path,
+                            *init_inputs,
+                            vocab=vocab,
+                            **init_kwargs,
+                        )
+                except Exception:
+                    pass
         if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.info(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
@@ -3293,6 +3341,131 @@ def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:
 
     return tokenizer_file
 
+
+# Shared helper to locate a SentencePiece model file for a repo/path
+def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
+    """
+    Find any .model file (SentencePiece model) in the model directory or Hub repo.
+
+    Tries known filenames first ("tokenizer.model", "spm.model"), then scans local dir,
+    and as a last resort lists files on the Hub to find any .model.
+
+    Returns the filename (str) relative to the repo root or directory if found, else None.
+    """
+    from .utils.hub import has_file
+
+    # Try common names first
+    for candidate in ("tokenizer.model", "spm.model"):
+        try:
+            if has_file(
+                pretrained_model_name_or_path,
+                candidate,
+                revision=kwargs.get("revision"),
+                token=kwargs.get("token"),
+                cache_dir=kwargs.get("cache_dir"),
+                local_files_only=kwargs.get("local_files_only", False),
+            ):
+                return candidate
+        except Exception:
+            pass
+
+    subfolder = kwargs.get("subfolder", "")
+    local_files_only = kwargs.get("local_files_only", False)
+
+    # Local directory scan
+    if os.path.isdir(pretrained_model_name_or_path):
+        dir_path = (
+            os.path.join(pretrained_model_name_or_path, subfolder) if subfolder else pretrained_model_name_or_path
+        )
+        if os.path.isdir(dir_path):
+            for filename in os.listdir(dir_path):
+                if filename.endswith(".model"):
+                    return filename if not subfolder else os.path.join(subfolder, filename)
+
+    # Hub listing if allowed
+    if not local_files_only:
+        try:
+            from huggingface_hub import list_repo_tree
+
+            entries = list_repo_tree(
+                repo_id=pretrained_model_name_or_path,
+                revision=kwargs.get("revision"),
+                path_in_repo=subfolder if subfolder else None,
+                recursive=False,
+                token=kwargs.get("token"),
+            )
+            for entry in entries:
+                if entry.path.endswith(".model"):
+                    return entry.path if not subfolder else entry.path.removeprefix(f"{subfolder}/")
+        except Exception:
+            pass
+
+    return None
+
+
+def load_vocab_and_merges(pretrained_model_name_or_path, **kwargs):
+    """
+    Resolve and load vocab.json and optionally merges.txt from a repo/path.
+
+    Returns:
+        tuple (vocab: dict|None, merges: list[tuple[str,str]]|None, files_loaded: list[str])
+    """
+    files_loaded = []
+    vocab = None
+    merges = None
+    try:
+        resolved_vocab_file = cached_file(
+            pretrained_model_name_or_path,
+            "vocab.json",
+            cache_dir=kwargs.get("cache_dir"),
+            force_download=kwargs.get("force_download", False),
+            proxies=kwargs.get("proxies"),
+            token=kwargs.get("token"),
+            revision=kwargs.get("revision"),
+            local_files_only=kwargs.get("local_files_only", False),
+            subfolder=kwargs.get("subfolder", ""),
+        )
+    except Exception:
+        resolved_vocab_file = None
+
+    if resolved_vocab_file is not None:
+        try:
+            with open(resolved_vocab_file, "r", encoding="utf-8") as vf:
+                vocab = json.load(vf)
+            files_loaded.append("vocab.json")
+        except Exception:
+            vocab = None
+
+    try:
+        resolved_merges_file = cached_file(
+            pretrained_model_name_or_path,
+            "merges.txt",
+            cache_dir=kwargs.get("cache_dir"),
+            force_download=kwargs.get("force_download", False),
+            proxies=kwargs.get("proxies"),
+            token=kwargs.get("token"),
+            revision=kwargs.get("revision"),
+            local_files_only=kwargs.get("local_files_only", False),
+            subfolder=kwargs.get("subfolder", ""),
+        )
+    except Exception:
+        resolved_merges_file = None
+
+    if resolved_merges_file is not None:
+        try:
+            merges = []
+            with open(resolved_merges_file, "r", encoding="utf-8") as mf:
+                for line in mf:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        parts = line.split()
+                        if len(parts) == 2:
+                            merges.append((parts[0], parts[1]))
+            files_loaded.append("merges.txt")
+        except Exception:
+            merges = None
+
+    return vocab, merges, files_loaded
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
 PreTrainedTokenizerBase.push_to_hub = copy_func(PreTrainedTokenizerBase.push_to_hub)

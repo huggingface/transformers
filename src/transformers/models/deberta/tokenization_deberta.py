@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Tokenization class for model DeBERTa."""
 
-from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_tokenizers import TokenizersBackend
@@ -134,23 +134,14 @@ class DebertaTokenizer(TokenizersBackend):
                 vocab=self._vocab,
                 merges=self._merges,
                 dropout=None,
-                unk_token=str(unk_token),
+                unk_token=None,
                 continuing_subword_prefix="",
                 end_of_word_suffix="",
                 fuse_unk=False,
             )
         )
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace("\n", " "),
-                normalizers.Replace("\r", " "),
-                normalizers.Replace("\t", " "),
-                normalizers.Replace(Regex(r" {2,}"), " "),
-                normalizers.NFC(),
-                normalizers.Strip(left=False, right=True),
-            ]
-        )
+        self._tokenizer.normalizer = None
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
@@ -170,6 +161,17 @@ class DebertaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{self.cls_token} $A {self.sep_token}",
+            pair=f"{self.cls_token} $A {self.sep_token} {self.sep_token} $B {self.sep_token}",
+            special_tokens=[
+                (self.cls_token, self.cls_token_id),
+                (self.sep_token, self.sep_token_id),
+            ],
+        )
+
+        self._post_init()
 
     @property
     def mask_token(self) -> str:

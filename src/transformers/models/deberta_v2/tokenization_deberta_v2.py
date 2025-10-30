@@ -14,9 +14,7 @@
 # limitations under the License.
 """Tokenization class for model DeBERTa-v2."""
 
-from typing import Optional
-
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
 from ...tokenization_tokenizers import TokenizersBackend
@@ -75,7 +73,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
-        unk_id (`int`, *optional*, defaults to `0`):
+        unk_id (`int`, *optional*, defaults to index of `unk_token` in vocab):
             The ID of the unknown token in the vocabulary.
     """
 
@@ -96,7 +94,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
         cls_token="[CLS]",
         mask_token="[MASK]",
         add_prefix_space=True,
-        unk_id=1,
+        unk_id=3,
         **kwargs,
     ):
         self.vocab_file = vocab_file
@@ -105,7 +103,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
 
         if vocab is None:
-            vocab = [
+            self._vocab = [
                 (str(pad_token), 0.0),
                 (str(unk_token), 0.0),
                 (str(bos_token), 0.0),
@@ -114,21 +112,26 @@ class DebertaV2Tokenizer(TokenizersBackend):
                 (str(cls_token), 0.0),
                 (str(mask_token), 0.0),
             ]
+        
+        else:
+            self._vocab = [tuple(item) if not isinstance(item, tuple) else item for item in vocab]
+            computed_unk_id = {piece: i for i, (piece, _score) in enumerate(self._vocab)}
+            unk_id = computed_unk_id.get(str(unk_token))
 
         self._tokenizer = Tokenizer(
             Unigram(
-                vocab,
+                self._vocab,
                 unk_id=unk_id,
                 byte_fallback=False,
             )
         )
 
-        # Set up normalizer
         list_normalizers = []
         if do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
 
-        list_normalizers.extend([
+        list_normalizers.extend(
+            [
                 normalizers.Replace("\n", " "),
                 normalizers.Replace("\r", " "),
                 normalizers.Replace("\t", " "),
@@ -142,10 +145,10 @@ class DebertaV2Tokenizer(TokenizersBackend):
         list_pretokenizers = []
         if split_by_punct:
             list_pretokenizers.append(pre_tokenizers.Punctuation(behavior="isolated"))
-        
+
         prepend_scheme = _get_prepend_scheme(add_prefix_space)
         list_pretokenizers.append(pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme))
-        
+
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(list_pretokenizers)
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)

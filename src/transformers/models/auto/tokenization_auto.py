@@ -37,7 +37,7 @@ from transformers.utils.import_utils import is_mistral_common_available
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
+from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE, find_sentencepiece_model_file, load_vocab_and_merges
 from ...utils import (
     extract_commit_hash,
     is_g2p_en_available,
@@ -409,67 +409,8 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
 
 
 def _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
-    """
-    Find any .model file (SentencePiece model) in the model directory or Hub repo.
-
-    Args:
-        pretrained_model_name_or_path: Path to local directory or model id on the Hub
-        **kwargs: Additional arguments like revision, token, cache_dir, local_files_only, subfolder
-
-    Returns:
-        The filename of the .model file if found, None otherwise
-    """
-    # First try tokenizer.model (most common)
-    try:
-        if has_file(
-            pretrained_model_name_or_path,
-            "tokenizer.model",
-            revision=kwargs.get("revision"),
-            token=kwargs.get("token"),
-            cache_dir=kwargs.get("cache_dir"),
-            local_files_only=kwargs.get("local_files_only", False),
-        ):
-            return "tokenizer.model"
-    except Exception:
-        pass
-
-    subfolder = kwargs.get("subfolder", "")
-    local_files_only = kwargs.get("local_files_only", False)
-
-    # If it's a local directory, list all files and find any .model file
-    if os.path.isdir(pretrained_model_name_or_path):
-        dir_path = (
-            os.path.join(pretrained_model_name_or_path, subfolder) if subfolder else pretrained_model_name_or_path
-        )
-        if os.path.isdir(dir_path):
-            for filename in os.listdir(dir_path):
-                if filename.endswith(".model"):
-                    return filename
-    # Otherwise, try to list files from the Hub
-    elif not local_files_only:
-        try:
-            model_files = [
-                entry.path if not subfolder else entry.path.removeprefix(f"{subfolder}/")
-                for entry in list_repo_tree(
-                    repo_id=pretrained_model_name_or_path,
-                    revision=kwargs.get("revision"),
-                    path_in_repo=subfolder if subfolder else None,
-                    recursive=False,
-                    token=kwargs.get("token"),
-                )
-                if entry.path.endswith(".model")
-            ]
-            if model_files:
-                # Return the first .model file found
-                return model_files[0]
-        except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
-            # These are valid errors that should be raised
-            raise
-        except (HfHubHTTPError, OfflineModeIsEnabled, httpx.NetworkError):
-            # Connection errors - fall through to return None
-            pass
-
-    return None
+    # Delegate to shared helper to avoid duplication
+    return find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
 
 
 def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs):
@@ -558,47 +499,20 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
             except Exception:
                 pass
 
-    # Try vocab.json + merges.txt
-    try:
-        vocab_file = cached_file(
-            pretrained_model_name_or_path,
-            "vocab.json",
-            cache_dir=kwargs.get("cache_dir"),
-            force_download=kwargs.get("force_download", False),
-            proxies=kwargs.get("proxies"),
-            token=kwargs.get("token"),
-            revision=kwargs.get("revision"),
-            local_files_only=kwargs.get("local_files_only", False),
-            subfolder=kwargs.get("subfolder", ""),
-        )
-        vocab_json_exists = True
-    except Exception:
-        vocab_json_exists = False
-
-    try:
-        merges_file = cached_file(
-            pretrained_model_name_or_path,
-            "merges.txt",
-            cache_dir=kwargs.get("cache_dir"),
-            force_download=kwargs.get("force_download", False),
-            proxies=kwargs.get("proxies"),
-            token=kwargs.get("token"),
-            revision=kwargs.get("revision"),
-            local_files_only=kwargs.get("local_files_only", False),
-        )
-        merges_txt_exists = True
-    except Exception:
-        merges_txt_exists = False
-
-    if vocab_json_exists and merges_txt_exists:
-        vocab = load_vocab(vocab_file)
-        merges = load_merges(merges_file)
-        files_loaded.extend(["vocab.json", "merges.txt"])
+    # Try vocab.json + merges.txt using shared helper
+    vocab, merges, loaded = load_vocab_and_merges(pretrained_model_name_or_path, **kwargs)
+    if vocab is not None:
+        files_loaded.extend(loaded)
         kwargs["backend"] = "tokenizers"
         kwargs["files_loaded"] = files_loaded
-        return tokenizer_class.from_pretrained(
-            pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
-        )
+        if merges is not None:
+            return tokenizer_class.from_pretrained(
+                pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
+            )
+        else:
+            return tokenizer_class.from_pretrained(
+                pretrained_model_name_or_path, *inputs, vocab=vocab, **kwargs
+            )
 
     # If all methods failed, raise an error
     raise ValueError(
