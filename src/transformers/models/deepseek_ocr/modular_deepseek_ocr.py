@@ -193,7 +193,9 @@ class DeepseekOcrTextConfig(DeepseekV2Config):
 class DeepseekOcrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekOcrForConditionalGeneration`]. It is used to instantiate a
-    DeepseekOCR model according to the specified arguments, defining the model architecture.
+    DeepseekOCR model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the DeepseekOCR
+    [deepseek-ai/deepseek-ocr](https://huggingface.co/deepseek-ai/deepseek-ocr) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

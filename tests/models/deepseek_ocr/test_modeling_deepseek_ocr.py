@@ -27,7 +27,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -39,7 +38,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,
 
 if is_torch_available():
     import torch
-    from PIL import Image
 
 
 class DeepseekOcrModelTester:
