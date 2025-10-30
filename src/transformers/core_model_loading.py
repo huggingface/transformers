@@ -751,7 +751,7 @@ def convert_and_load_state_dict_in_model(
     progress_bar = logging.tqdm(total=total_layers, desc="Converting weights", leave=False) if total_layers else None
 
     try:
-        for key in keys:
+        for key in keys[::-1]: # revert to process simple keys first
             group = by_conversion_pattern.pop(key)
             converter = group.weight_converter
             operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
