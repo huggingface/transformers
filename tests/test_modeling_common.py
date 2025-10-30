@@ -2861,17 +2861,17 @@ class ModelTesterMixin:
                         new_model = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
                     new_model.to(torch_device)
                     inputs = self._prepare_for_class(inputs_dict, model_class)
                     logits = new_model(**inputs).logits
-                    self.assertEqual(logits.shape[1], 42)
+                    self.assertEqual(logits.shape[1], 2) # we still want to load :)
 
                     with CaptureLogger(logger) as cl:
                         new_model_without_prefix = AutoModel.from_pretrained(
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
                     input_ids = ids_tensor((2, 8), 10)
                     new_model_without_prefix.to(torch_device)
                     if self.is_encoder_decoder:

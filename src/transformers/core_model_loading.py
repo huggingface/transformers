@@ -601,6 +601,7 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, misma
 
         if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((k, param_value.shape, ref.shape))
+
         if k in missing_keys:
             missing_keys.remove(k)
 
@@ -696,6 +697,16 @@ def convert_and_load_state_dict_in_model(
             converter = WeightConverter(original_key)
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
+
+        prefix = model.base_model_prefix
+        new_target_key = []
+        for t in target_key.split("|"): # let's correct the keys
+            if t.startswith(prefix) and meta_model_state_dict.get(t.replace(f"{prefix}.", "")) is not None:
+                t = t.replace(f"{prefix}.", "")
+            elif meta_model_state_dict.get(f"{prefix}.{t}") is not None:
+                t = f"{prefix}.{t}"
+            new_target_key.append(t)
+        target_key = "|".join(new_target_key)
 
         first_target_key = target_key.split("|")[0]
         fut = None

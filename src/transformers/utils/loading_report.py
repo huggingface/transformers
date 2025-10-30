@@ -218,15 +218,17 @@ def log_state_dict_report(
     prelude = (
         f"{ansi['bold']}{model.__class__.__name__} LOAD REPORT{ansi['reset']} from: {pretrained_model_name_or_path}\n"
     )
-    tips = (
-        f"\n\n{ansi['italic']}Notes:\n"
-        f"- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}\t:can be ignored when loading from different task/architecture; not ok if you expect identical arch.\n" if unexpected_keys else ""
-        f"- {_color('MISSING', 'red', ansi) + ansi['italic']}\t:those params were newly initialized; consider training on your downstream task.\n" if missing_keys else ""
-        f"- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}\t:ckpt weights were loaded, but they did not match the original empty weight.\n" if mismatched_keys else ""
-        f"- {_color('MISC', 'purple', ansi) + ansi['italic']}\t:originate from the conversion scheme\n" if misc else ""
-        f"{ansi['reset']}"
-    )
+    tips = f"\n\n{ansi['italic']}Notes:"
+    if unexpected_keys:
+        tips += f"\n- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}\t:can be ignored when loading from different task/architecture; not ok if you expect identical arch."
+    if missing_keys:
+        tips += f"\n- {_color('MISSING', 'red', ansi) + ansi['italic']}\t:those params were newly initialized because missing form the checkpoint. Consider training on your downstream task."
+    if mismatched_keys:
+        tips += f"\n- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}\t:ckpt weights were loaded, but they did not match the original empty weight."
+    if misc:
+        tips += f"\n- {_color('MISC', 'purple', ansi) + ansi['italic']}\t:originate from the conversion scheme"
+    tips += f"{ansi['reset']}"
 
-    print(prelude + table + "" + tips)
+    logger.warning(prelude + table + tips)
     if not ignore_mismatched_sizes and mismatched_keys:
         raise RuntimeError("You set `ignore_mismatched_sizes` to `False`, thus raising an error. For details look at the above report!")
