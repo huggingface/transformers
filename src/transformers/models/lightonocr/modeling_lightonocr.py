@@ -7,9 +7,6 @@
 from collections.abc import Callable
 from typing import Optional, Union
 
-import torch
-from torch import nn
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -21,9 +18,14 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Causal
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils import auto_docstring, can_return_tuple, is_torch_available
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from .configuration_lightonocr import LightOnOCRConfig, LightOnOCRTextConfig, LightOnOCRVisionConfig
+
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -1069,11 +1071,11 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
     def __init__(self, config: LightOnOCRConfig):
         super().__init__(config)
 
-        self.vision_encoder = LightOnOCRVisionModel(config.vision_config)
+        self.vision_encoder = LightOnOCRVisionModel._from_config(config.vision_config)
 
         self.vision_projection = LightOnOCRVisionProjector(config)
 
-        self.language_model = LightOnOCRTextModel(config.text_config)
+        self.language_model = LightOnOCRTextModel._from_config(config.text_config)
 
         self.post_init()
 
@@ -1155,7 +1157,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         past_key_values: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if inputs_embeds is None:
             if input_ids is None:
@@ -1239,7 +1241,7 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
