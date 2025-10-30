@@ -348,7 +348,7 @@ class To(ConversionOps):
     def __init__(self, device):
         self.device = device
 
-    def convert(self, realized_value: list[list[PySafeSlice]]):
+    def convert(self, realized_value):
         with torch.device(self.device):
             out = [[x[:] for x in inner] if isinstance(inner, list) else inner[:] for inner in realized_value]
         return out

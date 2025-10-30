@@ -1733,10 +1733,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
 
-        if self._keep_in_fp32_modules is not None:
+        if isinstance(self._keep_in_fp32_modules, dict):
             self._dtype_per_modules = dict.fromkeys(
                 self._keep_in_fp32_modules.keys(), torch.float32
-            )  # TODO finish this
+            )
 
         self._no_split_modules = self._no_split_modules or []
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
@@ -4681,7 +4681,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         has_prefix_module = any(s.startswith(prefix) for s in new_state_dict.keys()) if len(prefix) > 0 else False
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
-        loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
