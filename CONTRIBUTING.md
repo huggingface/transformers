@@ -44,6 +44,8 @@ open issues that are beginner-friendly and help you start contributing to open-s
 
 For something slightly more challenging, you can also take a look at the [Good Second Issue](https://github.com/huggingface/transformers/labels/Good%20Second%20Issue) list. In general though, if you feel like you know what you're doing, go for it and we'll help you get there! 🚀
 
+> **Note for Hacktoberfest Contributors:** Many of our "Good First Issue" tasks involve improving examples and documentation. For instance, adding gradient accumulation support to `no_trainer` example scripts is a valuable contribution that helps users train models with limited GPU memory. Check out [issue #18436](https://github.com/huggingface/transformers/issues/18436) for more details.
+
 > All contributions are equally valuable to the community. 🥰
 
 ## Fixing outstanding issues
