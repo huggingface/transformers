@@ -138,7 +138,7 @@ class RobertaTokenizer(TokenizersBackend):
         self.trim_offsets = trim_offsets
 
         if vocab is not None:
-            self._vocab = vocab
+            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             self._vocab = {
                 str(pad_token): 0,

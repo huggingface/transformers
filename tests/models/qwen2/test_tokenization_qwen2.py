@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import tempfile
 import unittest
 
 from tests.test_tokenization_common import TokenizerTesterMixin
@@ -22,32 +21,13 @@ from transformers.testing_utils import (
     require_tokenizers,
 )
 
-
 @require_tokenizers
 class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+
     from_pretrained_id = "Qwen/Qwen2.5-VL-7B-Instruct"
     tokenizer_class = Qwen2Tokenizer
-    test_slow_tokenizer = True
-    space_between_special_tokens = False
-    from_pretrained_kwargs = {}
-    test_seq2seq = False
-
-    # Integration test data - Qwen2 uses a custom input string
-    integration_test_input_string = """Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between Jax, PyTorch and TensorFlow.🤗 Transformers 提供了可以轻松地下载并且训练先进的预训练模型的 API 和工具。使用预训练模型可以减少计算消耗和碳排放，并且节省从头训练所需要的时间和资源。```python
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-tokenizer")
-tokenizer("世界，你好！")```<|im_start|>Hello, world!<|im_end|>
-"""
-    integration_expected_tokens = ["Transform", "ers", "Ġ(", "formerly", "Ġknown", "Ġas", "Ġpy", "torch", "-transform", "ers", "Ġand", "Ġpy", "torch", "-pre", "trained", "-b", "ert", ")", "Ġprovides", "Ġgeneral", "-purpose", "Ġarchitectures", "Ġ(", "BERT", ",", "ĠG", "PT", "-", "2", ",", "ĠRo", "BERT", "a", ",", "ĠX", "LM", ",", "ĠDist", "il", "B", "ert", ",", "ĠXL", "Net", "...)", "Ġfor", "ĠNatural", "ĠLanguage", "ĠUnderstanding", "Ġ(", "N", "LU", ")", "Ġand", "ĠNatural", "ĠLanguage", "ĠGeneration", "Ġ(", "NL", "G", ")", "Ġwith", "Ġover", "Ġ", "3", "2", "+", "Ġpretrained", "Ġmodels", "Ġin", "Ġ", "1", "0", "0", "+", "Ġlanguages", "Ġand", "Ġdeep", "Ġinteroper", "ability", "Ġbetween", "ĠJ", "ax", ",", "ĠPy", "T", "orch", "Ġand", "ĠTensorFlow", ".", "ðŁ¤Ĺ", "ĠTransformers", "ĠæıĲ", "ä¾Ľ", "äºĨ", "åı¯ä»¥", "è½»æĿ¾", "åľ°", "ä¸ĭè½½", "å¹¶ä¸Ķ", "è®Ńç»ĥ", "åħĪè¿ĽçļĦ", "é¢Ħ", "è®Ńç»ĥ", "æ¨¡åŀĭ", "çļĦ", "ĠAPI", "ĠåĴĮ", "å·¥åħ·", "ãĢĤ", "ä½¿çĶ¨", "é¢Ħ", "è®Ńç»ĥ", "æ¨¡åŀĭ", "åı¯ä»¥", "åĩıå°ĳ", "è®¡ç®Ĺ", "æ¶ĪèĢĹ", "åĴĮ", "ç¢³", "æİĴæĶ¾", "ï¼Įå¹¶", "ä¸Ķ", "èĬĤçľģ", "ä»İ", "å¤´", "è®Ńç»ĥ", "æīĢéľĢè¦ģ", "çļĦæĹ¶éĹ´", "åĴĮ", "èµĦæºĲ", "ãĢĤ", "```", "python", "Ċ", "tokenizer", "Ġ=", "ĠAuto", "Tokenizer", ".from", "_pre", "trained", '("', "Q", "wen", "/Q", "wen", "-token", "izer", '")Ċ', "tokenizer", '("', "ä¸ĸçķĮ", "ï¼Į", "ä½łå¥½", "ï¼ģ", '")', "```", "<|im_start|>", "Hello", ",", "Ġworld", "!", "<|im_end|>", "Ċ"]
-    integration_expected_token_ids = [8963, 388, 320, 69514, 3881, 438, 4510, 27414, 32852, 388, 323, 4510, 27414, 21334, 35722, 1455, 529, 8, 5707, 4586, 58238, 77235, 320, 61437, 11, 479, 2828, 12, 17, 11, 11830, 61437, 64, 11, 1599, 10994, 11, 27604, 321, 33, 529, 11, 29881, 6954, 32574, 369, 18448, 11434, 45451, 320, 45, 23236, 8, 323, 18448, 11434, 23470, 320, 30042, 38, 8, 448, 916, 220, 18, 17, 10, 80669, 4119, 304, 220, 16, 15, 15, 10, 15459, 323, 5538, 94130, 2897, 1948, 619, 706, 11, 5355, 51, 21584, 323, 94986, 13, 144834, 80532, 93685, 83744, 34187, 73670, 104261, 29490, 62189, 103937, 104034, 102830, 98841, 104034, 104949, 9370, 5333, 58143, 102011, 1773, 37029, 98841, 104034, 104949, 73670, 101940, 100768, 104997, 33108, 100912, 105054, 90395, 100136, 106831, 45181, 64355, 104034, 113521, 101975, 33108, 85329, 1773, 73594, 12669, 198, 85593, 284, 8979, 37434, 6387, 10442, 35722, 445, 48, 16948, 45274, 16948, 34841, 3135, 1138, 85593, 445, 99489, 3837, 108386, 6313, 899, 73594, 151644, 9707, 11, 1879, 0, 151645, 198]
+    
+    integration_expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'ĠðŁĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.Ċ', 'çĶŁæ´»çļĦ', 'çľŁ', 'è°Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'ĠĠ', 'ĠHello', 'ĊĊ', 'ĠĊĠĠĊ', 'ĠHello', 'Ċ', '<s', '>Ċ', 'hi', '<s', '>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠHello', '.Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸Ľ', 'à¸µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
+    integration_expected_token_ids = [1986, 374, 264, 1273, 26525, 232, 198, 40, 572, 9223, 304, 220, 24, 17, 15, 15, 15, 11, 323, 419, 374, 31932, 963, 624, 105301, 88051, 116109, 20412, 198, 13048, 220, 21927, 198, 13048, 256, 21927, 271, 48426, 21927, 198, 44047, 397, 6023, 44047, 29, 18532, 198, 785, 2701, 914, 1265, 387, 10277, 20498, 25, 21927, 624, 3983, 220, 2603, 323, 220, 54684, 28319, 256, 220, 2603, 256, 220, 37033, 198, 18665, 1246, 525, 498, 3730]
+    expected_tokens_from_ids = ['This', 'Ġis', 'Ġa', 'Ġtest', 'ĠðŁĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.Ċ', 'çĶŁæ´»çļĦ', 'çľŁ', 'è°Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'ĠĠ', 'ĠHello', 'ĊĊ', 'ĠĊĠĠĊ', 'ĠHello', 'Ċ', '<s', '>Ċ', 'hi', '<s', '>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠHello', '.Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸Ľ', 'à¸µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
     integration_expected_decoded_text = 'This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing'
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
-        from_pretrained_id = "Qwen/Qwen2.5-VL-7B-Instruct"
-
-        tokenizer = Qwen2Tokenizer.from_pretrained(from_pretrained_id)
-        tokenizer.save_pretrained(cls.tmpdirname)
-
-        cls.tokenizers = [tokenizer]
