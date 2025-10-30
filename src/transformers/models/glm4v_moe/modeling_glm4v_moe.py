@@ -337,24 +337,23 @@ class Glm4vMoeTextNaiveMoe(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
 
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).flatten()
-
-        for expert_idx in expert_hit.tolist():
-            expert_selection = expert_mask[expert_idx].squeeze(0)
-            top_indices, token_positions = torch.where(expert_selection)
-            if token_positions.numel() == 0:
+        num_experts = top_k_weights.shape[1]
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == num_experts:
                 continue
-
-            current_state = hidden_states.index_select(0, token_positions)
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2)
-            current_hidden_states = self.act_fn(up)
-            current_hidden_states = current_hidden_states * gate
+            with torch.no_grad():
+                _, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
 
-            routing_weights = top_k_weights[token_positions, top_indices].unsqueeze(-1)
+            routing_weights = top_k_weights[token_idx, expert_idx].unsqueeze(-1)
             current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
-            final_hidden_states.index_add_(0, token_positions, current_hidden_states.to(final_hidden_states.dtype))
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
 

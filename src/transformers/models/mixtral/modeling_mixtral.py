@@ -28,8 +28,8 @@ from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
-from torch import nn 
 import torch.nn.functional as F
+from torch import nn
 
 from transformers.utils.generic import check_model_inputs
 
@@ -75,7 +75,7 @@ class MixtralExperts(nn.Module):
         final_hidden_states = torch.zeros_like(hidden_states)
 
         num_experts = top_k_weights.shape[1]
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts+1).permute(2, 1, 0)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
