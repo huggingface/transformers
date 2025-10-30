@@ -2391,9 +2391,8 @@ class Trainer:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
         _steps_in_current_epoch = 0
         epoch_dataloader = train_dataloader
-        epoch_iterator = iter(epoch_dataloader)
         if len_dataloader is not None:
-            steps_in_epoch = len(epoch_iterator)
+            steps_in_epoch = len_dataloader
         else:
             steps_in_epoch = args.max_steps * args.gradient_accumulation_steps
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
