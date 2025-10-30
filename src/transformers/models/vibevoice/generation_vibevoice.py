@@ -14,15 +14,16 @@
 # limitations under the License.
 
 from dataclasses import dataclass
+from queue import Queue
 from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from ...utils import logging
-from ...generation import GenerationConfig, GenerationMixin, LogitsProcessor, LogitsProcessorList, BaseStreamer
+from ...generation import BaseStreamer, GenerationConfig, GenerationMixin, LogitsProcessor, LogitsProcessorList
 from ...modeling_outputs import ModelOutput
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -199,7 +200,7 @@ class AudioBatchIterator:
 
 
 class VibeVoiceGenerationMixin(GenerationMixin):
-    
+
     def _build_generate_config_model_kwargs(self, generation_config, inputs, tokenizer, return_processors=False, **kwargs):
         if generation_config is None:
             generation_config = GenerationConfig(
@@ -449,12 +450,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # speech_end
             diffusion_end_indices = (next_tokens == generation_config.speech_end_id).nonzero(as_tuple=False).squeeze(1)
-            if diffusion_end_indices.numel() > 0:
-                # Clear tokenizer caches for samples that reached speech end
-                if acoustic_cache is not None:
-                    acoustic_cache.set_to_zero(diffusion_end_indices)
-                if semantic_cache is not None:
-                    semantic_cache.set_to_zero(diffusion_end_indices)
 
             # speech_begin
             diffusion_start_indices = torch.arange(batch_size, device=device)[~finished_tags & (next_tokens == generation_config.speech_start_id)]
@@ -540,36 +535,31 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 negative_condition = negative_outputs.last_hidden_state[diffusion_indices, -1, :]
 
                 # Sample speech tokens from Diffusion model with classifier-free guidance (CFG)
-                speech_latent = self.sample_speech_tokens(
-                    positive_condition,
-                    negative_condition,
-                    cfg_scale=cfg_scale,
-                ).unsqueeze(1)
-                # self.model.noise_scheduler.set_timesteps(self.ddpm_inference_steps)
-                # condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.model.diffusion_head.device)
-                # speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
-                # with torch.no_grad():
-                #     for t in self.model.noise_scheduler.timesteps:
-                #         half = speech[: len(speech) // 2]
-                #         combined = torch.cat([half, half], dim=0)
-                #         eps = self.model.diffusion_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
-                #         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
-                #         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
-                #         eps = torch.cat([half_eps, half_eps], dim=0)
-                #         speech = self.model.noise_scheduler.step(eps, t, speech).prev_sample
-                # speech_latent = speech[: len(speech) // 2].unsqueeze(1)
+                self.model.noise_scheduler.set_timesteps(self.ddpm_inference_steps)
+                condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.model.diffusion_head.device)
+                speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
+                with torch.no_grad():
+                    for t in self.model.noise_scheduler.timesteps:
+                        half = speech[: len(speech) // 2]
+                        combined = torch.cat([half, half], dim=0)
+                        eps = self.model.diffusion_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
+                        cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
+                        half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
+                        eps = torch.cat([half_eps, half_eps], dim=0)
+                        speech = self.model.noise_scheduler.step(eps, t, speech).prev_sample
+                speech_latent = speech[: len(speech) // 2].unsqueeze(1)
 
                 # Decode acoustic latent to audio using acoustic streaming cache
                 scaled_latent = speech_latent / self.model.speech_scaling_factor.to(speech_latent.device) - self.model.speech_bias_factor.to(speech_latent.device)
                 with torch.no_grad():
                     audio_output = self.model.acoustic_tokenizer.decode(
                         scaled_latent.to(self.model.acoustic_tokenizer.device),
-                        past_conv_values=acoustic_cache,  # Use acoustic-specific cache
-                        sample_indices=diffusion_indices.to(self.model.acoustic_tokenizer.device),
+                        padding_cache=acoustic_cache,
+                        sample_mask=diffusion_indices.to(self.model.acoustic_tokenizer.device),
                         use_cache=True
                     )
                 audio_chunk = audio_output.audio
-                acoustic_cache = audio_output.past_conv_values
+                acoustic_cache = audio_output.padding_cache
 
                 # Store audio chunks for each sample
                 for i, sample_idx in enumerate(diffusion_indices):
@@ -587,12 +577,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 with torch.no_grad():
                     semantic_outputs = self.model.semantic_tokenizer.encode(
                         audio_chunk,
-                        past_conv_values=semantic_cache,  # Use semantic-specific cache
-                        sample_indices=diffusion_indices,
+                        padding_cache=semantic_cache,
+                        sample_mask=diffusion_indices,
                         use_cache=True
                     )
                 semantic_features = semantic_outputs.latents
-                semantic_cache = semantic_outputs.past_conv_values
+                semantic_cache = semantic_outputs.padding_cache
 
                 # Combine acoustic and semantic features for next input
                 acoustic_embed = self.model.acoustic_connector(speech_latent)
@@ -624,18 +614,3 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             speech_outputs=final_audio_outputs,
             reach_max_step_sample=reach_max_step_sample,
         )
-
-    @torch.no_grad()
-    def sample_speech_tokens(self, condition, neg_condition, cfg_scale=3.0):
-        self.model.noise_scheduler.set_timesteps(self.ddpm_inference_steps)
-        condition = torch.cat([condition, neg_condition], dim=0).to(self.model.diffusion_head.device)
-        speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
-        for t in self.model.noise_scheduler.timesteps:
-            half = speech[: len(speech) // 2]
-            combined = torch.cat([half, half], dim=0)
-            eps = self.model.diffusion_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
-            cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
-            half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
-            eps = torch.cat([half_eps, half_eps], dim=0)
-            speech = self.model.noise_scheduler.step(eps, t, speech).prev_sample
-        return speech[: len(speech) // 2]
