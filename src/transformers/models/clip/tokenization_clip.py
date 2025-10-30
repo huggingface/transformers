@@ -75,7 +75,6 @@ class CLIPTokenizer(TokenizersBackend):
         self.vocab_file = vocab_file
         self.merges_file = merges_file
 
-        # Initialize vocab and merges
         if vocab is not None:
             _vocab = vocab
         else:
@@ -90,7 +89,6 @@ class CLIPTokenizer(TokenizersBackend):
         else:
             _merges = []
 
-        # Create BPE tokenizer
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=_vocab,
@@ -103,12 +101,10 @@ class CLIPTokenizer(TokenizersBackend):
             )
         )
 
-        # Set up normalizer: NFC, replace multiple spaces, lowercase
         self._tokenizer.normalizer = normalizers.Sequence(
             [normalizers.NFC(), normalizers.Replace(Regex(r"\s+"), " "), normalizers.Lowercase()]
         )
 
-        # Set up pre-tokenizer: Split by regex pattern, then ByteLevel
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Split(
@@ -120,11 +116,8 @@ class CLIPTokenizer(TokenizersBackend):
             ]
         )
 
-        # Set up decoder
         self._tokenizer.decoder = decoders.ByteLevel()
 
-        # Set up post-processor (RobertaProcessing)
-        # Get token IDs from vocab or use defaults
         bos_token_id = _vocab.get(str(bos_token), 0)
         eos_token_id = _vocab.get(str(eos_token), 1)
         
@@ -146,10 +139,9 @@ class CLIPTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        self._wrap_decode_method_backend_tokenizer()
 
     def _post_init(self):
-        """Called after loading from pretrained to reinitialize custom behavior."""
+        super()._post_init()
         self._wrap_decode_method_backend_tokenizer()
 
     # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872
@@ -166,9 +158,6 @@ class CLIPTokenizer(TokenizersBackend):
             return text
 
         self.backend_tokenizer.decode = new_decode_method
-
-
-
 
 
 __all__ = ["CLIPTokenizer"]
