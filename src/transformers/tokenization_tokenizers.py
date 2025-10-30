@@ -27,6 +27,7 @@ import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
+from tokenizers import normalizers as tokenizers_normalizers
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
@@ -350,6 +351,42 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     self._tokenizer = TokenizerFast.from_str(json.dumps(tokenizer_json))
             except Exception:
                 pass
+
+        # Ensure normalizer flags (lowercase/accents/chinese chars) reflect tokenizer attributes
+        try:
+            normalizer = self.backend_tokenizer.normalizer
+            if normalizer is not None:
+                norm_state = json.loads(normalizer.__getstate__())
+                norm_type = norm_state.get("type")
+
+                desired_lowercase = getattr(self, "do_lower_case", None)
+                desired_strip_accents = getattr(self, "strip_accents", None)
+                # Some tokenizers expose keep_accents instead of strip_accents
+                if desired_strip_accents is None and hasattr(self, "keep_accents") and "strip_accents" in norm_state:
+                    keep_accents_value = getattr(self, "keep_accents")
+                    if keep_accents_value is not None:
+                        desired_strip_accents = not keep_accents_value
+                desired_handle_chinese = getattr(self, "tokenize_chinese_chars", None)
+
+                updated = False
+                if desired_lowercase is not None and "lowercase" in norm_state and norm_state["lowercase"] != desired_lowercase:
+                    norm_state["lowercase"] = desired_lowercase
+                    updated = True
+                if desired_strip_accents is not None and "strip_accents" in norm_state and norm_state["strip_accents"] != desired_strip_accents:
+                    norm_state["strip_accents"] = desired_strip_accents
+                    updated = True
+                if desired_handle_chinese is not None and "handle_chinese_chars" in norm_state and norm_state["handle_chinese_chars"] != desired_handle_chinese:
+                    norm_state["handle_chinese_chars"] = desired_handle_chinese
+                    updated = True
+
+                if updated and norm_type is not None:
+                    norm_class = getattr(tokenizers_normalizers, norm_type, None)
+                    if norm_class is not None:
+                        norm_state.pop("type", None)
+                        self.backend_tokenizer.normalizer = norm_class(**norm_state)
+        except Exception:
+            # Best-effort: do not block initialization on normalizer reconciliation
+            pass
 
     @property
     def vocab_size(self) -> int:

@@ -176,7 +176,7 @@ _import_structure = {
     "quantizers": [],
     "testing_utils": [],
     "tokenization_sentencepiece": ["SentencePieceBackend"],
-    "tokenization_utils": ["PreTrainedTokenizer"],
+    "tokenization_utils": ["PreTrainedTokenizer", "PythonBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
@@ -281,7 +281,11 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["tokenization_tokenizers"] = ["TokenizersBackend", "PreTrainedTokenizerFast"]
+    _import_structure["tokenization_tokenizers"] = [
+        "TokenizersBackend",
+        "TokenizersExtractor",
+        "PreTrainedTokenizerFast",
+    ]
 
 
 try:
@@ -713,8 +717,14 @@ if TYPE_CHECKING:
     # Tokenization
     from .tokenization_sentencepiece import SentencePieceBackend as SentencePieceBackend
     from .tokenization_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
-    from .tokenization_tokenizers import TokenizersBackend as TokenizersBackend
+    from .tokenization_tokenizers import (
+        TokenizersBackend as TokenizersBackend,
+    )
+    from .tokenization_tokenizers import (
+        TokenizersExtractor as TokenizersExtractor,
+    )
     from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_utils import PythonBackend as PythonBackend
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan

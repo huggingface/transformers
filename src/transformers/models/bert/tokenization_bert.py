@@ -15,10 +15,9 @@
 """Tokenization classes for Bert."""
 
 import collections
-import os
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import WordPiece
 
 from ...tokenization_tokenizers import TokenizersBackend
