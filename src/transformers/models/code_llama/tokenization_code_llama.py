@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tokenizers import AddedToken, Tokenizer, decoders, normalizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_tokenizers import TokenizersBackend

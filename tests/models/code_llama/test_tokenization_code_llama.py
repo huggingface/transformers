@@ -28,7 +28,14 @@ from transformers.tokenization_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
 
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
+
+from tokenizers import AddedToken
+
+# impoprt convert_slow_tokenizer
+from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 
 
 @require_sentencepiece
@@ -37,214 +44,12 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # TokenizerTesterMixin configuration
     from_pretrained_id = ["hf-internal-testing/llama-code-tokenizer"]
     tokenizer_class = CodeLlamaTokenizer
-    test_sentencepiece = True
-    from_pretrained_kwargs = {}
 
-
-    # Integration test data - expected outputs for the default input string
-    integration_expected_tokens = [
-    "▁This",
-    "▁is",
-    "▁a",
-    "▁test",
-    "<0x0A>",
-    "I",
-    "▁was",
-    "▁born",
-    "▁in",
-    "▁",
-    "9",
-    "2",
-    "0",
-    "0",
-    "0",
-    ",",
-    "▁and",
-    "▁this",
-    "▁is",
-    "▁f",
-    "als",
-    "é",
-    ".",
-    "<0x0A>",
-    "生",
-    "活",
-    "的",
-    "真",
-    "<0xE8>",
-    "<0xB0>",
-    "<0x9B>",
-    "是",
-    "<0x0A>",
-    "Hi",
-    "▁",
-    "▁Hello",
-    "<0x0A>",
-    "Hi",
-    "▁▁",
-    "▁Hello",
-    "<0x0A>",
-    "<0x0A>",
-    "▁",
-    "<0x0A>",
-    "▁▁",
-    "<0x0A>",
-    "▁Hello",
-    "<0x0A>",
-    "<",
-    "s",
-    ">",
-    "<0x0A>",
-    "hi",
-    "<",
-    "s",
-    ">",
-    "there",
-    "<0x0A>",
-    "The",
-    "▁following",
-    "▁string",
-    "▁should",
-    "▁be",
-    "▁properly",
-    "▁encoded",
-    ":",
-    "▁Hello",
-    ".",
-    "<0x0A>",
-    "But",
-    "▁",
-    "ird",
-    "▁and",
-    "▁",
-    "ป",
-    "ี",
-    "▁▁▁",
-    "ird",
-    "▁▁▁",
-    "ด",
-    "<0x0A>",
-    "H",
-    "ey",
-    "▁how",
-    "▁are",
-    "▁you",
-    "▁doing",
-]
-    integration_expected_token_ids = [
+    integration_expected_tokens = ['▁This', '▁is', '▁a', '▁test', '▁', '<0xF0>', '<0x9F>', '<0x98>', '<0x8A>', '<0x0A>', 'I', '▁was', '▁born', '▁in', '▁', '9', '2', '0', '0', '0', ',', '▁and', '▁this', '▁is', '▁f', 'als', 'é', '.', '<0x0A>', '生', '活', '的', '真', '<0xE8>', '<0xB0>', '<0x9B>', '是', '<0x0A>', 'Hi', '▁', '▁Hello', '<0x0A>', 'Hi', '▁▁', '▁Hello', '<0x0A>', '<0x0A>', '▁', '<0x0A>', '▁▁', '<0x0A>', '▁Hello', '<0x0A>', '<s>', '<0x0A>', 'hi', '<s>', 'there', '<0x0A>', 'The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '<0x0A>', 'But', '▁', 'ird', '▁and', '▁', 'ป', 'ี', '▁▁▁', 'ird', '▁▁▁', 'ด', '<0x0A>', 'H', 'ey', '▁how', '▁are', '▁you', '▁doing']
+    integration_expected_token_ids = [910, 338, 263, 1243, 29871, 243, 162, 155, 141, 13, 29902, 471, 6345, 297, 29871, 29929, 29906, 29900, 29900, 29900, 29892, 322, 445, 338, 285, 1338, 29948, 29889, 13, 30486, 31704, 30210, 30848, 235, 179, 158, 30392, 13, 18567, 29871, 15043, 13, 18567, 259, 15043, 13, 13, 29871, 13, 259, 13, 15043, 13, 1, 13, 2918, 1, 12711, 13, 1576, 1494, 1347, 881, 367, 6284, 18511, 29901, 15043, 29889, 13, 6246, 29871, 1823, 322, 29871, 31010, 30691, 1678, 1823, 1678, 30718, 13, 29950, 1032, 920, 526, 366, 2599]
+    expected_tokens_from_ids = ['▁This', '▁is', '▁a', '▁test', '▁', '<0xF0>', '<0x9F>', '<0x98>', '<0x8A>', '<0x0A>', 'I', '▁was', '▁born', '▁in', '▁', '9', '2', '0', '0', '0', ',', '▁and', '▁this', '▁is', '▁f', 'als', 'é', '.', '<0x0A>', '生', '活', '的', '真', '<0xE8>', '<0xB0>', '<0x9B>', '是', '<0x0A>', 'Hi', '▁', '▁Hello', '<0x0A>', 'Hi', '▁▁', '▁Hello', '<0x0A>', '<0x0A>', '▁', '<0x0A>', '▁▁', '<0x0A>', '▁Hello', '<0x0A>', '<s>', '<0x0A>', 'hi', '<s>', 'there', '<0x0A>', 'The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '<0x0A>', 'But', '▁', 'ird', '▁and', '▁', 'ป', 'ี', '▁▁▁', 'ird', '▁▁▁', 'ด', '<0x0A>', 'H', 'ey', '▁how', '▁are', '▁you', '▁doing']
     integration_expected_decoded_text = 'This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing'
-    1,
-    910,
-    338,
-    263,
-    1243,
-    13,
-    29902,
-    471,
-    6345,
-    297,
-    29871,
-    29929,
-    29906,
-    29900,
-    29900,
-    29900,
-    29892,
-    322,
-    445,
-    338,
-    285,
-    1338,
-    29948,
-    29889,
-    13,
-    30486,
-    31704,
-    30210,
-    30848,
-    235,
-    179,
-    158,
-    30392,
-    13,
-    18567,
-    29871,
-    15043,
-    13,
-    18567,
-    259,
-    15043,
-    13,
-    13,
-    29871,
-    13,
-    259,
-    13,
-    15043,
-    13,
-    29966,
-    29879,
-    29958,
-    13,
-    2918,
-    29966,
-    29879,
-    29958,
-    12711,
-    13,
-    1576,
-    1494,
-    1347,
-    881,
-    367,
-    6284,
-    18511,
-    29901,
-    15043,
-    29889,
-    13,
-    6246,
-    29871,
-    1823,
-    322,
-    29871,
-    31010,
-    30691,
-    1678,
-    1823,
-    1678,
-    30718,
-    13,
-    29950,
-    1032,
-    920,
-    526,
-    366,
-    2599,
-]
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
 
-        from_pretrained_id = "hf-internal-testing/llama-code-tokenizer"
-
-        tokenizer = CodeLlamaTokenizer.from_pretrained(from_pretrained_id)
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.save_pretrained(cls.tmpdirname)
-
-        # Build backend for tokenizer from the fast tokenizer's SentencePiece model
-        vocab_file = getattr(tokenizer, "vocab_file", None)
-
-        extractor = SentencePieceExtractor(vocab_file)
-        vocab_ids, vocab_scores, merges = extractor.extract()
-        tokenizer_from_vocab = CodeLlamaTokenizer(vocab=vocab_ids, merges=merges)
-        tokenizer_from_vocab.pad_token = tokenizer_from_vocab.eos_token
-
-        cls.tokenizers = [tokenizer]
-
-    def get_tokenizers(self, **kwargs):
-        kwargs.setdefault("pad_token", "<PAD>")
-        return super().get_tokenizers(**kwargs)
 
     def test_no_infilling_init(self):
         tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, prefix_token=None, keep_accents=True)
@@ -253,9 +58,6 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_batch_tokenization(self):
-        if not self.test_seq2seq:
-            self.skipTest(reason="test_seq2seq is False")
-
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -284,16 +86,12 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
-    def test_save_slow_from_fast_and_reload_fast(self):
-        pass
-
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.get_rust_tokenizer(
+                tokenizer_r = self.get_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
@@ -302,35 +100,13 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertTrue(special_token_id in r_output)
 
-                if self.test_slow_tokenizer:
-                    tokenizer_cr = self.get_rust_tokenizer(
-                        pretrained_name,
-                        additional_special_tokens=added_tokens,
-                        **kwargs,  # , from_slow=True <- unfortunately too slow to convert
-                    )
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
-                    )
-
-                    p_output = tokenizer_p.encode("Hey this is a <special> token")
-
-                    cr_output = tokenizer_cr.encode("Hey this is a <special> token")
-
-                    self.assertEqual(p_output, r_output)
-                    self.assertEqual(cr_output, r_output)
-                    self.assertTrue(special_token_id in p_output)
-                    self.assertTrue(special_token_id in cr_output)
-
-
-@require_torch
-@require_sentencepiece
 @require_tokenizers
 class LlamaIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         checkpoint_name = "hf-internal-testing/llama-code-tokenizer"
         cls.tokenizer: CodeLlamaTokenizer = CodeLlamaTokenizer.from_pretrained(checkpoint_name)
-        cls.rust_tokenizer = CodeLlamaTokenizerFast.from_pretrained(checkpoint_name)
+        cls.rust_tokenizer = CodeLlamaTokenizer.from_pretrained(checkpoint_name)
         return cls
 
     @require_torch
@@ -354,8 +130,6 @@ class LlamaIntegrationTest(unittest.TestCase):
     def test_fast_special_tokens(self):
         slow_tokenizer = self.tokenizer
         fast_tokenizer = self.rust_tokenizer
-        slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert slow == [1, 319, 4559, 1243]
 
         fast_tokenizer.add_eos_token = False
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
@@ -365,22 +139,11 @@ class LlamaIntegrationTest(unittest.TestCase):
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
         assert fast == [1, 319, 4559, 1243, 2]
 
-        slow_tokenizer.add_eos_token = True
-        slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert slow == [1, 319, 4559, 1243, 2]
-
-        fast_tokenizer = CodeLlamaTokenizerFast.from_pretrained(
+        fast_tokenizer = CodeLlamaTokenizer.from_pretrained(
             "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
         )
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
         assert fast == [319, 4559, 1243, 2]
-
-        slow_tokenizer = CodeLlamaTokenizer.from_pretrained(
-            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
-        )
-        slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert slow == [319, 4559, 1243, 2]
-
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
@@ -568,21 +331,21 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
     def test_fill_token(self):
-        tokenizer = CodeLlamaTokenizerFast.from_pretrained(
+        tokenizer = CodeLlamaTokenizer.from_pretrained(
             "codellama/CodeLlama-7b-hf", fill_token=None, prefix_token=None, suffix_token=None, middle_token=None
         )
-        tokenizer.encode_plus("Hey how are you").input_ids
+        tokenizer.encode("Hey how are you").input_ids
         tokenizer.fill_token = "<FILL_ME>"
         with self.assertRaises(ValueError):
             tokenizer.encode("Hey how <FILL_ME> are you")
-            tokenizer.encode_plus("Hey how <FILL_ME> are you", "mne too")
+            tokenizer.encode("Hey how <FILL_ME> are you", "mne too")
             tokenizer.tokenize("Hey how are you", "mne too")
 
-        tokenizer = CodeLlamaTokenizerFast.from_pretrained(
+        tokenizer = CodeLlamaTokenizer.from_pretrained(
             "codellama/CodeLlama-7b-hf", revision="3773f63b4511b9e47a9a7ffc765eed7eb0169486"
         )
         tokenizer.encode("Hey how <FILL_ME> are you")
-        tokenizer.encode_plus("Hey how <FILL_ME> are you", "mne too")
+        tokenizer.encode("Hey how <FILL_ME> are you", "mne too")
         tokenizer.tokenize("Hey how are you", "mne too")
 
     def test_spm_edge_cases(self):
