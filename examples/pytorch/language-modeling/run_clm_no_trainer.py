@@ -321,7 +321,6 @@ def main():
                     f.write("step_*\n")
                 if "epoch_*" not in content:
                     f.write("epoch_*\n")
-            
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
