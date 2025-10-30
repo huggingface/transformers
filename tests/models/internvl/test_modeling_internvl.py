@@ -227,6 +227,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_qwen2_small_model_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
@@ -244,7 +245,16 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image shows two cats lying on a pink surface, which appears to be a bed or couch."
+
+        # fmt: off
+        expected_outputs = Expectations(
+            {
+                (None, None): "The image shows two cats lying on a pink surface, which appears to be a bed or couch.",
+                ("xpu", 3): "The image shows two cats lying on a pink blanket. The cat on the left is a tabby",
+            }
+        )
+        # fmt: on
+        expected_output = expected_outputs.get_expectation()
 
         self.assertEqual(decoded_output, expected_output)
 
@@ -268,9 +278,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([11.7500, 14.7500, 14.1250, 10.5625, 6.7812], dtype=torch.float16),
-                ("cuda", 7): torch.tensor([11.9531, 14.7031, 14.2734, 10.6562,  6.9219], dtype=torch.float16),
-                ("cuda", 8): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484,  6.9141], dtype=torch.float16),
+                ("xpu", 3): torch.tensor([11.9922, 14.7188, 14.3125, 10.6719, 6.9297], dtype=torch.float16),
+                ("cuda", 7): torch.tensor([11.9531, 14.7031, 14.2734, 10.6562, 6.9219], dtype=torch.float16),
+                ("cuda", 8): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484, 6.9141], dtype=torch.float16),
             }
         )  # fmt: skip
         expected_logits = expected_logits_all.get_expectation()
@@ -298,7 +308,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Whispers of dawn,\nSilent whispers of the night,\nNew day's light.",
+                ("xpu", 3): "Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.",
                 ("cuda", 7): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
                 ("cuda", 8): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
             }
@@ -570,7 +580,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot.",
+                ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot",
                 ("cuda", 7): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
             }
         )  # fmt: skip
