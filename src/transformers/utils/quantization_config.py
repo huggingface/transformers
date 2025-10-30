@@ -1601,8 +1601,12 @@ class FPQuantConfig(QuantizationConfigMixin):
         else:
             raise ValueError("Only 'mxfp4' and 'nvfp4' are supported for forward_dtype for now.")
 
-        if self.backward_dtype != "bf16":
-            raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
+        if self.backward_dtype not in ["bf16", "mxfp8", "mxfp4"]:
+            raise ValueError("Only 'bf16', 'mxfp8' and 'mxfp4' are supported for backward_dtype for now.")
+
+        if self.backward_dtype != "bf16" and self.forward_dtype != "mxfp4":
+            raise ValueError("Only 'mxfp4' forward is compatible with non-bf16 backwards for now.")
+
         if self.transform_init not in ["hadamard", "identity", "gsr"]:
             raise ValueError("Only 'hadamard', 'identity' and 'gsr' are supported for transform_init.")
 
