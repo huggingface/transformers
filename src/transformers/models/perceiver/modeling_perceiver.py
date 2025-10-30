@@ -16,11 +16,11 @@
 
 import abc
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import reduce
 from operator import __add__
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -529,6 +529,7 @@ class PerceiverPreTrainedModel(PreTrainedModel):
     config: PerceiverConfig
     base_model_prefix = "perceiver"
     main_input_name = "inputs"
+    input_modalities = "image"  # techinically can be anything but HF impl has only image processor
 
     def _init_weights(self, module):
         """Initialize the weights"""

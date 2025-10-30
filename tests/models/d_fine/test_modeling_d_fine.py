@@ -206,7 +206,7 @@ class DFineModelTester:
             stem_channels=[3, 16, 16],
             use_lab=True,
         )
-        return DFineConfig.from_backbone_configs(
+        return DFineConfig(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
             encoder_in_channels=self.encoder_in_channels,
@@ -291,7 +291,6 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
 
     test_missing_keys = False
     test_torch_exportable = True

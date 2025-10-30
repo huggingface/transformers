@@ -231,27 +231,30 @@ class SiglipConfig(PreTrainedConfig):
     >>> config_text = SiglipTextConfig()
     >>> config_vision = SiglipVisionConfig()
 
-    >>> config = SiglipConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = SiglipConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "siglip"
     sub_configs = {"text_config": SiglipTextConfig, "vision_config": SiglipVisionConfig}
 
     def __init__(self, text_config=None, vision_config=None, **kwargs):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
+            text_config = SiglipTextConfig()
             logger.info("`text_config` is `None`. Initializing the `SiglipTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = SiglipTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = SiglipVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `SiglipVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = SiglipVisionConfig(**vision_config)
 
-        self.text_config = SiglipTextConfig(**text_config)
-        self.vision_config = SiglipVisionConfig(**vision_config)
-
+        self.text_config = text_config
+        self.vision_config = vision_config
         self.initializer_factor = 1.0
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["SiglipConfig", "SiglipTextConfig", "SiglipVisionConfig"]

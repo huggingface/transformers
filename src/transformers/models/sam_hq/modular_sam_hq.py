@@ -68,8 +68,6 @@ class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
             The non-linear activation function in the encoder and pooler.
     """
 
-    pass
-
 
 class SamHQVisionConfig(SamVisionConfig):
     pass
@@ -139,8 +137,6 @@ class SamHQConfig(SamConfig):
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
-
-    pass
 
 
 class SamHQVisionEncoderOutput(SamVisionEncoderOutput):

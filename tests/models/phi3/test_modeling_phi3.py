@@ -36,8 +36,6 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         Phi3ForCausalLM,
-        Phi3ForSequenceClassification,
-        Phi3ForTokenClassification,
         Phi3Model,
     )
 
@@ -92,17 +90,6 @@ class Phi3ModelTester(CausalLMModelTester):
 
 @require_torch
 class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Phi3Model,
-            "text-classification": Phi3ForSequenceClassification,
-            "token-classification": Phi3ForTokenClassification,
-            "text-generation": Phi3ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     model_tester_class = Phi3ModelTester
 
 
@@ -365,8 +352,8 @@ class Phi3IntegrationTest(unittest.TestCase):
         # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
         # the data-dependent control flow in _longrope_frequency_update. Alternatively, we can rewrite
         # that function to avoid the data-dependent control flow.
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            config.rope_scaling["type"] = "default"
+        if hasattr(config, "rope_parameters") and config.rope_parameters is not None:
+            config.rope_parameters["type"] = "default"
 
         # Load model
         device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM

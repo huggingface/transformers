@@ -15,11 +15,11 @@
 
 import os
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import redirect_stdout
 from dataclasses import dataclass, fields
 from io import BytesIO
-from typing import Callable, NewType, Optional, Union
+from typing import NewType, Optional, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -594,7 +594,7 @@ def read_video_torchcodec(
         seek_mode="exact",
         # Allow FFmpeg decide on the number of threads for efficiency
         num_ffmpeg_threads=0,
-        device=kwargs.get("device"),
+        device=kwargs.get("device", "cpu"),
     )
     metadata = VideoMetadata(
         total_num_frames=decoder.metadata.num_frames,

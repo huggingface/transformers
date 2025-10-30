@@ -35,7 +35,6 @@ if is_torch_available():
 
     from transformers import (
         JetMoeForCausalLM,
-        JetMoeForSequenceClassification,
         JetMoeModel,
     )
 
@@ -106,15 +105,6 @@ class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_disk_offload_bin = False
     test_disk_offload_safetensors = False
     model_tester_class = JetMoeModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": JetMoeModel,
-            "text-classification": JetMoeForSequenceClassification,
-            "text-generation": JetMoeForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     @require_flash_attn
     @require_torch_gpu

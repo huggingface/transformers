@@ -17,8 +17,9 @@ PyTorch XLM model.
 """
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -532,17 +533,17 @@ class MultiHeadAttention(nn.Module):
                 is_updated = cache.is_updated.get(self.layer_id)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = cache.cross_attention_cache
+                    curr_past_key_values = cache.cross_attention_cache
                 else:
-                    curr_past_key_value = cache.self_attention_cache
+                    curr_past_key_values = cache.self_attention_cache
             else:
-                curr_past_key_value = cache
+                curr_past_key_values = cache
 
         current_states = kv if is_cross_attention else input
         if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            k = curr_past_key_value.key_cache[self.layer_id]
-            v = curr_past_key_value.value_cache[self.layer_id]
+            k = curr_past_key_values.key_cache[self.layer_id]
+            v = curr_past_key_values.value_cache[self.layer_id]
         else:
             k = self.k_lin(current_states)
             v = self.v_lin(current_states)
@@ -552,7 +553,7 @@ class MultiHeadAttention(nn.Module):
             if cache is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                k, v = curr_past_key_value.update(k, v, self.layer_id, {"cache_position": cache_position})
+                k, v = curr_past_key_values.update(k, v, self.layer_id, {"cache_position": cache_position})
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
                     cache.is_updated[self.layer_id] = True
@@ -978,6 +979,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
@@ -1019,8 +1021,13 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        output = transformer_outputs[0]
-        outputs = self.pred_layer(output, labels)  # (loss, logits) or (logits,) depending on if labels are provided.
+        hidden_states = transformer_outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        outputs = self.pred_layer(
+            hidden_states[:, slice_indices, :],
+            labels,
+        )  # (loss, logits) or (logits,) depending on if labels are provided.
 
         if not return_dict:
             return outputs + transformer_outputs[1:]
