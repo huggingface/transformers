@@ -63,27 +63,47 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    min_pixels = None
-    max_pixels = None
     valid_kwargs = Qwen2VLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Qwen2VLImageProcessorKwargs]):
         size = kwargs.pop("size", None)
-        min_pixels = kwargs.pop("min_pixels", None)
-        max_pixels = kwargs.pop("max_pixels", None)
+        min_pixels_arg = kwargs.pop("min_pixels", None)
+        max_pixels_arg = kwargs.pop("max_pixels", None)
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = self.size if size is None else size
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
+        if min_pixels_arg is not None:
+            size["shortest_edge"] = min_pixels_arg
             size.pop("min_pixels", None)
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
+        if max_pixels_arg is not None:
+            size["longest_edge"] = max_pixels_arg
             size.pop("max_pixels", None)
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, min_pixels=min_pixels_arg, max_pixels=max_pixels_arg, **kwargs)
+
+    @property
+    def min_pixels(self):
+        """Get min_pixels, deriving from size dict as the single source of truth."""
+        return self.size.get("shortest_edge")
+
+    @min_pixels.setter
+    def min_pixels(self, value):
+        """Setting min_pixels auto-syncs to size dict."""
+        if value is not None:
+            self.size["shortest_edge"] = value
+
+    @property
+    def max_pixels(self):
+        """Get max_pixels, deriving from size dict as the single source of truth."""
+        return self.size.get("longest_edge")
+
+    @max_pixels.setter
+    def max_pixels(self, value):
+        """Setting max_pixels auto-syncs to size dict."""
+        if value is not None:
+            self.size["longest_edge"] = value
 
     def _further_process_kwargs(
         self,
