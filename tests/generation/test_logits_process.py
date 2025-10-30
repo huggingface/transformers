@@ -43,6 +43,8 @@ if is_torch_available():
         MinPLogitsWarper,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
+        PLessLogitsWarper,
+        PLessNormLogitsWarper,
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
         SequenceBiasLogitsProcessor,
@@ -528,6 +530,168 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # first batch should keep two tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [2, 2])
+
+    def test_p_less_dist_warper(self):
+        """
+        Create distributions of different relative entropies, where the expected post-warper
+        distribution is straightforward to verify.
+        """
+
+        p_less = True
+        input_ids = None
+
+        # Case 1: Low entropy distribution -> 1 token retained for sampling
+        logits = torch.log(
+            torch.tensor(
+                [[0.6, 0.1, 0.1, 0.1, 0.1]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        p_less_warp = PLessLogitsWarper(p_less)
+        filtered_logits = p_less_warp(input_ids, logits)
+        filtered_dist = torch.exp(filtered_logits)
+
+        expected_dist = torch.tensor(
+            [[0.6, 0.0, 0.0, 0.0, 0.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, expected_dist, rtol=1e-3, atol=1e-3)
+
+        # Case 2: Batch size 2 containing two mid entropy distributions
+        #     - 1st mid entropy distribution -> 2 tokens retained for sampling
+        #     - 2nd mid entropy distribution -> 3 tokens retained for sampling
+        logits = torch.log(
+            torch.tensor(
+                [[0.3, 0.25, 0.2, 0.15, 0.1], [0.23, 0.22, 0.21, 0.19, 0.15]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        p_less_warp = PLessLogitsWarper(p_less)
+        filtered_logits = p_less_warp(input_ids, logits)
+        filtered_dist = torch.exp(filtered_logits)
+
+        expected_dist = torch.tensor(
+            [[0.3, 0.25, 0.0, 0.0, 0.0], [0.23, 0.22, 0.21, 0.0, 0.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, expected_dist, rtol=1e-3, atol=1e-3)
+
+        # Case 3: High entropy distribution -> 4 tokens retained for sampling
+        logits = torch.log(
+            torch.tensor(
+                [[0.205, 0.205, 0.205, 0.205, 0.18]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        p_less_warp = PLessLogitsWarper(p_less)
+        filtered_logits = p_less_warp(input_ids, logits)
+        filtered_dist = torch.exp(filtered_logits)
+
+        expected_dist = torch.tensor(
+            [[0.205, 0.205, 0.205, 0.205, 0.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, expected_dist, rtol=1e-3, atol=1e-3)
+
+        # Case 4: Logits processor does not change logits in-place
+        logits = torch.log(
+            torch.tensor(
+                [[0.3, 0.25, 0.25, 0.1, 0.1]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        logits_copy = logits.clone()
+        p_less_warp = PLessLogitsWarper(p_less)
+        _ = p_less_warp(input_ids, logits)
+        torch.testing.assert_close(logits, logits_copy, rtol=1e-3, atol=1e-3)
+
+    def test_p_less_norm_dist_warper(self):
+        """
+        Create distributions of different relative entropies, where the expected post-warper
+        distribution is straightforward to verify.
+        """
+
+        p_less_norm = True
+        input_ids = None
+
+        # Case 1: Low entropy distribution -> 1 token retained for sampling
+        logits = torch.log(
+            torch.tensor(
+                [[0.6, 0.1, 0.1, 0.1, 0.1]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        p_less_warp = PLessNormLogitsWarper(p_less_norm)
+        filtered_logits = p_less_warp(input_ids, logits)
+        filtered_dist = torch.exp(filtered_logits)
+
+        expected_dist = torch.tensor(
+            [[0.6, 0.0, 0.0, 0.0, 0.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, expected_dist, rtol=1e-3, atol=1e-3)
+
+        # Case 2: Batch size 2 containing two mid entropy distributions
+        #     - 1st mid entropy distribution -> 2 tokens retained for sampling
+        #     - 2nd mid entropy distribution -> 3 tokens retained for sampling
+        logits = torch.log(
+            torch.tensor(
+                [[0.5, 0.2, 0.15, 0.1, 0.05], [0.4, 0.3, 0.15, 0.1, 0.05]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        p_less_warp = PLessNormLogitsWarper(p_less_norm)
+        filtered_logits = p_less_warp(input_ids, logits)
+        filtered_dist = torch.exp(filtered_logits)
+
+        expected_dist = torch.tensor(
+            [[0.5, 0.2, 0.0, 0.0, 0.0], [0.4, 0.3, 0.15, 0.0, 0.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, expected_dist, rtol=1e-3, atol=1e-3)
+
+        # Case 3: High entropy distribution -> all tokens retained for sampling
+        logits = torch.log(
+            torch.tensor(
+                [[0.2, 0.2, 0.2, 0.2, 0.2]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        p_less_warp = PLessNormLogitsWarper(p_less_norm)
+        filtered_logits = p_less_warp(input_ids, logits)
+        filtered_dist = torch.exp(filtered_logits)
+
+        expected_dist = torch.tensor(
+            [[0.2, 0.2, 0.2, 0.2, 0.2]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, expected_dist, rtol=1e-3, atol=1e-3)
+
+        # Case 4: Logits processor does not change logits in-place
+        logits = torch.log(
+            torch.tensor(
+                [[0.35, 0.3, 0.15, 0.15, 0.05]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        logits_copy = logits.clone()
+        p_less_warp = PLessNormLogitsWarper(p_less_norm)
+        _ = p_less_warp(input_ids, logits)
+        torch.testing.assert_close(logits, logits_copy, rtol=1e-3, atol=1e-3)
 
     def test_typical_dist_warper(self):
         input_ids = None
