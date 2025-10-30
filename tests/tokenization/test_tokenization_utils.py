@@ -339,4 +339,4 @@ class TokenizerUtilsTest(unittest.TestCase):
             {"role": "user", "content": "Hey there, how are you?"},
         ]
         with self.assertRaises(ValueError):
-            tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True, return_dict=False)
+            tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True)
