@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_tokenizers import TokenizersBackend
@@ -118,7 +118,7 @@ class GPT2Tokenizer(TokenizersBackend):
             self._vocab = {}
 
         if merges is not None:
-            self._merges = merges
+            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
         else:
             self._merges = []
 
@@ -135,18 +135,6 @@ class GPT2Tokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-        
-        if add_bos_token:
-            self._tokenizer.post_processor = processors.TemplateProcessing(
-                single=f"{bos_token}:0 $A:0",
-                pair=f"{bos_token}:0 $A:0 $B:1",
-                special_tokens=[
-                    (str(bos_token), self._vocab.get(str(bos_token), 0)),
-                ],
-            )
-        else:
-            # XXX trim_offsets=False actually means this post_processor doesn't really do anything.
-            self._tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
         tokenizer_object = self._tokenizer
         
