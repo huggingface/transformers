@@ -827,7 +827,7 @@ def convert_and_load_state_dict_in_model(
 
 # TODO this is not done yet!
 def revert_weight_conversion(model, state_dict):
-    reverse_key_mapping = model.inverse_converters
+    reverse_key_mapping = getattr(model, "inverse_converters", {})
     original_state_dict = {}
     for key, value in state_dict.items():
         for pattern, inverse_converter in reverse_key_mapping.items():

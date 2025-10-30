@@ -224,12 +224,10 @@ def apply_rotary_emb(
     return xq_out, xk_out
 
 
-class DeepseekV2Experts(Qwen2MoeExperts, nn.ModuleList):
+class DeepseekV2Experts(Qwen2MoeExperts):
     def __init__(self, config):
-        nn.ModuleList.__init__(self)
+        super().__init__(config)
         self.num_experts = config.n_routed_experts
-        for _ in range(config.n_routed_experts):
-            self.append(DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class DeepseekV2Moe(nn.Module):

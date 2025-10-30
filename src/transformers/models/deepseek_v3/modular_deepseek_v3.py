@@ -102,12 +102,10 @@ class DeepseekV3TopkRouter(nn.Module):
         return router_logits
 
 
-class DeepseekV3NaiveMoe(MixtralExperts, nn.ModuleList):
+class DeepseekV3NaiveMoe(MixtralExperts):
     def __init__(self, config):
-        nn.ModuleList.__init__(self)
+        super().__init__(config)
         self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class DeepseekV3MoE(nn.Module):
