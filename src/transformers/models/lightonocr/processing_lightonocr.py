@@ -8,12 +8,16 @@ import math
 from typing import Optional, Union
 
 import numpy as np
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
