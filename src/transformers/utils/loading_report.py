@@ -220,13 +220,13 @@ def log_state_dict_report(
     )
     tips = (
         f"\n\n{ansi['italic']}Notes:\n"
-        f"- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}:\tcan be ignored when loading from different task/architecture; not ok if you expect identical arch.\n"
-        f"- {_color('MISSING', 'red', ansi) + ansi['italic']}:\tthose params were newly initialized; consider training on your downstream task.\n"
-        f"- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}:\tckpt weights were loaded, but they did not match the original empty weight.\n"
-        f"- {_color('MISC', 'purple', ansi) + ansi['italic']}:\toriginate from the conversion scheme\n"
+        f"- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}\t:can be ignored when loading from different task/architecture; not ok if you expect identical arch.\n" if unexpected_keys else ""
+        f"- {_color('MISSING', 'red', ansi) + ansi['italic']}\t:those params were newly initialized; consider training on your downstream task.\n" if missing_keys else ""
+        f"- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}\t:ckpt weights were loaded, but they did not match the original empty weight.\n" if mismatched_keys else ""
+        f"- {_color('MISC', 'purple', ansi) + ansi['italic']}\t:originate from the conversion scheme\n" if misc else ""
         f"{ansi['reset']}"
     )
 
     print(prelude + table + "" + tips)
-    if ignore_mismatched_sizes and mismatched_keys:
+    if not ignore_mismatched_sizes and mismatched_keys:
         raise RuntimeError("You set `ignore_mismatched_sizes` to `False`, thus raising an error. For details look at the above report!")

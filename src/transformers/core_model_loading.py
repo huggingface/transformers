@@ -589,15 +589,17 @@ def set_param_for_module(model, k, v, meta_model_state_dict, empty_tensor, misma
         module_obj = model.get_submodule(module_path) if module_path else model
         param_value = v[0] if isinstance(v, list) else v[:]
         ref = meta_model_state_dict.get(k, empty_tensor)
-
+        use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
         if not isinstance(param_value, torch.nn.Parameter):
-            if distributed_operation != {} and distributed_operation.use_dtensor:
+            if distributed_operation != {} and use_dtensor:
                 param_value = DTensor.from_local(
                     param_value, distributed_operation.device_mesh, distributed_operation.shard, run_check=False, shape=ref.size(), stride=ref.stride()
                 )
+            else:
+                pass # TODO for "local" stuff, it will trigger missmatched no?
             param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
-        if ref is not None and ref.shape != param_value.shape and distributed_operation.use_dtensor:
+        if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((k, param_value.shape, ref.shape))
         if k in missing_keys:
             missing_keys.remove(k)

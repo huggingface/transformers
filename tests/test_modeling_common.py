@@ -2912,7 +2912,7 @@ class ModelTesterMixin:
 
                     with CaptureLogger(logger) as cl:
                         new_model = model_class.from_pretrained(tmp_dir, num_labels=42, ignore_mismatched_sizes=True)
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
 
                     # Find the name of the module with the mismatched size
                     top_linear_modules = [
