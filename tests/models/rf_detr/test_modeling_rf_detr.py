@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import os
 import tempfile
 import unittest
@@ -32,8 +31,6 @@ from transformers.testing_utils import (
     Expectations,
     require_torch,
     require_vision,
-    set_config_for_less_flaky_test,
-    set_model_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -175,7 +172,7 @@ class RfDetrModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
-        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask, "labels": labels}
+        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
 
     def create_and_check_rf_detr_model(self, config, pixel_values, pixel_mask, labels):
@@ -220,6 +217,26 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = True
+
+    # special case for head models
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "RfDetrForObjectDetection":
+                labels = []
+                for i in range(self.model_tester.batch_size):
+                    target = {}
+                    target["class_labels"] = torch.ones(
+                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
+                    )
+                    target["boxes"] = torch.ones(
+                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                    )
+                    labels.append(target)
+                inputs_dict["labels"] = labels
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = RfDetrModelTester(self)
@@ -470,96 +487,6 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertIsNotNone(outputs.auxiliary_outputs)
             self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.decoder_layers - 1)
-
-    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
-        """
-        Tests that the model supports batching and that the output is the nearly the same for the same input in
-        different batch sizes.
-        (Why "nearly the same" not "exactly the same"? Batching uses different matmul shapes, which often leads to
-        different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
-        """
-
-        def recursive_check(batched_object, single_row_object, model_name, key):
-            if isinstance(batched_object, (list, tuple)):
-                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
-            elif isinstance(batched_object, dict):
-                for batched_object_value, single_row_object_value in zip(
-                    batched_object.values(), single_row_object.values()
-                ):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
-            # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
-            elif batched_object is None or not isinstance(batched_object, torch.Tensor):
-                return
-            elif batched_object.dim() == 0:
-                return
-            # do not compare int or bool outputs as they are mostly computed with max/argmax/topk methods which are
-            # very sensitive to the inputs (e.g. tiny differences may give totally different results)
-            elif not torch.is_floating_point(batched_object):
-                return
-            else:
-                # indexing the first element does not always work
-                # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
-                batched_row = batched_object[slice_ids]
-                self.assertFalse(
-                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
-                )
-                self.assertFalse(
-                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
-                )
-                self.assertFalse(
-                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
-                )
-                self.assertFalse(
-                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
-                )
-                try:
-                    torch.testing.assert_close(batched_row, single_row_object, atol=atol, rtol=rtol)
-                except AssertionError as e:
-                    msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
-                    msg += str(e)
-                    raise AssertionError(msg)
-
-        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
-        set_config_for_less_flaky_test(config)
-
-        for model_class in self.all_model_classes:
-            config.output_hidden_states = True
-
-            model_name = model_class.__name__
-            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
-            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
-            set_model_for_less_flaky_test(model)
-
-            batch_size = self.model_tester.batch_size
-            single_row_input = {}
-            for key, value in batched_input_prepared.items():
-                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
-                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
-                    single_batch_shape = value.shape[0] // batch_size
-                    single_row_input[key] = value[:single_batch_shape]
-                elif key == "labels" and value is not None:
-                    single_row_input[key] = value[:1]
-                else:
-                    single_row_input[key] = value
-
-            with torch.no_grad():
-                model_batched_output = model(**batched_input_prepared)
-                model_row_output = model(**single_row_input)
-
-            if isinstance(model_batched_output, torch.Tensor):
-                model_batched_output = {"model_output": model_batched_output}
-                model_row_output = {"model_output": model_row_output}
-
-            for key in model_batched_output:
-                # DETR starts from zero-init queries to decoder, leading to cos_similarity = `nan`
-                if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
-                    model_batched_output[key] = model_batched_output[key][1:]
-                    model_row_output[key] = model_row_output[key][1:]
-                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
 
 @require_torch
