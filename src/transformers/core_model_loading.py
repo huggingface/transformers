@@ -481,7 +481,6 @@ def convert_and_load_state_dict_in_model(
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
 
-    # TODO: tricky part here!
     if model.config.tie_word_embeddings:
         for k in model._tied_weights_keys:
             missing_keys.discard(k)
