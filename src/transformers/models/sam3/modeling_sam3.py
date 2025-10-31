@@ -1122,23 +1122,23 @@ class Sam3LayerNorm(nn.LayerNorm):
 
 
 class Sam3MaskFuserCXBlock(GradientCheckpointingLayer):
-    def __init__(self, config: Sam3Config):
+    def __init__(self, config: Sam3GeometryEncoderConfig):
         super().__init__()
         self.depthwise_conv = nn.Conv2d(
-            config.mask_fuser_embed_dim,
-            config.mask_fuser_embed_dim,
+            config.mask_fuser_hidden_size,
+            config.mask_fuser_hidden_size,
             kernel_size=config.mask_fuser_kernel_size,
             padding=config.mask_fuser_padding,
-            groups=config.mask_fuser_embed_dim,
+            groups=config.mask_fuser_hidden_size,
         )  # depthwise conv
-        self.layer_norm = Sam3LayerNorm(config.mask_fuser_embed_dim, eps=1e-6, data_format="channels_first")
+        self.layer_norm = Sam3LayerNorm(config.mask_fuser_hidden_size, eps=1e-6, data_format="channels_first")
         self.activation = ACT2FN[config.mask_fuser_hidden_act]
         self.pointwise_conv1 = nn.Linear(
-            config.mask_fuser_embed_dim, config.mask_fuser_intermediate_dim
+            config.mask_fuser_hidden_size, config.mask_fuser_hidden_size * 4
         )  # pointwise/1x1 convs, implemented with linear layers
-        self.pointwise_conv2 = nn.Linear(config.mask_fuser_intermediate_dim, config.mask_fuser_embed_dim)
+        self.pointwise_conv2 = nn.Linear(config.mask_fuser_hidden_size * 4, config.mask_fuser_hidden_size)
         self.scale = nn.Parameter(
-            config.mask_fuser_layer_scale_init_value * torch.ones(config.mask_fuser_embed_dim),
+            config.mask_fuser_layer_scale_init_value * torch.ones(config.mask_fuser_hidden_size),
             requires_grad=True,
         )
 
@@ -1158,7 +1158,7 @@ class Sam3MaskFuserCXBlock(GradientCheckpointingLayer):
 
 
 class Sam3MaskFuser(nn.Module):
-    def __init__(self, config: Sam3Config):
+    def __init__(self, config: Sam3GeometryEncoderConfig):
         super().__init__()
         self.layers = nn.ModuleList([Sam3MaskFuserCXBlock(config) for _ in range(config.mask_fuser_num_layers)])
 
@@ -1170,7 +1170,7 @@ class Sam3MaskFuser(nn.Module):
 
 
 class Sam3MaskDownSamplerLayer(nn.Module):
-    def __init__(self, config: Sam3Config, in_channels: int, out_channels: int):
+    def __init__(self, config: Sam3GeometryEncoderConfig, in_channels: int, out_channels: int):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels,
@@ -1195,7 +1195,7 @@ class Sam3MaskDownSampler(nn.Module):
     In the end, we linearly project to embed_dim channels.
     """
 
-    def __init__(self, config: Sam3Config):
+    def __init__(self, config: Sam3GeometryEncoderConfig):
         super().__init__()
 
         num_layers = int(math.log2(config.mask_downsampler_total_stride) // math.log2(config.mask_downsampler_stride))
@@ -1208,7 +1208,7 @@ class Sam3MaskDownSampler(nn.Module):
             self.layers.append(Sam3MaskDownSamplerLayer(config, mask_in_chans, mask_out_chans))
             mask_in_chans = mask_out_chans
 
-        self.final_conv = nn.Conv2d(mask_out_chans, config.mask_downsampler_embed_dim, kernel_size=1)
+        self.final_conv = nn.Conv2d(mask_out_chans, config.mask_fuser_hidden_size, kernel_size=1)
 
     def forward(self, x):
         for layer in self.layers:
@@ -1218,15 +1218,14 @@ class Sam3MaskDownSampler(nn.Module):
 
 
 class Sam3FusedMaskEncoder(nn.Module):
-    def __init__(self, config: Sam3Config):
+    def __init__(self, config: Sam3GeometryEncoderConfig):
         super().__init__()
 
         hidden_size = config.hidden_size
-        output_channels = config.output_channels
         self.mask_downsampler = Sam3MaskDownSampler(config)
         self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
         self.mask_fuser = Sam3MaskFuser(config)
-        self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=output_channels // 2, normalize=True)
+        self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=hidden_size // 2, normalize=True)
 
     def forward(
         self,
@@ -1318,27 +1317,8 @@ class Sam3GeometryEncoder(nn.Module):
         self.boxes_pool_project = nn.Conv2d(self.hidden_size, self.hidden_size, self.roi_size)
         self.boxes_pos_enc_project = nn.Linear(self.hidden_size + 2, self.hidden_size)
 
-        # Mask encoding - use config parameters directly
-        from types import SimpleNamespace
-
-        mask_config = SimpleNamespace(
-            hidden_size=config.hidden_size,
-            mask_fuser_embed_dim=config.mask_fuser_embed_dim,
-            mask_fuser_intermediate_dim=config.mask_fuser_embed_dim * 4,
-            mask_fuser_hidden_act=config.mask_fuser_hidden_act,
-            mask_fuser_layer_scale_init_value=config.mask_fuser_layer_scale_init_value,
-            mask_fuser_num_layers=config.mask_fuser_num_layers,
-            mask_fuser_kernel_size=config.mask_fuser_kernel_size,
-            mask_fuser_padding=config.mask_fuser_padding,
-            mask_downsampler_embed_dim=config.mask_fuser_embed_dim,
-            mask_downsampler_kernel_size=config.mask_downsampler_kernel_size,
-            mask_downsampler_stride=config.mask_downsampler_stride,
-            mask_downsampler_padding=config.mask_downsampler_padding,
-            mask_downsampler_total_stride=config.mask_downsampler_total_stride,
-            mask_downsampler_hidden_act=config.mask_downsampler_hidden_act,
-            output_channels=config.hidden_size,
-        )
-        self.mask_encoder = Sam3FusedMaskEncoder(mask_config)
+        # Mask encoding
+        self.mask_encoder = Sam3FusedMaskEncoder(config)
 
         # Image feature normalization
         self.vision_layer_norm = nn.LayerNorm(self.hidden_size)

@@ -246,8 +246,8 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
             Whether to add a CLS token to the geometry prompts.
         add_post_encode_projection (`bool`, *optional*, defaults to `True`):
             Whether to add a projection layer after encoding.
-        mask_fuser_embed_dim (`int`, *optional*, defaults to 256):
-            Embedding dimension for mask fuser.
+        mask_fuser_hidden_size (`int`, *optional*, defaults to 256):
+            Hidden dimension for mask fuser.
         mask_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function for mask fuser.
         mask_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-6):
@@ -285,7 +285,7 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
         roi_size=7,
         add_cls_token=True,
         add_post_encode_projection=True,
-        mask_fuser_embed_dim=256,
+        mask_fuser_hidden_size=256,
         mask_fuser_hidden_act="gelu",
         mask_fuser_layer_scale_init_value=1e-6,
         mask_fuser_num_layers=2,
@@ -311,7 +311,7 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
         self.add_cls_token = add_cls_token
         self.add_post_encode_projection = add_post_encode_projection
         # Mask encoder parameters
-        self.mask_fuser_embed_dim = mask_fuser_embed_dim
+        self.mask_fuser_hidden_size = mask_fuser_hidden_size
         self.mask_fuser_hidden_act = mask_fuser_hidden_act
         self.mask_fuser_layer_scale_init_value = mask_fuser_layer_scale_init_value
         self.mask_fuser_num_layers = mask_fuser_num_layers
