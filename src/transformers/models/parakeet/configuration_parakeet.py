@@ -150,6 +150,65 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
+
+class ParakeetTDTDecoderConfig(PreTrainedConfig):
+    model_type = "parakeet_tdt_decoder"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    output_hidden_states = False
+
+    def __init__(
+        self,
+        hidden_size=640,
+        num_hidden_layers=1,
+        dropout=0,
+        vocab_size=1024,
+        forget_gate_bias=1.0,
+        t_max=None,
+        weights_init_scale=1.0,
+        hidden_hidden_bias_scale=0,
+        **kwargs,
+    ):
+        super().__init__(
+            **kwargs,
+        )
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.dropout = dropout
+        self.vocab_size = vocab_size
+        self.forget_gate_bias=forget_gate_bias
+        self.t_max=t_max
+        self.weights_init_scale=weights_init_scale
+        self.hidden_hidden_bias_scale=hidden_hidden_bias_scale
+
+
+class ParakeetTDTJointConfig(PreTrainedConfig):
+    model_type = "parakeet_tdt_joint"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        enc_hidden_size=1024,
+        pred_hidden_size=640,
+        hidden_size=640,
+        vocab_size=1024,
+        durations=[0,1,2,3,4],
+        norm=None,
+        dropout=0.0,
+        activation='relu',
+        **kwargs,
+    ):
+        super().__init__(
+            **kwargs,
+        )
+        self.enc_hidden_size = enc_hidden_size
+        self.pred_hidden_size = pred_hidden_size
+        self.hidden_size = hidden_size
+        self.vocab_size = vocab_size
+        self.durations = durations
+        self.dropout = dropout
+        self.activation = activation
+
+
 class ParakeetCTCConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ParakeetForCTC`]. It is used to instantiate a
@@ -232,4 +291,83 @@ class ParakeetCTCConfig(PreTrainedConfig):
         return cls(encoder_config=encoder_config.to_dict(), **kwargs)
 
 
-__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig"]
+class ParakeetTDTConfig(PreTrainedConfig):
+
+    model_type = "parakeet_tdt"
+    sub_configs = {"encoder_config": ParakeetEncoderConfig, "decoder_config": ParakeetTDTDecoderConfig, "joint_config": ParakeetTDTJointConfig}
+
+    def __init__(
+        self,
+#        bos_token_id=1,
+#        eos_token_id=2,
+#        pad_token_id=1024,
+        tdt_loss_reduction="mean",
+        encoder_config: Union[dict, ParakeetEncoderConfig] = None,
+        decoder_config: Union[dict, ParakeetTDTDecoderConfig] = None,
+        joint_config: Union[dict, ParakeetTDTJointConfig] = None,
+        **kwargs,
+    ):
+
+        if encoder_config is None:
+            self.encoder_config = ParakeetEncoderConfig()
+        elif isinstance(encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**encoder_config)
+        elif isinstance(encoder_config, ParakeetEncoderConfig):
+            self.encoder_config = encoder_config
+        else:
+            raise ValueError(
+                f"`encoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
+            )
+
+        if decoder_config is None:
+            self.decoder_config = ParakeetTDTDecoderConfig()
+        elif isinstance(decoder_config, dict):
+            self.decoder_config = ParakeetTDTDecoderConfig(**decoder_config)
+        elif isinstance(decoder_config, ParakeetTDTDecoderConfig):
+            self.decoder_config = decoder_config
+        else:
+            raise ValueError(
+                f"`decoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
+            )
+
+        if joint_config is None:
+            self.joint_config = ParakeetTDTJointConfig()
+        elif isinstance(joint_config, dict):
+            self.joint_config = ParakeetTDTJointConfig(**joint_config)
+        elif isinstance(joint_config, ParakeetTDTJointConfig):
+            self.joint_config = joint_config
+        else:
+            raise ValueError(
+                f"`decoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
+            )
+
+        vocab_size = self.joint_config.vocab_size
+        self.vocab_size = vocab_size
+
+        self.blank_token_id = vocab_size
+        super().__init__(
+#            pad_token_id=self.blank_token_id,
+            **kwargs,
+        )
+
+    @classmethod
+    def from_configs(
+        cls,
+        encoder_config: ParakeetEncoderConfig,
+        decoder_config: ParakeetTDTDecoderConfig,
+        joint_config: ParakeetTDTJointConfig,
+        **kwargs):
+        r"""
+        Instantiate a [`ParakeetConfig`] (or a derived class) from parakeet encoder model configuration.
+
+        Returns:
+            [`ParakeetConfig`]: An instance of a configuration object
+        """
+
+        return cls(
+            encoder_config=encoder_config.to_dict(),
+            decoder_config=decoder_config.to_dict(),
+            joint_config=joint_config.to_dict(),
+            **kwargs)
+
+__all__ = ["ParakeetCTCConfig", "ParakeetTDTConfig", "ParakeetEncoderConfig", "ParakeetTDTDecoderConfig", "ParakeetTDTJointConfig"]
