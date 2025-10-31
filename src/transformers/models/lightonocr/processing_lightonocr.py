@@ -11,7 +11,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available
 
@@ -141,7 +141,7 @@ class LightOnOCRProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        **kwargs,
+        **kwargs: Unpack[LightOnOCRProcessorKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You must provide either text or images")
