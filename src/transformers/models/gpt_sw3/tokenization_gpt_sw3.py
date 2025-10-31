@@ -4,7 +4,7 @@ import re
 import unicodedata
 from typing import Any, Optional, Union
 
-from ...tokenization_sentencepiece import SentencePieceBackend
+from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import is_torch_available, logging
 from ...utils.import_utils import requires
 

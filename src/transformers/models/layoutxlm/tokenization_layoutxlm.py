@@ -29,7 +29,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
     _get_prepend_scheme,
 )
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 
 

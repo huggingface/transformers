@@ -25,7 +25,7 @@ import numpy as np
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import is_levenshtein_available, is_nltk_available, logging, requires_backends
 
 

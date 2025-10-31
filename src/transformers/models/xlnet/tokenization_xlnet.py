@@ -19,7 +19,7 @@ from typing import Optional
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import _get_prepend_scheme
 from ...utils import logging
 

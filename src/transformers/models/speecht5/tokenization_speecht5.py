@@ -16,7 +16,7 @@
 
 from typing import Any, Optional
 
-from ...tokenization_sentencepiece import SentencePieceBackend
+from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import logging
 from ...utils.import_utils import requires
 from .number_normalizer import EnglishNumberNormalizer

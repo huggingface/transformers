@@ -1993,7 +1993,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if resolved_spm is not None:
                     try:
                         # Mirror AutoTokenizer fallback: extract vocab/merges from SentencePiece
-                        from .tokenization_sentencepiece import SentencePieceExtractor
+                        from .tokenization_utils_sentencepiece import SentencePieceExtractor
                         import inspect as _inspect
 
                         class_sig = _inspect.signature(getattr(cls, "__init__", cls))

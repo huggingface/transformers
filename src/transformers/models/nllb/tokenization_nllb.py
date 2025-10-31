@@ -19,7 +19,7 @@ from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, normaliz
 from tokenizers.models import BPE
 
 from ...tokenization_python import AddedToken, BatchEncoding
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 

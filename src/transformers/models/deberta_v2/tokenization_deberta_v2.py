@@ -17,7 +17,7 @@
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 

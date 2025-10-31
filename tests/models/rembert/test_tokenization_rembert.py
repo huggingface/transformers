@@ -19,7 +19,7 @@ import unittest
 from tests.test_tokenization_common import AddedToken, TokenizerTesterMixin
 from transformers import RemBertTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 
 SENTENCEPIECE_UNDERLINE = "▁"

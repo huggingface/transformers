@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

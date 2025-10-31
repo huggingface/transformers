@@ -2,7 +2,7 @@ import unittest
 
 from transformers.models.camembert.tokenization_camembert import CamembertTokenizer
 from transformers.testing_utils import require_tokenizers
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

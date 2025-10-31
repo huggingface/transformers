@@ -281,7 +281,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["tokenization_tokenizers"] = [
+    _import_structure["tokenization_utils_tokenizers"] = [
         "TokenizersBackend",
         "TokenizersExtractor",
         "PreTrainedTokenizerFast",
@@ -715,12 +715,12 @@ if TYPE_CHECKING:
     from .pytorch_utils import prune_layer as prune_layer
 
     # Tokenization
-    from .tokenization_sentencepiece import SentencePieceBackend as SentencePieceBackend
-    from .tokenization_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
-    from .tokenization_tokenizers import (
+    from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
+    from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+    from .tokenization_utils_tokenizers import (
         TokenizersBackend as TokenizersBackend,
     )
-    from .tokenization_tokenizers import (
+    from .tokenization_utils_tokenizers import (
         TokenizersExtractor as TokenizersExtractor,
     )
     from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer

@@ -19,7 +19,7 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, process
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken, BatchEncoding
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 

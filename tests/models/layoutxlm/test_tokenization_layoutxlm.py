@@ -27,7 +27,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.testing_utils import (
     get_tests_dir,
     require_pandas,

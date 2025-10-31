@@ -58,12 +58,12 @@ from .configuration_auto import (
 
 
 if is_tokenizers_available():
-    from ...tokenization_tokenizers import TokenizersBackend
+    from ...tokenization_utils_tokenizers import TokenizersBackend
 else:
     TokenizersBackend = None
 
 if is_sentencepiece_available():
-    from ...tokenization_sentencepiece import SentencePieceBackend
+    from ...tokenization_utils_sentencepiece import SentencePieceBackend
 else:
     SentencePieceBackend = None
 
@@ -476,7 +476,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
 
         if resolved_spm is not None:
             try:
-                from ...tokenization_sentencepiece import SentencePieceExtractor
+                from ...tokenization_utils_sentencepiece import SentencePieceExtractor
 
                 fast_sig = inspect.signature(getattr(tokenizer_class, "__init__", tokenizer_class))
                 if "vocab" in fast_sig.parameters:

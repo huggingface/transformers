@@ -19,7 +19,7 @@ from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors
 
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,

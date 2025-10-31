@@ -26,7 +26,7 @@ from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processo
 from tokenizers.models import BPE
 
 from ...tokenization_utils_base import BatchEncoding
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 

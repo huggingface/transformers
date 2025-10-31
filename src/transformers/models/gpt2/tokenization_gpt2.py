@@ -19,7 +19,7 @@ from typing import Optional
 from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 

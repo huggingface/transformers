@@ -20,7 +20,7 @@ from typing import Optional
 
 from ...tokenization_python import AddedToken
 from ...utils import is_sentencepiece_available, logging
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from tokenizers import Tokenizer, Regex, normalizers, pre_tokenizers, processors, decoders
 from tokenizers.models import Unigram
 

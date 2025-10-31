@@ -21,6 +21,7 @@ import inspect
 import json
 import os
 from collections import defaultdict
+from shutil import copyfile
 from typing import Any, Optional, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
@@ -1137,3 +1138,6 @@ class TokenizersExtractor:
             added_tokens_decoder[token_id] = added_token_obj
 
         return vocab_ids, vocab_scores, merges, added_tokens_decoder
+
+# Backward-compatible alias: allow referring to TokenizersBackend as PreTrainedTokenizerFast
+PreTrainedTokenizerFast = TokenizersBackend

@@ -22,7 +22,7 @@ from transformers import (
     SeamlessM4TTokenizer,
     is_torch_available,
 )
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -69,7 +69,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # Extract vocab from SAMPLE_VOCAB for testing
-        from transformers.tokenization_sentencepiece import SentencePieceExtractor
+        from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
         
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
         vocab_ids, vocab_scores, merges = extractor.extract()
@@ -80,7 +80,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_full_tokenizer(self):
         # Extract vocab from SAMPLE_VOCAB for this test
-        from transformers.tokenization_sentencepiece import SentencePieceExtractor
+        from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
         
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
         vocab_ids, vocab_scores, merges = extractor.extract()

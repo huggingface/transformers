@@ -17,7 +17,7 @@ from functools import cached_property
 
 from transformers import PegasusTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

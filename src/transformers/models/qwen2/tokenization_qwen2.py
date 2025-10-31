@@ -17,8 +17,8 @@
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_sentencepiece import generate_merges
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_sentencepiece import generate_merges
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 

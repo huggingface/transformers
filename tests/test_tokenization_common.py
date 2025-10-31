@@ -46,7 +46,7 @@ from transformers.testing_utils import (
     require_torch,
 )
 from transformers.tokenization_python import AddedToken
-from transformers.tokenization_tokenizers import TokenizersExtractor
+from transformers.tokenization_utils_tokenizers import TokenizersExtractor
 
 from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
 from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
@@ -317,7 +317,7 @@ Hey how are you doing"""
         Returns:
             Tokenizer built from extracted vocab/merges, or None if extraction fails.
         """
-        from transformers.tokenization_tokenizers import TokenizersExtractor
+        from transformers.tokenization_utils_tokenizers import TokenizersExtractor
         
         if reference_tokenizer is None:
             reference_tokenizer = self.get_tokenizer()
@@ -350,7 +350,7 @@ Hey how are you doing"""
         """
         Build a tokenizer from extracted vocab/merges using SentencePieceExtractor.
         """
-        from transformers.tokenization_sentencepiece import SentencePieceExtractor
+        from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
         
         try:
             sentencepiece_model_path = os.path.join(self.tmpdirname, "tokenizer.model")

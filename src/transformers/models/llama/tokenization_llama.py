@@ -16,7 +16,7 @@
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
 from ...utils import logging
 

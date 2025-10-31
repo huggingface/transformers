@@ -16,7 +16,7 @@ import unittest
 import tempfile
 from transformers import AlbertTokenizer
 from transformers import AutoTokenizer
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
