@@ -124,11 +124,12 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Get processor from saved directory."""
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
-    def prepare_image_inputs(self):
-        """Prepare dummy image inputs."""
-        # Create a simple test image (use size compatible with Pixtral)
-        image = Image.new("RGB", (512, 512), color="red")
-        return [image]
+    def prepare_image_inputs(self, batch_size=None):
+        """Prepare small dummy image inputs."""
+        image = Image.new("RGB", (112, 112), color="red")
+        if batch_size is None:
+            return image
+        return [image] * batch_size
 
     def test_processor_creation(self):
         """Test that processor can be created and loaded."""
@@ -151,7 +152,7 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_image_and_text(self):
         """Test processor with both image and text inputs."""
         processor = self.get_processor()
-        image = self.prepare_image_inputs()[0]
+        image = self.prepare_image_inputs()
         text = f"{self.image_token} Extract text from this image."
 
         inputs = processor(images=image, text=text, return_tensors="pt")
@@ -169,7 +170,7 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_image_token_expansion(self):
         """Test that image token is properly expanded based on image size."""
         processor = self.get_processor()
-        image = self.prepare_image_inputs()[0]
+        image = self.prepare_image_inputs()
         text = f"{self.image_token} Describe this image."
 
         inputs = processor(images=image, text=text, return_tensors="pt")
@@ -185,7 +186,7 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_batch_processing(self):
         """Test processor with batch of inputs."""
         processor = self.get_processor()
-        images = [self.prepare_image_inputs()[0] for _ in range(2)]
+        images = self.prepare_image_inputs(batch_size=2)
         texts = [f"{self.image_token} Extract text." for _ in range(2)]
 
         inputs = processor(images=images, text=texts, return_tensors="pt", padding=True)
@@ -233,7 +234,7 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_return_types(self):
         """Test different return types (pt, np, list)."""
         processor = self.get_processor()
-        image = self.prepare_image_inputs()[0]
+        image = self.prepare_image_inputs()
         text = f"{self.image_token} Test image."
 
         # Test PyTorch tensors
