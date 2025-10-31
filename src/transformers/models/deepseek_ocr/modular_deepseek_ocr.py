@@ -24,11 +24,11 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
-from ..auto import CONFIG_MAPPING, AutoConfig
 from ..clip.modeling_clip import (
     CLIPEncoder,
     CLIPEncoderLayer,
@@ -72,7 +72,6 @@ class DeepseekOcrSamConfig(PreTrainedConfig):
         use_rel_pos=True,
         window_size=14,
         global_attn_indexes=None,
-        mlp_ratio=4.0,
         output_channels=256,
         downsample_channels=None,
         **kwargs,
@@ -93,10 +92,9 @@ class DeepseekOcrSamConfig(PreTrainedConfig):
         self.use_rel_pos = use_rel_pos
         self.window_size = window_size
         self.global_attn_indexes = global_attn_indexes if global_attn_indexes is not None else [2, 5, 8, 11]
-        self.mlp_ratio = mlp_ratio
         self.output_channels = output_channels
         self.downsample_channels = downsample_channels if downsample_channels is not None else [512, 1024]
-        self.mlp_dim = int(hidden_size * mlp_ratio)
+        self.mlp_dim = int(hidden_size * 4.0)
         self.out_channels = output_channels
 
 
@@ -108,7 +106,6 @@ class DeepseekOcrCLIPVisionConfig(PreTrainedConfig):
         self,
         hidden_size=1024,
         intermediate_size=4096,
-        projection_dim=768,
         num_hidden_layers=24,
         num_attention_heads=16,
         num_channels=3,
@@ -118,13 +115,11 @@ class DeepseekOcrCLIPVisionConfig(PreTrainedConfig):
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
-        initializer_factor=1.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
@@ -134,7 +129,6 @@ class DeepseekOcrCLIPVisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
 
 
 class DeepseekOcrProjectorConfig(PreTrainedConfig):
@@ -145,15 +139,11 @@ class DeepseekOcrProjectorConfig(PreTrainedConfig):
         self,
         input_dim=2048,
         n_embed=1280,
-        projector_type="linear",
-        depth=1,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.input_dim = input_dim
         self.n_embed = n_embed
-        self.projector_type = projector_type
-        self.depth = depth
 
 
 class DeepseekOcrVisionConfig(PreTrainedConfig):
@@ -187,7 +177,133 @@ class DeepseekOcrVisionConfig(PreTrainedConfig):
 
 
 class DeepseekOcrTextConfig(DeepseekV2Config):
-    pass
+    r"""
+    This is the configuration class to store the configuration of a [`DeepseekOcrTextModel`]. It is used to instantiate a DeepSeek
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of DeepSeek-V2-Lite" [deepseek-ai/DeepSeek-V2-Lite"](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite").
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 32000):
+            Vocabulary size of the DeepSeek model. Defines the number of different tokens that can be represented by the
+            `input_ids` passed when calling [`DeepseekOcrTextModel`].
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 11008):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*):
+            The number of key-value heads used to implement Grouped Query Attention (GQA). If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi-Head Attention (MHA). If
+            `num_key_value_heads=1`, the model will use Multi-Query Attention (MQA). Otherwise, GQA is used.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated normal initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon value used by the RMS normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/value attentions (useful for inference optimization).
+        pad_token_id (`int`, *optional*):
+            Padding token ID.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            Beginning-of-sequence token ID.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            End-of-sequence token ID.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie input and output embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value, and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability applied to attention weights.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias term in the MLP layers.
+        first_k_dense_replace (`int`, *optional*, defaults to 0):
+            Number of dense layers in the shallow layers before switching to MoE layers.
+        n_group (`int`, *optional*):
+            Number of groups for routed experts.
+        n_routed_experts (`int`, *optional*, defaults to 64):
+            Number of routed experts (None indicates a dense model).
+        n_shared_experts (`int`, *optional*, defaults to 2):
+            Number of shared experts (None indicates a dense model).
+        qk_rope_head_dim (`int`, *optional*, defaults to 64):
+            The head dimension for QK projections when using RoPE.
+        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
+            Scaling factor for routed experts in MoE models.
+        topk_group (`int`, *optional*):
+            Number of selected groups per token for expert selection.
+        topk_method (`str`, *optional*, defaults to `"greedy"`):
+            The method used for selecting top-k experts in the routed gate mechanism.
+        num_experts_per_tok (`int`, *optional*):
+            The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
+        moe_intermediate_size (`int`, *optional*, defaults to 1407):
+            Dimension of the MoE (Mixture of Experts) representations.
+
+    ```python
+    >>> from transformers import DeepseekOcrTextModel, DeepseekOcrTextConfig
+    >>> # Initializing a DeepSeek-V2 style configuration
+    >>> configuration = DeepseekOcrTextConfig()
+    >>> # Accessing the model configuration
+    >>> model = DeepseekOcrTextModel(configuration)
+    >>> print(model.config)
+    ```
+    """
+
+    def __init__(
+        self,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        first_k_dense_replace: Optional[int] = 0,
+        n_group: Optional[int] = None,
+        n_routed_experts: Optional[int] = 64,
+        n_shared_experts: Optional[int] = 2,
+        routed_scaling_factor: Optional[float] = 1.0,
+        topk_group: Optional[int] = None,
+        topk_method: Optional[str] = "greedy",
+        num_experts_per_tok: Optional[int] = None,
+        moe_intermediate_size: Optional[int] = 1407,
+        **kwargs,
+    ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+        del self.kv_lora_rank
+        del self.q_lora_rank
+        del self.qk_nope_head_dim
+        del self.qk_rope_head_dim
+        del self.v_head_dim
+        del self.head_dim
 
 
 class DeepseekOcrConfig(PreTrainedConfig):
@@ -207,14 +323,12 @@ class DeepseekOcrConfig(PreTrainedConfig):
             The config object or dictionary of the vision encoders (SAM and CLIP).
         projector_config (`DeepseekOcrProjectorConfig` or `dict`, *optional*):
             The config object or dictionary of the projector that maps vision features to text embedding space.
-        candidate_resolutions (`list`, *optional*, defaults to `[[1024, 1024]]`):
-            List of candidate image resolutions for adaptive image processing.
-        global_view_pos (`str`, *optional*, defaults to `"head"`):
-            Position of the global view in the image sequence.
-        tile_tag (`str`, *optional*, defaults to `"2D"`):
-            Tag format for image tiles.
         image_token_index (`int`, *optional*, defaults to 100015):
             The index representing image tokens in the model's token vocabulary.
+        vision_feature_layer (`int`, *optional*):
+            Index of the vision layer to extract features from.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            Strategy for selecting vision features.
 
     Example:
 
@@ -233,7 +347,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
 
     model_type = "deepseek_ocr"
     sub_configs = {
-        "text_config": AutoConfig,
+        "text_config": DeepseekOcrTextConfig,
         "vision_config": DeepseekOcrVisionConfig,
         "projector_config": DeepseekOcrProjectorConfig,
     }
@@ -243,29 +357,18 @@ class DeepseekOcrConfig(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         projector_config=None,
-        candidate_resolutions=None,
-        global_view_pos="head",
-        tile_tag="2D",
         image_token_index=100015,
-        image_grid_pinpoints=None,
         vision_feature_layer=None,
         vision_feature_select_strategy="default",
         **kwargs,
     ):
-        if candidate_resolutions is None:
-            candidate_resolutions = [[1024, 1024]]
-
-        self.candidate_resolutions = candidate_resolutions
-        self.global_view_pos = global_view_pos
-        self.tile_tag = tile_tag
         self.image_token_index = image_token_index
         self.image_token_id = image_token_index
-        self.image_grid_pinpoints = image_grid_pinpoints if image_grid_pinpoints is not None else [[1024, 1024]]
         self.vision_feature_layer = vision_feature_layer
         self.vision_feature_select_strategy = vision_feature_select_strategy
 
         if text_config is None:
-            text_config = CONFIG_MAPPING["deepseek_v2"](
+            text_config = DeepseekOcrTextConfig(
                 hidden_size=1280,
                 intermediate_size=6848,
                 num_hidden_layers=12,
@@ -278,11 +381,9 @@ class DeepseekOcrConfig(PreTrainedConfig):
                 first_k_dense_replace=1,
                 vocab_size=129280,
                 max_position_embeddings=8192,
-                use_mla=False,
             )
         elif isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "deepseek_v2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+            text_config = DeepseekOcrTextConfig(**text_config)
 
         self.text_config = text_config
 
