@@ -61,7 +61,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 Whether or not to add special tokens when encoding the sequences. This will use the underlying
                 `PretrainedTokenizerBase.build_inputs_with_special_tokens` function, which defines which tokens are
                 automatically added to the input ids. This is useful if you want to add `bos` or `eos` tokens
-                automatically. When Tokenizer is loadig with `finetuning` mode it adds both `bos` and `eos`. Else, for "test" mode it only add `bos`.
+                automatically. When Tokenizer is loading with `finetuning` mode it adds both `bos` and `eos`. Else, for "test" mode it only adds `bos`.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
