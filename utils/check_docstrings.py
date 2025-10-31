@@ -44,7 +44,7 @@ import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Union
 
 from check_repo import ignore_undocumented
 from git import Repo
