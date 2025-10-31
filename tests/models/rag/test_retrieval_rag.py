@@ -24,7 +24,7 @@ from datasets import Dataset
 
 from transformers import is_faiss_available
 from transformers.models.bart.configuration_bart import BartConfig
-from transformers.models.bart.tokenization_bart import BartTokenizer
+from transformers.models.roberta.tokenization_roberta import RobertaTokenizer as BartTokenizer
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.dpr.configuration_dpr import DPRConfig
 from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer

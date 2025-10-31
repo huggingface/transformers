@@ -17,7 +17,7 @@ import unittest
 from functools import cached_property
 
 from transformers import BatchEncoding, LEDTokenizer, LEDTokenizerFast
-from transformers.models.led.tokenization_led import VOCAB_FILES_NAMES
+from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
 
 from ...test_tokenization_common import TokenizerTesterMixin
