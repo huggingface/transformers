@@ -322,7 +322,6 @@ src/transformers/convert_slow_tokenizer.py
 src/transformers/convert_slow_tokenizers_checkpoints_to_fast.py
 src/transformers/data/data_collator.py
 src/transformers/data/datasets/glue.py
-src/transformers/data/datasets/language_modeling.py
 src/transformers/data/datasets/squad.py
 src/transformers/data/metrics/squad_metrics.py
 src/transformers/data/processors/glue.py
