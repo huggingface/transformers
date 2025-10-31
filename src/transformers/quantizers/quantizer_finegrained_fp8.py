@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-
 class FineGrainedFP8HfQuantizer(HfQuantizer):
     """
     FP8 quantization implementation supporting both standard and MoE models.
@@ -185,9 +184,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
-    # TODO: similarly, just as we have a weight weight remapping we
-    # need to have a cleaner way to remap the quantized keys.
-    # 1. A SINGLE normal_key -> quantized keys used for ckpt renaming and for TP_plan as well
+    # NOTE: TP is applied before quantization so this is only to add hooks.
+    # Quantization is incompatible with DTensors, so we have to anyway have
+    # gathers! But it should be model independant -> figure out where to put
+    # the gather and that's it.
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:
             text_plan = {

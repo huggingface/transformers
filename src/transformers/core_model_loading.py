@@ -15,6 +15,7 @@
 """Core helpers for loading model checkpoints."""
 
 from __future__ import annotations
+from typing import MutableMapping, MutableSequence, Any, Tuple
 
 import itertools
 import os
@@ -23,11 +24,11 @@ import threading
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolthread_poolutor
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Optional, Union
-
+from glob import translate
 import torch
 from torch.distributed.tensor import DTensor
 
@@ -41,7 +42,7 @@ logger = logging.get_logger(__name__)
 
 def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
     """
-    Convert a glob with '*' into a regex *source* string.
+    Convert a glob with '*' into a regex *source* string. We don't use `glob.translate`
     '*' matches (\\d+) if digits_only else (.+). Inner groups are non-capturing.
     """
     star = r"(\d+)" if digits_only else r"(.+)"
@@ -50,28 +51,30 @@ def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
 
 def build_glob_alt(
     globs: list[str],
-    *,
-    digits_only: bool = True,
-    allow_prefix: bool = True,
 ) -> tuple[re.Pattern, dict[str, str]]:
     """
-    Build one compiled regex alternation with a named group per glob.
-    - digits_only: '*' => digits only (\\d+) if True, else any chars (.+)
-    - allow_prefix: if True, allow arbitrary prefix before the pattern
-                    (keeps '$' so we still require a full suffix match)
+    Build one compiled regex alternation with a named group per glob. This allows to run a single
+    re.match and get the correct group name to finally get which pattern matched.
     Returns (compiled_regex, name->glob map).
+
+    Example:
+
+    ```py
+    >>> reg, map = build_glob_alt(["mlp.*.w1", "mlp.*.w2"])
+    >>> print(reg)
+    (re.compile(r'(?P<g0>.*mlp\.(\d+)\.w1)|(?P<g1>.*mlp\.(\d+)\.w2)', re.UNICODE),
+    >>> print(map)
+    {'g0': 'mlp.*.w1', 'g1': 'mlp.*.w2'})
+    ```
     """
     name_map: dict[str, str] = {}
     parts: list[str] = []
-
-    # If we keep using .match(), we must handle prefix allowance in the pattern itself.
-    prefix_src = r".*" if allow_prefix else r"^"
+    prefix_src = r".*"
 
     for i, g in enumerate(globs):
         name = f"g{i}"
         name_map[name] = g
-        pat_src = _glob_to_regex_src(g, digits_only=digits_only)
-        # Each branch is fully wrapped and uniquely named.
+        pat_src = _glob_to_regex_src(g)
         parts.append(f"(?P<{name}>{prefix_src}{pat_src})")
 
     alt_src = "|".join(parts)
@@ -297,8 +300,6 @@ class WeightConverter:
 
     distributed_operation: dict[str, ConversionOps] = field(default_factory=dict, compare=False, repr=False)
     quantization_operation: dict[str, ConversionOps] = field(default_factory=dict, compare=False, repr=False)
-    _compiled: tuple[tuple[str, re.Pattern], ...] = field(default_factory=tuple, compare=False, repr=False)
-    _regex_pat: tuple[re.Pattern, dict[str, str]] = field(default_factory=tuple, compare=False, repr=False)
 
     def __post_init__(self):
         if not isinstance(self.source_keys, list):
@@ -308,7 +309,18 @@ class WeightConverter:
                 self.target_keys = self.source_keys
             else:
                 self.target_keys = [self.target_keys]
-        self._regex_pat = build_glob_alt(self.source_keys)
+        if (len(self.source_keys)-1 +  len(self.target_keys)-1) < 2:
+            raise ValueError(f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one.")
+        for pattern in self.source_keys:
+            try:
+                re.compile(translate(pattern))
+            except re.error as _:
+                raise AssertionError(f"Invalide source glob pattern: '{pattern}'")
+        for pattern in self.target_keys:
+            try:
+                re.compile(translate(pattern))
+            except re.error as _:
+                raise AssertionError(f"Invalide source glob pattern: '{pattern}'")
 
 
 def set_param_for_module(
@@ -343,6 +355,7 @@ def set_param_for_module(
         setattr(module_obj, param_name, param_value)
     except Exception as e:
         misc[k] = f"{e} for {k} on {list(module_obj.state_dict().keys())}"
+    return model, mismatch_keys, missing_keys, misc, distributed_operation
 
 
 @dataclass(slots=True)
@@ -361,24 +374,24 @@ def _materialize_copy(x):
     return x[...]
 
 
-def spawn_materialize(EXEC, _file_sems, file_id, t) -> Future:
-    sem = _file_sems[file_id]
+def spawn_materialize(thread_pool, _file_semaphore, file_id, t) -> Future:
+    sem = _file_semaphore[file_id]
 
     def _job():
         with sem:
             return _materialize_copy(t)
 
-    return EXEC.submit(_job)
+    return thread_pool.submit(_job)
 
 
-def spawn_tp_materialize(EXEC, _file_sems, file_id, t, sharding_method, empty_tensor, tensor_idx) -> Future:
-    sem = _file_sems[file_id]
+def spawn_tp_materialize(thread_pool, _file_semaphore, file_id, t, sharding_method, empty_tensor, tensor_idx) -> Future:
+    sem = _file_semaphore[file_id]
 
     def _job():
         with sem:
             return sharding_method.shard_tensor(t, empty_tensor, tensor_idx=tensor_idx)[0]
 
-    return EXEC.submit(_job)
+    return thread_pool.submit(_job)
 
 
 def dot_natural_key(s: str):
@@ -411,15 +424,17 @@ def convert_and_load_state_dict_in_model(
     weight_mapping = weight_mapping or {}  # {glob_pattern: WeightConverter}
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
+
+    # TODO: tricky part here!
     if model.config.tie_word_embeddings and "lm_head.weight" in missing_keys:
         missing_keys.remove("lm_head.weight")
 
     misc = {}
     mismatch_keys = set()
     unexpected_keys = set()
-    # Global executor + per-file semaphores
-    EXEC = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
-    _file_sems = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
+    # Global thread_poolutor + per-file semaphores: allow lock only upon 4 file access? Should be tensor get_shape dependant?
+    thread_pool = ThreadPoolthread_poolutor(max_workers=GLOBAL_WORKERS)
+    _file_semaphore = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
 
     _patterns = list(itertools.chain.from_iterable([k.source_keys for k in weight_mapping]))
     source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
@@ -480,11 +495,11 @@ def convert_and_load_state_dict_in_model(
                     converter.distributed_operation.empty_tensor = empty_tensor.clone()
                 shard_index = len(entry.collected_tensors[target_key].get(converter_key, []))
                 future = spawn_tp_materialize(
-                    EXEC, _file_sems, file_id, tensor, converter.distributed_operation, empty_tensor, shard_index
+                    thread_pool, _file_semaphore, file_id, tensor, converter.distributed_operation, empty_tensor, shard_index
                 )
 
         if future is None:  # If not TP, async move tensors
-            future = spawn_materialize(EXEC, _file_sems, file_id, tensor)
+            future = spawn_materialize(thread_pool, _file_semaphore, file_id, tensor)
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(future)
 
     # 2. Actually convert the ckpt
@@ -531,11 +546,11 @@ def convert_and_load_state_dict_in_model(
                         matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
                         if matched_dtype_pattern is not None:
                             op = Cast(keep_in_dtype[matched_dtype_pattern])
-                            output_value = op(output_value)
+                            output_value = op.convert(output_value)
 
                         for src in converter.source_keys:  # what should happen to k when we meet k at saving
                             inverse_converters[k] = {src: converter}
-                        set_param_for_module(
+                        model, mismatch_keys, missing_keys,misc = set_param_for_module(
                             model,
                             k,
                             output_value,
@@ -554,7 +569,7 @@ def convert_and_load_state_dict_in_model(
         if progress_bar is not None:
             progress_bar.close()
     model.inverse_converters = inverse_converters
-    EXEC.shutdown(wait=True)
+    thread_pool.shutdown(wait=True)
     return missing_keys, unexpected_keys, mismatch_keys, misc
 
 

@@ -1,3 +1,16 @@
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import logging
 import re
 import shutil
@@ -15,12 +28,12 @@ def _pattern_of(key: str) -> str:
     return _DIGIT_RX.sub("*", key)
 
 
-def _fmt_indices(values: list[int]) -> str:
-    """Format a list of ints as single number, {a, b, ...}, or first...last."""
+def _fmt_indices(values: list[int], cutoff=10) -> str:
+    """Format a list of ints as single number, {a, ..., b}, or first...last."""
     if len(values) == 1:
         return str(values[0])
     values = sorted(values)
-    if len(values) > 10:
+    if len(values) > cutoff:
         return f"{values[0]}...{values[-1]}"
     return ", ".join(map(str, values))
 
@@ -53,7 +66,6 @@ def update_key_name(mapping: dict[str, Any]) -> dict[str, Any]:
         parts = patt.split("*")  # stars are between parts
         final = parts[0]
         for i in range(1, len(parts)):
-            # i-1 is the star index before parts[i]
             if i - 1 < len(sets) and sets[i - 1]:
                 insert = _fmt_indices(sorted(sets[i - 1]))
                 if len(sets[i - 1]) > 1:
@@ -61,19 +73,16 @@ def update_key_name(mapping: dict[str, Any]) -> dict[str, Any]:
                 else:
                     final += insert
             else:
-                # If no digits observed for this star position, keep a literal '*'
                 final += "*"
             final += parts[i]
 
         out_items[final] = val
-
-    # Stable ordering by merged key
     out = OrderedDict(out_items)
     if not_mapping:
         return out.keys()
     return out
 
-
+# We have a class to simplify disabling ANSI colors
 class ANSI:
     palette = {
         "reset": "[0m",
@@ -117,7 +126,6 @@ def _make_table(rows, headers):
 
 
 def _color(s, color, ansi):
-    # ansi returns empty strings when disabled, so safe to interpolate
     return f"{ansi[color]}{s}{ansi['reset']}"
 
 
@@ -140,7 +148,6 @@ def log_state_dict_report(
     mismatched_shapes=None,
     ignore_mismatched_sizes=True,
     misc=None,
-    limit_rows=50,  # safety for huge checkpoints
     color=True,  # allow disabling for plain logs
     min_width_full_table=60,  # terminal min width to attempt full table
 ):

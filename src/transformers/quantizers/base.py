@@ -59,15 +59,11 @@ class HfQuantizer(ABC):
         requires_parameters_quantization (`bool`):
             Whether the quantization method requires to create a new Parameter. For example, for bitsandbytes, it is
             required to create a new xxxParameter in order to properly quantize the model.
-        requires_full_weights (`bool`):
-            Whether the quantization method needs the full (non-sharded) weights for conversion. If set to `False`, only
-            the relevant tensor slices will be provided during weight loading.
     """
 
     requires_calibration = False
     required_packages = None
     requires_parameters_quantization = False
-    requires_full_weights = True
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
