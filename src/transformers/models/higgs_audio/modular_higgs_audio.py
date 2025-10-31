@@ -294,7 +294,7 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
             audio_input_ids = audio_input_ids[:, -current_input_length:]
             audio_input_ids = audio_input_ids.clone(memory_format=torch.contiguous_format)
             model_inputs["audio_input_ids"] = audio_input_ids
-        
+
         # Handle audio_input_ids_mask slicing for generation with past_key_values
         if audio_input_ids_mask is not None and model_inputs.get("past_key_values") is not None:
             current_input_length = (

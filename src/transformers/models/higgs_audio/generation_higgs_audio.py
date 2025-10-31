@@ -115,7 +115,6 @@ class HiggsAudioGenerationMixin(GenerationMixin):
         streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
-        pad_token_id = generation_config._pad_token_tensor
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -232,9 +231,8 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                     generated_audio_inputs_ids = model_kwargs["audio_input_ids"][:, -cut_idx:, :]
                     # Create mask to exclude counting when equality is 1024, audio_stream_eos_id, or audio_stream_bos_id
                     equality_mask = generated_audio_inputs_ids[:, -ras_win_len:, :] == next_tokens[:, None, :]
-                    not_excluded_mask = (
-                        (generated_audio_inputs_ids[:, -ras_win_len:, :] != 1024) &
-                        (generated_audio_inputs_ids[:, -ras_win_len:, :] != 1025)
+                    not_excluded_mask = (generated_audio_inputs_ids[:, -ras_win_len:, :] != 1024) & (
+                        generated_audio_inputs_ids[:, -ras_win_len:, :] != 1025
                     )
                     rep_num = (equality_mask & not_excluded_mask).sum(dim=1)
 
@@ -247,7 +245,9 @@ class HiggsAudioGenerationMixin(GenerationMixin):
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
-                next_tokens = next_tokens * unfinished_sequences[:, None] + self.config.audio_stream_eos_id * (1 - unfinished_sequences[:, None])
+                next_tokens = next_tokens * unfinished_sequences[:, None] + self.config.audio_stream_eos_id * (
+                    1 - unfinished_sequences[:, None]
+                )
 
             # Check which batch elements have audio stream EOS tokens
             has_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).any(dim=-1)
@@ -260,18 +260,22 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             else:
                 model_kwargs["audio_input_ids"] = next_tokens
 
+            next_audio_input_ids_mask = torch.ones((batch_size, 1), dtype=torch.bool, device=next_tokens.device)
+            next_audio_input_ids_mask[has_audio_stream_eos] = 0
+
+            audio_input_ids_mask = model_kwargs.get("audio_input_ids_mask")
+            if audio_input_ids_mask is not None:
+                audio_input_ids_mask = torch.cat([audio_input_ids_mask, next_audio_input_ids_mask], dim=1)
+            else:
+                audio_input_ids_mask = next_audio_input_ids_mask
+
+            model_kwargs["audio_input_ids_mask"] = audio_input_ids_mask
+
             # For batches with audio stream EOS, set next token to audio_eos_token_id
             next_tokens_flat = input_ids.new_ones(batch_size) * self.config.audio_out_token_idx
             next_tokens_flat[has_audio_stream_eos] = self.config.audio_eos_token_id
             next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
             next_tokens = next_tokens_flat
-
-            audio_input_ids_mask = model_kwargs.get("audio_input_ids_mask")
-            if audio_input_ids_mask is not None:
-                next_audio_input_ids_mask = audio_input_ids_mask.new_ones(batch_size, 1)
-                next_audio_input_ids_mask[has_audio_stream_eos] = 0
-                audio_input_ids_mask = torch.cat([audio_input_ids_mask, next_audio_input_ids_mask], dim=1)
-                model_kwargs["audio_input_ids_mask"] = audio_input_ids_mask
             # ============================
 
             # update generated ids, model inputs, and length for next step

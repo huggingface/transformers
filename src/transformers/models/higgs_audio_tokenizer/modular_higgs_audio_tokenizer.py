@@ -13,9 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..xcodec.modeling_xcodec import XcodecModel, XcodecEuclideanCodebook
-from ..xcodec.configuration_xcodec import XcodecConfig
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import torchaudio
+
+from ..xcodec.configuration_xcodec import XcodecConfig
+from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel
 
 
 class HiggsAudioTokenizerConfig(XcodecConfig):
@@ -102,16 +106,14 @@ class HiggsAudioTokenizerModel(XcodecModel):
         semantic_features = stacked.mean(dim=1)
 
         semantic_downsample_factor = int(
-            self.config.hop_length / (self.config.sample_rate / self.config.semantic_sample_rate) / self.config.downsample_factor
+            self.config.hop_length
+            / (self.config.sample_rate / self.config.semantic_sample_rate)
+            / self.config.downsample_factor
         )
         if semantic_downsample_factor > 1:
-            semantic_features = semantic_features[:, :: semantic_downsample_factor, :]
+            semantic_features = semantic_features[:, ::semantic_downsample_factor, :]
 
         return semantic_features
 
 
 __all__ = ["HiggsAudioTokenizerConfig", "HiggsAudioTokenizerModel"]
-
-
-
-
