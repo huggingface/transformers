@@ -46,7 +46,7 @@ def _build_checkpoint_conversion_mapping():
             # WeightConverter(
             #     ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
             #     "self_attn.qkv_proj",
-            #     Concatenate(dim=0),  # more like stack?
+            #     operations=[Concatenate(dim=0)],  # more like stack?
             # ),
             WeightConverter("*.block_sparse_moe.", "*.mlp."),
         ],

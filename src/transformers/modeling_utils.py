@@ -4279,7 +4279,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             commit_hash = getattr(config, "_commit_hash", commit_hash)
 
         download_kwargs_with_commit["commit_hash"] = commit_hash
-        profile_weight_conversion = kwargs.pop("profile_weight_conversion", False)
 
         # Because some composite configs call super().__init__ before instantiating the sub-configs, we need this call
         # to correctly redispatch recursively if the kwarg is provided
@@ -4394,7 +4393,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             key_mapping=key_mapping,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
-            profile_weight_conversion=profile_weight_conversion,
         )
 
         model.tie_weights()  # make sure token embedding weights are still tied if needed
@@ -4575,7 +4573,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
         weight_mapping: Optional[Sequence[WeightConverter]] = None,
-        profile_weight_conversion: bool = False,
     ):
         is_quantized = hf_quantizer is not None
         is_hqq_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
@@ -4643,7 +4640,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device_map,
                 keep_in_dtype,
                 device_mesh=device_mesh,
-                profile=profile_weight_conversion,
             )
 
         for k in all_pointer:  # finally close all opened file pointeres

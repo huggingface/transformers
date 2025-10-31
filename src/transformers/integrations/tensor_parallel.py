@@ -899,6 +899,20 @@ class GroupedGemmParallel(TensorParallelLayer):
         super().__init__()
         self.use_dtensor = False
 
+    def shard_tensor(self, param, **kwargs):
+        empty_param = self.empty_param
+        ep_rank = self.rank
+        device_mesh=self.device_mesh
+
+        global_num_experts = empty_param.shape[0]
+        if global_num_experts % device_mesh.size() != 0:
+            raise ValueError(
+                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
+            )
+        local_num_experts = global_num_experts // device_mesh.size()
+        param = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts]
+        return param
+
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         ep_rank = rank
         global_num_experts = empty_param.shape[0]

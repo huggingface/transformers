@@ -385,7 +385,6 @@ def log_to_misc(
     try:
         yield
     except Exception as e:
-
         def _format_op_name(curr_op: Union[list[ConversionOps], ConversionOps, None]) -> Optional[str]:
             if curr_op is None:
                 return None
@@ -410,6 +409,7 @@ def log_to_misc(
             misc[layer_name] = f"{op_name}: {e}"
         else:
             misc[layer_name] = f"{extras} |Error: {e}"
+        raise SkipLayer()
 
 
 def set_param_for_module(
@@ -445,13 +445,12 @@ def set_param_for_module(
 
         if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
-
-        if layer_name in missing_keys:
-            missing_keys.remove(layer_name)
-
+        missing_keys.discard(layer_name)
         setattr(module_obj, param_name, param_value)
-    return model, mismatch_keys, missing_keys, misc, distributed_operation
 
+class SkipLayer(Exception):
+    """Control-flow sentinel: abort processing of the current layer only."""
+    pass
 
 def convert_and_load_state_dict_in_model(
     model,
@@ -475,6 +474,7 @@ def convert_and_load_state_dict_in_model(
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
 
+    # TODO: maybe use `find_tied_parameters`
     if model.config.tie_word_embeddings and isinstance(model._tied_weights_keys, list):
         for k in model._tied_weights_keys:
             missing_keys.discard(k)
@@ -563,15 +563,16 @@ def convert_and_load_state_dict_in_model(
     total_layers = sum(len(by_conversion_pattern[key].collected_tensors) for key in keys)
     progress_bar = logging.tqdm(total=total_layers, desc="Converting weights", leave=False) if total_layers else None
 
-    try:
-        for key in keys[::-1]:  # revert to process simple keys first
-            group = by_conversion_pattern.pop(key)
-            converter = group.weight_converter
-            operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
-            for layer_name, tensors_for_this_layer in group.collected_tensors.items():
-                concrete_target_keys = layer_name.split("|")
+    for key in keys[::-1]:  # revert to process simple keys first
+        group = by_conversion_pattern.pop(key)
+        converter = group.weight_converter
+        operations = converter.operations if isinstance(converter.operations, list) else [converter.operations]
+        for layer_name, tensors_for_this_layer in group.collected_tensors.items():
+            concrete_target_keys = layer_name.split("|")
+            try:
                 if bool(set(concrete_target_keys) - unexpected_keys):
-                    values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
+                    with log_to_misc(layer_name, misc):
+                        values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
 
                     for op in operations:
                         with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
@@ -613,13 +614,13 @@ def convert_and_load_state_dict_in_model(
                             misc,
                             converter.distributed_operation,
                         )
-
-            del group
-            for op in operations:
-                op.clear_cache()
-    finally:
-        if progress_bar is not None:
-            progress_bar.close()
+            except SkipLayer:
+                continue
+        del group
+        for op in operations:
+            op.clear_cache()
+    if progress_bar is not None:
+        progress_bar.close()
     model.inverse_converters = inverse_converters
     thread_pool.shutdown(wait=True)
     return missing_keys, unexpected_keys, mismatch_keys, misc
