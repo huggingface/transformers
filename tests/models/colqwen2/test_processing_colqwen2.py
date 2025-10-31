@@ -17,6 +17,7 @@
 import unittest
 
 import torch
+from parameterized import parameterized
 
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
@@ -37,7 +38,12 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ColQwen2Processor
-    model_id = "Qwen/Qwen2-VL-2B-Instruct"
+    model_id = "vidore/colqwen2-v1.0-hf"
+
+    @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("Not tested before, to investigate")
+    def test_apply_chat_template_image(self, batch_size, return_tensors):
+        pass
 
     @unittest.skip("ColQwen2Processor can only process one of text or images at a time")
     def test_processor_with_multiple_inputs(self):

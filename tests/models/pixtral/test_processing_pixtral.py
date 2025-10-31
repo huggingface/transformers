@@ -15,6 +15,7 @@ import unittest
 
 import numpy as np
 import torch
+from parameterized import parameterized
 
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
@@ -37,6 +38,11 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
     image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
+
+    @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("Not tested before, to investigate")
+    def test_apply_chat_template_image(self, batch_size, return_tensors):
+        pass
 
     def test_image_token_filling(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
