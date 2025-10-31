@@ -25,7 +25,7 @@ import torch
 from transformers.image_utils import load_image
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import require_mistral_common
-from transformers.tokenization_mistral_common import MistralCommonBackend, _get_validation_mode
+from transformers.tokenization_mistral_common import MistralCommonBackend
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils import PaddingStrategy, is_mistral_common_available
 
@@ -1997,8 +1997,8 @@ class TestMistralCommonBackend(unittest.TestCase):
             ("finetuning", ValidationMode.finetuning),
             (ValidationMode.finetuning, ValidationMode.finetuning),
         ]:
-            self.assertEqual(_get_validation_mode(mode), expected)
+            self.assertEqual(MistralCommonTokenizer._get_validation_mode(mode), expected)
 
         for invalid_mode in [("serving", ValidationMode.serving, "invalid", 1)]:
             with self.assertRaises(ValueError):
-                _get_validation_mode(invalid_mode)
+                MistralCommonTokenizer._get_validation_mode(invalid_mode)

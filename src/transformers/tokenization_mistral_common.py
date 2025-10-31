@@ -149,22 +149,6 @@ class MistralTokenizerType(str, Enum):
     tekken = "tekken"
 
 
-def _get_validation_mode(mode: Union[str, "ValidationMode"]) -> "ValidationMode":
-    """Get the validation mode from a string or a ValidationMode."""
-    _invalid_mode_msg = f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are 'finetuning' or 'test'."
-    if isinstance(mode, str):
-        try:
-            mode = ValidationMode[mode]
-        except KeyError:
-            raise ValueError(_invalid_mode_msg)
-    elif not isinstance(mode, (str, ValidationMode)):
-        raise ValueError(_invalid_mode_msg)
-
-    if mode not in [ValidationMode.finetuning, ValidationMode.test]:
-        raise ValueError(_invalid_mode_msg)
-    return mode
-
-
 @requires(backends=("mistral-common",))
 class MistralCommonBackend(PushToHubMixin):
     """
@@ -267,7 +251,7 @@ class MistralCommonBackend(PushToHubMixin):
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported to init `MistralCommonBackend`.")
 
         self._tokenizer_path = Path(tokenizer_path)
-        self._mode = _get_validation_mode(mode)
+        self._mode = self._get_validation_mode(mode)
         self.tokenizer: MistralTokenizer = MistralTokenizer.from_file(str(self._tokenizer_path), mode=self._mode)
         self._tokenizer_type = (
             MistralTokenizerType.tekken
@@ -1816,7 +1800,7 @@ class MistralCommonBackend(PushToHubMixin):
         ):
             raise ValueError(f"Some kwargs in {kwargs} are not supported by `MistralCommonBackend.from_pretrained`.")
 
-        mode = _get_validation_mode(mode)
+        mode = cls._get_validation_mode(mode)
 
         if not os.path.isdir(pretrained_model_name_or_path):
             tokenizer_path = download_tokenizer_from_hf_hub(
@@ -1928,3 +1912,21 @@ class MistralCommonBackend(PushToHubMixin):
             )
 
         return (str(save_directory / self._tokenizer_path.name),)
+
+    @staticmethod
+    def _get_validation_mode(mode: Union[str, ValidationMode]) -> ValidationMode:
+        """Get the validation mode from a string or a ValidationMode."""
+        _invalid_mode_msg = (
+            f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are 'finetuning' or 'test'."
+        )
+        if isinstance(mode, str):
+            try:
+                mode = ValidationMode[mode]
+            except KeyError:
+                raise ValueError(_invalid_mode_msg)
+        elif not isinstance(mode, (str, ValidationMode)):
+            raise ValueError(_invalid_mode_msg)
+
+        if mode not in [ValidationMode.finetuning, ValidationMode.test]:
+            raise ValueError(_invalid_mode_msg)
+        return mode
