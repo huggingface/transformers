@@ -221,13 +221,9 @@ class T5Gemma2Config(PreTrainedConfig):
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to a hypothetical balanced Gemma3 encoder-decoder model.
     e.g. [google/t5gemma-2-270m-270m](https://huggingface.co/google/t5gemma-2-270m-270m)
-    ```python
-    >>> from transformers import T5Gemma2Config, T5Gemma2Model
-    >>> t5gemma2_config = T5Gemma2Config.from_pretrained("google/t5gemma-270m-270m")
-    >>> model = T5Gemma2Model(t5gemma2_config)
-    ```
     Configuration objects inherit from [PreTrainedConfig] and can be used to control the model outputs. Read the
     documentation from [PreTrainedConfig] for more information.
+
     Args:
         encoder (`Union[T5Gemma2ModuleConfig, dict]`, optional, *optional*):
             Configuration for the encoder.
@@ -258,6 +254,11 @@ class T5Gemma2Config(PreTrainedConfig):
             Vocabulary size of the T5Gemma2 model (the same as Gemma 3).
         kwargs (additional keyword arguments, optional, *optional*):
             Will be passed to the PreTrainedConfig base class.
+    ```python
+    >>> from transformers import T5Gemma2Config, T5Gemma2Model
+    >>> t5gemma2_config = T5Gemma2Config.from_pretrained("google/t5gemma-270m-270m")
+    >>> model = T5Gemma2Model(t5gemma2_config)
+    ```
     """
 
     model_type = "t5gemma2"
@@ -319,7 +320,8 @@ class T5Gemma2Config(PreTrainedConfig):
             encoder = T5Gemma2ModuleConfig()
             logger.info("encoder is None, using default T5Gemma2ModuleConfig encoder config.")
         else:
-            assert isinstance(encoder, T5Gemma2ModuleConfig), f"{type(encoder)} is not supported."
+            if not isinstance(encoder, T5Gemma2ModuleConfig):
+                raise ValueError(f"{type(encoder)} is not supported.")
 
         if isinstance(decoder, dict):
             decoder = T5Gemma2ModuleConfig(**decoder)
@@ -327,7 +329,8 @@ class T5Gemma2Config(PreTrainedConfig):
             decoder = copy.deepcopy(encoder)
             logger.info("decoder is None, using the same config as encoder.")
         else:
-            assert isinstance(decoder, T5Gemma2ModuleConfig), f"{type(decoder)} is not supported."
+            if not isinstance(decoder, T5Gemma2ModuleConfig):
+                raise ValueError(f"{type(decoder)} is not supported.")
 
         if isinstance(vision_config, dict):
             vision_config = SiglipVisionConfig(**vision_config)
@@ -335,12 +338,22 @@ class T5Gemma2Config(PreTrainedConfig):
             vision_config = SiglipVisionConfig()
             logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
         else:
-            assert isinstance(vision_config, SiglipVisionConfig), f"{type(vision_config)} is not supported."
+            if not isinstance(vision_config, SiglipVisionConfig):
+                raise ValueError(f"{type(vision_config)} is not supported.")
 
         if encoder.hidden_size != decoder.hidden_size:
             raise ValueError(
                 "Imbalanced encoder-decoder is not supported in T5Gemma2: "
                 f"encoder ({encoder.hidden_size}) vs decoder ({decoder.hidden_size})."
+            )
+
+        if not is_encoder_decoder:
+            raise ValueError("T5Gemma2Model only support encoder-decoder modeling.")
+
+        if encoder.vocab_size != decoder.vocab_size:
+            raise ValueError(
+                "Imbalanced encoder-decoder vocabulary size is not supported in T5Gemma2: "
+                f"encoder ({encoder.vocab_size}) vs decoder ({decoder.vocab_size})."
             )
 
         encoder = T5Gemma2ModuleConfig(**encoder.to_dict())
@@ -360,7 +373,7 @@ class T5Gemma2Config(PreTrainedConfig):
 
         self.vision_config = vision_config
 
-        for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
+        for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id", "use_cache"]:
             if special_token_key not in kwargs:
                 kwargs[special_token_key] = getattr(decoder, special_token_key)
 
@@ -373,7 +386,6 @@ class T5Gemma2Config(PreTrainedConfig):
         self.initializer_range = initializer_range
 
         self.is_encoder_decoder = is_encoder_decoder
-        self.use_cache = kwargs.get("use_cache", decoder.use_cache)
         self.dropout_rate = dropout_rate
         self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
