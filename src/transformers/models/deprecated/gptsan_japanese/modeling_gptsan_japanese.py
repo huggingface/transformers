@@ -22,7 +22,7 @@ from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
 from ....modeling_utils import PreTrainedModel
-from ....utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring
+from ....utils import DUMMY_INPUTS, DUMMY_MASK
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
 
 
@@ -635,7 +635,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
