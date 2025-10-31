@@ -683,6 +683,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
     txt_config = {
         "model_type": "glm4v_moe_text",
         "attention_bias": model_config.get("add_qkv_bias", True),
+        "use_qk_norm": model_config.get("use_qk_norm", False),
         "attention_dropout": 0.0,
         "pad_token_id": model_config.get("pad_token_id", 151329),
         "eos_token_id": model_config.get("eos_token_id", [151329, 151336, 151338]),
