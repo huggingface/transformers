@@ -166,10 +166,6 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="This test is broken on A10 multi runners for now")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 class Siglip2VisionModelTester:
     def __init__(
