@@ -319,35 +319,49 @@ def _test_model_dense_backward_pass_impl():
     
     torch.distributed.barrier()
 
-def _test_model_dense_generate_impl():
-    """Implementation of test_model_generate for distributed execution."""
+def _test_model_dense_forward_compile_impl(mode):
+    """Implementation for comparing TP and non-TP model outputs with torch.compile."""
     model_id = "JackFram/llama-68m"
-
-    int(os.environ["RANK"])
-    int(os.environ["WORLD_SIZE"])
-
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    torch.distributed.barrier()
-
-    model.forward = torch.compile(model.forward)
-
-    has_dtensor = 0
-    for name, parameter in model.named_parameters():
-        if isinstance(parameter.data, torch.distributed.tensor.DTensor):
-            has_dtensor = 1
-            break
-
-    assert has_dtensor == 1, "TP model must has DTensor"
-
+    
+    torch.manual_seed(0)
+    
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
     prompt = "Can I help"
+    inputs = tokenizer(prompt, return_tensors="pt")
+    
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    torch.distributed.barrier()
+    if mode == "eval":
+        model_tp.eval()
+    else:
+        model_tp.train()
+    
+    device = model_tp.device
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+    model = model.to(device)
 
-    inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-    outputs = model.generate(inputs, max_new_tokens=10, cache_implementation="static")
+    if mode == "eval":
+        model.eval()
+    else:
+        model.train()
+    
+    # Compile both models
+    model.forward = torch.compile(model.forward)
+    model_tp.forward = torch.compile(model_tp.forward)
+    
+    input_ids = inputs.input_ids.to(device)
+    
+    with torch.no_grad():
+        outputs = model(input_ids)
+        logits = outputs.logits
+        
+        outputs_tp = model_tp(input_ids)
+        logits_tp = outputs_tp.logits
 
-    output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-    assert output_text[0].startswith(prompt), f"Expected output to start with '{prompt}', got '{output_text[0]}'"
-
+    assert torch.allclose(
+        logits, logits_tp, atol=1e-5, rtol=1e-5
+    ), f"TP and non-TP model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
+    
     torch.distributed.barrier()
 
 
@@ -400,13 +414,24 @@ class TestTensorParallelBase(TestCasePlus):
         init_distributed(tp=self.nproc_per_node)(_test_model_dense_backward_pass_impl)()
 
     @require_torch_multi_accelerator
-    def test_model_dense_generate(self):
+    def test_model_dense_forward_compile_eval(self):
+        """Test that TP and non-TP models produce the same outputs with torch.compile in eval mode."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_generate_impl)()
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("eval")
+
+    @require_torch_multi_accelerator
+    def test_model_dense_forward_compile_train(self):
+        """Test that TP and non-TP models produce the same outputs with torch.compile in train mode."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("train")
 
     @require_huggingface_hub_greater_or_equal("0.31.4")
     @require_torch_multi_accelerator
