@@ -85,6 +85,10 @@ class SiglipModelTesterMixin(ModelTesterMixin):
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_eager.config._attn_implementation == "eager")
 
+    @unittest.skip(reason="This test is broken on A10 multi runners for now")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
 
 class SiglipVisionModelTester:
     def __init__(
