@@ -33,7 +33,7 @@ from typing import Any, Optional, Union
 import torch
 from torch.distributed.tensor import DTensor
 
-from .integrations.finegrained_fp8 import Fp8Quantize
+
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
 from .utils import logging
 
@@ -319,7 +319,7 @@ class WeightConverter:
             else:
                 self.target_keys = [self.target_keys]
 
-        if (len(self.source_keys) - 1 + len(self.target_keys) - 1) < 2:
+        if bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
             raise ValueError(
                 f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
             )
@@ -535,6 +535,7 @@ def convert_and_load_state_dict_in_model(
                 and quantizer.param_needs_quantization(model, t)
                 and quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer"
             ):
+                from .integrations.finegrained_fp8 import Fp8Quantize
                 converter.quantization_operation = Fp8Quantize()  # TODO support other methods
             else:
                 raise ValueError("This quantization method is gonna be supported SOOOON")
