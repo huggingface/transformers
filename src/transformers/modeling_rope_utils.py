@@ -13,11 +13,18 @@
 # limitations under the License.
 
 import math
+import sys
 from functools import wraps
 from typing import Optional, TypedDict
 
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_available, logging
+
+
+if sys.version_info >= (3, 11):
+    from typing import Required
+else:
+    from typing_extensions import Required
 
 
 logger = logging.get_logger(__name__)
@@ -885,14 +892,16 @@ def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] 
             )
 
 
-class RopeParameters(TypedDict):
+class RopeParameters(TypedDict, total=False):
     """
     Args:
         rope_theta (`float`):
             The base period of the RoPE embeddings.
-        rope_type (`str`, *optional*, defaults to "default"):
+        rope_type (`str`):
             The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-            'llama3'], with 'default' being the original RoPE implementation.
+            'llama3'], with 'default' being the original RoPE implementation. This value will be "default" if
+            constructed by `standardize_rope_params()` from a legacy config without a `rope_parameters` or
+            `rope_scaling` field that specifies this value.
         factor (`float`, *optional*):
             Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
             most scaling types, a `factor` of x will enable the model to handle sequences of length x *
@@ -924,8 +933,8 @@ class RopeParameters(TypedDict):
             Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
     """
 
-    rope_theta: float
-    rope_type: Optional[str]
+    rope_theta: Required[float]
+    rope_type: Required[str]
     factor: Optional[float]
     original_max_position_embeddings: Optional[int]
     attention_factor: Optional[float]
