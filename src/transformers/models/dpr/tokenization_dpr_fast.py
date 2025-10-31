@@ -19,7 +19,7 @@ from typing import Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
-from ..bert.tokenization_bert_fast import BertTokenizerFast
+from ..bert.tokenization_bert import BertTokenizer
 from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
 
 
