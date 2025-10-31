@@ -23,6 +23,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     slow,
@@ -297,9 +298,15 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [
-            "What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He acknowledges the diverse perspectives and conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He expresses optimism about the country's future and looks forward to continuing his work as a citizen. The audio concludes with a heartfelt thank you and a blessing for the United States."
-        ]
+        # fmt: off
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                (None, None): ["What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He acknowledges the diverse perspectives and conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He expresses optimism about the country's future and looks forward to continuing his work as a citizen. The audio concludes with a heartfelt thank you and a blessing for the United States."],
+                ("xpu", None): ["What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He emphasizes the importance of self-government and active citizenship, encouraging listeners to engage in their communities and participate in democracy. The president expresses his optimism about the country's future and his commitment to continuing to serve as a citizen. He concludes the speech with a heartfelt thank you and a blessing for the United States."],
+            }
+        )
+        # fmt: on
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
