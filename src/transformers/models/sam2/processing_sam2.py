@@ -52,9 +52,6 @@ class Sam2Processor(ProcessorMixin):
             The value used for padding input points.
     """
 
-    attributes = ["image_processor"]
-    image_processor_class = "Sam2ImageProcessorFast"
-
     def __init__(self, image_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs):
         super().__init__(image_processor, **kwargs)
         self.point_pad_value = point_pad_value
