@@ -20,8 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_led import *
     from .modeling_led import *
-    from .tokenization_led import *
-    from .tokenization_led_fast import *
+    from ..roberta.tokenization_roberta import RobertaTokenizer as LEDTokenizer
 else:
     import sys
 

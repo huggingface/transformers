@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_electra import *
     from .modeling_electra import *
-    from .tokenization_electra import *
+    from ..bert.tokenization_bert import BertTokenizer as ElectraTokenizer
 else:
     import sys
 

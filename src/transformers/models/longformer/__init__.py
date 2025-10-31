@@ -20,8 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_longformer import *
     from .modeling_longformer import *
-    from .tokenization_longformer import *
-    from .tokenization_longformer_fast import *
+    from ..roberta.tokenization_roberta import RobertaTokenizer as LongformerTokenizer
 else:
     import sys
 

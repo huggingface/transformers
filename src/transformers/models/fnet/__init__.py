@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_fnet import *
     from .modeling_fnet import *
-    from .tokenization_fnet import *
-    from .tokenization_fnet_fast import *
+    from ..albert.tokenization_albert import AlbertTokenizer as FNetTokenizer
+    from ..albert.tokenization_albert import AlbertTokenizer as FNetTokenizerFast
 else:
     import sys
 

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_distilbert import *
     from .modeling_distilbert import *
     from .tokenization_distilbert import *
-    from .tokenization_distilbert_fast import *
+    from ..bert.tokenization_bert import BertTokenizer as DistilBertTokenizerFast
 else:
     import sys
 

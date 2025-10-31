@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_layoutlm import *
     from .modeling_layoutlm import *
-    from .tokenization_layoutlm import *
-    from .tokenization_layoutlm_fast import *
+    from ..bert.tokenization_bert import BertTokenizer as LayoutLMTokenizer
+    from ..bert.tokenization_bert import BertTokenizer as LayoutLMTokenizerFast
 else:
     import sys
 

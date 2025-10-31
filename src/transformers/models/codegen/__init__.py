@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_codegen import *
     from .modeling_codegen import *
     from .tokenization_codegen import *
+    from ..gpt2.tokenization_gpt2 import GPT2Tokenizer as CodeGenTokenizerFast
 else:
     import sys
 

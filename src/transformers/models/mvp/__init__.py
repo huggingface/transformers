@@ -20,8 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_mvp import *
     from .modeling_mvp import *
-    from .tokenization_mvp import *
-    from .tokenization_mvp_fast import *
+    from ..roberta.tokenization_roberta import RobertaTokenizer as MvpTokenizer
 else:
     import sys
 
