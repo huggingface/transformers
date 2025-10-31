@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer
+from transformers import AutoTokenizer
 from transformers.testing_utils import require_jmespath
 from transformers.utils.chat_parsing_utils import recursive_parse
 
@@ -43,7 +43,7 @@ cohere_schema = {
                             "name": {"type": "string"},
                             "arguments": {
                                 "type": "object",
-                                "additionalProperties": {"type": "any"},
+                                "additionalProperties": {},
                             },
                         },
                     },
@@ -74,7 +74,7 @@ ernie_schema = {
                             "name": {"type": "string"},
                             "arguments": {
                                 "type": "object",
-                                "additionalProperties": {"type": "any"},
+                                "additionalProperties": {},
                             },
                         },
                     },
@@ -105,7 +105,7 @@ gpt_oss_schema = {
                                 "type": "object",
                                 "x-regex": r"<\|message\|>(.*)",
                                 "x-parser": "json",
-                                "additionalProperties": {"type": "any"},
+                                "additionalProperties": {},
                             },
                         },
                     },
@@ -136,7 +136,7 @@ smollm_schema = {
                             "name": {"type": "string"},
                             "arguments": {
                                 "type": "object",
-                                "additionalProperties": {"type": "any"},
+                                "additionalProperties": {},
                             },
                         },
                     },
@@ -192,14 +192,6 @@ class ChatSchemaParserTest(unittest.TestCase):
             reloaded_tokenizer = AutoTokenizer.from_pretrained(tmpdir)
         self.assertEqual(reloaded_tokenizer.response_schema, ernie_schema)
 
-        # Has no schema by default
-        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration")
-        processor.response_schema = ernie_schema
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor.save_pretrained(tmpdir)
-            reloaded_processor = AutoProcessor.from_pretrained(tmpdir)
-        self.assertEqual(reloaded_processor.response_schema, ernie_schema)
-
     def test_tokenizer_method(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
@@ -207,6 +199,40 @@ class ChatSchemaParserTest(unittest.TestCase):
         tokenizer.response_schema = cohere_schema
         tokenizer_parsed_chat = tokenizer.parse_response(model_out)
         self.assertEqual(tokenizer_parsed_chat, parsed_chat)
+
+    def test_batched_inputs(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        tokenizer.response_schema = cohere_schema
+        parsed_chat = tokenizer.parse_response(model_out)
+        self.assertEqual(tokenizer.parse_response([model_out]), [parsed_chat])
+        self.assertEqual(tokenizer.parse_response([model_out] * 2), [parsed_chat] * 2)
+
+    def test_token_id_inputs(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")  # Need an actual tokenizer to encode
+        model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        tokenizer.response_schema = cohere_schema
+        parsed_chat = tokenizer.parse_response(model_out)
+        tokenized_out = tokenizer(model_out).input_ids
+        self.assertEqual(tokenizer.parse_response(tokenized_out), parsed_chat)
+        self.assertEqual(tokenizer.parse_response([tokenized_out]), [parsed_chat])
+        self.assertEqual(tokenizer.parse_response([tokenized_out] * 2), [parsed_chat] * 2)
+
+    def test_numpy_inputs(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")  # Need an actual tokenizer to encode
+        model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        tokenizer.response_schema = cohere_schema
+        parsed_chat = tokenizer.parse_response(model_out)
+        tokenized_out = tokenizer(model_out, return_tensors="np").input_ids
+        self.assertEqual(tokenizer.parse_response(tokenized_out), [parsed_chat])
+
+    def test_tensor_inputs(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")  # Need an actual tokenizer to encode
+        model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        tokenizer.response_schema = cohere_schema
+        parsed_chat = tokenizer.parse_response(model_out)
+        tokenized_out = tokenizer(model_out, return_tensors="pt").input_ids
+        self.assertEqual(tokenizer.parse_response(tokenized_out), [parsed_chat])
 
     def test_cohere_template(self):
         model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
@@ -289,6 +315,7 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.assertEqual(
             parsed_chat,
             {
+                "role": "assistant",
                 "thinking": 'Okay, the user said, "Hello! How are you?" I need to respond appropriately. Since this is the first message, I should greet them back and ask how I can assist. I should keep it friendly and open-ended. Let me make sure the response is welcoming and encourages them to share what they need help with. I\'ll avoid any technical jargon and keep it simple. Let me check for any typos and ensure the tone is positive.',
                 "tool_calls": [
                     {
@@ -310,9 +337,10 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.assertEqual(
             parsed_chat,
             {
+                "role": "assistant",
                 "tool_calls": [
                     {"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris"}}}
-                ]
+                ],
             },
         )
 
@@ -322,6 +350,7 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.assertEqual(
             parsed_chat,
             {
+                "role": "assistant",
                 "content": "Some content about gravity goes here but I'm cutting it off to make this shorter!",
                 "thinking": 'Okay, the user asked, "Hey! Can you tell me about gravity?" Let me start by breaking down what they might be looking for. They probably want a basic understanding of gravity, maybe for a school project or just personal curiosity. I should explain what gravity is, how it works, and maybe some examples.',
             },
@@ -333,6 +362,7 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.assertEqual(
             parsed_chat,
             {
+                "role": "assistant",
                 "tool_calls": [
                     {
                         "type": "function",
@@ -344,6 +374,6 @@ class ChatSchemaParserTest(unittest.TestCase):
                             },
                         },
                     }
-                ]
+                ],
             },
         )

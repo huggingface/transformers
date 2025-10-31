@@ -38,6 +38,10 @@ on:
         default: ""
         required: false
         type: string
+      pytest_marker:
+        required: false
+        type: string
+
 
 env:
   HF_HOME: /mnt/cache
@@ -127,6 +131,7 @@ jobs:
       commit_sha: ${{ inputs.commit_sha || github.sha }}
       runner_type: ${{ inputs.runner_type }}
       report_repo_id: ${{ inputs.report_repo_id }}
+      pytest_marker: ${{ inputs.pytest_marker }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
@@ -160,7 +165,7 @@ jobs:
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
-      image: huggingface/transformers-pytorch-gpu
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
