@@ -17,6 +17,7 @@ import gc
 import io
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import torch
@@ -24,7 +25,7 @@ import torch
 from transformers.image_utils import load_image
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import require_mistral_common
-from transformers.tokenization_mistral_common import MistralCommonBackend
+from transformers.tokenization_mistral_common import MistralCommonBackend, _get_validation_mode
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils import PaddingStrategy, is_mistral_common_available
 
@@ -33,6 +34,9 @@ if is_mistral_common_available():
     import mistral_common.tokens.tokenizers
     from mistral_common.exceptions import InvalidMessageStructureException
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
+    from mistral_common.protocol.instruct.validator import (
+        ValidationMode,
+    )
     from mistral_common.protocol.transcription.request import TranscriptionRequest
     from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
@@ -206,7 +210,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         # Test 1:
         # encode with add_special_tokens
-        expected_with_special = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=True, eos=True)
+        expected_with_special = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=True, eos=False)
         tokens_with_special = self.tokenizer.encode(string, add_special_tokens=True)
         self.assertEqual(tokens_with_special, expected_with_special)
 
@@ -215,6 +219,13 @@ class TestMistralCommonBackend(unittest.TestCase):
         expected_without_special = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=False, eos=False)
         tokens_without_special = self.tokenizer.encode(string, add_special_tokens=False)
         self.assertEqual(tokens_without_special, expected_without_special)
+
+        # Test 3:
+        # encode with add_special_tokens and mode finetuning
+        expected_with_special_ft = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=True, eos=True)
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            tokens_with_special_ft = self.tokenizer.encode(string, add_special_tokens=True)
+        self.assertEqual(tokens_with_special_ft, expected_with_special_ft)
 
         # Test 3:
         # encode with return_tensors
@@ -1473,7 +1484,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         # Test 1:
         # default case
         text = "Hello world!"
-        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=True)
+        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=False)
         tokens = self.tokenizer(text)
         self.assertIsInstance(tokens, BatchEncoding)
         self.assertEqual(tokens["input_ids"], expected_tokens)
@@ -1498,7 +1509,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         tokens = self.tokenizer(text, return_special_tokens_mask=True)
         self.assertEqual(tokens["input_ids"], expected_tokens)
         self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
-        self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1])
+        self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 5:
         # add_special_tokens=False
@@ -1508,6 +1519,17 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(tokens["input_ids"], expected_tokens)
         self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
         self.assertEqual(tokens["special_tokens_mask"], [0] * len(expected_tokens))
+
+        # Test 6:
+        # add_special_tokens=False and mode finetuning
+        text = "Hello world!"
+        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=True)
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            tokens = self.tokenizer(text, return_special_tokens_mask=True)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], expected_tokens)
+        self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
+        self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1])
 
         with self.assertRaises(
             ValueError, msg="Kwargs [wrong_kwarg] are not supported by `MistralCommonBackend.__call__`."
@@ -1534,7 +1556,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         # Test 1:
         # truncation=True or "longest_first" or TruncationStrategy.LONGEST_FIRST
         text = "Hello world!" * 10
-        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=True)
+        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=False)
 
         for truncation in [True, "longest_first", TruncationStrategy.LONGEST_FIRST]:
             tokens = self.tokenizer(text, truncation=True, max_length=10, return_special_tokens_mask=True)
@@ -1550,7 +1572,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.assertIsInstance(tokens, BatchEncoding)
             self.assertEqual(tokens["input_ids"], expected_tokens)
             self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
-            self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1])
+            self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 3:
         # truncation=True or "longest_first" or TruncationStrategy.LONGEST_FIRST with return_overflowing_tokens=True and stride
@@ -1583,7 +1605,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
     def test_call_with_padding(self):
         text = "Hello world!"
-        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=True)
+        expected_tokens = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=True, eos=False)
 
         # Test 1:
         # padding=False or padding=True or "do_not_pad" or PaddingStrategy.DO_NOT_PAD or padding="longest" or PaddingStrategy.LONGEST
@@ -1592,7 +1614,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.assertIsInstance(tokens, BatchEncoding)
             self.assertEqual(tokens["input_ids"], expected_tokens)
             self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
-            self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1])
+            self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 2:
         # padding="max_length" or PaddingStrategy.MAX_LENGTH
@@ -1602,9 +1624,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             num_padding = 20 - len(expected_tokens)
             self.assertEqual(tokens["input_ids"], num_padding * [self.tokenizer.pad_token_id] + expected_tokens)
             self.assertEqual(tokens["attention_mask"], num_padding * [0] + [1] * len(expected_tokens))
-            self.assertEqual(
-                tokens["special_tokens_mask"], num_padding * [1] + [1] + [0] * (len(expected_tokens) - 2) + [1]
-            )
+            self.assertEqual(tokens["special_tokens_mask"], num_padding * [1] + [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 3:
         # pad_to_multiple_of
@@ -1615,9 +1635,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         num_padding = 16 - len(expected_tokens)
         self.assertEqual(tokens["input_ids"], num_padding * [self.tokenizer.pad_token_id] + expected_tokens)
         self.assertEqual(tokens["attention_mask"], num_padding * [0] + [1] * len(expected_tokens))
-        self.assertEqual(
-            tokens["special_tokens_mask"], num_padding * [1] + [1] + [0] * (len(expected_tokens) - 2) + [1]
-        )
+        self.assertEqual(tokens["special_tokens_mask"], num_padding * [1] + [1] + [0] * (len(expected_tokens) - 1))
 
         # Test 4:
         # padding="max_length" and padding_side="right"
@@ -1628,15 +1646,15 @@ class TestMistralCommonBackend(unittest.TestCase):
         num_padding = 20 - len(expected_tokens)
         self.assertEqual(tokens["input_ids"], expected_tokens + num_padding * [self.tokenizer.pad_token_id])
         self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens) + num_padding * [0])
-        self.assertEqual(
-            tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1] + num_padding * [1]
-        )
+        self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 1) + num_padding * [1])
 
     def test_batch_call(self):
         # Test 1:
         # default case
         text = ["Hello world!", "Hello world! Longer"]
-        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=False) for t in text
+        ]
         tokens = self.tokenizer(text)
         self.assertIsInstance(tokens, BatchEncoding)
         self.assertEqual(tokens["input_ids"], expected_tokens)
@@ -1682,15 +1700,12 @@ class TestMistralCommonBackend(unittest.TestCase):
                 torch.Tensor(
                     (len(expected_tokens[1]) - len(expected_tokens[0])) * [1]
                     + [1]
-                    + [0] * (len(expected_tokens[0]) - 2)
-                    + [1]
+                    + [0] * (len(expected_tokens[0]) - 1)
                 ),
             )
         )
         self.assertTrue(
-            torch.equal(
-                tokens["special_tokens_mask"][1], torch.Tensor([1] + [0] * (len(expected_tokens[1]) - 2) + [1])
-            )
+            torch.equal(tokens["special_tokens_mask"][1], torch.Tensor([1] + [0] * (len(expected_tokens[1]) - 1)))
         )
 
         # Test 4:
@@ -1704,11 +1719,25 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(tokens["attention_mask"], [[1] * len(t) for t in expected_tokens])
         self.assertEqual(tokens["special_tokens_mask"], [[0] * len(t) for t in expected_tokens])
 
+        # Test 5:
+        # add_special_tokens=True and mode = finetuning
+        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            tokens = self.tokenizer(text, add_special_tokens=True, return_special_tokens_mask=True)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], expected_tokens)
+        self.assertEqual(
+            tokens["special_tokens_mask"],
+            [[1] + [0] * (len(expected_tokens[0]) - 2) + [1], [1] + [0] * (len(expected_tokens[1]) - 2) + [1]],
+        )
+
     def test_batch_call_with_truncation(self):
         # Test 1:
         # truncation=True
         text = ["Hello world!", "Hello world! Longer" * 10]
-        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=False) for t in text
+        ]
 
         for truncation in [True, "longest_first", TruncationStrategy.LONGEST_FIRST]:
             tokens = self.tokenizer(text, truncation=True, max_length=10, return_special_tokens_mask=True)
@@ -1729,7 +1758,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.assertEqual(tokens["attention_mask"], [[1] * len(t) for t in expected_tokens])
             self.assertEqual(
                 tokens["special_tokens_mask"],
-                [[1] + [0] * (len(t) - 2) + [1] for t in expected_tokens],
+                [[1] + [0] * (len(t) - 1) for t in expected_tokens],
             )
 
         # Test 3:
@@ -1764,7 +1793,9 @@ class TestMistralCommonBackend(unittest.TestCase):
         # Test 1:
         # padding=False or padding=True or "do_not_pad" or PaddingStrategy.DO_NOT_PAD or padding="longest" or PaddingStrategy.LONGEST
         text = ["Hello world!", "Hello world! Longer"]
-        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=False) for t in text
+        ]
         for padding in [False, "do_not_pad", PaddingStrategy.DO_NOT_PAD]:
             tokens = self.tokenizer(text, padding=padding, return_special_tokens_mask=True)
             self.assertIsInstance(tokens, BatchEncoding)
@@ -1772,7 +1803,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.assertEqual(tokens["attention_mask"], [[1] * len(t) for t in expected_tokens])
             self.assertEqual(
                 tokens["special_tokens_mask"],
-                [[1] + [0] * (len(t) - 2) + [1] for t in expected_tokens],
+                [[1] + [0] * (len(t) - 1) for t in expected_tokens],
             )
 
         # Test 2:
@@ -1798,8 +1829,8 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.assertEqual(
                 tokens["special_tokens_mask"],
                 [
-                    num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 2) + [1],
-                    num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 2) + [1],
+                    num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 1),
+                    num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 1),
                 ],
             )
 
@@ -1826,8 +1857,8 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.assertEqual(
                 tokens["special_tokens_mask"],
                 [
-                    num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 2) + [1],
-                    num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 2) + [1],
+                    num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 1),
+                    num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 1),
                 ],
             )
 
@@ -1855,8 +1886,8 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(
             tokens["special_tokens_mask"],
             [
-                num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 2) + [1],
-                num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 2) + [1],
+                num_padding[0] * [1] + [1] + [0] * (len(expected_tokens[0]) - 1),
+                num_padding[1] * [1] + [1] + [0] * (len(expected_tokens[1]) - 1),
             ],
         )
 
@@ -1885,8 +1916,8 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.assertEqual(
                 tokens["special_tokens_mask"],
                 [
-                    [1] + [0] * (len(expected_tokens[0]) - 2) + [1] + num_padding[0] * [1],
-                    [1] + [0] * (len(expected_tokens[1]) - 2) + [1] + num_padding[1] * [1],
+                    [1] + [0] * (len(expected_tokens[0]) - 1) + num_padding[0] * [1],
+                    [1] + [0] * (len(expected_tokens[1]) - 1) + num_padding[1] * [1],
                 ],
             )
 
@@ -1896,7 +1927,9 @@ class TestMistralCommonBackend(unittest.TestCase):
         # and truncation=True or "longest_first" or TruncationStrategy.LONGEST_FIRST
         # and max_length
         text = ["Hello world!", "Hello world! Longer" * 10]
-        expected_tokens = [self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=True) for t in text]
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=True, eos=False) for t in text
+        ]
         for padding in [True, "longest", PaddingStrategy.LONGEST, "max_length", PaddingStrategy.MAX_LENGTH]:
             for truncation in [True, "longest_first", TruncationStrategy.LONGEST_FIRST]:
                 tokens = self.tokenizer(
@@ -1956,3 +1989,16 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.assertEqual(
                 self.ref_tokenizer.decode([id_token], special_token_policy=SpecialTokenPolicy.KEEP), token
             )
+
+    def test_get_validation_mode(self):
+        for mode, expected in [
+            ("test", ValidationMode.test),
+            (ValidationMode.test, ValidationMode.test),
+            ("finetuning", ValidationMode.finetuning),
+            (ValidationMode.finetuning, ValidationMode.finetuning),
+        ]:
+            self.assertEqual(_get_validation_mode(mode), expected)
+
+        for invalid_mode in [("serving", ValidationMode.serving, "invalid", 1)]:
+            with self.assertRaises(ValueError):
+                _get_validation_mode(invalid_mode)
