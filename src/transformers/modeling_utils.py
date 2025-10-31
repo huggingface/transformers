@@ -3722,7 +3722,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough. # TODO: we should def parallelize this we are otherwise just waiting
-                # too much before scheduling the next write when its on a different
+                # too much before scheduling the next write when its in a different file
                 safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
@@ -4628,7 +4628,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
                     )
                     all_pointer.add(file_pointer)
-                    merged_state_dict[k] = (v, file_pointer.get_slice(k))  # don't meterialize yet
+                    merged_state_dict[k] = (v, file_pointer.get_slice(k))  # don't materialize yet
             elif state_dict is not None:
                 merged_state_dict = {k: ("", v) for k, v in state_dict.items()}
             else:
