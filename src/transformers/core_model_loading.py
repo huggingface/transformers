@@ -391,6 +391,7 @@ def log_to_misc(
     try:
         yield
     except Exception as e:
+
         def _format_op_name(curr_op: Union[list[ConversionOps], ConversionOps, None]) -> Optional[str]:
             if curr_op is None:
                 return None
@@ -481,8 +482,9 @@ def convert_and_load_state_dict_in_model(
     missing_keys = set(meta_model_state_dict.keys())
 
     # TODO: tricky part here!
-    if model.config.tie_word_embeddings and "lm_head.weight" in missing_keys:
-        missing_keys.remove("lm_head.weight")
+    if model.config.tie_word_embeddings:
+        for k in model._tied_weights_keys:
+            missing_keys.discard(k)
 
     misc = {}
     mismatch_keys = set()
@@ -584,7 +586,7 @@ def convert_and_load_state_dict_in_model(
                             values = op.convert(values)
 
                     values = [values] if not isinstance(values, list) else values
-                    with log_to_misc(layer_name, misc,(values, concrete_target_keys), operations):
+                    with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
                         realized_value = {
                             k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys
                         }
