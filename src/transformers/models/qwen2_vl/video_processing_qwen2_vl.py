@@ -41,14 +41,14 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_qwen2_vl import smart_resize
 
 
-class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    min_frames: Optional[int]
-    max_frames: Optional[int]
+class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
 
 
 @add_start_docstrings(
@@ -162,7 +162,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 )
             max_frames = math.floor(min(max_frames, total_num_frames) / temporal_patch_size) * temporal_patch_size
             num_frames = total_num_frames / metadata.fps * fps
-            num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
+            num_frames = min(max(num_frames, min_frames), max_frames, total_num_frames)
             num_frames = math.floor(num_frames / temporal_patch_size) * temporal_patch_size
 
         if num_frames > total_num_frames:

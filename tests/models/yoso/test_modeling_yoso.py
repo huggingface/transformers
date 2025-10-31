@@ -259,8 +259,6 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_pruning = False
-    test_torchscript = False
 
     pipeline_model_mapping = (
         {

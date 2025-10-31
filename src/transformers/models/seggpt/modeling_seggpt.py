@@ -591,6 +591,7 @@ class SegGptPreTrainedModel(PreTrainedModel):
     config: SegGptConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SegGptEmbeddings", "SegGptLayer"]
 
@@ -649,14 +650,6 @@ class SegGptModel(SegGptPreTrainedModel):
 
     def get_input_embeddings(self) -> SegGptPatchEmbeddings:
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(

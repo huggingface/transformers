@@ -142,7 +142,7 @@ class CsmModelTester:
 
 class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     test_resize_embeddings_untied = False
 
@@ -263,10 +263,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
 
     @pytest.mark.skip(reason="CSM has custom embedding approach (text and audio embeddings).")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @pytest.mark.skip(reason="CSM has custom embedding approach (text and audio embeddings).")
-    def test_tie_model_weights(self):
         pass
 
     @pytest.mark.generate

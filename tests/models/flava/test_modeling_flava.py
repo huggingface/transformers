@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch FLAVA model."""
 
 import inspect
-import os
 import random
 import tempfile
 import unittest
@@ -35,7 +34,6 @@ from transformers.utils import is_torch_available, is_vision_available
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -163,8 +161,6 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (FlavaImageModel,) if is_torch_available() else ()
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
 
     def setUp(self):
@@ -432,8 +428,6 @@ class FlavaTextModelTester:
 @require_torch
 class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaTextModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = FlavaTextModelTester(self)
@@ -569,9 +563,8 @@ class FlavaMultimodalModelTester:
 @require_torch
 class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaMultimodalModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = FlavaMultimodalModelTester(self)
@@ -683,9 +676,8 @@ class FlavaImageCodebookTester:
 @require_torch
 class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaImageCodebook,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_torchscript = False
     has_attentions = False
 
     def setUp(self):
@@ -815,11 +807,11 @@ class FlavaModelTester:
         }
 
     def get_config(self):
-        return FlavaConfig.from_configs(
-            self.image_model_tester.get_config(),
-            self.text_model_tester.get_config(),
-            self.multimodal_model_tester.get_config(),
-            self.image_codebook_tester.get_config(),
+        return FlavaConfig(
+            image_config=self.image_model_tester.get_config(),
+            text_config=self.text_model_tester.get_config(),
+            multimodal_config=self.multimodal_model_tester.get_config(),
+            image_codebook_config=self.image_codebook_tester.get_config(),
             hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
             initializer_range=self.initializer_range,
@@ -883,7 +875,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": FlavaModel} if is_torch_available() else {}
     class_for_tester = FlavaModelTester
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
 
@@ -916,87 +908,6 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="FlavaModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        configs_no_init.return_loss = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # FLAVA needs pixel_values
-
-                if "input_ids_masked" in inputs_dict:
-                    # For pretraining
-                    inputs = (input_ids, inputs_dict["input_ids_masked"], pixel_values)
-                else:
-                    inputs = (input_ids, pixel_values)
-
-                traced_model = torch.jit.trace(model, inputs)
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-            # Non persistent buffers won't be in original state dict
-            loaded_model_state_dict.pop("text_model.embeddings.token_type_ids", None)
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
 
     def test_load_image_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1178,7 +1089,6 @@ class FlavaForPreTrainingTester(FlavaModelTester):
 class FlavaForPreTrainingTest(FlavaModelTest):
     all_model_classes = (FlavaForPreTraining,) if is_torch_available() else ()
     class_for_tester = FlavaForPreTrainingTester
-    test_torchscript = False
 
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

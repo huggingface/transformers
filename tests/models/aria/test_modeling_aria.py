@@ -190,8 +190,7 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     """
 
     all_model_classes = (AriaModel, AriaForConditionalGeneration) if is_torch_available() else ()
-    test_pruning = False
-    test_torchscript = False
+
     _is_composite = True
 
     def setUp(self):
@@ -521,7 +520,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
         )
         processor = AutoProcessor.from_pretrained(model_id)
-        assert model.device.type == "cuda", "This test is only supported on CUDA"  # TODO: remove this
         # Prepare inputs with no images
         inputs = processor(text="Hello, I am", return_tensors="pt").to(torch_device)
 

@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.57.0.dev0"
+__version__ = "5.0.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -58,7 +58,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # Base objects, independent of any specific backend
 _import_structure = {
     "audio_utils": [],
-    "commands": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
@@ -123,7 +122,6 @@ _import_structure = {
         "is_optuna_available",
         "is_ray_available",
         "is_ray_tune_available",
-        "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
         "is_trackio_available",
@@ -131,8 +129,6 @@ _import_structure = {
     ],
     "loss": [],
     "modelcard": ["ModelCard"],
-    # Models
-    "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
@@ -265,6 +261,7 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+    "utils.kernel_config": ["KernelConfig"],
 }
 
 # tokenizers-backed objects
@@ -355,21 +352,21 @@ else:
         "DynamicLayer",
         "StaticLayer",
         "StaticSlidingWindowLayer",
-        "SlidingWindowLayer",
-        "ChunkedSlidingLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
-        "Cache",
-        "DynamicCache",
-        "EncoderDecoderCache",
+        "SlidingWindowLayer",
+        "ChunkedSlidingLayer",
         "HQQQuantizedCache",
         "HybridCache",
         "HybridChunkedCache",
         "OffloadedCache",
         "OffloadedStaticCache",
-        "QuantizedCache",
         "QuantoQuantizedCache",
         "SlidingWindowCache",
+        "Cache",
+        "DynamicCache",
+        "EncoderDecoderCache",
+        "QuantizedCache",
         "StaticCache",
     ]
     _import_structure["data.datasets"] = [
@@ -421,6 +418,7 @@ else:
             "SynthIDTextWatermarkingConfig",
             "SynthIDTextWatermarkLogitsProcessor",
             "TemperatureLogitsWarper",
+            "TopHLogitsWarper",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
@@ -440,7 +438,7 @@ else:
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update", "RopeParameters"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
     _import_structure["optimization"] = [
@@ -458,12 +456,7 @@ else:
         "get_wsd_schedule",
         "get_reduce_on_plateau_schedule",
     ]
-    _import_structure["pytorch_utils"] = [
-        "Conv1D",
-        "apply_chunking_to_forward",
-        "prune_layer",
-        "infer_device",
-    ]
+    _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward"]
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -586,6 +579,7 @@ if TYPE_CHECKING:
     from .generation import TemperatureLogitsWarper as TemperatureLogitsWarper
     from .generation import TextIteratorStreamer as TextIteratorStreamer
     from .generation import TextStreamer as TextStreamer
+    from .generation import TopHLogitsWarper as TopHLogitsWarper
     from .generation import TopKLogitsWarper as TopKLogitsWarper
     from .generation import TopPLogitsWarper as TopPLogitsWarper
     from .generation import TypicalLogitsWarper as TypicalLogitsWarper
@@ -610,7 +604,6 @@ if TYPE_CHECKING:
     from .integrations import is_optuna_available as is_optuna_available
     from .integrations import is_ray_available as is_ray_available
     from .integrations import is_ray_tune_available as is_ray_tune_available
-    from .integrations import is_sigopt_available as is_sigopt_available
     from .integrations import is_swanlab_available as is_swanlab_available
     from .integrations import is_tensorboard_available as is_tensorboard_available
     from .integrations import is_trackio_available as is_trackio_available
@@ -624,6 +617,7 @@ if TYPE_CHECKING:
     from .modelcard import ModelCard as ModelCard
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
+    from .modeling_rope_utils import RopeParameters as RopeParameters
     from .modeling_rope_utils import dynamic_rope_update as dynamic_rope_update
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
@@ -692,7 +686,6 @@ if TYPE_CHECKING:
     from .processing_utils import ProcessorMixin as ProcessorMixin
     from .pytorch_utils import Conv1D as Conv1D
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
-    from .pytorch_utils import prune_layer as prune_layer
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
@@ -706,8 +699,6 @@ if TYPE_CHECKING:
 
     # Trainer
     from .trainer import Trainer as Trainer
-
-    # Trainer
     from .trainer_callback import DefaultFlowCallback as DefaultFlowCallback
     from .trainer_callback import EarlyStoppingCallback as EarlyStoppingCallback
     from .trainer_callback import PrinterCallback as PrinterCallback
@@ -754,8 +745,9 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
+    from .utils.kernel_config import KernelConfig as KernelConfig
 
-    # bitsandbytes config
+    # Quantization config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
     from .utils.quantization_config import AutoRoundConfig as AutoRoundConfig
     from .utils.quantization_config import AwqConfig as AwqConfig
@@ -775,7 +767,6 @@ if TYPE_CHECKING:
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
-
 else:
     import sys
 

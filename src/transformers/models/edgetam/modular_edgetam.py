@@ -107,8 +107,6 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         backbone_channel_list = [384, 192, 96, 48] if backbone_channel_list is None else backbone_channel_list
         backbone_feature_sizes = (
             [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
@@ -118,8 +116,6 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = backbone_config.get("model_type", "timm_wrapper")
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
-        elif isinstance(backbone_config, AutoConfig):
-            backbone_config = backbone_config
         elif backbone_config is None:
             backbone_config = AutoConfig.from_pretrained(
                 "timm/repvit_m1.dist_in1k",
@@ -141,6 +137,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 class EdgeTamPromptEncoderConfig(Sam2PromptEncoderConfig):

@@ -36,9 +36,8 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_rembert import RemBertConfig
 
 
@@ -135,7 +134,6 @@ class RemBertSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -159,17 +157,17 @@ class RemBertSelfAttention(nn.Module):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_values.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = curr_past_key_value.layers[self.layer_idx].keys
-            value_layer = curr_past_key_value.layers[self.layer_idx].values
+            key_layer = curr_past_key_values.layers[self.layer_idx].keys
+            value_layer = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_layer = (
                 self.key(current_states)
@@ -185,7 +183,7 @@ class RemBertSelfAttention(nn.Module):
             if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_layer, value_layer = curr_past_key_value.update(
+                key_layer, value_layer = curr_past_key_values.update(
                     key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -236,26 +234,6 @@ class RemBertAttention(nn.Module):
         super().__init__()
         self.self = RemBertSelfAttention(config, layer_idx=layer_idx)
         self.output = RemBertSelfOutput(config)
-        self.pruned_heads = set()
-
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     # copied from transformers.models.bert.modeling_bert.BertAttention.forward
     def forward(
@@ -410,13 +388,6 @@ class RemBertEncoder(nn.Module):
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_hidden_states = () if output_hidden_states else None
@@ -567,14 +538,6 @@ class RemBertModel(RemBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -616,13 +579,7 @@ class RemBertModel(RemBertPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -824,6 +781,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
@@ -865,25 +823,22 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.cls(hidden_states[:, slice_indices, :])
 
-        lm_loss = None
+        loss = None
         if labels is not None:
-            lm_loss = self.loss_function(
-                prediction_scores,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

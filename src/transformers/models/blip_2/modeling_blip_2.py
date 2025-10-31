@@ -16,8 +16,9 @@
 
 import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import nn
@@ -36,7 +37,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
@@ -391,6 +392,7 @@ class Blip2EncoderLayer(GradientCheckpointingLayer):
 class Blip2PreTrainedModel(PreTrainedModel):
     config: Blip2Config
     base_model_prefix = "blip"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -473,6 +475,7 @@ class Blip2Encoder(nn.Module):
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->Blip2, BLIP->BLIP_2
 class Blip2VisionModel(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     config: Blip2VisionConfig
     _can_record_outputs = {
         "hidden_states": Blip2EncoderLayer,
@@ -642,25 +645,6 @@ class Blip2QFormerAttention(nn.Module):
         super().__init__()
         self.attention = Blip2QFormerMultiHeadAttention(config, is_cross_attention)
         self.output = Blip2QFormerSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -916,14 +900,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     def get_extended_attention_mask(
         self,
@@ -1515,6 +1491,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 @auto_docstring
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
 
@@ -1986,6 +1963,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
 

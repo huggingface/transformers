@@ -193,8 +193,7 @@ class JanusVisionText2TextModelTester:
 class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (JanusModel, JanusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     _is_composite = True
 
     def setUp(self):
@@ -353,8 +352,7 @@ class JanusVQModelTester:
 @require_torch
 class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (JanusVQVAE,) if is_torch_available() else ()
-    test_pruning = False
-    fx_compatible = False
+
     has_attentions = False
     test_resize_embeddings = False
 

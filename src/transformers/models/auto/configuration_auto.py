@@ -17,7 +17,6 @@
 import importlib
 import os
 import re
-import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar, Union
@@ -94,6 +93,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("csm", "CsmConfig"),
         ("ctrl", "CTRLConfig"),
         ("cvt", "CvtConfig"),
+        ("cwm", "CwmConfig"),
         ("d_fine", "DFineConfig"),
         ("dab-detr", "DabDetrConfig"),
         ("dac", "DacConfig"),
@@ -226,6 +226,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
         ("lfm2", "Lfm2Config"),
+        ("lfm2_moe", "Lfm2MoeConfig"),
         ("lfm2_vl", "Lfm2VlConfig"),
         ("lightglue", "LightGlueConfig"),
         ("lilt", "LiltConfig"),
@@ -306,7 +307,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
         ("perceiver", "PerceiverConfig"),
-        ("perception_encoder", "TimmWrapperConfig"),
         ("perception_lm", "PerceptionLMConfig"),
         ("persimmon", "PersimmonConfig"),
         ("phi", "PhiConfig"),
@@ -417,6 +417,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
+        ("video_llama_3", "VideoLlama3Config"),
+        ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
@@ -529,6 +531,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("csm", "CSM"),
         ("ctrl", "CTRL"),
         ("cvt", "CvT"),
+        ("cwm", "Code World Model (CWM)"),
         ("d_fine", "D-FINE"),
         ("dab-detr", "DAB-DETR"),
         ("dac", "DAC"),
@@ -670,6 +673,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("led", "LED"),
         ("levit", "LeViT"),
         ("lfm2", "Lfm2"),
+        ("lfm2_moe", "Lfm2Moe"),
         ("lfm2_vl", "Lfm2Vl"),
         ("lightglue", "LightGlue"),
         ("lilt", "LiLT"),
@@ -761,7 +765,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("pegasus", "Pegasus"),
         ("pegasus_x", "PEGASUS-X"),
         ("perceiver", "Perceiver"),
-        ("perception_encoder", "PerceptionEncoder"),
         ("perception_lm", "PerceptionLM"),
         ("persimmon", "Persimmon"),
         ("phi", "Phi"),
@@ -876,6 +879,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("upernet", "UPerNet"),
         ("van", "VAN"),
         ("vaultgemma", "VaultGemma"),
+        ("video_llama_3", "VideoLlama3"),
+        ("video_llama_3_vision", "VideoLlama3Vision"),
         ("video_llava", "VideoLlava"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
@@ -995,7 +1000,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
-        ("perception_encoder", "perception_lm"),
+        ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
     ]
@@ -1309,18 +1314,6 @@ class AutoConfig:
         {'foo': False}
         ```
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)
