@@ -835,14 +835,8 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                (
-                    "cuda",
-                    None,
-                ): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
-                (
-                    "xpu",
-                    None,
-                ): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+                ("cuda", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+                ("xpu", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
             }
         ).get_expectation()
         # fmt: on
@@ -891,17 +885,11 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                (
-                    "cuda",
-                    None,
-                ): [
+                ("cuda", None): [
                     "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
                     "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
                 ],
-                (
-                    "xpu",
-                    None,
-                ): [
+                ("xpu", None): [
                     "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
                     "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
                 ],
