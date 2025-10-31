@@ -605,7 +605,7 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
             "patch_size": 14,
         }
 
-        config = LightOnOCRConfig(text_config=text_config, vision_config=vision_config, image_token_index=10)
+        config = LightOnOCRConfig(text_config=text_config, vision_config=vision_config, image_token_id=10)
         model = LightOnOCRForConditionalGeneration(config).to(torch_device)
         model.eval()
 
@@ -643,7 +643,7 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
             "patch_size": 14,
         }
 
-        config = LightOnOCRConfig(text_config=text_config, vision_config=vision_config, image_token_index=10)
+        config = LightOnOCRConfig(text_config=text_config, vision_config=vision_config, image_token_id=10)
         model = LightOnOCRForConditionalGeneration(config).to(torch_device)
         model.eval()
 

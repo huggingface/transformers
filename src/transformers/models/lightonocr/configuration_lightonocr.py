@@ -367,5 +367,9 @@ class LightOnOCRConfig(PretrainedConfig):
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
+    @property
+    def vocab_size(self):
+        return self.text_config.vocab_size
+
 
 __all__ = ["LightOnOCRConfig"]
