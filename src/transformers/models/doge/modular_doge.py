@@ -304,6 +304,7 @@ class DogeAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.keep_window_size = config.keep_window_size
+        self.is_causal = True
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -508,7 +509,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         # sequence transformation
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
@@ -525,6 +526,8 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        if isinstance(hidden_states, tuple):
+            hidden_states, _ = hidden_states
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
         hidden_states = self.post_attention_residual * residual + hidden_states
 
@@ -546,6 +549,9 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
                 module.A.data.zero_()
+        elif isinstance(module, DogeCDMoE):
+            if hasattr(module, "router_gate"):
+                module.router_gate.weight.data.zero_()
         elif isinstance(module, DogeDecoderLayer):
             if hasattr(module, "input_residual"):
                 module.input_residual.data.fill_(1.0)
