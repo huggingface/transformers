@@ -22,8 +22,8 @@ import inspect
 import json
 import os
 import re
-import time
 import sys
+import time
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
@@ -4702,7 +4702,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict
         )
-        logger.warn(f"Loading the checkpoint files into the model took {end-start}")
+        logger.warn(f"Loading the checkpoint files into the model took {end - start}")
         log_state_dict_report(
             model=model,
             pretrained_model_name_or_path=pretrained_model_name_or_path,

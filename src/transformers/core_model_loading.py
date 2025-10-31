@@ -259,7 +259,9 @@ class Cast(ConversionOps):
         self.dtype = dtype
 
     def convert(self, value):
-        out = [[x.to(self.dtype) for x in inner] if isinstance(inner, list) else inner.to(self.dtype) for inner in value]
+        out = [
+            [x.to(self.dtype) for x in inner] if isinstance(inner, list) else inner.to(self.dtype) for inner in value
+        ]
         return out
 
 
@@ -364,6 +366,7 @@ def log_to_misc(
     try:
         yield
     except Exception as e:
+
         def _format_op_name(curr_op: Union[list[ConversionOps], ConversionOps, None]) -> Optional[str]:
             if curr_op is None:
                 return None
@@ -427,9 +430,12 @@ def set_param_for_module(
         missing_keys.discard(layer_name)
         setattr(module_obj, param_name, param_value)
 
+
 class SkipLayer(Exception):
     """Control-flow sentinel: abort processing of the current layer only."""
+
     pass
+
 
 def convert_and_load_state_dict_in_model(
     model,
@@ -516,7 +522,10 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
                 if matched_dtype_pattern is not None:
                     dtype = keep_in_dtype[matched_dtype_pattern]
-                if dtype != str_to_torch_dtype[tensor.get_dtype()] and dtype is not None:
+                tensor_dtype = (
+                    tensor.dtype if isinstance(tensor, torch.Tensor) else str_to_torch_dtype[tensor.get_dtype()]
+                )
+                if dtype != tensor_dtype and dtype is not None:
                     converter.operations.append(Cast(dtype))
 
         first_target_key = target_key.split("|")[0]

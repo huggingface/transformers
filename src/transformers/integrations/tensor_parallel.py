@@ -902,7 +902,7 @@ class GroupedGemmParallel(TensorParallelLayer):
     def shard_tensor(self, param, **kwargs):
         empty_param = self.empty_param
         ep_rank = self.rank
-        device_mesh=self.device_mesh
+        device_mesh = self.device_mesh
 
         global_num_experts = empty_param.shape[0]
         if global_num_experts % device_mesh.size() != 0:
