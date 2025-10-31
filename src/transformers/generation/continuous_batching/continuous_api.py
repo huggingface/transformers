@@ -919,6 +919,7 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
+    # FIXME: stop iteration when request status is finished?
     def request_id_iter(self, request_id: str) -> Generator[GenerationOutput]:
         """Iterate over results matching a specific request id as they become available."""
         request_cancelled = False
