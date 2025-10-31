@@ -15,7 +15,6 @@
 from .dependency_versions_table import deps
 from .utils.versions import require_version, require_version_core
 
-
 # define which module versions we always want to check at run time
 # (usually the ones defined in `install_requires` in setup.py)
 #
@@ -45,6 +44,7 @@ for pkg in pkgs_to_check_at_runtime:
 
             if not is_tokenizers_available():
                 continue  # not required, check version only if installed
+
         elif pkg == "accelerate":
             # must be loaded here, or else tqdm check may fail
             from .utils import is_accelerate_available
@@ -53,6 +53,14 @@ for pkg in pkgs_to_check_at_runtime:
             # Transformers with PyTorch
             if not is_accelerate_available():
                 continue  # not required, check version only if installed
+
+        elif pkg == "safetensors":
+            import importlib.metadata
+            try:
+                importlib.metadata.version("safetensors")
+            except importlib.metadata.PackageNotFoundError:
+                print("[INFO] safetensors not installed — continuing without it.")
+                continue  # skip version check if not installed
 
         require_version_core(deps[pkg])
     else:
