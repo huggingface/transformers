@@ -77,6 +77,11 @@ class LukeConfig(PreTrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -116,11 +121,18 @@ class LukeConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         """Constructs LukeConfig."""
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.entity_vocab_size = entity_vocab_size
         self.hidden_size = hidden_size

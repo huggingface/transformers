@@ -103,6 +103,10 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         hidden_act: Optional[str] = "silu",
         intermediate_size: Optional[int] = 2816,
         initializer_range: Optional[float] = 0.02,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        tie_word_embeddings: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -120,6 +124,10 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = False  # Force-set to False for BC
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
@@ -129,9 +137,7 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        super().__init__(**kwargs)
 
 
 class BltGlobalTransformerConfig(PreTrainedConfig):
@@ -154,6 +160,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         hidden_act: Optional[str] = "silu",
         intermediate_size: Optional[int] = 5632,
         initializer_range: Optional[float] = 0.02,
+        tie_word_embeddings: Optional[bool] = False,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -167,6 +174,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = False
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
@@ -175,9 +183,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         rope_theta = kwargs.get("rope_theta", 500000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        super().__init__(**kwargs)
 
 
 class BltPatcherConfig(PreTrainedConfig):
@@ -233,6 +239,7 @@ class BltPatcherConfig(PreTrainedConfig):
         intermediate_size: Optional[int] = 2048,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         initializer_range: Optional[float] = 0.02,
+        tie_word_embeddings: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -255,9 +262,8 @@ class BltPatcherConfig(PreTrainedConfig):
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        self.tie_word_embeddings = False
+        super().__init__(**kwargs)
 
 
 class BltConfig(PreTrainedConfig):
@@ -355,6 +361,9 @@ class BltConfig(PreTrainedConfig):
         decoder_config: Optional[dict] = None,
         global_config: Optional[dict] = None,
         tie_word_embeddings: Optional[bool] = False,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
         initializer_range: Optional[float] = 0.02,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
@@ -434,9 +443,11 @@ class BltConfig(PreTrainedConfig):
             encoder_cross_output_size if encoder_cross_output_size != self.global_config.hidden_size else None
         )
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = [

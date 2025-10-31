@@ -197,6 +197,9 @@ class Exaone4Config(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.sliding_window_pattern = sliding_window_pattern
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
@@ -220,9 +223,7 @@ class Exaone4Config(PreTrainedConfig):
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        super().__init__(**kwargs)
 
 
 class Exaone4RMSNorm(LlamaRMSNorm):
