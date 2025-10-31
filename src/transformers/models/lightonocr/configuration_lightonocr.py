@@ -371,5 +371,9 @@ class LightOnOCRConfig(PretrainedConfig):
     def vocab_size(self):
         return self.text_config.vocab_size
 
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self.text_config.vocab_size = value
+
 
 __all__ = ["LightOnOCRConfig"]
