@@ -37,8 +37,9 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 
 
-sys.path.append(".")
-from utils.fetch_hub_objects_for_ci import url_to_local_path
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(os.path.join(parent_dir, "utils"))
+from fetch_hub_objects_for_ci import url_to_local_path  # noqa: E402
 
 
 global_rng = random.Random()

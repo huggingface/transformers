@@ -20,6 +20,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 import torch.nn as nn
 from parameterized import parameterized
@@ -907,6 +908,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
 
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
             "lkhl/VideoLLaMA3-2B-Image-HF",
@@ -933,6 +935,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
 
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
             "lkhl/VideoLLaMA3-2B-Image-HF",

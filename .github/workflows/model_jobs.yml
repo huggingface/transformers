@@ -28,6 +28,9 @@ on:
       report_repo_id:
         required: false
         type: string
+      pytest_marker:
+        required: false
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -137,7 +140,7 @@ jobs:
       - name: Run all tests on GPU
         working-directory: /transformers
         run: |
-          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports tests/${{ matrix.folders }}" test_outputs.txt
+          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports python3 -m pytest -rsfE -v -m '${{ inputs.pytest_marker }}' --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports tests/${{ matrix.folders }}" test_outputs.txt
           ls -la
           # Extract the exit code from the output file
           EXIT_CODE=$(tail -1 test_outputs.txt | grep -o 'COMMAND_EXIT_CODE="[0-9]*"' | cut -d'"' -f2)

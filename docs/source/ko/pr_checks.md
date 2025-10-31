@@ -37,7 +37,7 @@ pip install transformers[dev]
 또는 Transformers 저장소 내에 편집 가능한 설치가 필요합니다:
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 Transformers의 선택적 종속성 수가 많이 늘어났기 때문에 개발 설치를 실패할 수도 있습니다. 개발 설치가 실패하는 경우, 작업 중인 Deep Learning 프레임워크 (PyTorch, TensorFlow 및/또는 Flax)를 설치하고 다음 명령을 실행하세요.
@@ -49,7 +49,7 @@ pip install transformers[quality]
 편집 가능한 설치의 경우는 다음 명령을 실행하세요.
 
 ```bash
-pip install -e .[quality]
+pip install -e ".[quality]"
 ```
 
 

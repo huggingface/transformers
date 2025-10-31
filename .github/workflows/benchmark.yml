@@ -28,7 +28,7 @@ jobs:
       (github.event_name == 'pull_request' && contains( github.event.pull_request.labels.*.name, 'run-benchmark') )||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     container:
-      image: huggingface/transformers-pytorch-gpu
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host
     steps:
       - name: Get repo

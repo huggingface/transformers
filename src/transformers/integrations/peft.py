@@ -628,7 +628,7 @@ def maybe_load_adapters(
     **adapter_kwargs,
 ):
     if pretrained_model_name_or_path is None or not is_peft_available():
-        return None, pretrained_model_name_or_path
+        return None, pretrained_model_name_or_path, adapter_kwargs
 
     token = download_kwargs.get("token")
 
@@ -651,13 +651,15 @@ def maybe_load_adapters(
 
     _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
 
+    token_from_adapter_kwargs = adapter_kwargs.pop("token", None)
+
     if _adapter_model_path is None:
         _adapter_model_path = find_adapter_config_file(
             pretrained_model_name_or_path,
             cache_dir=download_kwargs.get("cache_dir"),
             force_download=bool(download_kwargs.get("force_download", False)),
             proxies=download_kwargs.get("proxies"),
-            token=token,
+            token=token or token_from_adapter_kwargs,
             revision=download_kwargs.get("revision"),
             local_files_only=bool(download_kwargs.get("local_files_only", False)),
             subfolder=download_kwargs.get("subfolder", ""),
@@ -670,4 +672,4 @@ def maybe_load_adapters(
             _adapter_model_path = pretrained_model_name_or_path
             pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
-    return _adapter_model_path, pretrained_model_name_or_path
+    return _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs
