@@ -258,8 +258,6 @@
 #       title: النماذج
 #     - local: main_classes/text_generation
 #       title: توليد النصوص
-#     - local: main_classes/onnx
-#       title: ONNX
 #     - local: main_classes/optimizer_schedules
 #       title: التحسين
 #     - local: main_classes/output
