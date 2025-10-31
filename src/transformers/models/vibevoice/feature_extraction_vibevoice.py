@@ -49,11 +49,11 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         normalize_audio: bool = True,
         target_dB_FS: float = -25,
         eps: float = 1e-6,
-        n_channels: int = 1,
+        feature_size: int = 1,
         padding_value: float = 0.0,
         **kwargs,
     ):
-        super().__init__(feature_size=n_channels, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
         self.normalize_audio = normalize_audio
         self.target_dB_FS = target_dB_FS

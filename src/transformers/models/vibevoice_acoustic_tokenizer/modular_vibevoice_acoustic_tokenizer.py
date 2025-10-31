@@ -28,7 +28,7 @@ from ..vibevoice_semantic_tokenizer.modeling_vibevoice_semantic_tokenizer import
     VibeVoiceSemanticTokenizerModel,
     VibeVoiceSemanticTokenizerOutput,
     VibeVoiceSemanticTokenizerPreTrainedModel,
-    VibeVoiceStreamingConv1d,
+    VibeVoiceCausalConv1d,
 )
 
 
@@ -252,8 +252,8 @@ class VibeVoiceAcousticTokenizerRMSNorm(LlamaRMSNorm):
     pass
 
 
-class VibeVoiceStreamingConvTranspose1d(nn.Module):
-    """ConvTranspose1d with built-in handling of streaming and causal padding."""
+class VibeVoiceCausalConvTranspose1d(nn.Module):
+    """ConvTranspose1d with built-in causal padding and optional streaming support through a cache."""
 
     def __init__(
         self,
@@ -321,7 +321,7 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
         # stem and upsampling layers
         self.upsample_layers = nn.ModuleList()
         self.upsample_layers.append(
-            VibeVoiceStreamingConv1d(
+            VibeVoiceCausalConv1d(
                 in_channels=config.hidden_size,
                 out_channels=config.n_filters * 2 ** (len(config.decoder_depths) - 1),
                 kernel_size=config.kernel_size,
@@ -332,7 +332,7 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
         for stage_idx in range(len(config.upsampling_ratios)):
             input_channels = config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx))
             output_channels = config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx - 1))
-            upsample_layer = VibeVoiceStreamingConvTranspose1d(
+            upsample_layer = VibeVoiceCausalConvTranspose1d(
                 input_channels,
                 output_channels,
                 kernel_size=config.upsampling_ratios[stage_idx] * 2,
@@ -351,7 +351,7 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
             )
             self.stages.append(stage)
 
-        self.head = VibeVoiceStreamingConv1d(
+        self.head = VibeVoiceCausalConv1d(
             in_channels=input_channels,
             out_channels=config.channels,
             kernel_size=config.kernel_size,

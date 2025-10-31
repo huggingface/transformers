@@ -48,9 +48,9 @@ def update_state_dict_for_hf_model(state_dict):
             # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
             if "downsample_layers." in key and ".0.conv." in key:
                 new_key = new_key.replace(".0.conv.", ".conv.")
-            # Handle ConvNext1DLayer mixer simplification: mixer.conv.conv.conv.* -> mixer.*
+            # Handle ConvNext1DLayer mixer simplification: mixer.conv.conv.conv.* -> mixer.conv.*
             if "mixer.conv.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
+                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
             # Handle general conv.conv -> conv mapping (after mixer handling to avoid conflicts)
             elif ".conv.conv." in key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
@@ -61,9 +61,9 @@ def update_state_dict_for_hf_model(state_dict):
             # Handle downsample_layers Sequential removal: .X.0.conv -> .X.conv
             if "downsample_layers." in key and ".0.conv." in key:
                 new_key = new_key.replace(".0.conv.", ".conv.")
-            # Handle ConvNext1DLayer mixer simplification: mixer.conv.conv.conv.* -> mixer.*
+            # Handle ConvNext1DLayer mixer simplification: mixer.conv.conv.conv.* -> mixer.conv.*
             if "mixer.conv.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
+                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
             # Handle general conv.conv -> conv mapping (after mixer handling to avoid conflicts)
             elif ".conv.conv." in key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
@@ -81,9 +81,9 @@ def update_state_dict_for_hf_model(state_dict):
             elif "head.conv." in key:
                 new_key = new_key.replace("head.conv.", "head.")
             # Handle stages (changed from Block1D to VibeVoiceAcousticTokenizerConvNext1dLayer)
-            # Original Block1D had: mixer.conv.conv.conv.* -> VibeVoiceAcousticTokenizerConvNext1dLayer has: mixer.*
+            # Original Block1D had: mixer.conv.conv.conv.* -> VibeVoiceAcousticTokenizerConvNext1dLayer has: mixer.conv.*
             elif "stages." in key and "mixer.conv.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.")
+                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
 
         # Handle prediction_head -> diffusion_head mapping
         if "prediction_head." in key:

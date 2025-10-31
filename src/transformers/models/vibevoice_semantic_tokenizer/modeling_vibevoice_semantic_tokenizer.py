@@ -24,7 +24,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
@@ -150,8 +149,8 @@ class VibeVoiceConv1dCache:
         return current_cache
 
 
-class VibeVoiceStreamingConv1d(nn.Module):
-    """Conv1d with built-in handling of streaming and causal padding."""
+class VibeVoiceCausalConv1d(nn.Module):
+    """Conv1d with built-in causal padding and optional streaming support through a cache."""
 
     def __init__(
         self,
@@ -231,7 +230,7 @@ class VibeVoiceConvNext1dLayer(nn.Module):
             raise NotImplementedError("DropPath is not implemented.")
         self.drop_path = nn.Identity()
 
-        self.mixer = nn.Conv1d(
+        self.mixer = VibeVoiceCausalConv1d(
             in_channels=hidden_size,
             out_channels=hidden_size,
             kernel_size=config.kernel_size,
@@ -240,14 +239,10 @@ class VibeVoiceConvNext1dLayer(nn.Module):
             dilation=dilation,
             stride=stride,
         )
-        # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L266
-        self.causal_padding = (config.kernel_size - 1) * dilation - (stride - 1)
 
     def forward(self, hidden_states):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.transpose(1, 2)).transpose(1, 2)
-        # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L382
-        hidden_states = F.pad(hidden_states, (self.causal_padding, 0))
         hidden_states = self.mixer(hidden_states)
         hidden_states = hidden_states * self.gamma.unsqueeze(-1)
         # (ebezzam) original code (https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653)
@@ -289,7 +284,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
         # stem and intermediate downsampling conv layers
         self.downsample_layers = nn.ModuleList()
         self.downsample_layers.append(
-            VibeVoiceStreamingConv1d(
+            VibeVoiceCausalConv1d(
                 in_channels=config.channels,
                 out_channels=config.n_filters,
                 kernel_size=config.kernel_size,
@@ -298,7 +293,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
             )
         )
         for stage_idx in range(len(config.downsampling_ratios)):
-            downsample_layer = VibeVoiceStreamingConv1d(
+            downsample_layer = VibeVoiceCausalConv1d(
                 in_channels=config.n_filters * (2**stage_idx),
                 out_channels=config.n_filters * (2 ** (stage_idx + 1)),
                 kernel_size=config.downsampling_ratios[stage_idx] * 2,
@@ -317,7 +312,7 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
             )
             self.stages.append(stage)
 
-        self.head = VibeVoiceStreamingConv1d(
+        self.head = VibeVoiceCausalConv1d(
             in_channels=input_channels,
             out_channels=config.hidden_size,
             kernel_size=config.kernel_size,
