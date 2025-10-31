@@ -799,7 +799,9 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 2:
         # without tokenize
-        self.assertEqual(self.tokenizer.apply_chat_template(conversation, tokenize=True), expected_tokenized.tokens)
+        self.assertEqual(
+            self.tokenizer.apply_chat_template(conversation, tokenize=True).input_ids, expected_tokenized.tokens
+        )
 
         with self.assertRaises(
             ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.apply_chat_template`."
@@ -824,7 +826,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             expected_tokenized.text,
         )
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True),
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True).input_ids,
             expected_tokenized.tokens,
         )
 
@@ -846,7 +848,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             token_outputs = self.tokenizer.apply_chat_template(
                 conversation, tokenize=True, add_generation_prompt=add_generation_prompt
             )
-            self.assertEqual(token_outputs, expected_tokenized.tokens)
+            self.assertEqual(token_outputs.input_ids, expected_tokenized.tokens)
 
         # Test 2:
         # with continue_final_message
@@ -958,18 +960,16 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 },
             ]
 
-            output = self.tokenizer.apply_chat_template(conversation, tokenize=True)
+            output = self.tokenizer.apply_chat_template(conversation).input_ids
             self.assertEqual(output, expected_tokenized.tokens)
 
-        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True, return_dict=True)
+        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True)
         self.assertEqual(output_dict["input_ids"], expected_tokenized.tokens)
         self.assertEqual(len(output_dict["pixel_values"]), len(expected_tokenized.images))
         for o, e in zip(output_dict["pixel_values"], expected_tokenized.images):
             self.assertTrue(np.allclose(o, e))
 
-        output_dict = self.tokenizer.apply_chat_template(
-            conversation, tokenize=True, return_dict=True, return_tensors="pt"
-        )
+        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True, return_tensors="pt")
         self.assertEqual(output_dict["input_ids"].tolist()[0], expected_tokenized.tokens)
         expected_images_pt_tensor = torch.from_numpy(np.stack(expected_tokenized.images))
         self.assertTrue(torch.allclose(output_dict["pixel_values"], expected_images_pt_tensor))
@@ -1013,7 +1013,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 },
             ]
 
-            output = self.tokenizer_audio.apply_chat_template(conversation, tokenize=True)
+            output = self.tokenizer_audio.apply_chat_template(conversation, tokenize=True).input_ids
             self.assertEqual(output, expected_tokenized.tokens)
 
         output_dict = self.tokenizer_audio.apply_chat_template(conversation, tokenize=True, return_dict=True)
@@ -1041,14 +1041,14 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 1:
         # with truncation
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=True, max_length=20),
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=True, max_length=20).input_ids,
             expected_tokenized.tokens[:20],
         )
 
         # Test 2:
         # without truncation
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=False, max_length=20),
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=False, max_length=20).input_ids,
             expected_tokenized.tokens,
         )
 
@@ -1130,7 +1130,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         ]
 
         text_outputs = self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=False)
-        token_outputs = self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True)
+        token_outputs = self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True).input_ids
 
         self.assertEqual(len(text_outputs), len(token_outputs))
         self.assertEqual(len(text_outputs), len(expected_tokenized))
@@ -1202,7 +1202,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             ChatCompletionRequest.from_openai(ref_conversation)
         )
 
-        output = self.tokenizer.apply_chat_template(conversations, tokenize=True)
+        output = self.tokenizer.apply_chat_template(conversations, tokenize=True).input_ids
         self.assertEqual(output, [expected_tokenized.tokens] * 3)
 
         output = self.tokenizer.apply_chat_template(conversations, tokenize=True, return_dict=True)
@@ -1248,7 +1248,9 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             for conversation in conversations
         ]
 
-        token_outputs = self.tokenizer.apply_chat_template(conversations, tokenize=True, continue_final_message=True)
+        token_outputs = self.tokenizer.apply_chat_template(
+            conversations, tokenize=True, continue_final_message=True
+        ).input_ids
 
         for output, expected in zip(token_outputs, expected_tokenized):
             self.assertEqual(output, expected.tokens)
@@ -1297,7 +1299,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             ]
             token_outputs = self.tokenizer.apply_chat_template(
                 conversations, tokenize=True, add_generation_prompt=add_generation_prompt
-            )
+            ).input_ids
             for output, expected in zip(token_outputs, expected_tokenized):
                 self.assertEqual(output, expected.tokens)
 
@@ -1331,7 +1333,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # with truncation
         token_outputs = self.tokenizer.apply_chat_template(
             self.fixture_conversations, tokenize=True, truncation=True, max_length=20
-        )
+        ).input_ids
 
         for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
             self.assertEqual(output, expected.tokens[:20])
@@ -1340,7 +1342,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # without truncation
         token_outputs = self.tokenizer.apply_chat_template(
             self.fixture_conversations, tokenize=True, truncation=False, max_length=20
-        )
+        ).input_ids
         self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
         for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
             self.assertEqual(output, expected.tokens)
@@ -1358,7 +1360,9 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         for padding in [True, "max_length", PaddingStrategy.LONGEST, PaddingStrategy.MAX_LENGTH]:
             if padding == PaddingStrategy.MAX_LENGTH:
                 # No padding if no max length is provided
-                token_outputs = self.tokenizer.apply_chat_template(self.fixture_conversations, padding=padding)
+                token_outputs = self.tokenizer.apply_chat_template(
+                    self.fixture_conversations, padding=padding, return_dict=False
+                )
                 self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
                 for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
                     self.assertEqual(output, expected.tokens)
@@ -1366,7 +1370,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             max_length = 20 if padding == PaddingStrategy.MAX_LENGTH else None
 
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, padding=padding, max_length=max_length
+                self.fixture_conversations, tokenize=True, padding=padding, max_length=max_length, return_dict=False
             )
 
             if padding != PaddingStrategy.MAX_LENGTH:
@@ -1390,7 +1394,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         for padding in [False, "do_not_pad", PaddingStrategy.DO_NOT_PAD]:
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, padding=padding
+                self.fixture_conversations, tokenize=True, padding=padding, return_dict=False
             )
             self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
             for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
@@ -1402,7 +1406,12 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         max_length = 20
         for padding in [True, "max_length", PaddingStrategy.LONGEST, PaddingStrategy.MAX_LENGTH]:
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, truncation=True, padding=padding, max_length=max_length
+                self.fixture_conversations,
+                tokenize=True,
+                truncation=True,
+                padding=padding,
+                max_length=max_length,
+                return_dict=False,
             )
             self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
             for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
@@ -1411,7 +1420,12 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 )
         for padding in [False, "do_not_pad", PaddingStrategy.DO_NOT_PAD]:
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, truncation=True, padding=padding, max_length=max_length
+                self.fixture_conversations,
+                tokenize=True,
+                truncation=True,
+                padding=padding,
+                max_length=max_length,
+                return_dict=False,
             )
             self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
             for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
@@ -1421,7 +1435,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 1:
         # with tokenize
         token_outputs = self.tokenizer.apply_chat_template(
-            self.fixture_conversations, tokenize=True, return_tensors="pt", padding=True
+            self.fixture_conversations, tokenize=True, return_tensors="pt", padding=True, return_dict=False
         )
         self.assertIsInstance(token_outputs, torch.Tensor)
         self.assertEqual(
@@ -1432,7 +1446,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 2:
         # without tokenize, should ignore return_tensors
         token_outputs = self.tokenizer.apply_chat_template(
-            self.fixture_conversations, tokenize=False, return_tensors="pt", padding=True
+            self.fixture_conversations, tokenize=False, return_tensors="pt", padding=True, return_dict=False
         )
         self.assertEqual(token_outputs, [t.text for t in self.tokenized_fixture_conversations])
 

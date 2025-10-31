@@ -1378,7 +1378,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = False,
+        return_dict: bool = True,
         **kwargs,
     ) -> Union[str, list[int], list[str], list[list[int]], BatchEncoding]:
         """
