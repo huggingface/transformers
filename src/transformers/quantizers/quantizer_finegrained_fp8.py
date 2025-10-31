@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+
 class FineGrainedFP8HfQuantizer(HfQuantizer):
     """
     FP8 quantization implementation supporting both standard and MoE models.

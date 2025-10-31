@@ -436,8 +436,14 @@ class TensorParallelLayer:
     """
 
     use_dtensor = True
-    device_mes = None
+    device_mesh = None
     rank = None
+
+    # Used to compare the shape of the original tensor
+    empty_tensor = None
+
+    # Used to init the corresponding DTensor
+    shard = None
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh): ...
@@ -565,7 +571,7 @@ class ReplicateParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
-    def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+    def shard_tensor(self, param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         return param[...].to(param_casting_dtype)
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -609,8 +615,9 @@ class ColwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
-    def shard_tensor(self, param, empty_param, param_type=None, tensor_idx=None):
+    def shard_tensor(self, param, param_type=None, tensor_idx=None):
         device_mesh = self.device_mesh
+        empty_param = self.empty_param
         rank = self.rank
         if param_type == "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1, tensor_idx)
@@ -625,9 +632,7 @@ class ColwiseParallel(TensorParallelLayer):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
-        parameter, shard = self.shard_tensor(
-            param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh
-        )
+        parameter, shard = self.shard_tensor(param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh)
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
@@ -647,8 +652,8 @@ class ColwiseParallel(TensorParallelLayer):
 
 
 class PackedColwiseParallel(ColwiseParallel):
-    def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        return get_packed_weights(param, empty_param, device_mesh, rank, -2), [Shard(-2)]
+    def shard_tensor(self, param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        return get_packed_weights(param, self.empty_param, device_mesh, rank, -2), [Shard(-2)]
 
     def create_nn_parameter(
         self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh
@@ -701,8 +706,9 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
 
-    def shard_tensor(self, param, empty_param, param_type=None, tensor_idx=None):
+    def shard_tensor(self, param, param_type=None, tensor_idx=None):
         device_mesh = self.device_mesh
+        empty_param = self.empty_param
         rank = self.rank
         if param_type == "bias":
             shard = [Replicate()]
@@ -784,8 +790,8 @@ class RowwiseParallel(TensorParallelLayer):
 
 
 class PackedRowwiseParallel(RowwiseParallel):
-    def shard_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        return get_packed_weights(param, empty_param, device_mesh, rank, -1), [Shard(-1)]
+    def shard_tensor(self, param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        return get_packed_weights(param, self.empty_param, device_mesh, rank, -1), [Shard(-1)]
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)

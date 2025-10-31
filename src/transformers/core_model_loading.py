@@ -15,7 +15,6 @@
 """Core helpers for loading model checkpoints."""
 
 from __future__ import annotations
-from typing import MutableMapping, MutableSequence, Any, Tuple
 
 import itertools
 import os
@@ -23,17 +22,19 @@ import re
 import threading
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Sequence
-from concurrent.futures import Future, ThreadPoolthread_poolutor
+from collections.abc import MutableMapping, MutableSet, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Optional, Union
 from glob import translate
+from typing import Any, Optional, Union
+
 import torch
 from torch.distributed.tensor import DTensor
 
 from .integrations.finegrained_fp8 import Fp8Quantize
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
 from .utils import logging
 
 
@@ -52,7 +53,7 @@ def _glob_to_regex_src(glob: str, *, digits_only: bool = True) -> str:
 def build_glob_alt(
     globs: list[str],
 ) -> tuple[re.Pattern, dict[str, str]]:
-    """
+    r"""
     Build one compiled regex alternation with a named group per glob. This allows to run a single
     re.match and get the correct group name to finally get which pattern matched.
     Returns (compiled_regex, name->glob map).
@@ -60,11 +61,16 @@ def build_glob_alt(
     Example:
 
     ```py
-    >>> reg, map = build_glob_alt(["mlp.*.w1", "mlp.*.w2"])
+    >>> reg, map_ = build_glob_alt(["mlp.*.w1", "mlp.*.w2"])
     >>> print(reg)
     (re.compile(r'(?P<g0>.*mlp\.(\d+)\.w1)|(?P<g1>.*mlp\.(\d+)\.w2)', re.UNICODE),
-    >>> print(map)
+    >>> print(map_)
     {'g0': 'mlp.*.w1', 'g1': 'mlp.*.w2'})
+    >>> match_ = reg.match("model.layers.0.mlp.0.w1.weight")
+    >>> print(match_.lastgroup)
+    'g0'
+    >>> print(map_[match_.lastgroup])
+    mlp.*.w1
     ```
     """
     name_map: dict[str, str] = {}
@@ -94,7 +100,7 @@ def match_glob(key: str, alt: re.Pattern, name_map: dict[str, str]) -> Optional[
 class ConversionOps:
     """Base class for weight conversion operations."""
 
-    # Reusable scratch buffer to avoid reallocations.
+    # Reusable staging/scratch buffer to avoid reallocations.
     _buffer: Optional[torch.Tensor] = None
     # The inverse operation class, will be used when saving the checkpoint
     _inverse_op: type[ConversionOps]
@@ -131,7 +137,9 @@ class ConversionOps:
         self._buffer = None
 
     @abstractmethod
-    def convert(self, value: Union[Sequence[torch.Tensor], torch.Tensor], *args, **kwargs) -> torch.Tensor:
+    def convert(
+        self, value: Union[dict[str, torch.Tensor], Sequence[torch.Tensor], torch.Tensor], *args, **kwargs
+    ) -> torch.Tensor:
         raise NotImplementedError
 
 
@@ -260,6 +268,7 @@ class To(ConversionOps):
     """
     Transfers the tensor to the provided device potentially using a stream?
 
+    TODO I should re-introduce cpu offloading logic!
     if param_device == "disk":
         if not is_safetensors:
             disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
@@ -298,8 +307,8 @@ class WeightConverter:
     target_keys: Optional[Union[str, list[str]]] = None
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
-    distributed_operation: dict[str, ConversionOps] = field(default_factory=dict, compare=False, repr=False)
-    quantization_operation: dict[str, ConversionOps] = field(default_factory=dict, compare=False, repr=False)
+    distributed_operation: Optional[TensorParallelLayer] = None
+    quantization_operation: Optional[ConversionOps] = None
 
     def __post_init__(self):
         if not isinstance(self.source_keys, list):
@@ -309,8 +318,12 @@ class WeightConverter:
                 self.target_keys = self.source_keys
             else:
                 self.target_keys = [self.target_keys]
-        if (len(self.source_keys)-1 +  len(self.target_keys)-1) < 2:
-            raise ValueError(f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one.")
+
+        if (len(self.source_keys) - 1 + len(self.target_keys) - 1) < 2:
+            raise ValueError(
+                f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
+            )
+
         for pattern in self.source_keys:
             try:
                 re.compile(translate(pattern))
@@ -323,49 +336,13 @@ class WeightConverter:
                 raise AssertionError(f"Invalide source glob pattern: '{pattern}'")
 
 
-def set_param_for_module(
-    model, k, v, meta_model_state_dict, empty_tensor, mismatch_keys, missing_keys, misc, distributed_operation
-):
-    try:
-        module_path, _, param_name = k.rpartition(".")
-        module_obj = model.get_submodule(module_path) if module_path else model
-        param_value = v[0] if isinstance(v, list) else v[:]
-        ref = meta_model_state_dict.get(k, empty_tensor)
-        use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
-        if not isinstance(param_value, torch.nn.Parameter):
-            if distributed_operation != {} and use_dtensor:
-                param_value = DTensor.from_local(
-                    param_value,
-                    distributed_operation.device_mesh,
-                    distributed_operation.shard,
-                    run_check=False,
-                    shape=ref.size(),
-                    stride=ref.stride(),
-                )
-            else:
-                pass  # TODO for "local" stuff, it will trigger missmatched no?
-            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-
-        if ref is not None and ref.shape != param_value.shape:
-            mismatch_keys.add((k, param_value.shape, ref.shape))
-
-        if k in missing_keys:
-            missing_keys.remove(k)
-
-        setattr(module_obj, param_name, param_value)
-    except Exception as e:
-        misc[k] = f"{e} for {k} on {list(module_obj.state_dict().keys())}"
-    return model, mismatch_keys, missing_keys, misc, distributed_operation
-
-
 @dataclass(slots=True)
 class ConversionEntry:
     weight_converter: WeightConverter
     collected_tensors: dict = field(default_factory=lambda: defaultdict(dict))
 
 
-# Tune these to your storage:
-GLOBAL_WORKERS = min(32, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
+GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
 PER_FILE_LIMIT = 4  # concurrent reads per file
 
 
@@ -384,12 +361,12 @@ def spawn_materialize(thread_pool, _file_semaphore, file_id, t) -> Future:
     return thread_pool.submit(_job)
 
 
-def spawn_tp_materialize(thread_pool, _file_semaphore, file_id, t, sharding_method, empty_tensor, tensor_idx) -> Future:
+def spawn_tp_materialize(thread_pool, _file_semaphore, file_id, t, sharding_method, tensor_idx) -> Future:
     sem = _file_semaphore[file_id]
 
     def _job():
         with sem:
-            return sharding_method.shard_tensor(t, empty_tensor, tensor_idx=tensor_idx)[0]
+            return sharding_method.shard_tensor(t, tensor_idx=tensor_idx)[0]
 
     return thread_pool.submit(_job)
 
@@ -401,6 +378,84 @@ def dot_natural_key(s: str):
         if p.isdigit():
             parts[i] = int(p)
     return parts
+
+
+@contextmanager
+def log_to_misc(
+    layer_name: str,
+    misc: MutableMapping[str, str],
+    extras: Any = None,
+    op: Union[list[ConversionOps], ConversionOps, None] = None,
+):
+    # A simple helper to handle errors with contextual messages.
+    try:
+        yield
+    except Exception as e:
+        def _format_op_name(curr_op: Union[list[ConversionOps], ConversionOps, None]) -> Optional[str]:
+            if curr_op is None:
+                return None
+            if isinstance(curr_op, (list, tuple, set)):
+                names = [o.__class__.__name__ for o in curr_op if o is not None]
+                if not names:
+                    return None
+                return ", ".join(names)
+            return curr_op.__class__.__name__
+
+        op_name = _format_op_name(op)
+        if isinstance(extras, tuple) and len(extras) == 2:
+            values, target_keys = extras
+            descriptor = f"{op_name} " if op_name else ""
+            misc[layer_name] = (
+                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {values}"
+            )
+        elif isinstance(extras, str):
+            suffix = f" via {op_name}" if op_name else ""
+            misc[layer_name] = f"{e}\nError{suffix} when processing parameter {extras}"
+        elif extras is None and op_name:
+            misc[layer_name] = f"{op_name}: {e}"
+        else:
+            misc[layer_name] = f"{extras} |Error: {e}"
+
+
+def set_param_for_module(
+    model: torch.nn.Module,
+    layer_name: str,
+    param_value: torch.Tensor,
+    meta_model_state_dict: MutableMapping[str, Any],
+    empty_tensor: torch.Tensor,
+    mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
+    missing_keys: MutableSet[str],
+    misc: MutableMapping[str, Any],
+    distributed_operation: Optional[TensorParallelLayer],
+):
+    with log_to_misc(layer_name, misc, layer_name):
+        module_path, _, param_name = layer_name.rpartition(".")
+        module_obj = model.get_submodule(module_path) if module_path else model
+        param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
+        ref = meta_model_state_dict.get(layer_name, empty_tensor)
+        use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
+        if not isinstance(param_value, torch.nn.Parameter):
+            if distributed_operation is not None and use_dtensor:
+                param_value = DTensor.from_local(
+                    param_value,
+                    distributed_operation.device_mesh,
+                    distributed_operation.shard,
+                    run_check=False,
+                    shape=ref.size(),
+                    stride=ref.stride(),
+                )
+            else:
+                pass  # TODO for "local" stuff, it will trigger missmatched no?
+            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+
+        if ref is not None and ref.shape != param_value.shape:
+            mismatch_keys.add((layer_name, param_value.shape, ref.shape))
+
+        if layer_name in missing_keys:
+            missing_keys.remove(layer_name)
+
+        setattr(module_obj, param_name, param_value)
+    return model, mismatch_keys, missing_keys, misc, distributed_operation
 
 
 def convert_and_load_state_dict_in_model(
@@ -433,7 +488,7 @@ def convert_and_load_state_dict_in_model(
     mismatch_keys = set()
     unexpected_keys = set()
     # Global thread_poolutor + per-file semaphores: allow lock only upon 4 file access? Should be tensor get_shape dependant?
-    thread_pool = ThreadPoolthread_poolutor(max_workers=GLOBAL_WORKERS)
+    thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
     _file_semaphore = defaultdict(lambda: threading.Semaphore(PER_FILE_LIMIT))
 
     _patterns = list(itertools.chain.from_iterable([k.source_keys for k in weight_mapping]))
@@ -479,7 +534,7 @@ def convert_and_load_state_dict_in_model(
                 and quantizer.param_needs_quantization(model, t)
                 and quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer"
             ):
-                converter.quantization_operation[t] = Fp8Quantize()  # TODO support other methods
+                converter.quantization_operation = Fp8Quantize()  # TODO support other methods
             else:
                 raise ValueError("This quantization method is gonna be supported SOOOON")
 
@@ -489,16 +544,22 @@ def convert_and_load_state_dict_in_model(
             if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
                 empty_tensor = meta_model_state_dict.get(first_target_key)
                 if getattr(converter, "distributed_operation", {}) == {}:
-                    converter.distributed_operation = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]]
-                    converter.distributed_operation.device_mesh = device_mesh
-                    converter.distributed_operation.rank = device_map[""].index
-                    converter.distributed_operation.empty_tensor = empty_tensor.clone()
+                    tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
+                    converter.distributed_operation = tp_layer(
+                        device_mesh=device_mesh, rank=device_map[""].index, empty_tensor=empty_tensor.clone()
+                    )
+                # VERY IMPORTANT: this tells us wether we collected stuffs or not.
                 shard_index = len(entry.collected_tensors[target_key].get(converter_key, []))
                 future = spawn_tp_materialize(
-                    thread_pool, _file_semaphore, file_id, tensor, converter.distributed_operation, empty_tensor, shard_index
+                    thread_pool,
+                    _file_semaphore,
+                    file_id,
+                    tensor,
+                    converter.distributed_operation,
+                    shard_index,
                 )
 
-        if future is None:  # If not TP, async move tensors
+        if future is None:  # If not TP, async materialize the tensors. TODO probably need a check for To() op.
             future = spawn_materialize(thread_pool, _file_semaphore, file_id, tensor)
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(future)
 
@@ -519,24 +580,21 @@ def convert_and_load_state_dict_in_model(
                     values = [[k.result() for k in inner] for inner in tensors_for_this_layer.values()]
 
                     for op in operations:
-                        try:
+                        with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
                             values = op.convert(values)
-                        except Exception as e:
-                            misc[layer_name] = (
-                                f"{e}\nError: {op.__class__.__name__} on tensors collected from {converter.source_keys}. Ckpt contains: {values}"
-                            )
 
                     values = [values] if not isinstance(values, list) else values
-                    realized_value = {k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys}
+                    with log_to_misc(layer_name, misc,(values, concrete_target_keys), operations):
+                        realized_value = {
+                            k: t for k, t in zip(concrete_target_keys, values) if k not in unexpected_keys
+                        }
 
                     for k in list(realized_value.keys()).copy():
-                        if op := converter.quantization_operation.get(k):
-                            try:
+                        if op := converter.quantization_operation:
+                            with log_to_misc(layer_name, misc, op=op):
                                 realized_value.update(
                                     op.convert({k: realized_value.pop(k)}, quant_config=quantizer.quantization_config)
                                 )
-                            except Exception as e:
-                                misc[layer_name] = f"{op.__class__.__name__}: {e}"
 
                     if progress_bar is not None:
                         progress_bar.set_postfix_str(layer_name, refresh=False)
@@ -550,7 +608,7 @@ def convert_and_load_state_dict_in_model(
 
                         for src in converter.source_keys:  # what should happen to k when we meet k at saving
                             inverse_converters[k] = {src: converter}
-                        model, mismatch_keys, missing_keys,misc = set_param_for_module(
+                        set_param_for_module(
                             model,
                             k,
                             output_value,

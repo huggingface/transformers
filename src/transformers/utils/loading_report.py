@@ -82,6 +82,7 @@ def update_key_name(mapping: dict[str, Any]) -> dict[str, Any]:
         return out.keys()
     return out
 
+
 # We have a class to simplify disabling ANSI colors
 class ANSI:
     palette = {
@@ -198,10 +199,9 @@ def log_state_dict_report(
             status = "MISMATCH"
             status = _color(status, "yellow", ansi)
             data = [key, status]
-            if term_w > limit_rows:
-                data.append(
-                    " ".join(["Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"])
-                )
+            data.append(
+                " ".join(["Reinit due to size mismatch", f"ckpt: {str(shape_ckpt)} vs model:{str(shape_model)}"])
+            )
             rows.append(data)
 
     if misc:
