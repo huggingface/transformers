@@ -63,7 +63,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel, load_and_register_attn_kernel
+from .integrations.hub_kernels import is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -2387,7 +2387,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_attn_kernel(applicable_attn_implementation)
+                # preload flash attention here to allow compile with fullgraph
+                lazy_import_flash_attention(applicable_attn_implementation)
+
                 # log that we used kernel fallback if successful
                 if "flash_" in attn_implementation:
                     logger.warning_once(
@@ -2408,9 +2410,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             applicable_attn_implementation = self.get_correct_attn_implementation(
                 applicable_attn_implementation, is_init_check
             )
+
             # preload flash attention here to allow compile with fullgraph
-            if applicable_attn_implementation.startswith("flash_"):
-                lazy_import_flash_attention(applicable_attn_implementation, force_import=True)
+            if "flash" in applicable_attn_implementation:
+                lazy_import_flash_attention(applicable_attn_implementation)
+
         return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
@@ -5388,6 +5392,7 @@ class AttentionInterface(GeneralInterface):
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "paged|flash_attention_3": paged_attention_forward,
         "paged|flash_attention_2": paged_attention_forward,
         "paged|sdpa": sdpa_attention_paged_forward,
         "paged|eager": eager_paged_attention_forward,
