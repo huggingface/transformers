@@ -481,7 +481,7 @@ def convert_and_load_state_dict_in_model(
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
 
-    if model.config.tie_word_embeddings:
+    if model.config.tie_word_embeddings and isinstance(model._tied_weights_keys, list) :
         for k in model._tied_weights_keys:
             missing_keys.discard(k)
 
@@ -530,15 +530,12 @@ def convert_and_load_state_dict_in_model(
             if empty_tensor is None:
                 unexpected_keys.add(t)
                 continue
-            if (
-                quantizer is not None
-                and quantizer.param_needs_quantization(model, t)
-                and quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer"
-            ):
-                from .integrations.finegrained_fp8 import Fp8Quantize
-                converter.quantization_operation = Fp8Quantize()  # TODO support other methods
-            else:
-                raise ValueError("This quantization method is gonna be supported SOOOON")
+            if quantizer is not None and quantizer.param_needs_quantization(model, t):
+                if quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer":
+                    from .integrations.finegrained_fp8 import Fp8Quantize
+                    converter.quantization_operation = Fp8Quantize()  # TODO support other methods
+                else:
+                    raise ValueError("This quantization method is gonna be supported SOOOON")
 
         first_target_key = target_key.split("|")[0]
         future = None
@@ -635,10 +632,11 @@ def convert_and_load_state_dict_in_model(
 
 # TODO this is not done yet!
 def revert_weight_conversion(model, state_dict):
-    reverse_key_mapping = getattr(model, "inverse_converters", {})
+    mapping = getattr(model, "", {}) # IDK why but setting this will fail all llava.
+    reverse_key_mapping = [(v,k) for k,v in mapping.items()]
     original_state_dict = {}
     for key, value in state_dict.items():
-        for pattern, inverse_converter in reverse_key_mapping.items():
+        for pattern, inverse_converter in reverse_key_mapping:
             # TODO FIXME you name it
             replacement = inverse_converter.lstrip("^")  # strip off un-needed chars and patterns
             replacement = re.sub(r"\(.*\)", "", replacement)
