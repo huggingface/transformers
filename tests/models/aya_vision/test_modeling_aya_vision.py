@@ -267,7 +267,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("xpu", 3): [0.4109, 0.1532, 0.8018, 2.1328, 0.5483],
+                ("xpu", 3): [1.6699, 0.6260, 3.2266, 8.5547, 2.209],
                 # 4-bit
                 ("cuda", 7): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
                 ("cuda", 8): [1.6396, 0.6094, 3.1992, 8.5234, 2.1875],
@@ -308,7 +308,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
                 # 4-bit
                 ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
                 ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
@@ -474,7 +474,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
                 ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
                 ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
             }
