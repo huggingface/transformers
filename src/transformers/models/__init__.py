@@ -216,6 +216,7 @@ if TYPE_CHECKING:
     from .mgp_str import *
     from .mimi import *
     from .minimax import *
+    from .minimax_m2 import *
     from .ministral import *
     from .mistral import *
     from .mistral3 import *
