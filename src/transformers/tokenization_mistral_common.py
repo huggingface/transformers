@@ -149,7 +149,7 @@ class MistralTokenizerType(str, Enum):
     tekken = "tekken"
 
 
-def _get_validation_mode(mode: Union[str, ValidationMode]) -> ValidationMode:
+def _get_validation_mode(mode: Union[str, "ValidationMode"]) -> "ValidationMode":
     """Get the validation mode from a string or a ValidationMode."""
     _invalid_mode_msg = f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are 'finetuning' or 'test'."
     if isinstance(mode, str):
