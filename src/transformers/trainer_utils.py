@@ -275,7 +275,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second")]
+    speed_metrics = [m for m in metrics if m.endswith(("_runtime", "_per_second"))]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())

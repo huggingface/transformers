@@ -1048,7 +1048,7 @@ class SpecialTokensMixin:
 
     def __setattr__(self, key, value):
         key_without_id = key
-        key_is_special_id = key.endswith("_id") or key.endswith("_ids")
+        key_is_special_id = key.endswith(("_id", "_ids"))
         if key_is_special_id:
             key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
 
@@ -1072,7 +1072,7 @@ class SpecialTokensMixin:
 
     def __getattr__(self, key):
         key_without_id = key
-        key_is_special_id = key.endswith("_id") or key.endswith("_ids")
+        key_is_special_id = key.endswith(("_id", "_ids"))
         if key_is_special_id:
             key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
 

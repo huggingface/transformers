@@ -78,7 +78,7 @@ class EnglishNumberNormalizer:
             return "zero"
 
         parts = []
-        for i in range(0, len(self.thousands)):
+        for i in range(len(self.thousands)):
             if num % 1000 != 0:
                 part = ""
                 hundreds = num % 1000 // 100
