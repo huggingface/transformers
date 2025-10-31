@@ -13,7 +13,7 @@
 # limitations under the License.
 """
 Tokenization classes for python tokenizers. For fast tokenizers (provided by HuggingFace's tokenizers library) see
-tokenization_utils_fast.py
+tokenization_utils_tokenizers.py
 """
 
 import bisect

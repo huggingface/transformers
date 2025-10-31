@@ -20,7 +20,7 @@ from typing import Optional
 from tokenizers import normalizers
 from tokenizers.pre_tokenizers import BertPreTokenizer, PreTokenizer
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_roformer import RoFormerTokenizer
 from .tokenization_utils import JiebaPreTokenizer

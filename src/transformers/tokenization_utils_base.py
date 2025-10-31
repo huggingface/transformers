@@ -2250,7 +2250,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
 
         Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
-        specific [`~tokenization_utils_fast.PreTrainedTokenizerFast._save_pretrained`]
+        specific [`~tokenization_utils_tokenizers.PreTrainedTokenizerFast._save_pretrained`]
         """
         if legacy_format is False:
             raise ValueError(

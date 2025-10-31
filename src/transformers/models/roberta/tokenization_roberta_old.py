@@ -20,7 +20,7 @@ from typing import Optional
 from tokenizers import processors
 
 from ...tokenization_utils_base import AddedToken, BatchEncoding
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_roberta import RobertaTokenizer
 

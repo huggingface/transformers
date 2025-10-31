@@ -34,7 +34,7 @@ from ...tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_markuplm import MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, MarkupLMTokenizer
 

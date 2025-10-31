@@ -26,7 +26,7 @@ from ...tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
 
 

@@ -127,7 +127,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
-    from ..tokenization_utils_fast import PreTrainedTokenizerFast
+    from ..tokenization_utils_tokenizers import PreTrainedTokenizerFast
 
 
 logger = logging.get_logger(__name__)
