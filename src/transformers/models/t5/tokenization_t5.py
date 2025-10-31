@@ -15,9 +15,8 @@
 """Tokenization class for model T5."""
 
 import re
-from typing import Optional
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_tokenizers import TokenizersBackend
@@ -120,12 +119,14 @@ class T5Tokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = None  
+        self._tokenizer.normalizer = None
 
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence([
-            pre_tokenizers.WhitespaceSplit(),
-            pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-        ])
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
+            ]
+        )
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
@@ -145,7 +146,7 @@ class T5Tokenizer(TokenizersBackend):
             single=["$A", "</s>"],
             pair=["$A", "</s>", "$B", "</s>"],
             special_tokens=[
-                ("</s>",  self.eos_token_id),
+                ("</s>", self.eos_token_id),
             ],
         )
 

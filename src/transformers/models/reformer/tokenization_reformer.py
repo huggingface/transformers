@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_tokenizers import TokenizersBackend
@@ -128,6 +128,6 @@ class ReformerTokenizer(TokenizersBackend):
             **kwargs,
         )
 
+        super()._post_init()
 
 __all__ = ["ReformerTokenizer"]
-

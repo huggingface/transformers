@@ -109,7 +109,7 @@ class MBartTokenizer(TokenizersBackend):
             vocab_list.append((str(unk_token), 0.0))
             
             # Add the rest of the SentencePiece vocab (skipping first 3: <unk>, <s>, </s>)
-            vocab_list.extend(vocab[3:])
+            vocab_list.extend(vocab[4:])
             
             # Add language codes
             for lang_code in FAIRSEQ_LANGUAGE_CODES:

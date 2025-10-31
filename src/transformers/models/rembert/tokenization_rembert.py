@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_tokenizers import TokenizersBackend
@@ -113,11 +113,14 @@ class RemBertTokenizer(TokenizersBackend):
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab_scores,
-                unk_id=0,
+                unk_id=2,
                 byte_fallback=False,
             )
         )
 
+        # Build normalizer matching RemBertConverter behavior
+        # When loading from pretrained, this will be overridden by tokenizer.json config
+        # When creating from extractor (vocab), this provides equivalent behavior
         list_normalizers = [
             normalizers.Replace("``", '"'),
             normalizers.Replace("''", '"'),
@@ -128,16 +131,18 @@ class RemBertTokenizer(TokenizersBackend):
             list_normalizers.append(normalizers.StripAccents())
         if self.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
+        
+        # Add Precompiled equivalent (newline conversion + NFKC normalization)
+        list_normalizers.extend([
+            normalizers.Replace(Regex(r"[\n\r\t]"), " "),  # Precompiled converts newlines/tabs to spaces
+            normalizers.NFKC(),  # Precompiled does NFKC normalization
+        ])
 
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         prepend_scheme = "always" if add_prefix_space else "never"
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme),
-            ]
-        )
+        # Remove WhitespaceSplit - should only have Metaspace (matches SpmConverter)
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
@@ -157,6 +162,22 @@ class RemBertTokenizer(TokenizersBackend):
             mask_token=mask_token,
             remove_space=remove_space,
             **kwargs,
+        )
+
+        # Set post_processor after super().__init__() so we have token IDs available
+        # This matches RemBertConverter.post_processor()
+        cls_token_str = str(cls_token)
+        sep_token_str = str(sep_token)
+        cls_token_id = self.convert_tokens_to_ids(cls_token_str)
+        sep_token_id = self.convert_tokens_to_ids(sep_token_str)
+        
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls_token_str}:0 $A:0 {sep_token_str}:0",
+            pair=f"{cls_token_str}:0 $A:0 {sep_token_str}:0 $B:1 {sep_token_str}:1",
+            special_tokens=[
+                (cls_token_str, cls_token_id),
+                (sep_token_str, sep_token_id),
+            ],
         )
 
         super()._post_init()

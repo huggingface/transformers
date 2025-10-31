@@ -15,8 +15,8 @@
 
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
-from tokenizers.models import Unigram
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, normalizers, Regex
+from tokenizers.models import BPE
 
 from ...tokenization_python import AddedToken, BatchEncoding
 from ...tokenization_tokenizers import TokenizersBackend
@@ -102,7 +102,7 @@ class NllbTokenizer(TokenizersBackend):
         additional_special_tokens=None,
         legacy_behaviour=False,
         vocab=None,
-        merges=None, 
+        merges=None,
         vocab_file=None,
         **kwargs,
     ):
@@ -118,46 +118,44 @@ class NllbTokenizer(TokenizersBackend):
         )
         self.legacy_behaviour = legacy_behaviour
 
-        # NLLB uses fairseq vocab alignment: <s>=0, <pad>=1, </s>=2, <unk>=3, then SPM pieces[3:]
-        # Note: NLLB doesn't add lang codes to vocab like MBart (they're in additional_special_tokens)
         if vocab is not None:
-            # Ensure vocab is list of (str, float) tuples
-            vocab = [(str(item[0]), float(item[1])) for item in vocab]
-            
-            # Reorder to fairseq: <s>, <pad>, </s>, <unk>, ... (rest of vocab from SPM[3:])
-            vocab_list = []
-            vocab_list.append((str(bos_token), 0.0))
-            vocab_list.append((str(pad_token), 0.0))
-            vocab_list.append((str(eos_token), 0.0))
-            vocab_list.append((str(unk_token), 0.0))
-            
-            vocab_list.extend(vocab[3:])
-            
-            self._vocab_scores = vocab_list
+            if isinstance(vocab, list):
+                self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)}
+            else:
+                self._vocab = vocab
         else:
-            self._vocab_scores = [
-                (str(bos_token), 0.0),
-                (str(pad_token), 0.0),
-                (str(eos_token), 0.0),
-                (str(unk_token), 0.0),
-                ("▁", -2.0),
-            ]
+            self._vocab = {
+                str(bos_token): 0,
+                str(pad_token): 1,
+                str(eos_token): 2,
+                str(unk_token): 3,
+            }
+
+        if merges is None:
+            self._merges = []
+        else:
+            self._merges = merges
 
         self._tokenizer = Tokenizer(
-            Unigram(
-                self._vocab_scores,
-                unk_id=3,
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                dropout=None,
+                unk_token=str(unk_token),
+                fuse_unk=True,
                 byte_fallback=False,
             )
         )
 
-        self._tokenizer.normalizer = None
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
+                normalizers.NFKC(), 
+                normalizers.Replace(Regex(r" {2,}"), " "), 
+            ]
+        )
 
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence([
-            pre_tokenizers.WhitespaceSplit(),
-            pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-        ])
-
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         tokenizer_object = self._tokenizer

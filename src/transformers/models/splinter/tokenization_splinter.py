@@ -83,8 +83,6 @@ class SplinterTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab_file: Optional[str] = None,
-        tokenizer_file: Optional[str] = None,
         do_lower_case: bool = True,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
@@ -98,9 +96,7 @@ class SplinterTokenizer(TokenizersBackend):
         **kwargs,
     ):
         if vocab is not None:
-            self._vocab = vocab
-        elif vocab_file is not None:
-            self._vocab = load_vocab(vocab_file)
+            self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
         else:
             self._vocab = {
                 str(pad_token): 0,
@@ -126,8 +122,6 @@ class SplinterTokenizer(TokenizersBackend):
         tokenizer_object = self._tokenizer
 
         super().__init__(
-            vocab_file=vocab_file,
-            tokenizer_file=tokenizer_file,
             tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             sep_token=sep_token,
@@ -158,7 +152,6 @@ class SplinterTokenizer(TokenizersBackend):
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
         self.question_token = question_token
-        self.vocab_file = vocab_file
         if self.question_token not in self.all_special_tokens:
             self.add_tokens([self.question_token], special_tokens=True)
         self.update_post_processor()

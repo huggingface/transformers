@@ -17,7 +17,7 @@
 from typing import Optional
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
-from tokenizers.models import BPE
+from tokenizers.models import Unigram
 
 from ...tokenization_sentencepiece import generate_merges
 from ...tokenization_tokenizers import TokenizersBackend
@@ -86,28 +86,22 @@ class XGLMTokenizer(TokenizersBackend):
         if vocab is not None:
             self._vocab = vocab
         else:
-            self._vocab = {
-                str(bos_token): 0,
-                str(pad_token): 1,
-                str(eos_token): 2,
-                str(unk_token): 3,
-            }
-        
-        self._merges = merges if merges is not None else generate_merges(self._vocab)
-        self._tokenizer = Tokenizer(
-            BPE(
-                vocab=self._vocab,
-                merges=self._merges,
-                dropout=None,
-                unk_token=str(unk_token),
-                continuing_subword_prefix="",
-                end_of_word_suffix="",
-                fuse_unk=True,
-                byte_fallback=False,
-            )
-        )
+            self._vocab = [
+                (str(bos_token), 0.0),
+                (str(pad_token), 0.0),
+                (str(eos_token), 0.0),
+                (str(unk_token), 0.0),
+            ]
+            
+        self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
 
-        self._tokenizer.normalizer = normalizers.Sequence([normalizers.Strip(left=False, right=True), normalizers.Replace(Regex(" {2,}"), "▁")])
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
+                normalizers.NFKC(), 
+                normalizers.Replace(Regex(r" {2,}"), " "), 
+            ]
+        )
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
@@ -126,5 +120,13 @@ class XGLMTokenizer(TokenizersBackend):
             **kwargs,
         )
 
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{self.eos_token} $A {self.eos_token}",
+            pair=f"{self.eos_token} $A {self.eos_token} {self.eos_token} $B {self.eos_token}",
+            special_tokens=[
+                (self.bos_token, self.bos_token_id),
+                (self.eos_token, self.eos_token_id),
+            ],
+        )
 
 __all__ = ["XGLMTokenizer"]

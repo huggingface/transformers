@@ -15,7 +15,7 @@
 
 from typing import Optional
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, normalizers, Regex
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken, BatchEncoding
@@ -103,31 +103,30 @@ class MBart50Tokenizer(TokenizersBackend):
 
         self.vocab_file = vocab_file
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
-        kwargs["additional_special_tokens"] += [
-            code for code in FAIRSEQ_LANGUAGE_CODES if code not in kwargs["additional_special_tokens"]
-        ]
+        # Do not pass language codes via extra_special_tokens to super().__init__.
+        # We will mark them as special AFTER backend construction to avoid re-adding tokens
+        # when loading from pretrained files.
 
-        # MBart50 uses fairseq vocab alignment: <s>=0, <pad>=1, </s>=2, <unk>=3, then SPM pieces[3:], lang codes, <mask>
+        # Always construct a tokenizer_object without referencing external tokenizer files
         if vocab is not None:
+            # MBart50 uses fairseq vocab alignment matching MBart50Converter:
+            # <s>=0, <pad>=1, </s>=2, <unk>=3, then tokens, lang codes, <mask>
+            
+            # Input vocab from TokenizersExtractor is already in fairseq format
+            # We just need to add language codes and mask token at the end
             vocab = [(str(item[0]), float(item[1])) for item in vocab]
-
-            # Reorder to fairseq: <s>, <pad>, </s>, <unk>, ... (rest of vocab from SPM[3:])
-            vocab_list = []
-            vocab_list.append((str(cls_token), 0.0))   # 0: <s>
-            vocab_list.append((str(pad_token), 0.0))   # 1: <pad>
-            vocab_list.append((str(eos_token), 0.0))   # 2: </s>
-            vocab_list.append((str(unk_token), 0.0))   # 3: <unk>
+            vocab_list = list(vocab)  # Copy the existing vocab
             
-            vocab_list.extend(vocab[3:])
-            
+            # Add language codes
             for lang_code in FAIRSEQ_LANGUAGE_CODES:
                 vocab_list.append((str(lang_code), 0.0))
             
+            # Add mask token
             vocab_list.append((str(mask_token), 0.0))
-            
+
             self._vocab_scores = vocab_list
         else:
+            # Minimal fallback: small vocab with specials and language codes
             self._vocab_scores = [
                 (str(cls_token), 0.0),
                 (str(pad_token), 0.0),
@@ -139,6 +138,7 @@ class MBart50Tokenizer(TokenizersBackend):
                 self._vocab_scores.append((lang_code, 0.0))
             self._vocab_scores.append((str(mask_token), 0.0))
 
+        # Build backend tokenizer from self._vocab_scores (both branches above set it)
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab_scores,
@@ -147,19 +147,23 @@ class MBart50Tokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = None
-
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence([
-            pre_tokenizers.WhitespaceSplit(),
-            pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-        ])
+        # Set normalizer equivalent to Precompiled + Strip + Replace from tokenizer.json
+        # When loading from pretrained, this will be overridden by the tokenizer.json config
+        # When creating from extractor (vocab), this provides equivalent behavior
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.Replace(Regex(r"[\n\r\t]"), " "),  # Precompiled converts newlines/tabs to spaces
+                normalizers.NFKC(),  # Precompiled does NFKC normalization
+                normalizers.Strip(left=False, right=True),  # Strip trailing whitespace (matches tokenizer.json)
+                normalizers.Replace(Regex(r" {2,}"), "▁"),  # Replace multiple spaces with underscore (matches tokenizer.json)
+            ]
+        )
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
+            tokenizer_object=self._tokenizer,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             eos_token=eos_token,
@@ -176,6 +180,18 @@ class MBart50Tokenizer(TokenizersBackend):
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
         self.fairseq_offset = 1
+
+        # Mark language codes as extra special tokens without re-adding them to the backend.
+        # Merge with any pre-existing extra_special_tokens (e.g., restored from config on load).
+        try:
+            lang_tokens = [AddedToken(code, special=True) for code in FAIRSEQ_LANGUAGE_CODES]
+        except Exception:
+            lang_tokens = list(FAIRSEQ_LANGUAGE_CODES)
+        existing_extra = getattr(self, "_extra_special_tokens", []) or []
+        # Preserve order: keep existing, append missing language codes
+        existing_strs = {str(t) for t in existing_extra}
+        merged_extra = list(existing_extra) + [t for t in lang_tokens if str(t) not in existing_strs]
+        self._extra_special_tokens = merged_extra
 
         # Build fairseq token mappings for backward compatibility
         self.fairseq_tokens_to_ids = {
@@ -201,7 +217,6 @@ class MBart50Tokenizer(TokenizersBackend):
     def src_lang(self, new_src_lang: str) -> None:
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
-
 
     def prepare_seq2seq_batch(
         self,

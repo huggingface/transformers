@@ -421,6 +421,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
     1. If tokenizer.json exists, load directly
     2. If any .model file (SPM) exists, try extracting vocab and merges
     3. If vocab.json and merges.txt exist, load with those
+    4. If vocab.txt exists (WordPiece models), load with that
 
     Args:
         tokenizer_class: The tokenizer class to instantiate
@@ -514,10 +515,46 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                 pretrained_model_name_or_path, *inputs, vocab=vocab, **kwargs
             )
 
+    # Try vocab.txt (WordPiece models like SplinterTokenizer)
+    try:
+        resolved_vocab_txt = cached_file(
+            pretrained_model_name_or_path,
+            "vocab.txt",
+            cache_dir=kwargs.get("cache_dir"),
+            force_download=kwargs.get("force_download", False),
+            proxies=kwargs.get("proxies"),
+            token=kwargs.get("token"),
+            revision=kwargs.get("revision"),
+            local_files_only=kwargs.get("local_files_only", False),
+            subfolder=kwargs.get("subfolder", ""),
+        )
+    except Exception:
+        resolved_vocab_txt = None
+
+    if resolved_vocab_txt is not None:
+        try:
+            fast_sig = inspect.signature(getattr(tokenizer_class, "__init__", tokenizer_class))
+            if "vocab" in fast_sig.parameters:
+                # Load vocab.txt: each line is a token, line number is the ID
+                vocab = OrderedDict()
+                with open(resolved_vocab_txt, "r", encoding="utf-8") as reader:
+                    tokens = reader.readlines()
+                for index, token in enumerate(tokens):
+                    token = token.rstrip("\n")
+                    vocab[token] = index
+                files_loaded.append("vocab.txt")
+                kwargs["backend"] = "tokenizers"
+                kwargs["files_loaded"] = files_loaded
+                return tokenizer_class.from_pretrained(
+                    pretrained_model_name_or_path, *inputs, vocab=vocab, **kwargs
+                )
+        except Exception:
+            pass
+
     # If all methods failed, raise an error
     raise ValueError(
         f"Could not load tokenizer from {pretrained_model_name_or_path} using tokenizers backend. "
-        "No tokenizer.json, vocab.json+merges.txt, or compatible SentencePiece model found."
+        "No tokenizer.json, vocab.json+merges.txt, vocab.txt, or compatible SentencePiece model found."
     )
 
 

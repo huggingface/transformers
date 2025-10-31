@@ -14,15 +14,10 @@
 
 import unittest
 
-from transformers import AutoTokenizer, XLMRobertaTokenizer
+from transformers import XLMRobertaTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
-from transformers.tokenization_sentencepiece import SentencePieceExtractor
-from tokenizers import AddedToken, Tokenizer
 
 # import cached_property
-
-
-
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
@@ -38,11 +33,128 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = False
     test_sentencepiece = True
 
-    
     # Integration test data - expected outputs for the default input string
-    integration_expected_tokens = ['▁This', '▁is', '▁a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '▁', '生活的', '真', '谛', '是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '<s>', '▁hi', '<s>', '▁there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁en', 'code', 'd', ':', '▁Hello', '.', '▁But', '▁ir', 'd', '▁and', '▁ปี', '▁ir', 'd', '▁ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']
-    integration_expected_token_ids = [3293, 83, 10, 3034, 6, 82803, 87, 509, 103122, 23, 483, 13821, 4, 136, 903, 83, 84047, 446, 5, 6, 62668, 5364, 245875, 354, 2673, 35378, 2673, 35378, 35378, 0, 1274, 0, 2685, 581, 25632, 79315, 5608, 186, 155965, 22, 40899, 71, 12, 35378, 5, 4966, 193, 71, 136, 10249, 193, 71, 48229, 28240, 3642, 621, 398, 20594]
-    integration_expected_decoded_text = 'This is a test 😊 I was born in 92000, and this is falsé. 生活的真谛是 Hi Hello Hi Hello Hello<s> hi<s> there The following string should be properly encoded: Hello. But ird and ปี ird ด Hey how are you doing'
+    integration_expected_tokens = [
+        "▁This",
+        "▁is",
+        "▁a",
+        "▁test",
+        "▁",
+        "😊",
+        "▁I",
+        "▁was",
+        "▁born",
+        "▁in",
+        "▁9",
+        "2000",
+        ",",
+        "▁and",
+        "▁this",
+        "▁is",
+        "▁fals",
+        "é",
+        ".",
+        "▁",
+        "生活的",
+        "真",
+        "谛",
+        "是",
+        "▁Hi",
+        "▁Hello",
+        "▁Hi",
+        "▁Hello",
+        "▁Hello",
+        "<s>",
+        "▁hi",
+        "<s>",
+        "▁there",
+        "▁The",
+        "▁following",
+        "▁string",
+        "▁should",
+        "▁be",
+        "▁properly",
+        "▁en",
+        "code",
+        "d",
+        ":",
+        "▁Hello",
+        ".",
+        "▁But",
+        "▁ir",
+        "d",
+        "▁and",
+        "▁ปี",
+        "▁ir",
+        "d",
+        "▁ด",
+        "▁Hey",
+        "▁how",
+        "▁are",
+        "▁you",
+        "▁doing",
+    ]
+    integration_expected_token_ids = [
+        3293,
+        83,
+        10,
+        3034,
+        6,
+        82803,
+        87,
+        509,
+        103122,
+        23,
+        483,
+        13821,
+        4,
+        136,
+        903,
+        83,
+        84047,
+        446,
+        5,
+        6,
+        62668,
+        5364,
+        245875,
+        354,
+        2673,
+        35378,
+        2673,
+        35378,
+        35378,
+        0,
+        1274,
+        0,
+        2685,
+        581,
+        25632,
+        79315,
+        5608,
+        186,
+        155965,
+        22,
+        40899,
+        71,
+        12,
+        35378,
+        5,
+        4966,
+        193,
+        71,
+        136,
+        10249,
+        193,
+        71,
+        48229,
+        28240,
+        3642,
+        621,
+        398,
+        20594,
+    ]
+    integration_expected_decoded_text = "This is a test 😊 I was born in 92000, and this is falsé. 生活的真谛是 Hi Hello Hi Hello Hello<s> hi<s> there The following string should be properly encoded: Hello. But ird and ปี ird ด Hey how are you doing"
 
     @classmethod
     def setUpClass(cls):
@@ -52,16 +164,6 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokenizer = XLMRobertaTokenizer.from_pretrained(from_pretrained_id)
         tokenizer.save_pretrained(cls.tmpdirname)
-
-        
-        # Build backend for slow tokenizer from the fast tokenizer's SentencePiece model
-        vocab_file = getattr(tokenizer, "vocab_file", None)
-
-        extractor = SentencePieceExtractor(vocab_file)
-        vocab_ids, vocab_scores, merges = extractor.extract()
-        tokenizer_from_vocab = XLMRobertaTokenizer(vocab=vocab_ids, merges=merges)
-
-        cls.tokenizers = [tokenizer, tokenizer_from_vocab]
 
     # def test_full_tokenizer(self):
     #     extractor = SentencePieceExtractor(SAMPLE_VOCAB)
@@ -228,7 +330,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # xlmr.eval()
         # xlmr.encode(symbols)
 
-        tokenizer = self.tokenizers[0]
+        tokenizer = self.get_tokenizer()
         self.assertListEqual(original_tokenizer_encodings, tokenizer.encode(symbols))
 
     # def test_tokenizer_integration(self):

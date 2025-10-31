@@ -17,7 +17,7 @@
 from typing import Optional
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
-from tokenizers.models import BPE
+from tokenizers.models import Unigram
 
 from ...tokenization_tokenizers import TokenizersBackend
 from ...utils import logging
@@ -66,38 +66,24 @@ class XLMRobertaTokenizer(TokenizersBackend):
         mask_token: str = "<mask>",
         add_prefix_space: bool = True,
         vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
         vocab_file: Optional[str] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
 
+
         if vocab is not None:
             self._vocab = vocab
         else:
-            self._vocab = {
-                str(bos_token): 0,
-                str(pad_token): 1,
-                str(eos_token): 2,
-                str(unk_token): 3,
-                str(mask_token): 4, 
-            }
+            self._vocab = [
+                (str(bos_token), 0.0),
+                (str(pad_token), 0.0),
+                (str(eos_token), 0.0),
+                (str(unk_token), 0.0),
+                (str(mask_token), 0.0),
+            ]
 
-        if merges is not None:
-            self._merges = merges
-        else:
-            self._merges = []
-
-        self._tokenizer = Tokenizer(
-            BPE(
-                vocab=self._vocab,
-                merges=self._merges,
-                unk_token=str(unk_token),
-                fuse_unk=True,
-                byte_fallback=False,
-                dropout=None,
-            )
-        )
+        self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
 
         self._tokenizer.normalizer = normalizers.Sequence([
             normalizers.Strip(left=False, right=True),
@@ -105,17 +91,9 @@ class XLMRobertaTokenizer(TokenizersBackend):
         ])
 
         prepend_scheme = "always" if add_prefix_space else "never"
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence([pre_tokenizers.WhitespaceSplit(), pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)])
         self._tokenizer.decoder = decoders.Metaspace( replacement="▁", prepend_scheme=prepend_scheme)
 
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single="<s> $A </s>",
-            pair="<s> $A </s> </s> $B </s>",
-            special_tokens=[
-                ("<s>", self._vocab.get(str(bos_token), 0)),
-                ("</s>", self._vocab.get(str(eos_token), 2)),
-            ],
-        )
 
         tokenizer_object = self._tokenizer
 
@@ -131,6 +109,16 @@ class XLMRobertaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+        
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.eos_token_id),
+            ],
+        )
+
 
         self.vocab_file = vocab_file
 
