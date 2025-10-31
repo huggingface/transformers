@@ -156,7 +156,7 @@ class Chunk(ConversionOps):
         self.sizes = list(sizes) if sizes is not None else None
         self.reverse_op = Concatenate
 
-    def convert(self, value: torch.Tensor) -> list[torch.Tensor]:
+    def convert(self, value: torch.Tensor,*args, **kwargs) -> list[torch.Tensor]:
         if not isinstance(value, torch.Tensor):
             raise TypeError("Chunk expects a torch.Tensor as input.")
         if self.sizes is not None:
@@ -174,7 +174,7 @@ class Concatenate(ConversionOps):
         self.reverse_op = Chunk
 
     @torch.no_grad
-    def convert(self, value: Sequence[torch.Tensor]) -> torch.Tensor:
+    def convert(self, value: Sequence[torch.Tensor], *args, **kwargs) -> torch.Tensor:
         if isinstance(value[0], list):
             value = [v[0] for v in value]
         tensors = value
@@ -207,7 +207,7 @@ class MergeModulelist(Concatenate):
         super().__init__(dim=dim)
         self.reverse_op = SplitModulelist
 
-    def convert(self, value: Sequence[torch.Tensor]) -> list[torch.Tensor]:
+    def convert(self, value: Sequence[torch.Tensor], *args, **kwargs) -> list[torch.Tensor]:
         merged = []
         with torch.no_grad():  # we use staging buffers
             for group in value:
@@ -258,7 +258,7 @@ class Cast(ConversionOps):
     def __init__(self, dtype):
         self.dtype = dtype
 
-    def convert(self, realized_value):
+    def convert(self, realized_value, *args, **kwargs):
         return realized_value.to(self.dtype)
 
 
@@ -278,9 +278,33 @@ class To(ConversionOps):
     def __init__(self, device):
         self.device = device
 
-    def convert(self, realized_value):
+    def convert(self, realized_value, *args, **kwargs):
         with torch.device(self.device):
             out = [[x[...] for x in inner] if isinstance(inner, list) else inner[...] for inner in realized_value]
+        return out
+
+
+class PermuteForRope(ConversionOps):
+    """
+    Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
+    """
+
+    def __init__(self):
+        pass
+
+    def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
+        dim1 , dim2 = tensor.shape
+        n_heads = self.config.getattr("num_attention_heads", 1)
+
+        tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+        tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
+        return tensor
+
+    def convert(
+        self, value: Union[dict[str, torch.Tensor], Sequence[torch.Tensor], torch.Tensor], config
+    ) -> Union[dict[str, torch.Tensor], list[torch.Tensor], torch.Tensor]:
+        self.config = config
+        out = [[self._apply(x) for x in inner] if isinstance(inner, list) else self._apply(inner) for inner in value]
         return out
 
 
@@ -311,13 +335,15 @@ class WeightConverter:
     def __post_init__(self):
         if not isinstance(self.source_keys, list):
             self.source_keys = [self.source_keys]
+        targets_were_none = False
         if not isinstance(self.target_keys, list):
             if self.target_keys is None:
-                self.target_keys = self.source_keys
+                self.target_keys = list(self.source_keys)
+                targets_were_none = True
             else:
                 self.target_keys = [self.target_keys]
 
-        if bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
+        if not targets_were_none and bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
             raise ValueError(
                 f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
             )
@@ -576,7 +602,7 @@ def convert_and_load_state_dict_in_model(
 
                     for op in operations:
                         with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
-                            values = op.convert(values)
+                            values = op.convert(values, model.config)
 
                     values = [values] if not isinstance(values, list) else values
                     with log_to_misc(layer_name, misc, (values, concrete_target_keys), operations):
