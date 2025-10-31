@@ -175,33 +175,6 @@ def add_offsets_to_mask_function(mask_function: Callable, q_offset: int, kv_offs
     return inner_mask
 
 
-def _vmap_for_bhqkv(mask_function: Callable, bh_indices: bool = True) -> Callable:
-    """
-    Used to vmap our mask_functions over the q_idx and kv_idx dimensions of the inputs. Optionally, vmap over
-    the batch and head indices as well if `bh_indices=True`.
-    Using vmap here allows us to keep the performance of vectorized ops, while having a single set of primitive
-    functions between attention interfaces (i.e. between flex and sdpa/eager, FA2 being a bit different).
-
-    Args:
-        mask_function (`Callable`):
-            The mask_function to vmap.
-        bh_indices (`bool`, optional):
-            Whether to vmap over the batch and head indices as well, or only q and kv indices.
-
-    Returns:
-        Callable: The vmapped function.
-    """
-    # We vmap the function 2 times, broadcasting the [q_idx, kv_idx] dimensions
-    dimensions = [(None, None, None, 0), (None, None, 0, None)]
-    if bh_indices:
-        # We extend broadcasting over the [batch_idx, head_idx] dimensions
-        dimensions.extend([(None, 0, None, None), (0, None, None, None)])
-
-    for dims in dimensions:
-        mask_function = torch.vmap(mask_function, in_dims=dims, out_dims=0)
-    return mask_function
-
-
 def prepare_padding_mask(
     attention_mask: Optional[torch.Tensor], kv_length: int, kv_offset: int, _slice: bool = True
 ) -> Optional[torch.Tensor]:
@@ -282,10 +255,25 @@ def _ignore_bidirectional_mask_sdpa(padding_mask: Optional[torch.Tensor]) -> boo
     return False
 
 
+def _vmap_expansion_sdpa(mask_function: Callable) -> Callable:
+    """
+    Used to vmap our mask_functions over the all 4 dimensions (b_idx, h_idx, q_idx, kv_idx) of the inputs.
+    Using vmap here allows us to keep the performance of vectorized ops, while having a single set of primitive
+    functions between attention interfaces (i.e. between flex and sdpa/eager, FA2 being a bit different).
+    """
+    # We vmap the function over all 4 dimensions, broadcasting [b_idx, h_idx, q_idx, kv_idx]
+    dimensions = [(0, None, None, None)], [(None, 0, None, None), (None, None, 0, None), (None, None, None, 0)]
+    for dims in dimensions:
+        mask_function = torch.vmap(mask_function, in_dims=dims, out_dims=0)
+    return mask_function
+
+
 def _non_vmap_expansion_sdpa(batch_size, cache_position, kv_arange):
     """
-    Broadcasts indices along their non-responsible dimensions.
-    Allows the usage of any index-based mask function.
+    Used to broadcast our mask_functions over the all 4 dimensions (b_idx, h_idx, q_idx, kv_idx) of the inputs.
+    Allows the usage of any index-based mask function without relying on vmap.
+
+    NOTE: This is limited to index based functions only and is not guaranteed to work otherwise.
 
     Reference:
         - https://github.com/huggingface/optimum-onnx/blob/c123e8f4fab61b54a8e0e31ce74462bcacca576e/optimum/exporters/onnx/model_patcher.py#L362-L365
@@ -456,23 +444,14 @@ def sdpa_mask(
         # scalar tensor (it internally calls `.item()` which vmap does not allow, but this context works around it
         # We don't need to add an offset to the mask_function either, as we vmap directly the correct indices for k and kv indices
         with TransformGetItemToIndex():
-            attention_mask = _vmap_for_bhqkv(mask_function)(batch_arange, head_arange, cache_position, kv_arange)
+            attention_mask = _vmap_expansion_sdpa(mask_function)(batch_arange, head_arange, cache_position, kv_arange)
 
-    # Option 3: Limited vmap mask creation (torch<2.6 and custom patterns)
+    # Option 3: Error out since it indicates that the user did something custom, which he shouldn't (torch<2.6)
     else:
-        logger.warning_once(
-            "Using vmap mask creation (custom patterns with and/or masks) has limited capabilities under "
-            "`torch<2.6.0`. We cannot guarantee that the correct mask is constructed."
+        raise ValueError(
+            "The vmap functionality for mask creation is only supported from torch>=2.6. "
+            "Please update your torch version or use `use_vmap=False` with index-based masks."
         )
-
-        # This creates the 4D mask easily. Note that we do not include vmap over the batch_idx dimension as well,
-        # as vmap cannot handle slicing a tensor from scalar tensor (it internally calls `.item()` which vmap does not allow
-        # However, in more recent version of Pytorch, a trick was introduced to handle it
-        attention_mask = _vmap_for_bhqkv(mask_function, bh_indices=False)(None, None, cache_position, kv_arange)
-        attention_mask = attention_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
-
-        if padding_mask is not None:
-            attention_mask = attention_mask * padding_mask
 
     # Due to a bug in versions of torch<2.5, we need to update the mask in case a query is not attending to any
     # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
@@ -844,10 +823,6 @@ def create_causal_mask(
 
     # If we detected packing format
     if packed_sequence_mask is not None:
-        if use_vmap and not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError(
-                "Packed masking along custom patterns (i.e. and/or masks) is only allowed from `torch>=2.6.0`."
-            )
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
@@ -1039,10 +1014,6 @@ def create_sliding_window_causal_mask(
 
     # If we detected packing format
     if packed_sequence_mask is not None:
-        if use_vmap and not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError(
-                "Packed masking along custom patterns (i.e. and/or masks) is only allowed from `torch>=2.6.0`."
-            )
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
@@ -1161,10 +1132,6 @@ def create_chunked_causal_mask(
 
     # If we detected packing format
     if packed_sequence_mask is not None:
-        if use_vmap and not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError(
-                "Packed masking along custom patterns (i.e. and/or masks) is only allowed from `torch>=2.6.0`."
-            )
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
