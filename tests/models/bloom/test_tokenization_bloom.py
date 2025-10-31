@@ -17,7 +17,7 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers importTokenizersBackend
+from transformers import TokenizersBackend
 from transformers.testing_utils import require_jinja, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
