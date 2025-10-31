@@ -46,10 +46,25 @@ class MistralAttention(LlamaAttention):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        if self.config.llama_4_scaling is not None:
+            self.llama_4_scaling_beta = self.config.llama_4_scaling.scaling_beta
+            self.llama_4_scaling_original_max_position_embeddings = (
+                self.config.llama_4_scaling.original_max_position_embeddings
+            )
+        else:
+            self.llama_4_scaling_beta = None
+            self.llama_4_scaling_original_max_position_embeddings = None
+
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+
+    def _get_llama4_attn_scale(self, positions_ids: torch.Tensor) -> torch.Tensor:
+        scaling = 1 + self.llama_4_scaling_beta * torch.log(
+            1 + torch.floor(positions_ids / self.llama_4_scaling_original_max_position_embeddings)
+        )
+        return scaling.unsqueeze(-1)
 
     def forward(
         self,
@@ -69,6 +84,9 @@ class MistralAttention(LlamaAttention):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if self.llama_4_scaling_beta is not None:
+            query_states = query_states * self._get_llama4_attn_scale(cache_position).to(query_states.dtype)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

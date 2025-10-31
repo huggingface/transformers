@@ -166,6 +166,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 32768):
         "intermediate_size": "hidden_dim",
         "num_attention_heads": "n_heads",
         "rms_norm_eps": "norm_eps",
+        "tie_word_embeddings": "tie_embeddings",
     }
     similar_keys_to_keep = [
         "head_dim",
@@ -180,12 +181,32 @@ def convert_config(original_config: dict, max_position_embeddings: int = 32768):
     new_config_kwargs["num_key_value_heads"] = original_config.get(
         "n_kv_heads", new_config_kwargs["num_attention_heads"]
     )
-    new_config_kwargs["rope_theta"] = original_config.get("rope_theta", 10000.0)
-    new_config_kwargs["max_position_embeddings"] = original_config.get("max_seq_len", max_position_embeddings)
+    new_config_kwargs["max_position_embeddings"] = original_config.get(
+        "max_position_embeddings", max_position_embeddings
+    )
+
+    if original_config.get("yarn"):
+        new_config_kwargs["rope_parameters"] = {
+            "type": "yarn",
+            "rope_theta": original_config.get("rope_theta", 10000.0),
+            "factor": original_config["yarn"]["factor"],
+            "original_max_position_embeddings": original_config["yarn"]["original_max_position_embeddings"],
+            "beta_fast": original_config["yarn"]["beta"],
+            "beta_slow": original_config["yarn"]["alpha"],
+            "mscale_all_dim": 1,
+        }
+
+        if original_config.get("llama_4_scaling"):
+            new_config_kwargs["mscale"] = 1
+    else:
+        new_config_kwargs["rope_theta"] = original_config.get("rope_theta", 10000.0)
 
     # This may sometimes be a string in `params.json`
     if new_config_kwargs["sliding_window"] is not None:
         new_config_kwargs["sliding_window"] = int(new_config_kwargs["sliding_window"])
+
+    if original_config.get("llama_4_scaling"):
+        new_config_kwargs["llama_4_scaling"] = original_config["llama_4_scaling"]
 
     new_config = MistralConfig(**new_config_kwargs)
     return new_config
@@ -226,6 +247,7 @@ def convert_and_write_tokenizer(input_dir: str, output_dir: str, tokenizer_templ
     if "tekken.json" in os.listdir(input_dir):
         tokenizer_file = os.path.join(input_dir, "tekken.json")
         tokenizer = convert_tekken_tokenizer(tokenizer_file)
+        tokenizer.add_special_tokens({"pad_token": "<pad>"})
     else:
         # May have .v3 or .v7 at the end
         tokenizer_file = [file for file in os.listdir(input_dir) if "tokenizer.model" in file][0]
@@ -272,12 +294,18 @@ def main():
         action="store_true",
         help="If passed, will only convert the tokenizer.",
     )
+    parser.add_argument(
+        "--model_only",
+        action="store_true",
+        help="If passed, will only convert the tokenizer.",
+    )
 
     args = parser.parse_args()
 
     if not args.tokenizer_only:
         convert_and_write_model(args.input_dir, args.output_dir, args.max_position_embeddings, args.modules_are_split)
-    convert_and_write_tokenizer(args.input_dir, args.output_dir, args.template_name)
+    if not args.model_only:
+        convert_and_write_tokenizer(args.input_dir, args.output_dir, args.template_name)
 
 
 if __name__ == "__main__":
