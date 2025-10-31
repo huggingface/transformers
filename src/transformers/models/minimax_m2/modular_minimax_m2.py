@@ -182,6 +182,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         router_jitter_noise: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         rotary_dim: Optional[int] = 64,
+        use_qk_norm: Optional[bool] = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -213,6 +214,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
         self.rotary_dim = rotary_dim
+        self.use_qk_norm = use_qk_norm
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)
@@ -243,7 +245,7 @@ class MiniMaxM2SparseMoeBlock(MixtralSparseMoeBlock):
         self.jitter_noise = config.router_jitter_noise
         self.gate = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
         self.experts = MiniMaxM2Experts(config)
-        self.e_score_correction_bias = nn.Parameter(torch.zeros((config.num_local_experts), dtype=torch.float32))
+        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
 
     def route_tokens_to_experts(self, router_logits):
         routing_weights = torch.nn.functional.sigmoid(router_logits.float())

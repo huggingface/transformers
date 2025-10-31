@@ -105,7 +105,7 @@ class MiniMaxM2SparseMoeBlock(nn.Module):
         self.jitter_noise = config.router_jitter_noise
         self.gate = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
         self.experts = MiniMaxM2Experts(config)
-        self.e_score_correction_bias = nn.Parameter(torch.zeros((config.num_local_experts), dtype=torch.float32))
+        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
 
     def route_tokens_to_experts(self, router_logits):
         routing_weights = torch.nn.functional.sigmoid(router_logits.float())

@@ -42,6 +42,10 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MiniMaxM2ModelTester(CausalLMModelTester):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.rotary_dim = self.head_dim
+
     if is_torch_available():
         base_model_class = MiniMaxM2Model
 

@@ -162,6 +162,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         router_jitter_noise: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         rotary_dim: Optional[int] = 64,
+        use_qk_norm: Optional[bool] = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -193,6 +194,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
         self.rotary_dim = rotary_dim
+        self.use_qk_norm = use_qk_norm
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)
