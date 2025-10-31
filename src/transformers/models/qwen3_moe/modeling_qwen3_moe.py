@@ -209,7 +209,7 @@ class Qwen3MoeMLP(nn.Module):
         return down_proj
 
 
-class Qwen3Moe(nn.Module):
+class Qwen3MoeExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
@@ -274,7 +274,7 @@ class Qwen3MoeTopKRouter(nn.Module):
 class Qwen3MoeSparseMoeBlock(nn.Module):
     def __init__(self, config: Qwen3MoeConfig):
         super().__init__()
-        self.experts = Qwen3Moe(config)
+        self.experts = Qwen3MoeExperts(config)
         self.router = Qwen3MoeTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

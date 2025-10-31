@@ -323,10 +323,10 @@ class WeightConverter:
             )
 
         for pattern in self.source_keys:
-            if any(ch in pattern for ch in set(".^$*+?{}[]|()")):
+            if any(ch in pattern for ch in set("^$+?{}[]|()")):
                 raise AssertionError(f"'{pattern}' is not glob")
         for pattern in self.target_keys:
-            if any(ch in pattern for ch in set(".^$*+?{}[]|()")):
+            if any(ch in pattern for ch in set("^$+?{}[]|()")):
                 raise AssertionError(f"'{pattern}' is not glob")
 
 

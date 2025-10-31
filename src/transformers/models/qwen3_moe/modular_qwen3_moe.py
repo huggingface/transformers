@@ -55,7 +55,7 @@ class Qwen3MoeMLP(Qwen2MoeMLP):
     pass
 
 
-class Qwen3Moe(Qwen2MoeExperts):
+class Qwen3MoeExperts(Qwen2MoeExperts):
     pass
 
 
@@ -66,7 +66,7 @@ class Qwen3MoeTopKRouter(Qwen2MoeTopKRouter):
 class Qwen3MoeSparseMoeBlock(nn.Module):
     def __init__(self, config: Qwen3MoeConfig):
         super().__init__()
-        self.experts = Qwen3Moe(config)
+        self.experts = Qwen3MoeExperts(config)
         self.router = Qwen3MoeTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
