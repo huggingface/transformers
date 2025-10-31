@@ -15,6 +15,7 @@
 
 import copy
 import unittest
+from difflib import SequenceMatcher
 
 from transformers import (
     AutoProcessor,
@@ -569,15 +570,16 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Decode output, excluding the input prompt
         decoded_output = processor.decode(generated_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        # Check that the model generated non-empty text
-        # The exact output depends on the trained model, but it should contain some OCR text
-        self.assertIsNotNone(decoded_output)
-        self.assertIsInstance(decoded_output, str)
-        self.assertGreater(len(decoded_output.strip()), 0, "Model should generate non-empty OCR output")
+        expected_output = "Document No : TD01167104\n\nDate : 25/12/2018 8:13:39 PM\n\nCashier : MANIS\n\nMember :\n\nCASH BILL\n\n| CODE"
 
-        # Check that the model correctly extracted the date from the receipt
-        self.assertIn(
-            "25/12/2018", decoded_output, "Model should extract the date '25/12/2018' from the receipt image"
+        similarity = SequenceMatcher(None, decoded_output, expected_output).ratio()
+
+        # Require at least 95% similarity to catch regressions while allowing minor variations
+        self.assertGreater(
+            similarity,
+            0.95,
+            f"Model output differs too much from expected output (similarity: {similarity:.2%}).\n"
+            f"Expected:\n{expected_output}\n\nGot:\n{decoded_output}",
         )
 
     def test_model_can_generate_without_images(self):
