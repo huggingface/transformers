@@ -124,7 +124,7 @@ class HeliumConfig(PreTrainedConfig):
         rms_norm_eps: Optional[int] = 1e-8,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         pad_token_id: Optional[int] = 3,
         eos_token_id: Optional[int] = 2,
         bos_token_id: Optional[int] = 1,
