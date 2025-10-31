@@ -29,10 +29,9 @@ class MiniMaxM2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxM2Model`]. It is used to instantiate an
     MiniMaxM2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the MiniMaxM2-7B-v0.1 or MiniMaxM2-7B-Instruct-v0.1.
+    with the defaults will yield a similar configuration to that of the MiniMaxM2.
 
-    [minimax_m2ai/MiniMaxM2-8x7B](https://huggingface.co/minimax_m2ai/MiniMaxM2-8x7B)
-    [minimax_m2ai/MiniMaxM2-7B-Instruct-v0.1](https://huggingface.co/minimax_m2ai/MiniMaxM2-7B-Instruct-v0.1)
+    [MiniMaxAI/MiniMax-M2](https://huggingface.co/MiniMaxAI/MiniMax-M2)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -99,14 +98,16 @@ class MiniMaxM2Config(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        rotary_dim (`int`, *optional*, defaults to `None`):
+            The dimension of the rotary embeddings. If not specified, will default to `head_dim`.
 
     ```python
     >>> from transformers import MiniMaxM2Model, MiniMaxM2Config
 
-    >>> # Initializing a MiniMaxM2 7B style configuration
+    >>> # Initializing a MiniMaxM2 style configuration
     >>> configuration = MiniMaxM2Config()
 
-    >>> # Initializing a model from the MiniMaxM2 7B style configuration
+    >>> # Initializing a model from the MiniMaxM2 style configuration
     >>> model = MiniMaxM2Model(configuration)
 
     >>> # Accessing the model configuration
@@ -160,6 +161,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rotary_dim: Optional[int] = 64,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -190,6 +192,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
+        self.rotary_dim = rotary_dim
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)

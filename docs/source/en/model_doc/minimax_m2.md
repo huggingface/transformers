@@ -22,23 +22,35 @@ limitations under the License.
 
 ## Overview
 
-The MiniMax-M2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+MiniMax-M2 redefines efficiency for agents. It's a compact, fast, and cost-effective MoE model (230 billion total parameters with 10 billion active parameters) built for elite performance in coding and agentic tasks, all while maintaining powerful general intelligence. With just 10 billion activated parameters, MiniMax-M2 provides the sophisticated, end-to-end tool use performance expected from today's leading models, but in a streamlined form factor that makes deployment and scaling easier than ever.
 
-The abstract from the paper is the following:
-
-<INSERT PAPER ABSTRACT HERE>
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+For more details refer to the [release blog post](https://www.minimax.io/news/minimax-m2).
 
 ## Usage examples
 
-<INSERT SOME NICE EXAMPLES HERE>
+```python
+from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
+
+model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-M2", device_map="auto")
+
+tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M2")
+
+generation_config = GenerationConfig.from_pretrained("MiniMaxAI/MiniMax-M2")
+
+messages = [
+    {"role": "user", "content": "What is your favourite condiment?"},
+    {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
+    {"role": "user", "content": "Do you have mayonnaise recipes?"}
+]
+
+model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to("cuda")
+
+generated_ids = model.generate(model_inputs, max_new_tokens=100, generation_config=generation_config)
+
+response = tokenizer.batch_decode(generated_ids)[0]
+
+print(response)
+```
 
 ## MiniMaxM2Config
 
