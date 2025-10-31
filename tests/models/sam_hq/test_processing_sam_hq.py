@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
@@ -26,7 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin, prepare_image_inputs
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, SamHQProcessor, SamImageProcessor
+    from transformers import SamHQProcessor
 
 if is_torch_available():
     import torch
@@ -37,21 +35,6 @@ if is_torch_available():
 class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SamHQProcessor
 
-    @classmethod
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        image_processor = SamImageProcessor()
-        processor = SamHQProcessor(image_processor)
-        processor.save_pretrained(self.tmpdirname)
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    @classmethod
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    # Processor tester class can't use ProcessorTesterMixin atm because the processor is atypical e.g. only contains an image processor
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images."""
         return prepare_image_inputs()
@@ -94,11 +77,8 @@ class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_structured_kwargs_nested_from_dict(self):
         self.skipTest("SamHQProcessor does not have a tokenizer")
 
-    def test_save_load_pretrained_additional_features(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
     def test_image_processor_no_masks(self):
-        image_processor = self.get_image_processor()
+        image_processor = self.get_component("image_processor")
 
         processor = SamHQProcessor(image_processor=image_processor)
 
@@ -122,7 +102,7 @@ class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )  # reshaped_input_size value is before padding
 
     def test_image_processor_with_masks(self):
-        image_processor = self.get_image_processor()
+        image_processor = self.get_component("image_processor")
 
         processor = SamHQProcessor(image_processor=image_processor)
 
@@ -140,7 +120,7 @@ class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_post_process_masks(self):
-        image_processor = self.get_image_processor()
+        image_processor = self.get_component("image_processor")
 
         processor = SamHQProcessor(image_processor=image_processor)
         dummy_masks = [torch.ones((1, 3, 5, 5))]

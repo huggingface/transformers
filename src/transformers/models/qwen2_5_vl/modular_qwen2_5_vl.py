@@ -858,8 +858,6 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             in a chat into a tokenizable string.
     """
 
-    image_processor_class = "AutoImageProcessor"
-
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names

@@ -93,10 +93,6 @@ class ColPaliProcessor(ProcessorMixin):
             A prefix to be used for the query.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
-    tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
-
     def __init__(
         self,
         image_processor=None,

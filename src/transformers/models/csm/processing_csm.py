@@ -95,10 +95,6 @@ class CsmProcessor(ProcessorMixin):
 
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "EncodecFeatureExtractor"
-    tokenizer_class = "PreTrainedTokenizerFast"
-
     def __init__(
         self,
         feature_extractor,
