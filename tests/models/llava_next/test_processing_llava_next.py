@@ -40,6 +40,10 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         print("tokenizer_class", tokenizer_class)
         tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b")
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[PAD]"
+            if tokenizer.pad_token_id is None:
+                tokenizer.pad_token_id = 0
         return tokenizer
 
     @classmethod

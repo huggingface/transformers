@@ -356,8 +356,7 @@ class ProcessorTesterMixin:
         return components
 
     def get_processor(self):
-        components = self.prepare_components()
-        processor = self.processor_class(**components, **self.prepare_processor_dict())
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
         return processor
 
     def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):

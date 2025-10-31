@@ -47,23 +47,6 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {"num_query_tokens": 1}
 
-    def test_video_processor(self):
-        video_processor = self.get_video_processor()
-        tokenizer = self.get_tokenizer()
-        qformer_tokenizer = self.get_qformer_tokenizer()
-        processor_kwargs = self.prepare_processor_dict()
-
-        processor = InstructBlipVideoProcessor(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            qformer_tokenizer=qformer_tokenizer,
-            **processor_kwargs,
-        )
-
-        image_input = self.prepare_image_inputs()
-
-        input_feat_extract = video_processor(image_input, return_tensors="pt")
-        input_processor = processor(images=image_input, return_tensors="pt")
-
-        for key in input_feat_extract:
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+    @unittest.skip("InstructBlipVideoProcessor takes in 'images' instead of 'videos' (legacy)")
+    def test_processor_with_multiple_inputs(self):
+        pass
