@@ -22,7 +22,7 @@ import numpy as np
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_soundfile_available, is_torch_available, logging
 
 
@@ -42,6 +42,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
             "padding_side": "left",
             "add_special_tokens": False,
+            "return_attention_mask": True,
         },
         "audio_kwargs": {
             "sampling_rate": 24000,
@@ -86,22 +87,24 @@ class VibeVoiceProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-        # Pre-compute common token sequences
+        # Fixed text parts used in building text sequences
         self.system_prompt = " Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n"
-        self._prompt_tokens = self.tokenizer.encode(self.system_prompt)
-        self._voice_input_tokens = self.tokenizer.encode(' Voice input:\n', add_special_tokens=False)
-        self._text_input_tokens = self.tokenizer.encode(' Text input:\n', add_special_tokens=False)
-        self._speech_output_tokens = self.tokenizer.encode(' Speech output:\n', add_special_tokens=False)
-        self._newline_tokens = self.tokenizer.encode('\n', add_special_tokens=False)
+        self._voice_input_text = ' Voice input:\n'
+        self._text_input_text = ' Text input:\n'
+        self._speech_output_text = ' Speech output:\n'
+        self._newline_text = '\n'
+        
+        # Pre-compute token lengths for fixed text parts (for building the speech mask)
+        self._prompt_tokens_len = len(self.tokenizer.encode(self.system_prompt))
+        self._voice_input_tokens_len = len(self.tokenizer.encode(self._voice_input_text, add_special_tokens=False))
+        self._text_input_tokens_len = len(self.tokenizer.encode(self._text_input_text, add_special_tokens=False))
+        self._speech_output_tokens_len = len(self.tokenizer.encode(self._speech_output_text, add_special_tokens=False))
+        self._newline_tokens_len = len(self.tokenizer.encode(self._newline_text, add_special_tokens=False))
 
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
         voice_samples: Optional[AudioInput] = None,
-        padding: Union[bool, str, PaddingStrategy] = True,
-        truncation: Union[bool, str, TruncationStrategy] = False,
-        max_length: Optional[int] = None,
-        return_attention_mask: bool = True,
         **kwargs: Unpack[VibeVoiceProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -136,14 +139,6 @@ class VibeVoiceProcessor(ProcessorMixin):
                 Voice samples for each script. Order should match speaker IDs appearance in script. Can be:
                 - A list of samples for a single script
                 - A list of lists for batch processing
-            padding (`bool`, `str` or `PaddingStrategy`, defaults to `True`):
-                Whether to pad sequences to the same length
-            truncation (`bool`, `str` or `TruncationStrategy`, defaults to `False`):
-                Whether to truncate sequences
-            max_length (`int`, *optional*):
-                Maximum length of the returned sequences
-            return_attention_mask (`bool`, defaults to `True`):
-                Whether to return the attention mask
 
         Returns:
             `BatchFeature`: A BatchFeature with the following fields:
@@ -237,95 +232,71 @@ class VibeVoiceProcessor(ProcessorMixin):
         else:
             voice_samples_list = [None] * len(texts)
 
-        # Build full token sequence for each script
-        # Pre-compute speaker prefixes for unique speaker IDs (vectorized)
-        all_speaker_ids = set()
-        for speakers in speakers_per_script:
-            all_speaker_ids.update(speakers)
-        speaker_prefix_cache = {
-            spk_id: self.tokenizer.encode(f" Speaker {spk_id}:", add_special_tokens=False)
-            for spk_id in all_speaker_ids
-        }
-
-        input_ids = []
+        # Build text sequences with placeholders for speech tokens
+        text_sequences = []
         speech_input_masks = []
-
         for i, _script in enumerate(scripts):
-            # Initialize with prompt
-            full_tokens = self._prompt_tokens.copy()
-            speech_input_mask = [False] * len(self._prompt_tokens)
+            # Start with system prompt
+            text_parts = [self.system_prompt]
+            speech_input_mask = [False] * self._prompt_tokens_len
 
             # Add voice section if audio provided
             if processed_audio is not None:
                 script_speakers = speakers_per_script[i]
+                text_parts.append(self._voice_input_text)
+                speech_input_mask.extend([False] * self._voice_input_tokens_len)
 
-                # Add voice input header
-                full_tokens.extend(self._voice_input_tokens)
-                speech_input_mask.extend([False] * len(self._voice_input_tokens))
-
-                # Build speaker voice tokens
+                # Build speaker voice sections with placeholders
                 vae_tok_lens = processed_audio["speech_masks"][script_speakers].sum(dim=-1).int().tolist()
                 for speaker_id, vae_tok_len in zip(script_speakers, vae_tok_lens):
-                    prefix_tokens = speaker_prefix_cache[speaker_id]
-
-                    # Build tokens in one go
-                    speaker_tokens = (prefix_tokens +
-                                    [self.tokenizer.speech_start_id] +
-                                    [self.tokenizer.speech_diffusion_id] * vae_tok_len +
-                                    [self.tokenizer.speech_end_id] +
-                                    self._newline_tokens)
-
-                    # Build mask in one go
-                    vae_input_mask = ([False] * len(prefix_tokens) +
-                                    [False] +  # speech_start_id
-                                    [True] * vae_tok_len +  # speech tokens
-                                    [False] +  # speech_end_id
-                                    [False] * len(self._newline_tokens))
-
-                    full_tokens.extend(speaker_tokens)
-                    speech_input_mask.extend(vae_input_mask)
+                    # Use the actual speech tokens from the tokenizer
+                    speech_placeholder = self.tokenizer._speech_diffusion_token * vae_tok_len
+                    speaker_voice_text = f" Speaker {speaker_id}:{self.tokenizer._speech_start_token}{speech_placeholder}{self.tokenizer._speech_end_token}{self._newline_text}"
+                    text_parts.append(speaker_voice_text)
+                    
+                    # Track where speech tokens will be in the mask
+                    prefix_text = f" Speaker {speaker_id}:"
+                    prefix_len = len(self.tokenizer.encode(prefix_text, add_special_tokens=False))
+                    speech_input_mask.extend([False] * prefix_len)  # prefix
+                    speech_input_mask.extend([False])  # speech_start_id
+                    speech_input_mask.extend([True] * vae_tok_len)  # speech tokens
+                    speech_input_mask.extend([False])  # speech_end_id
+                    speech_input_mask.extend([False] * self._newline_tokens_len)  # newline
 
             # Add text input section
-            full_tokens.extend(self._text_input_tokens)
-            speech_input_mask.extend([False] * len(self._text_input_tokens))
+            text_parts.append(self._text_input_text)
+            speech_input_mask.extend([False] * self._text_input_tokens_len)
 
-            # Batch encode all speaker text at once
-            speaker_texts = [f" Speaker {speaker_id}:{speaker_text}\n" for speaker_id, speaker_text in _script]
-            if speaker_texts:
-                # Encode all speaker texts in one call
-                all_speaker_tokens = [self.tokenizer.encode(text, add_special_tokens=False) for text in speaker_texts]
-                for speaker_tokens in all_speaker_tokens:
-                    full_tokens.extend(speaker_tokens)
-                    speech_input_mask.extend([False] * len(speaker_tokens))
+            # Add script text
+            for speaker_id, speaker_text in _script:
+                speaker_line = f" Speaker {speaker_id}:{speaker_text}{self._newline_text}"
+                text_parts.append(speaker_line)
+                speaker_tokens_len = len(self.tokenizer.encode(speaker_line, add_special_tokens=False))
+                speech_input_mask.extend([False] * speaker_tokens_len)
 
             # Add speech output section
-            full_tokens.extend(self._speech_output_tokens + [self.tokenizer.speech_start_id])
-            speech_input_mask.extend([False] * (len(self._speech_output_tokens) + 1))
+            speech_output_text = f'{self._speech_output_text}{self.tokenizer._speech_start_token}'
+            text_parts.append(speech_output_text)
+            # Use precomputed length for fixed part + 1 for the speech start token
+            speech_input_mask.extend([False] * (self._speech_output_tokens_len + 1))
 
-            input_ids.append(full_tokens)
+            # Join all text parts
+            full_text = ''.join(text_parts)
+            text_sequences.append(full_text)
             speech_input_masks.append(speech_input_mask)
 
-        # Pad/truncate tokenizer input for batch
-        batch_encoding = self.tokenizer.pad(
-            BatchFeature({"input_ids": input_ids}),
-            padding=padding,
-            padding_side="left",
-            max_length=max_length if truncation else None,
-            return_tensors=return_tensors,
-            return_attention_mask=return_attention_mask,
-        )
+        # Tokenize the complete text sequences
+        batch_encoding = self.tokenizer(text_sequences, **text_kwargs)
 
-        # Manually align speech_input_mask with padded input_ids
+        # Handle speech input mask alignment (same logic as before but simpler)
         padded_length = batch_encoding["input_ids"].shape[1]
         padded_speech_masks = []
         for mask in speech_input_masks:
             if len(mask) < padded_length:
-                # Pad on the left (same as input_ids padding_side="left")
                 padding_needed = padded_length - len(mask)
                 padded_mask = [False] * padding_needed + mask
             else:
-                # Truncate if needed (same logic as input_ids)
-                padded_mask = mask[-padded_length:] if truncation else mask[:padded_length]
+                padded_mask = mask[:padded_length]
             padded_speech_masks.append(padded_mask)
         batch_encoding["speech_input_mask"] = torch.tensor(padded_speech_masks, dtype=torch.bool)
 
