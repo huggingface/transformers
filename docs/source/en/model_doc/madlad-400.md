@@ -54,6 +54,31 @@ One can directly use MADLAD-400 weights without finetuning the model:
 ['Eu amo pizza!']
 ```
 
+Note that in the input sentence, "`<2pt>`" is a token determining the target language of the translation. To see all supported language codes and their corresponding tokens:
+```python
+>>> tokens = [tokenizer.decode(i) for i in range(4,459)]
+>>> lang_codes = [token[2:-1] for token in tokens]
+>>> tokens
+
+    ['<2ace>',
+     '<2ace_Arab>',
+     '<2af>',
+      ...
+     '<2zh_Latn>',
+     '<2zne>',
+     '<2zza>']
+
+>>> lang_codes
+
+    ['ace',
+     'ace_Arab',
+     'af',
+      ...
+     'zh_Latn',
+     'zne',
+     'zza']
+```
+
 Google has released the following variants:
 
 - [google/madlad400-3b-mt](https://huggingface.co/google/madlad400-3b-mt)
