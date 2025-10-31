@@ -778,9 +778,7 @@ class ProcessorMixin(PushToHubMixin):
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
-    def save_pretrained(
-        self, save_directory, push_to_hub: bool = False, exclude_attributes: Optional[list[str]] = None, **kwargs
-    ):
+    def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -801,8 +799,6 @@ class ProcessorMixin(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            exclude_attributes (`list[str]`, *optional*):
-                A list of attributes to exclude from saving.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -822,8 +818,6 @@ class ProcessorMixin(PushToHubMixin):
             custom_object_save(self, save_directory, config=configs)
 
         for attribute_name in self.get_attributes():
-            if exclude_attributes and attribute_name in exclude_attributes:
-                continue
             attribute = getattr(self, attribute_name)
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
