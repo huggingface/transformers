@@ -662,16 +662,10 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for Wav2Vec2Conformer")
-
 
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
-
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for Wav2Vec2Conformer")
 
 
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
@@ -687,9 +681,6 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
     def tie_weights(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for Wav2Vec2Conformer")
-
     def freeze_base_model(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
@@ -698,24 +689,15 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassificati
     def __init__(self, config):
         super().__init__(config)
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for Wav2Vec2Conformer")
-
 
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
     def __init__(self, config):
         super().__init__(config)
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for Wav2Vec2Conformer")
-
 
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
     def __init__(self, config):
         super().__init__(config)
-
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for Wav2Vec2Conformer")
 
 
 __all__ = [

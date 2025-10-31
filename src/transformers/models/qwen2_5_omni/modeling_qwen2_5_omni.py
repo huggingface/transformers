@@ -1903,7 +1903,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         >>> text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
         >>> audios = [ librosa.load(BytesIO(urlopen( conversations[1]['content'][1]['audio_url'] ).read()), sr=self.processor.feature_extractor.sampling_rate) ]
         >>> images, videos = process_vision_info(conversations)
-        >>> inputs = processor(text=text, audios=audios, images=images, videos=videos, return_tensors="pt", padding=True)
+        >>> inputs = processor(text=text, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True)
 
         >>> # Generate
         >>> inputs['use_audio_in_video'] = `True` or `False`
@@ -2349,7 +2349,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
         >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
-        >>> inputs = processor(text=prompt, audios=audio, return_tensors="pt")
+        >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)

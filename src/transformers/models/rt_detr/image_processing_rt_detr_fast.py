@@ -334,14 +334,6 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
         return image, pixel_mask, annotation
 
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[RTDetrImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -519,6 +511,13 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             )
 
         return results
+
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[RTDetrImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
 
 __all__ = ["RTDetrImageProcessorFast"]
