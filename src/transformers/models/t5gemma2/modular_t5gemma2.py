@@ -986,6 +986,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
                 position_ids=position_ids,
                 inputs_embeds=inputs_embeds,
                 pixel_values=pixel_values,
+                return_dict=True,
                 **kwargs,
             )
 
@@ -1002,6 +1003,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
             encoder_attention_mask=attention_mask,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1033,7 +1035,6 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: T5Gemma2Config):
-        config.is_encoder_decoder = True
         super().__init__(config)
 
         self.model = T5Gemma2Model(config)
