@@ -193,7 +193,15 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_read_token
     def test_model_2b_8bit(self):
-        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"]  # fmt: skip
+        # fmt: off
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", None): ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am stuck', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
+                (None, None): ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
+            }
+        )
+        # fmt: on
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
             "gg-hf/recurrent-gemma-2b-hf",
@@ -208,7 +216,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_read_token
     def test_long_context(self):
