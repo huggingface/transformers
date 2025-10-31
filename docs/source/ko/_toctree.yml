@@ -469,7 +469,7 @@
         title: Blenderbot
       - local: in_translation
         title: Blenderbot Small
-      - local: in_translation
+      - local: model_doc/bloom
         title: BLOOM
       - local: in_translation
         title: BORT
