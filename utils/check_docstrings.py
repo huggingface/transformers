@@ -61,15 +61,22 @@ from transformers.utils.auto_docstring import (
 
 
 @dataclass
-class ASTIndexes:
-    """Clean data structure holding all precomputed AST indexes for a file."""
+class DecoratedItem:
+    """Information about a single @auto_docstring decorated function or class."""
 
-    def_line_to_kind: dict[int, str]
-    deco_line_to_custom_args: dict[int, str]
-    deco_line_to_def_line: dict[int, int]
-    def_line_to_body_start: dict[int, int]
-    def_line_to_args: dict[int, list[str]]
-    auto_doc_info_by_def_line: dict[int, dict]
+    decorator_line: int  # 1-based line number of the decorator
+    def_line: int  # 1-based line number of the def/class statement
+    kind: str  # 'function' or 'class'
+    body_start_line: (
+        int  # 1-based line number where body starts (for functions) or __init__ body start (for classes with __init__)
+    )
+    args: list[str]  # List of argument names (excluding self, *args, **kwargs) - for classes, these are __init__ args
+    custom_args_text: Optional[str] = None  # custom_args string if provided in decorator
+
+    # Class-specific fields (only populated when kind == 'class')
+    has_init: bool = False  # Whether the class has an __init__ method
+    init_def_line: Optional[int] = None  # 1-based line number of __init__ def (if has_init)
+    is_model_output: bool = False  # Whether the class inherits from ModelOutput
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -884,44 +891,34 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
 
 def _find_docstring_end_line(lines, docstring_start_line):
+    """Find the line number where a docstring ends. Only handles triple double quotes."""
     if docstring_start_line is None or docstring_start_line < 0 or docstring_start_line >= len(lines):
         return None
     start_line = lines[docstring_start_line]
-    has_triple_dq = '"""' in start_line
-    has_triple_sq = "'''" in start_line
-    if not has_triple_dq and not has_triple_sq:
+    if '"""' not in start_line:
         return None
-    dq_index = start_line.find('"""') if has_triple_dq else -1
-    sq_index = start_line.find("'''") if has_triple_sq else -1
-    if dq_index == -1:
-        delim = "'''"
-    elif sq_index == -1:
-        delim = '"""'
-    else:
-        delim = '"""' if dq_index != -1 and (sq_index == -1 or dq_index < sq_index) else "'''"
-    if start_line.count(delim) >= 2:
+    # Check if docstring starts and ends on the same line
+    if start_line.count('"""') >= 2:
         return docstring_start_line
-    idx = docstring_start_line + 1
-    while idx < len(lines):
-        if delim in lines[idx]:
+    # Find the closing triple quotes on subsequent lines
+    for idx in range(docstring_start_line + 1, len(lines)):
+        if '"""' in lines[idx]:
             return idx
-        idx += 1
     return len(lines) - 1
 
 
 def _is_auto_docstring_decorator(dec):
     """Return True if the decorator expression corresponds to `@auto_docstring`."""
-    if isinstance(dec, ast.Name) and dec.id == "auto_docstring":
-        return True
-    if isinstance(dec, ast.Attribute) and dec.attr == "auto_docstring":
-        return True
-    if isinstance(dec, ast.Call):
-        func = dec.func
-        if isinstance(func, ast.Name) and func.id == "auto_docstring":
-            return True
-        if isinstance(func, ast.Attribute) and func.attr == "auto_docstring":
-            return True
-    return False
+    # Handle @auto_docstring(...) - unwrap the Call to get the function
+    target = dec.func if isinstance(dec, ast.Call) else dec
+    # Check if it's named "auto_docstring"
+    return isinstance(target, ast.Name) and target.id == "auto_docstring"
+
+
+def _extract_function_args(func_node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> list[str]:
+    """Extract argument names from a function node, excluding 'self', *args, **kwargs."""
+    all_args = (func_node.args.posonlyargs or []) + func_node.args.args + func_node.args.kwonlyargs
+    return [a.arg for a in all_args if a.arg != "self"]
 
 
 def find_matching_model_files(check_all: bool = False):
@@ -1113,16 +1110,14 @@ def generate_new_docstring_for_signature(
 
 def generate_new_docstring_for_function(
     lines,
-    current_line_end,
+    item: DecoratedItem,
     custom_args_dict,
-    ast_indexes: ASTIndexes,
 ):
     """
     Wrapper for function docstring generation using the generalized helper.
     """
-    sig_end_line = ast_indexes.def_line_to_body_start.get(current_line_end, current_line_end + 1)
-    # Use precomputed args from AST indexes
-    args_in_signature = ast_indexes.def_line_to_args[current_line_end]
+    sig_end_line = item.body_start_line - 1  # Convert to 0-based
+    args_in_signature = item.args
     docstring_start_line = sig_end_line if '"""' in lines[sig_end_line] else None
     return generate_new_docstring_for_signature(
         lines,
@@ -1136,37 +1131,25 @@ def generate_new_docstring_for_function(
 
 def generate_new_docstring_for_class(
     lines,
-    current_line_end,
+    item: DecoratedItem,
     custom_args_dict,
-    ast_indexes: ASTIndexes,
+    source: str,
 ):
     """
     Wrapper for class docstring generation (via __init__) using the generalized helper.
     Returns the new docstring and relevant signature/docstring indices.
     """
-    sig_start_line = current_line_end
-    found_init_method = False
-    found_model_output = False
-    while sig_start_line < len(lines) - 1 and not found_init_method:
-        sig_start_line += 1
-        if "    def __init__" in lines[sig_start_line]:
-            found_init_method = True
-        elif lines[sig_start_line].startswith("class ") or lines[sig_start_line].startswith("def "):
-            break
-    if not found_init_method:
-        if "ModelOutput" in lines[current_line_end]:
-            found_model_output = True
-            sig_start_line = current_line_end
-        else:
-            return "", None, None, [], [], []
-
-    if found_init_method:
-        sig_end_line = ast_indexes.def_line_to_body_start.get(sig_start_line, sig_start_line + 1)
-        # Use precomputed args from AST indexes
-        args_in_signature = ast_indexes.def_line_to_args[sig_start_line]
-    else:
-        # we have a ModelOutput class, the class attributes are the args
-        sig_end_line = sig_start_line + 1
+    # Use pre-extracted information from DecoratedItem (no need to search or re-parse!)
+    if item.has_init:
+        # Class has an __init__ method - use its args and body start
+        sig_end_line = item.body_start_line - 1  # Convert from body start to sig end (0-based)
+        args_in_signature = item.args
+        output_docstring_indent = 8
+        source_args_doc = [ModelArgs, ImageProcessorArgs]
+    elif item.is_model_output:
+        # ModelOutput class - extract args from dataclass attributes
+        current_line_end = item.def_line - 1  # Convert to 0-based
+        sig_end_line = current_line_end + 1
         docstring_end = _find_docstring_end_line(lines, sig_end_line)
         model_output_class_start = docstring_end + 1 if docstring_end is not None else sig_end_line - 1
         model_output_class_end = model_output_class_start
@@ -1176,6 +1159,11 @@ def generate_new_docstring_for_class(
             model_output_class_end += 1
         dataclass_content = lines[model_output_class_start : model_output_class_end - 1]
         args_in_signature = get_args_in_dataclass(lines, dataclass_content)
+        output_docstring_indent = 4
+        source_args_doc = [ModelOutputArgs]
+    else:
+        # Class has no __init__ and is not a ModelOutput - nothing to document
+        return "", None, None, [], [], []
 
     docstring_start_line = sig_end_line if '"""' in lines[sig_end_line] else None
 
@@ -1186,148 +1174,130 @@ def generate_new_docstring_for_class(
         docstring_start_line,
         arg_indent="",
         custom_args_dict=custom_args_dict,
-        output_docstring_indent=4 if found_model_output else 8,
-        source_args_doc=[ModelArgs, ImageProcessorArgs] if not found_model_output else [ModelOutputArgs],
+        output_docstring_indent=output_docstring_indent,
+        source_args_doc=source_args_doc,
     )
 
 
-def _build_ast_indexes(source: str):
-    """Parse source once and build quick lookup indexes used by updates.
+def _build_ast_indexes(source: str) -> list[DecoratedItem]:
+    """Parse source once and return list of all @auto_docstring decorated items.
 
-    Returns a tuple: (def_line_to_kind, deco_line_to_custom_args, deco_line_to_def_line, def_line_to_body_start, def_line_to_args, auto_doc_info_by_def_line)
-    - def_line_to_kind: maps 0-based def line -> 'function' | 'class'
-    - deco_line_to_custom_args: maps 1-based decorator line -> custom_args string (if present), else None omitted
+    Returns:
+        List of DecoratedItem objects, one for each @auto_docstring decorated function or class.
     """
     tree = ast.parse(source)
-    # Collect top-level string variables for resolving custom_args names
+    # First pass: collect top-level string variables (for resolving custom_args variable references)
     var_to_string: dict[str, str] = {}
-    for node in getattr(tree, "body", []):
-        if isinstance(node, ast.Assign):
-            value = node.value
-            if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                text = value.value
-            else:
-                continue
-            for t in node.targets:
-                if isinstance(t, ast.Name):
-                    var_to_string[t.id] = text
-        elif isinstance(node, ast.AnnAssign):
-            value = node.value
-            if isinstance(value, ast.Str):
-                text = value.s
-            elif isinstance(value, ast.Constant) and isinstance(value.value, str):
-                text = value.value
-            else:
-                continue
-            target = node.target
-            if isinstance(target, ast.Name):
-                var_to_string[target.id] = text
-
-    def_line_to_kind: dict[int, str] = {}
-    deco_line_to_custom_args: dict[int, str] = {}
-    deco_line_to_def_line: dict[int, int] = {}
-    def_line_to_body_start: dict[int, int] = {}
-    # Precompute argument names for each function/async function definition (excluding kwargs and varargs)
-    def_line_to_args: dict[int, list[str]] = {}
-    # Store complete info for auto_docstring-decorated objects, keyed by def line (0-based)
-    auto_doc_info_by_def_line: dict[int, dict] = {}
+    for node in tree.body:
+        # Handle: ARGS = "some string"
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+            if isinstance(node.value.value, str):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        var_to_string[target.id] = node.value.value
+        # Handle: ARGS: str = "some string"
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.value, ast.Constant):
+            if isinstance(node.value.value, str) and isinstance(node.target, ast.Name):
+                var_to_string[node.target.id] = node.value.value
+    # Second pass: find all @auto_docstring decorated functions/classes
+    decorated_items: list[DecoratedItem] = []
     for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        # Find @auto_docstring decorator and extract custom_args if present
+        decorator_line = None
+        custom_args_text = None
+        for dec in node.decorator_list:
+            if not _is_auto_docstring_decorator(dec):
+                continue
+            decorator_line = dec.lineno
+            # Extract custom_args from @auto_docstring(custom_args=...)
+            if isinstance(dec, ast.Call):
+                for kw in dec.keywords:
+                    if kw.arg == "custom_args":
+                        if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                            custom_args_text = kw.value.value.strip()
+                        elif isinstance(kw.value, ast.Name):
+                            custom_args_text = var_to_string.get(kw.value.id, "").strip()
+            break
+        if decorator_line is None:  # No @auto_docstring decorator found
+            continue
+        # Extract info for this decorated item
+        kind = "class" if isinstance(node, ast.ClassDef) else "function"
+        body_start_line = node.body[0].lineno if node.body else node.lineno + 1
+        # Extract function arguments (skip self, *args, **kwargs)
+        arg_names = []
+        has_init = False
+        init_def_line = None
+        is_model_output = False
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            def_line_to_kind[getattr(node, "lineno", 0) - 1] = "function"
-            if getattr(node, "body", None):
-                def_line_to_body_start[getattr(node, "lineno", 0) - 1] = node.body[0].lineno - 1
-            # Build arg list from AST node
-            arg_names: list[str] = []
-            for a in getattr(node.args, "posonlyargs", []) or []:
-                arg_names.append(a.arg)
-            for a in node.args.args:
-                arg_names.append(a.arg)
-            for a in node.args.kwonlyargs:
-                arg_names.append(a.arg)
-            # Exclude 'self' and do not include kwargs or varargs at all
-            arg_names = [n for n in arg_names if n != "self"]
-            def_line_to_args[getattr(node, "lineno", 0) - 1] = arg_names
+            # For functions, extract args directly
+            arg_names = _extract_function_args(node)
         elif isinstance(node, ast.ClassDef):
-            def_line_to_kind[getattr(node, "lineno", 0) - 1] = "class"
-            if getattr(node, "body", None):
-                def_line_to_body_start[getattr(node, "lineno", 0) - 1] = node.body[0].lineno - 1
-        # Extract custom_args from decorators
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            for dec in getattr(node, "decorator_list", []):
-                if _is_auto_docstring_decorator(dec):
-                    # Map decorator line to the corresponding def/class line
-                    deco_line_to_def_line[getattr(dec, "lineno", 0)] = getattr(node, "lineno", 0)
-                    # Build autodocstring info bucket for this node
-                    def_line0 = getattr(node, "lineno", 0) - 1
-                    info = auto_doc_info_by_def_line.get(def_line0) or {
-                        "kind": def_line_to_kind.get(def_line0),
-                        "body_start": def_line_to_body_start.get(def_line0),
-                        "decorator_lineno": getattr(dec, "lineno", 0),
-                        "args": def_line_to_args.get(def_line0, []),
-                        "custom_args_text": None,
-                    }
-                    if isinstance(dec, ast.Call):
-                        for kw in dec.keywords or []:
-                            if kw.arg == "custom_args":
-                                v = kw.value
-                                value_str: Optional[str] = None
-                                if isinstance(v, ast.Constant) and isinstance(v.value, str):
-                                    value_str = v.value
-                                elif isinstance(v, ast.Name):
-                                    value_str = var_to_string.get(v.id)
-                                if value_str is not None:
-                                    deco_line_to_custom_args[getattr(dec, "lineno", 0)] = value_str.strip()
-                                    info["custom_args_text"] = value_str.strip()
-                    else:
-                        # plain @auto_docstring (no args)
-                        pass
-                    auto_doc_info_by_def_line[def_line0] = info
-    return ASTIndexes(
-        def_line_to_kind=def_line_to_kind,
-        deco_line_to_custom_args=deco_line_to_custom_args,
-        deco_line_to_def_line=deco_line_to_def_line,
-        def_line_to_body_start=def_line_to_body_start,
-        def_line_to_args=def_line_to_args,
-        auto_doc_info_by_def_line=auto_doc_info_by_def_line,
-    )
+            # For classes, look for __init__ method and check if it's a ModelOutput
+            # Check if class inherits from ModelOutput
+            for base in node.bases:
+                if isinstance(base, ast.Name) and "ModelOutput" in base.id:
+                    is_model_output = True
+                    break
+            # Look for __init__ method in the class body
+            for class_item in node.body:
+                if isinstance(class_item, ast.FunctionDef) and class_item.name == "__init__":
+                    has_init = True
+                    init_def_line = class_item.lineno
+                    arg_names = _extract_function_args(class_item)
+                    # Update body_start_line to be the __init__ body start
+                    body_start_line = class_item.body[0].lineno if class_item.body else class_item.lineno + 1
+                    break
+
+        decorated_items.append(
+            DecoratedItem(
+                decorator_line=decorator_line,
+                def_line=node.lineno,
+                kind=kind,
+                body_start_line=body_start_line,
+                args=arg_names,
+                custom_args_text=custom_args_text,
+                has_init=has_init,
+                init_def_line=init_def_line,
+                is_model_output=is_model_output,
+            )
+        )
+
+    return sorted(decorated_items, key=lambda x: x.decorator_line)
 
 
 def update_file_with_new_docstrings(
     candidate_file,
     lines,
-    line_starts_candidates,
-    line_ends_candidates,
-    ast_indexes: ASTIndexes,
+    decorated_items: list[DecoratedItem],
+    source: str,
     overwrite=False,
 ):
     """
     For a given file, update the docstrings for all @auto_docstring candidates and write the new content.
     """
-    content_base_file_new_lines = lines[: line_ends_candidates[0]]
-    current_line_start = line_starts_candidates[0]
-    current_line_end = line_ends_candidates[0]
-    index = 1
+    if not decorated_items:
+        return [], [], []
+
     missing_docstring_args_warnings = []
     fill_docstring_args_warnings = []
     docstring_args_ro_remove_warnings = []
 
-    # Use precomputed AST indexes
+    # Build new file content by processing decorated items and unchanged sections
+    content_base_file_new_lines = []
+    last_line_added = 0  # Track the last line we've already added to output (0-based)
 
-    while index <= len(line_starts_candidates):
+    for index, item in enumerate(decorated_items):
+        def_line_0 = item.def_line - 1  # Convert to 0-based
+
+        # Parse custom_args if present
         custom_args_dict = {}
-        # Prefer precomputed info if available
-        custom_args_text = ast_indexes.deco_line_to_custom_args.get(current_line_start + 1)
-        info = ast_indexes.auto_doc_info_by_def_line.get(current_line_end)
-        if info and info.get("custom_args_text"):
-            custom_args_text = info["custom_args_text"]
-        if custom_args_text:
-            custom_args_dict, _ = parse_docstring(custom_args_text)
-        new_docstring = ""
-        modify_class_docstring = False
-        # Detect kind via AST map first
-        kind = ast_indexes.def_line_to_kind.get(current_line_end)
-        # Function
-        if kind == "function":
+        if item.custom_args_text:
+            custom_args_dict, _ = parse_docstring(item.custom_args_text)
+
+        # Generate new docstring based on kind
+        if item.kind == "function":
             (
                 new_docstring,
                 sig_line_end,
@@ -1335,64 +1305,46 @@ def update_file_with_new_docstrings(
                 missing_docstring_args,
                 fill_docstring_args,
                 docstring_args_ro_remove,
-            ) = generate_new_docstring_for_function(
-                lines,
-                current_line_end,
-                custom_args_dict,
-                ast_indexes,
-            )
-        # Class
-        elif kind == "class":
+            ) = generate_new_docstring_for_function(lines, item, custom_args_dict)
+        else:  # class
             (
                 new_docstring,
-                class_sig_line_end,
-                class_docstring_end_line,
+                sig_line_end,
+                docstring_end,
                 missing_docstring_args,
                 fill_docstring_args,
                 docstring_args_ro_remove,
-            ) = generate_new_docstring_for_class(
-                lines,
-                current_line_end,
-                custom_args_dict,
-                ast_indexes,
-            )
-            modify_class_docstring = class_sig_line_end is not None
-        # Add warnings if needed
-        if missing_docstring_args:
-            for arg in missing_docstring_args:
-                missing_docstring_args_warnings.append(f"    - {arg} line {current_line_end}")
-        if fill_docstring_args:
-            for arg in fill_docstring_args:
-                fill_docstring_args_warnings.append(f"    - {arg} line {current_line_end}")
-        if docstring_args_ro_remove:
-            for arg in docstring_args_ro_remove:
-                docstring_args_ro_remove_warnings.append(f"    - {arg} line {current_line_end}")
-        # Write new lines
-        if index >= len(line_ends_candidates) or line_ends_candidates[index] > current_line_end:
-            if (kind == "function") or (kind is None and lines[current_line_end].lstrip().startswith("def ")):
-                content_base_file_new_lines += lines[current_line_end:sig_line_end]
-                if new_docstring != "":
-                    content_base_file_new_lines += new_docstring.split("\n")
-                if index < len(line_ends_candidates):
-                    content_base_file_new_lines += lines[docstring_end + 1 : line_ends_candidates[index]]
-                else:
-                    content_base_file_new_lines += lines[docstring_end + 1 :]
-            elif modify_class_docstring:
-                content_base_file_new_lines += lines[current_line_end:class_sig_line_end]
-                if new_docstring != "":
-                    content_base_file_new_lines += new_docstring.split("\n")
-                if index < len(line_ends_candidates):
-                    content_base_file_new_lines += lines[class_docstring_end_line + 1 : line_ends_candidates[index]]
-                else:
-                    content_base_file_new_lines += lines[class_docstring_end_line + 1 :]
-            elif index < len(line_ends_candidates):
-                content_base_file_new_lines += lines[current_line_end : line_ends_candidates[index]]
-            else:
-                content_base_file_new_lines += lines[current_line_end:]
-            if index < len(line_ends_candidates):
-                current_line_end = line_ends_candidates[index]
-                current_line_start = line_starts_candidates[index]
-        index += 1
+            ) = generate_new_docstring_for_class(lines, item, custom_args_dict, source)
+
+        # If sig_line_end is None, this item couldn't be processed (e.g., class with no __init__)
+        # In this case, we don't modify anything and just continue to the next item
+        if sig_line_end is None:
+            continue
+
+        # Add all lines from last processed line up to current def line
+        content_base_file_new_lines += lines[last_line_added:def_line_0]
+
+        # Collect warnings
+        for arg in missing_docstring_args:
+            missing_docstring_args_warnings.append(f"    - {arg} line {def_line_0}")
+        for arg in fill_docstring_args:
+            fill_docstring_args_warnings.append(f"    - {arg} line {def_line_0}")
+        for arg in docstring_args_ro_remove:
+            docstring_args_ro_remove_warnings.append(f"    - {arg} line {def_line_0}")
+
+        # Add lines from current def through signature
+        content_base_file_new_lines += lines[def_line_0:sig_line_end]
+
+        # Add new docstring if generated
+        if new_docstring:
+            content_base_file_new_lines += new_docstring.split("\n")
+
+        # Update last_line_added to skip the old docstring
+        last_line_added = (docstring_end + 1) if docstring_end is not None else sig_line_end
+
+    # Add any remaining lines after the last decorated item
+    content_base_file_new_lines += lines[last_line_added:]
+
     content_base_file_new = "\n".join(content_base_file_new_lines)
     if overwrite:
         with open(candidate_file, "w", encoding="utf-8") as f:
@@ -1422,18 +1374,20 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         with open(candidate_file, "r", encoding="utf-8") as f:
             content = f.read()
         lines = content.split("\n")
-        # Build indexes once per file and reuse
-        ast_indexes = _build_ast_indexes(content)
-        # Derive candidate lines directly from decorator line/index map
-        line_starts_candidates = sorted(ast_indexes.deco_line_to_def_line.keys())
-        line_ends_candidates = [ast_indexes.deco_line_to_def_line[start] - 1 for start in line_starts_candidates]
+
+        # Parse file once to find all @auto_docstring decorated items
+        decorated_items = _build_ast_indexes(content)
+
+        if not decorated_items:
+            continue
+
+        # Update docstrings for all decorated items
         missing_docstring_args_warnings, fill_docstring_args_warnings, docstring_args_ro_remove_warnings = (
             update_file_with_new_docstrings(
                 candidate_file,
                 lines,
-                [i - 1 for i in line_starts_candidates],  # convert to 0-based
-                line_ends_candidates,
-                ast_indexes,
+                decorated_items,
+                content,
                 overwrite=overwrite,
             )
         )
