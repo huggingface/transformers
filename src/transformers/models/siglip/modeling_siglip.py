@@ -678,9 +678,14 @@ class SiglipTextModel(SiglipPreTrainedModel):
         )
 
 
-class SiglipVisionTransformer(nn.Module):
+class SiglipVisionTransformer(SiglipPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": SiglipEncoderLayer,
+        "attentions": SiglipAttention,
+    }
+
     def __init__(self, config: SiglipVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
 
@@ -691,6 +696,7 @@ class SiglipVisionTransformer(nn.Module):
         if self.use_head:
             self.head = SiglipMultiheadAttentionPoolingHead(config)
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
