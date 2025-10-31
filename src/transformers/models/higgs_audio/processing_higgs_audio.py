@@ -12,18 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""HiggsAudioProcessor."""
 
 import re
 from itertools import islice
 from pathlib import Path
 from typing import Optional, Union
 
-import numpy as np
-
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_soundfile_available, is_torch_available, logging
 
 
@@ -105,8 +103,8 @@ class HiggsAudioProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[str, list[str]],
-        audio: Optional[Union[np.ndarray, list[np.ndarray]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        audio: Optional[AudioInput] = None,
         output_labels: Optional[bool] = False,
         **kwargs: Unpack[HiggsAudioProcessorKwargs],
     ):
@@ -195,10 +193,7 @@ class HiggsAudioProcessor(ProcessorMixin):
 
         return BatchFeature(data=data, tensor_type="pt")
 
-    def batch_decode(
-        self,
-        decoder_input_ids: "torch.Tensor",
-    ) -> list["torch.Tensor"]:
+    def batch_decode(self, decoder_input_ids):
         # start idx should be the last sequence index of the audio bos tokens
         audio_bos_token_idxs = (decoder_input_ids == self.audio_stream_bos_id).all(-1).nonzero()
         start_of_generation_idx = audio_bos_token_idxs[-1, -1].item()
@@ -227,10 +222,7 @@ class HiggsAudioProcessor(ProcessorMixin):
 
         return audios
 
-    def decode(
-        self,
-        decoder_input_ids: "torch.Tensor",
-    ) -> "torch.Tensor":
+    def decode(self, decoder_input_ids):
         if decoder_input_ids.shape[0] != 1:
             raise ValueError(
                 f"Expecting a single output to be decoded but received {decoder_input_ids.shape[0]} samples instead."
@@ -259,12 +251,11 @@ class HiggsAudioProcessor(ProcessorMixin):
 
     def revert_delay_pattern(self, input_ids):
         seq_len, num_codebooks = input_ids.shape
-
         # Extract diagonal slices from the delay pattern
         slices = []
         for i in range(num_codebooks):
             end_idx = seq_len - num_codebooks + 1 + i
-            slices.append(input_ids[i:end_idx, i:i + 1])
+            slices.append(input_ids[i:end_idx, i : i + 1])
 
         return torch.cat(slices, dim=1)
 
