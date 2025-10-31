@@ -26,8 +26,8 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torch_fp16,
     require_torch_accelerator,
+    require_torch_fp16,
     slow,
     torch_device,
 )

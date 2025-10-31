@@ -186,8 +186,7 @@ class Glm4IntegrationTest(unittest.TestCase):
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
                     "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
                 ],
-                # Default fallback for XPU
-                (None, None): [
+                ("xpu", None): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
                     "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
                 ],

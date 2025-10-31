@@ -32,8 +32,8 @@ from transformers.models.kosmos2_5.configuration_kosmos2_5 import (
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
     require_torch_accelerator,
+    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
