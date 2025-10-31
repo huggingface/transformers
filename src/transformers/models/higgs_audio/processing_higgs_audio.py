@@ -17,6 +17,7 @@
 from dataclasses import dataclass
 from typing import Optional, Union
 from itertools import islice
+import re
 
 import numpy as np
 
@@ -28,6 +29,7 @@ from ...utils import is_torch_available, logging
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -40,30 +42,11 @@ class HiggsAudioProcessorKwargs(ProcessingKwargs, total=False):
             "padding_side": "left",
         },
         "audio_kwargs": {
+            "padding": False,
             "sampling_rate": 24000,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
-
-
-
-def revert_delay_pattern(data):
-    """Convert samples encoded with delay pattern back to the original form.
-
-    Args:
-        data (:obj:`torch.Tensor`):
-            The data with delay pattern applied. It will have shape (num_codebooks, seq_len + num_codebooks - 1).
-
-    Returns:
-        ret (:obj:`torch.Tensor`):
-            Recovered data with delay pattern removed. It will have shape (num_codebooks, seq_len).
-    """
-    assert len(data.shape) == 2
-    out_l = []
-    num_codebooks = data.shape[0]
-    for i in range(num_codebooks):
-        out_l.append(data[i : (i + 1), i : (data.shape[1] - num_codebooks + 1 + i)])
-    return torch.cat(out_l, dim=0)
 
 
 class HiggsAudioProcessor(ProcessorMixin):
@@ -97,15 +80,15 @@ class HiggsAudioProcessor(ProcessorMixin):
         audio_token="<|AUDIO_OUT|>",
         audio_bos_token="<|audio_out_bos|>",
         audio_eos_token="<|audio_eos|>",
+        audio_stream_bos_id=1024,
+        audio_stream_eos_id=1025,
     ):
-        # TODO: better like that? (so llava like) or should it be more like Dia with things in the HiggsAudioProcessorKwargs
-        if chat_template is None:
-            chat_template = self.default_chat_template
-
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
+        self.audio_stream_bos_id = audio_stream_bos_id
+        self.audio_stream_eos_id = audio_stream_eos_id
 
         super().__init__(
             feature_extractor,
@@ -128,6 +111,7 @@ class HiggsAudioProcessor(ProcessorMixin):
         )
 
         text_kwargs = output_kwargs["text_kwargs"]
+        audio_kwargs = output_kwargs["audio_kwargs"]
         return_tensors = text_kwargs.get("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
@@ -152,104 +136,66 @@ class HiggsAudioProcessor(ProcessorMixin):
                     f"number of provided audios ({n_audio})."
                 )
 
-        # Process audio and expand audio tokens if needed
-        audio_ids_list = []
         if audio is not None:
-            # Ensure audio is a list
-            if isinstance(audio, np.ndarray):
-                audio = [audio]
+            # tokenize audio
+            audio_input_ids_list = []
+            for audio_el in audio:
+                # TODO: @eustlb, this should be batched !!!
+                audio_inputs = self.feature_extractor(audio_el, **audio_kwargs)
+                audio_inputs.to(self.audio_tokenizer.device)
+                audio_input_ids = self.audio_tokenizer.encode(**audio_inputs).audio_codes
 
-            # Process each audio
-            for audio_data in audio:
-                # Assume audio_data comes with the correct sample rate or resample
-                if hasattr(audio_data, "shape"):
-                    processed_audio = audio_data
-                else:
-                    processed_audio = np.array(audio_data)
-                # Generate audio tokens and store them in a list
-                input_values = self.feature_extractor(processed_audio)
-                input_values = torch.tensor(
-                    input_values["input_values"][0], device=self.audio_tokenizer.device
-                ).unsqueeze(0)
-                audio_ids = self.audio_tokenizer.encode(input_values).audio_codes
+                # add audio eos and bos
+                bos_codes = audio_input_ids.new_full((*audio_input_ids.shape[:2], 1), self.audio_stream_bos_id)
+                eos_codes = audio_input_ids.new_full((*audio_input_ids.shape[:2], 1), self.audio_stream_eos_id)
+                audio_input_ids = torch.cat([bos_codes, audio_input_ids, eos_codes], dim=2)
 
-                audio_ids = torch.cat(
-                    [
-                        torch.full((*audio_ids.shape[:2], 1), 1024, dtype=torch.int, device=audio_ids.device),
-                        audio_ids,
-                        torch.full((*audio_ids.shape[:2], 1), 1025, dtype=torch.int, device=audio_ids.device),
-                    ],
-                    dim=2,
-                )
+                audio_input_ids = self.build_delay_pattern_mask(audio_input_ids)
+                audio_input_ids_list.append(audio_input_ids[0].transpose(0, 1).cpu())
 
-                audio_ids = self.build_delay_pattern_mask(
-                    audio_ids,
-                    bos_token_id=1024,
-                    pad_token_id=1025,
-                )[0].squeeze(0)
-                audio_ids_list.append(audio_ids.squeeze(0).transpose(0, 1).cpu())
+            # convert to nested list according to n_audio_in_text
+            # [audio_1, audio_2, ...] -> [[audio_1_1, audio_1_2, ...], [audio_2_1, audio_2_2, ...], ...]
+            audio_input_ids_iter = iter(audio_input_ids_list)
+            audio_input_ids_list = [list(islice(audio_input_ids_iter, l)) for l in n_audio_in_text]
+            audio_input_ids_list = [torch.cat(batch_el, dim=0) for batch_el in audio_input_ids_list]
 
-            # Get the actual number of audio tokens from encoded audio
-            num_audio_tokens_list = [len(audio_ids) for audio_ids in audio_ids_list]
-            num_audio_tokens_list_copy = num_audio_tokens_list.copy()
-
-            # expand the text to repeat the audio token for the corresponding number of frames
-            expanded_text = []
-            for sample in text:
-                replace_str = []
-                while self.audio_token in sample:
-                    num_audio_tokens = num_audio_tokens_list_copy.pop(0)
-                    expanded_audio_token = self.audio_token * num_audio_tokens
-
-                    replace_str.append(expanded_audio_token)
-                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
-                expanded_text.append(sample)
-
-            text = expanded_text
-
-        encoding = self.tokenizer(text, **text_kwargs)
-        audio_ids_list_iter = iter(audio_ids_list)
-        data = {}
-        data.update(encoding)
-        if audio is not None:
-            audio_ids_list_iter = iter(audio_ids_list)
-            audio_ids_list = [list(islice(audio_ids_list_iter, length)) for length in n_audio_in_text]
-            audio_ids_list = [torch.cat(batch_el, dim=0) for batch_el in audio_ids_list]
-            
-            lenghts = [audio_ids.shape[0] for audio_ids in audio_ids_list]
+            # pad and stack
+            lenghts = [ids.shape[0] for ids in audio_input_ids_list]
             max_length = max(lenghts)
-            audio_ids_list = [
-                torch.nn.functional.pad(audio_ids, (0, 0, 0, max_length - audio_ids.shape[0]), value=1025)
-                for audio_ids in audio_ids_list
+            audio_input_ids_list = [
+                F.pad(ids, (0, 0, 0, max_length - ids.shape[0]), value=self.audio_stream_eos_id)
+                for ids in audio_input_ids_list
             ]
-
+            audio_input_ids = torch.stack(audio_input_ids_list, dim=0)
             audio_input_ids_mask = torch.arange(max_length)[None, :] < torch.tensor(lenghts)[:, None]
+            
+            # expand audio tokens in text
+            num_audio_tokens_iter = iter(len(audio_input_ids) for audio_input_ids in audio_input_ids_list)
+            for i in range(len(text)): 
+                expanded = re.sub(
+                    re.escape(self.audio_token),
+                    lambda _: self.audio_token * next(num_audio_tokens_iter),
+                    text[i]
+                )
+                text[i] = expanded
 
+        # tokenize text
+        data = self.tokenizer(text, **text_kwargs)
+        if audio is not None:
             data.update(
                 {
-                    "audio_input_ids": torch.stack(audio_ids_list, dim=0),
-                    "audio_input_ids_mask": audio_input_ids_mask.to(torch.int64),
+                    "audio_input_ids": audio_input_ids,
+                    "audio_input_ids_mask": audio_input_ids_mask,
                 }
             )
 
         return BatchFeature(data=data, tensor_type="pt")
 
-    def batch_decode(
-        self,
-        decoder_text_ids: "torch.Tensor",
-        decoder_audio_ids: list["torch.Tensor"],
-        prompt_token_length: int,
-    ) -> list["torch.Tensor"]:
-        raise NotImplementedError("Higgs Audio currently only supports single sample generation")
-
     def decode(
         self,
-        decoder_audio_ids: list["torch.Tensor"],
-        **kwargs: Unpack[HiggsAudioProcessorKwargs],
-    ):
+        audio_token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
+        **kwargs,
+    ) -> str:
         output_kwargs = self._merge_kwargs(
             HiggsAudioProcessorKwargs,
             **kwargs,
@@ -257,27 +203,100 @@ class HiggsAudioProcessor(ProcessorMixin):
         audio_kwargs = output_kwargs["audio_kwargs"]
         audio_codebook_size = 1024
 
-        if len(decoder_audio_ids) > 0:
-            wv_list = []
-            for output_audio in decoder_audio_ids:
-                vq_code = revert_delay_pattern(output_audio).clip(0, audio_codebook_size - 1)[:, 1:-1]
-                wv_numpy = self.audio_tokenizer.decode(vq_code.unsqueeze(0))[0][0, 0]
-                wv_list.append(wv_numpy.detach().cpu().numpy())
-            wv_numpy = np.concatenate(wv_list)
-        else:
-            wv_numpy = None
+        audio_token_ids = audio_token_ids.transpose(1, 2)
+
+        wv_list = []
+        for output_audio in audio_token_ids:
+            vq_code = self.revert_delay_pattern(output_audio).clip(0, audio_codebook_size - 1)[:, 1:-1]
+            wv_numpy = self.audio_tokenizer.decode(vq_code.unsqueeze(0))[0][0, 0]
+            wv_list.append(wv_numpy.detach().cpu().numpy())
+        wv_numpy = np.concatenate(wv_list)
 
         return wv_numpy
 
-    def build_delay_pattern_mask(
+     def batch_decode(
         self,
-        input_ids: "torch.LongTensor",
-        bos_token_id: int,
-        pad_token_id: int,
-        ) -> tuple["torch.LongTensor", "torch.LongTensor"]:
+        decoder_input_ids: "torch.Tensor",
+        audio_prompt_len: Optional[int] = None,
+        **kwargs: Unpack[DiaProcessorKwargs],
+    ) -> list["torch.Tensor"]:
+        output_kwargs = self._merge_kwargs(
+            DiaProcessorKwargs,
+            **kwargs,
+        )
+        audio_kwargs = output_kwargs["audio_kwargs"]
 
-        delay_pattern = list(range(self.audio_tokenizer.config.num_quantizers))
+        delay_pattern = audio_kwargs.pop("delay_pattern", None)
+        audio_bos_token_id = audio_kwargs.pop("bos_token_id", None)
+        audio_pad_token_id = audio_kwargs.pop("pad_token_id", None)
+        if audio_bos_token_id is None or audio_pad_token_id is None or delay_pattern is None:
+            raise ValueError(
+                "To enable decoding for Dia, we need the `bos_token_id`, `pad_token_id`, "
+                "and `delay_pattern`. You may have accidentally overwritten one of those."
+            )
 
+        # either decode the whole audio sequence or only the generated parts
+        if audio_prompt_len is not None:
+            audio_prompt_len = torch.tensor(audio_prompt_len, device=decoder_input_ids.device, dtype=torch.long)
+            start_of_generation_idx = audio_prompt_len[None].expand(decoder_input_ids.shape[0])
+        else:
+            start_of_generation_idx = (decoder_input_ids[:, :, 0] == audio_bos_token_id).sum(dim=-1)
+        # -1 for the eos token
+        end_of_generation_idx = (
+            decoder_input_ids.shape[1] - (decoder_input_ids[:, :, 0] == audio_pad_token_id).sum(dim=-1) - 1
+        )
+
+        # revert delay
+        
+        bsz, seq_len, num_channels = decoder_input_ids.shape
+        precomputed_idx = self.build_indices(
+            bsz=bsz,
+            seq_len=seq_len,
+            num_channels=num_channels,
+            delay_pattern=delay_pattern,
+            revert=True,
+        )
+
+        output_sequences = self.apply_audio_delay(
+            audio=decoder_input_ids,
+            # We do not care about these values as we cut them out
+            # with `start_of_generation_idx` and `end_of_generation_idx`
+            pad_token_id=-1,
+            bos_token_id=-1,
+            precomputed_idx=precomputed_idx,
+        ).transpose(1, 2)
+
+        # retrieve the correct sequences each
+        audios = []
+        with torch.no_grad():
+            for i in range(start_of_generation_idx.shape[0]):
+                output_i = output_sequences[i, :, start_of_generation_idx[i] : end_of_generation_idx[i]][None, ...]
+                output_i = output_i.to(self.audio_tokenizer.device)
+                audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values.cpu().squeeze()
+                audios.append(audio_i)
+
+        return audios
+    
+    def decode(
+        self,
+        decoder_input_ids: "torch.Tensor",
+        audio_prompt_len: Optional[int] = None,
+        **kwargs: Unpack[DiaProcessorKwargs],
+    ) -> "torch.Tensor":
+        """
+        Decodes a single sequence of audio codebooks into the respective audio waveform via the
+        `audio_tokenizer`. See [`~DacModel.decode`] and [`~DiaProcessor.batch_decode`] for more information.
+        """
+        if decoder_input_ids.shape[0] != 1:
+            raise ValueError(
+                f"Expecting a single output to be decoded but received {decoder_input_ids.shape[0]} samples instead."
+            )
+
+        return self.batch_decode(decoder_input_ids, audio_prompt_len, **kwargs)[0]
+
+    def build_delay_pattern_mask(self, input_ids):
+        bos_token_id = self.audio_stream_bos_id
+        pad_token_id = self.audio_stream_eos_id
         bsz, num_codebooks, seq_len = input_ids.shape
 
         new_seq_len = seq_len + num_codebooks - 1
@@ -289,7 +308,26 @@ class HiggsAudioProcessor(ProcessorMixin):
         input_ids = input_ids_with_gen_mask.clone()
         input_ids[eos_mask] = pad_token_id
         input_ids_with_gen_mask[eos_mask] = -1
-        return input_ids, input_ids_with_gen_mask
+
+        return input_ids
+
+    def revert_delay_pattern(self, data):
+        """Convert samples encoded with delay pattern back to the original form.
+
+        Args:
+            data (:obj:`torch.Tensor`):
+                The data with delay pattern applied. It will have shape (num_codebooks, seq_len + num_codebooks - 1).
+
+        Returns:
+            ret (:obj:`torch.Tensor`):
+                Recovered data with delay pattern removed. It will have shape (num_codebooks, seq_len).
+        """
+        assert len(data.shape) == 2
+        out_l = []
+        num_codebooks = data.shape[0]
+        for i in range(num_codebooks):
+            out_l.append(data[i : (i + 1), i : (data.shape[1] - num_codebooks + 1 + i)])
+        return torch.cat(out_l, dim=0)
 
 
 __all__ = ["HiggsAudioProcessor"]

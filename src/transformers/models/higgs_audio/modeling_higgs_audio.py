@@ -418,8 +418,8 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         audio_input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.BoolTensor] = None,
-        audio_input_ids_mask: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        audio_input_ids_mask: Optional[torch.BoolTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -438,9 +438,8 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
             if audio_input_ids is not None:
-                audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids[audio_input_ids_mask.bool()])
-                audio_inputs_embeds = audio_inputs_embeds.to(inputs_embeds.device)
-                inputs_embeds[audio_token_mask] = audio_inputs_embeds
+                audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids[audio_input_ids_mask])
+                inputs_embeds[audio_token_mask] = audio_inputs_embeds.to(inputs_embeds.device)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
