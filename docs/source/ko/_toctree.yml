@@ -432,8 +432,8 @@
       title: 피쳐 추출기
     - local: in_translation
       title: (번역중) Image Processor
-    - local: in_translation
-      title: (번역중) Video Processor
+    - local: main_classes/video_processor
+      title: 비디오 프로세서
     title: 메인 클래스
   - sections:
     - sections:
