@@ -877,9 +877,11 @@ class ContinuousBatchingManager:
         self.input_queue.put(state, block=True, timeout=10)  # XXX: pass timeout as fn arg?
         return request_id
 
-    def add_requests(self, inputs: list[list[int]], max_new_tokens: Optional[int] = None) -> None:
+    def add_requests(
+        self, inputs: list[list[int]], max_new_tokens: Optional[int] = None, streaming: bool = False
+    ) -> None:
         for input_ids in inputs:
-            self.add_request(input_ids, max_new_tokens=max_new_tokens)
+            self.add_request(input_ids, max_new_tokens=max_new_tokens, streaming=streaming)
 
     def cancel_request(self, request_id: str) -> None:
         """Cancel a request by its ID.
