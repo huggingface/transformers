@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import glob
 import itertools
 import os
 import re
@@ -324,15 +323,11 @@ class WeightConverter:
             )
 
         for pattern in self.source_keys:
-            try:
-                re.compile(glob.translate(pattern))
-            except re.error as _:
-                raise AssertionError(f"Invalide source glob pattern: '{pattern}'")
+            if any(ch in pattern for ch in set(".^$*+?{}[]|()")):
+                raise AssertionError(f"'{pattern}' is not glob")
         for pattern in self.target_keys:
-            try:
-                re.compile(glob.translate(pattern))
-            except re.error as _:
-                raise AssertionError(f"Invalide source glob pattern: '{pattern}'")
+            if any(ch in pattern for ch in set(".^$*+?{}[]|()")):
+                raise AssertionError(f"'{pattern}' is not glob")
 
 
 @dataclass(slots=True)
