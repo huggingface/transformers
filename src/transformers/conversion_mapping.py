@@ -22,7 +22,7 @@ _checkpoint_conversion_mapping = {
             source_keys=[
                 "block_sparse_moe.experts.*.w1.weight",
                 "block_sparse_moe.experts.*.w3.weight",
-            ],  # you give me a list of 2 keys, I collect a list of tensors
+            ],  # you give me a list of 2 keys, I collect a list of a list of tensors
             target_keys="mlp.experts.gate_up_proj",  # target key gets the list of two tensors
             operations=[
                 MergeModulelist(
