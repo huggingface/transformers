@@ -150,7 +150,13 @@ class Qwen3MoeAttention(nn.Module):
         self.sliding_window = getattr(config, "sliding_window", None)
 
         rotary_kernel = lazy_load_kernel("rotary_emb")
-        self.rotary_fn = rotary_kernel.apply_rotary_transformers if rotary_kernel is not None else apply_rotary_pos_emb
+        self.rotary_fn = (
+            rotary_kernel.apply_rotary_transformers
+            if rotary_kernel is not None
+            and hasattr(rotary_kernel, "apply_rotary_transformers")
+            and rotary_kernel.apply_rotary_transformers is not None
+            else apply_rotary_pos_emb
+        )
 
     def forward(
         self,

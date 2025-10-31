@@ -1465,7 +1465,13 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         self.sliding_window = None
 
         rotary_kernel = lazy_load_kernel("rotary_emb")
-        self.rotary_fn = rotary_kernel.apply_rotary_transformers if rotary_kernel is not None else apply_rotary_pos_emb
+        self.rotary_fn = (
+            rotary_kernel.apply_rotary_transformers
+            if rotary_kernel is not None
+            and hasattr(rotary_kernel, "apply_rotary_transformers")
+            and rotary_kernel.apply_rotary_transformers is not None
+            else apply_rotary_pos_emb
+        )
 
     def forward(
         self,
@@ -2321,7 +2327,13 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
         rotary_kernel = lazy_load_kernel("rotary_emb")
-        self.rotary_fn = rotary_kernel.apply_rotary_transformers if rotary_kernel is not None else apply_rotary_pos_emb
+        self.rotary_fn = (
+            rotary_kernel.apply_rotary_transformers
+            if rotary_kernel is not None
+            and hasattr(rotary_kernel, "apply_rotary_transformers")
+            and rotary_kernel.apply_rotary_transformers is not None
+            else apply_rotary_pos_emb
+        )
 
     def forward(
         self,
@@ -3398,7 +3410,13 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         self.sliding_window = config.sliding_window
 
         rotary_kernel = lazy_load_kernel("rotary_emb")
-        self.rotary_fn = rotary_kernel.apply_rotary_transformers if rotary_kernel is not None else apply_rotary_pos_emb
+        self.rotary_fn = (
+            rotary_kernel.apply_rotary_transformers
+            if rotary_kernel is not None
+            and hasattr(rotary_kernel, "apply_rotary_transformers")
+            and rotary_kernel.apply_rotary_transformers is not None
+            else apply_rotary_pos_emb
+        )
 
     def forward(
         self,
