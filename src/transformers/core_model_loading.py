@@ -432,7 +432,7 @@ def set_param_for_module(
         if not isinstance(param_value, torch.nn.Parameter):
             if distributed_operation is not None and use_dtensor:
                 param_value = DTensor.from_local(
-                    param_value,
+                    param_value.to(empty_tensor.dtype),
                     distributed_operation.device_mesh,
                     distributed_operation.shard,
                     run_check=False,
@@ -441,7 +441,7 @@ def set_param_for_module(
                 )
             else:
                 pass  # TODO for "local" stuff, it will trigger missmatched no?
-            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+            param_value = torch.nn.Parameter(param_value.to(empty_tensor.dtype), requires_grad=param_value.is_floating_point())
 
         if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
