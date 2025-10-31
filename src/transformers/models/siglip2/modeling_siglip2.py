@@ -492,7 +492,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.fc2.weight)
             nn.init.normal_(module.fc1.bias, std=1e-6)
             nn.init.normal_(module.fc2.bias, std=1e-6)
-        elif "MultiheadAttentionPoolingHead" in module.__class__.__name__:
+        elif isinstance(module, Siglip2MultiheadAttentionPoolingHead):
             nn.init.xavier_uniform_(module.probe.data)
             nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
             nn.init.zeros_(module.attention.in_proj_bias.data)
