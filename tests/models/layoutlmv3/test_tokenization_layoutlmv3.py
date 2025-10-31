@@ -64,6 +64,85 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return words, boxes
 
+    def test_integration(self):
+        """Integration test with hardcoded expectations for LayoutLMv3."""
+        input_words = ["a", "weirdly", "test", "hello", "my", "name", "is", "bob"]
+        input_boxes = [
+            [423, 237, 440, 251],
+            [427, 272, 441, 287],
+            [419, 115, 437, 129],
+            [961, 885, 992, 912],
+            [256, 38, 330, 58],
+            [256, 38, 330, 58],
+            [336, 42, 353, 57],
+            [34, 42, 66, 69],
+        ]
+
+        expected_tokens = [
+            "Ġa", "Ġweird", "ly", "Ġtest", "Ġhello", "Ġmy", "Ġname", "Ġis", "Ġbob",
+        ]
+        expected_ids = [10, 7735, 352, 1296, 20760, 127, 766, 16, 22401]
+        expected_tokens_from_ids = [
+            "Ġa", "Ġweird", "ly", "Ġtest", "Ġhello", "Ġmy", "Ġname", "Ġis", "Ġbob",
+        ]
+        expected_decoded_text = " a weirdly test hello my name is bob"
+
+        tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutlmv3-base", cls_token="<s>")
+
+        # Flatten tokens per word
+        tokens = []
+        for word in input_words:
+            tokens.extend(tokenizer.tokenize(word))
+        self.assertListEqual(tokens, expected_tokens)
+
+        ids = tokenizer.encode(input_words, boxes=input_boxes, add_special_tokens=False)
+        self.assertListEqual(ids, expected_ids)
+
+        roundtrip_tokens = tokenizer.convert_ids_to_tokens(ids)
+        self.assertListEqual(roundtrip_tokens, expected_tokens_from_ids)
+
+        decoded_text = tokenizer.decode(ids, clean_up_tokenization_spaces=False)
+        self.assertEqual(decoded_text, expected_decoded_text)
+
+    def test_integration_from_extractor(self):
+        """Integration test using pretokenized words and boxes as if coming from an extractor."""
+        input_words = ["a", "weirdly", "test", "hello", "my", "name", "is", "bob"]
+        input_boxes = [
+            [423, 237, 440, 251],
+            [427, 272, 441, 287],
+            [419, 115, 437, 129],
+            [961, 885, 992, 912],
+            [256, 38, 330, 58],
+            [256, 38, 330, 58],
+            [336, 42, 353, 57],
+            [34, 42, 66, 69],
+        ]
+
+        expected_tokens = [
+            "Ġa", "Ġweird", "ly", "Ġtest", "Ġhello", "Ġmy", "Ġname", "Ġis", "Ġbob",
+        ]
+        expected_ids = [10, 7735, 352, 1296, 20760, 127, 766, 16, 22401]
+        expected_tokens_from_ids = [
+            "Ġa", "Ġweird", "ly", "Ġtest", "Ġhello", "Ġmy", "Ġname", "Ġis", "Ġbob",
+        ]
+        expected_decoded_text = " a weirdly test hello my name is bob"
+
+        tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutlmv3-base", cls_token="<s>")
+
+        tokens = []
+        for word in input_words:
+            tokens.extend(tokenizer.tokenize(word))
+        self.assertListEqual(tokens, expected_tokens)
+
+        ids = tokenizer.encode(input_words, boxes=input_boxes, add_special_tokens=False)
+        self.assertListEqual(ids, expected_ids)
+
+        roundtrip_tokens = tokenizer.convert_ids_to_tokens(ids)
+        self.assertListEqual(roundtrip_tokens, expected_tokens_from_ids)
+
+        decoded_text = tokenizer.decode(ids, clean_up_tokenization_spaces=False)
+        self.assertEqual(decoded_text, expected_decoded_text)
+
     def get_words_and_boxes_batch(self):
         words = [["lower", "newer"], ["new", "low"]]
         boxes = [
