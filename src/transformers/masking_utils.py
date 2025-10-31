@@ -209,18 +209,19 @@ def prepare_padding_mask(
     From the 2D attention mask, prepare the correct padding mask to use by potentially padding it, and slicing
     according to the `kv_offset` if `_slice` is `True`.
     """
+    if attention_mask is None:
+        return None
     local_padding_mask = attention_mask
-    if attention_mask is not None:
-        # Pad it if necessary
-        if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
-            local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
-        # For flex, we should not slice them, only use an offset
-        if _slice:
-            # Equivalent to: `local_padding_mask = attention_mask[:, kv_offset : kv_offset + kv_length]`,
-            # but without data-dependent slicing (i.e. torch.compile friendly)
-            mask_indices = torch.arange(kv_length, device=local_padding_mask.device)
-            mask_indices += kv_offset
-            local_padding_mask = local_padding_mask[:, mask_indices]
+    # Pad it if necessary
+    if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
+        local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
+    # For flex, we should not slice them, only use an offset
+    if _slice:
+        # Equivalent to: `local_padding_mask = attention_mask[:, kv_offset : kv_offset + kv_length]`,
+        # but without data-dependent slicing (i.e. torch.compile friendly)
+        mask_indices = torch.arange(kv_length, device=local_padding_mask.device)
+        mask_indices += kv_offset
+        local_padding_mask = local_padding_mask[:, mask_indices]
     return local_padding_mask
 
 
