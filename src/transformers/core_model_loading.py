@@ -258,29 +258,8 @@ class Cast(ConversionOps):
     def __init__(self, dtype):
         self.dtype = dtype
 
-    def convert(self, realized_value):
-        return realized_value.to(self.dtype)
-
-
-class To(ConversionOps):
-    """
-    Transfers the tensor to the provided device potentially using a stream?
-
-    TODO I should re-introduce cpu offloading logic!
-    if param_device == "disk":
-        if not is_safetensors:
-            disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
-    elif not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
-        if is_fsdp_enabled():
-            param_device = "cpu" if is_local_dist_rank_0() else "meta"
-    """
-
-    def __init__(self, device):
-        self.device = device
-
-    def convert(self, realized_value):
-        with torch.device(self.device):
-            out = [[x[...] for x in inner] if isinstance(inner, list) else inner[...] for inner in realized_value]
+    def convert(self, value):
+        out = [[x.to(self.dtype) for x in inner] if isinstance(inner, list) else inner.to(self.dtype) for inner in value]
         return out
 
 
@@ -432,7 +411,7 @@ def set_param_for_module(
         if not isinstance(param_value, torch.nn.Parameter):
             if distributed_operation is not None and use_dtensor:
                 param_value = DTensor.from_local(
-                    param_value.to(empty_tensor.dtype),
+                    param_value,
                     distributed_operation.device_mesh,
                     distributed_operation.shard,
                     run_check=False,
@@ -441,7 +420,7 @@ def set_param_for_module(
                 )
             else:
                 pass  # TODO for "local" stuff, it will trigger missmatched no?
-            param_value = torch.nn.Parameter(param_value.to(empty_tensor.dtype), requires_grad=param_value.is_floating_point())
+            param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         if ref is not None and ref.shape != param_value.shape:
             mismatch_keys.add((layer_name, param_value.shape, ref.shape))
@@ -458,6 +437,7 @@ def convert_and_load_state_dict_in_model(
     weight_mapping,
     tp_plan,
     quantizer,
+    dtype=torch.float32,
     device_map=None,
     keep_in_dtype=None,
     device_mesh=None,
@@ -467,6 +447,8 @@ def convert_and_load_state_dict_in_model(
     Convert a state dict according to a weight mapping (one WeightConverter per glob pattern),
     collecting tensors per *layer instance* (the concrete indices captured from '*').
     """
+    from .modeling_utils import str_to_torch_dtype
+
     tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
     device_map = device_map or {}  # {exact_target_key: device}
     keep_in_dtype = keep_in_dtype or {}  # {glob_pattern: dtype}
@@ -474,7 +456,6 @@ def convert_and_load_state_dict_in_model(
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
 
-    # TODO: maybe use `find_tied_parameters`
     if model.config.tie_word_embeddings and isinstance(model._tied_weights_keys, list):
         for k in model._tied_weights_keys:
             missing_keys.discard(k)
@@ -531,6 +512,12 @@ def convert_and_load_state_dict_in_model(
                     converter.quantization_operation = Fp8Quantize()  # TODO support other methods
                 else:
                     raise ValueError("This quantization method is gonna be supported SOOOON")
+            else:
+                matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
+                if matched_dtype_pattern is not None:
+                    dtype = keep_in_dtype[matched_dtype_pattern]
+                if dtype != str_to_torch_dtype[tensor.get_dtype()] and dtype is not None:
+                    converter.operations.append(Cast(dtype))
 
         first_target_key = target_key.split("|")[0]
         future = None
@@ -596,11 +583,6 @@ def convert_and_load_state_dict_in_model(
                         progress_bar.update()
 
                     for k, output_value in realized_value.items():
-                        matched_dtype_pattern = match_glob(k, dtype_policy_alt, dtype_policy_by_group_name)
-                        if matched_dtype_pattern is not None:
-                            op = Cast(keep_in_dtype[matched_dtype_pattern])
-                            output_value = op.convert(output_value)
-
                         for src in converter.source_keys:  # what should happen to k when we meet k at saving
                             inverse_converters[k] = {src: converter}
                         set_param_for_module(

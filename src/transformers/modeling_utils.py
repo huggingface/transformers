@@ -22,6 +22,7 @@ import inspect
 import json
 import os
 import re
+import time
 import sys
 import warnings
 from abc import abstractmethod
@@ -4614,11 +4615,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     k_v_iterator = sharded_metadata["weight_map"].items()
 
                 for k, v in k_v_iterator:
-                    key = pattern.match(k).group(1)
-                    if key is not None and key != "":
-                        device = device_map[key]
+                    match = pattern.match(k)
+                    if match and match.group(1) != "":
+                        device = device_map[match.group(1)]
                     else:
-                        device = device_map[""]
+                        device = device_map.get("", "cpu")
                         if isinstance(device, torch.device):
                             device = device.index  # safetensors only
                     file_pointer = safe_open(
@@ -4630,17 +4631,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 merged_state_dict = {k: ("", v) for k, v in state_dict.items()}
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
-
+            start = time.perf_counter()
             missing_keys, unexpected_keys, mismatched_keys, misc = convert_and_load_state_dict_in_model(
                 model,
                 merged_state_dict,
                 weight_mapping,
                 tp_plan,
                 hf_quantizer,
+                dtype,
                 device_map,
                 keep_in_dtype,
                 device_mesh=device_mesh,
             )
+            end = time.perf_counter()
 
         for k in all_pointer:  # finally close all opened file pointeres
             k.__exit__(None, None, None)
@@ -4699,6 +4702,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict
         )
+        logger.warn(f"Loading the checkpoint files into the model took {end-start}")
         log_state_dict_report(
             model=model,
             pretrained_model_name_or_path=pretrained_model_name_or_path,
