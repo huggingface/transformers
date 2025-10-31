@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import glob
 import itertools
 import os
 import re
@@ -27,7 +28,6 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
-from glob import translate
 from typing import Any, Optional, Union
 
 import torch
@@ -326,12 +326,12 @@ class WeightConverter:
 
         for pattern in self.source_keys:
             try:
-                re.compile(translate(pattern))
+                re.compile(glob.translate(pattern))
             except re.error as _:
                 raise AssertionError(f"Invalide source glob pattern: '{pattern}'")
         for pattern in self.target_keys:
             try:
-                re.compile(translate(pattern))
+                re.compile(glob.translate(pattern))
             except re.error as _:
                 raise AssertionError(f"Invalide source glob pattern: '{pattern}'")
 
