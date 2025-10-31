@@ -4628,7 +4628,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
                     )
                     all_pointer.add(file_pointer)
-                    merged_state_dict[k] = (v, file_pointer.get_slice(k))  # don't meterialize yet
+                    merged_state_dict[k] = (v, file_pointer.get_slice(k))  # don't materialize yet
             elif state_dict is not None:
                 merged_state_dict = {k: ("", v) for k, v in state_dict.items()}
             else:
