@@ -16,68 +16,89 @@
 from .core_model_loading import Concatenate, MergeModulelist, WeightConverter
 
 
-_checkpoint_conversion_mapping = {
-    "mixtral": [
-        WeightConverter(
-            source_keys=[
-                "block_sparse_moe.experts.*.w1.weight",
-                "block_sparse_moe.experts.*.w3.weight",
-            ],  # you give me a list of 2 keys, I collect a list of a list of tensors
-            target_keys="mlp.experts.gate_up_proj",  # target key gets the list of two tensors
-            operations=[
-                MergeModulelist(
-                    dim=0
-                ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
-                Concatenate(dim=1),  # each process has 2 tensors, gate and up, we concat them into gate_up
-            ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
-        ),
-        WeightConverter(
-            source_keys=[
-                "block_sparse_moe.experts.*.w2.weight",
-            ],
-            target_keys="mlp.experts.down_proj",  # target key gets the list of two tensors
-            operations=[
-                MergeModulelist(
-                    dim=0
-                ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
-            ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
-        ),
-        # WeightConverter(
-        #     ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
-        #     "self_attn.qkv_proj",
-        #     Concatenate(dim=0),  # more like stack?
-        # ),
-        WeightConverter("*.block_sparse_moe.", "*.mlp."),
-    ],
-    "qwen2_moe": [
-        WeightConverter(
-            source_keys=[
-                "mlp.experts.*.gate_proj.weight",
-                "mlp.experts.*.up_proj.weight",
-            ],
-            target_keys="mlp.experts.gate_up_proj",
-            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-        ),
-        WeightConverter(
-            source_keys=["mlp.experts.*.down_proj.weight"],
-            target_keys="mlp.experts.down_proj",
-            operations=[MergeModulelist(dim=0)],
-        ),
-    ],
-}
-_checkpoint_conversion_mapping["phimoe"] = _checkpoint_conversion_mapping["mixtral"].copy()
-_checkpoint_conversion_mapping["deepseek_v2"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["deepseek_v3"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["dot1"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["ernie_4_5_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["glm4_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["glm4v_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["jamba"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["lfm2_moe"] = _checkpoint_conversion_mapping["mixtral"].copy()
-_checkpoint_conversion_mapping["long_cat_flash"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["qwen3_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["qwen3_omni_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["qwen3_next"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["qwen3_vl_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["hunyuan_v1_moe"] = _checkpoint_conversion_mapping["qwen2_moe"].copy()
-_checkpoint_conversion_mapping["minimax"] = _checkpoint_conversion_mapping["mixtral"].copy()
+def _build_checkpoint_conversion_mapping():
+    mapping = {
+        "mixtral": [
+            WeightConverter(
+                source_keys=[
+                    "block_sparse_moe.experts.*.w1.weight",
+                    "block_sparse_moe.experts.*.w3.weight",
+                ],  # you give me a list of 2 keys, I collect a list of a list of tensors
+                target_keys="mlp.experts.gate_up_proj",  # target key gets the list of two tensors
+                operations=[
+                    MergeModulelist(
+                        dim=0
+                    ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
+                    Concatenate(dim=1),  # each process has 2 tensors, gate and up, we concat them into gate_up
+                ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
+            ),
+            WeightConverter(
+                source_keys=[
+                    "block_sparse_moe.experts.*.w2.weight",
+                ],
+                target_keys="mlp.experts.down_proj",  # target key gets the list of two tensors
+                operations=[
+                    MergeModulelist(
+                        dim=0
+                    ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
+                ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
+            ),
+            # WeightConverter(
+            #     ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
+            #     "self_attn.qkv_proj",
+            #     Concatenate(dim=0),  # more like stack?
+            # ),
+            WeightConverter("*.block_sparse_moe.", "*.mlp."),
+        ],
+        "qwen2_moe": [
+            WeightConverter(
+                source_keys=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_keys="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_keys=["mlp.experts.*.down_proj.weight"],
+                target_keys="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+    }
+
+    mapping["phimoe"] = mapping["mixtral"].copy()
+    mapping["deepseek_v2"] = mapping["qwen2_moe"].copy()
+    mapping["deepseek_v3"] = mapping["qwen2_moe"].copy()
+    mapping["dot1"] = mapping["qwen2_moe"].copy()
+    mapping["ernie_4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
+    mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
+    mapping["jamba"] = mapping["qwen2_moe"].copy()
+    mapping["lfm2_moe"] = mapping["mixtral"].copy()
+    mapping["long_cat_flash"] = mapping["qwen2_moe"].copy()
+    mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
+    mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
+    mapping["qwen3_next"] = mapping["qwen2_moe"].copy()
+    mapping["qwen3_vl_moe"] = mapping["qwen2_moe"].copy()
+    mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
+    mapping["minimax"] = mapping["mixtral"].copy()
+
+    return mapping
+
+
+_checkpoint_conversion_mapping_cache = None
+
+
+def get_checkpoint_conversion_mapping():
+    global _checkpoint_conversion_mapping_cache
+    if _checkpoint_conversion_mapping_cache is None:
+        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+        globals()["_checkpoint_conversion_mapping"] = _checkpoint_conversion_mapping_cache
+    return _checkpoint_conversion_mapping_cache
+
+
+def __getattr__(name):
+    if name == "_checkpoint_conversion_mapping":
+        return get_checkpoint_conversion_mapping()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

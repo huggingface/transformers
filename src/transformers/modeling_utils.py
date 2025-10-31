@@ -45,7 +45,7 @@ from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
 from .configuration_utils import PreTrainedConfig
-from .conversion_mapping import _checkpoint_conversion_mapping as DEFAULT_WEIGHT_CONVERSION_MAPPING
+from .conversion_mapping import get_checkpoint_conversion_mapping
 from .core_model_loading import WeightConverter, convert_and_load_state_dict_in_model, revert_weight_conversion
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
@@ -4293,7 +4293,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions: Optional[list[WeightConverter]] = None
         model_type = getattr(config, "model_type", None)
         if model_type is not None:
-            weight_conversions = DEFAULT_WEIGHT_CONVERSION_MAPPING.get(model_type)
+            weight_conversions = get_checkpoint_conversion_mapping().get(model_type)
 
         if gguf_file:
             if hf_quantizer is not None:
