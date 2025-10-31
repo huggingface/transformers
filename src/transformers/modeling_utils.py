@@ -2381,7 +2381,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and not is_torch_npu_available()
         ):
             if attn_implementation.endswith("2"):
-                applicable_attn_implementation = "kernels-community/flash-attn"
+                applicable_attn_implementation = "kernels-community/flash-attn2"
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 

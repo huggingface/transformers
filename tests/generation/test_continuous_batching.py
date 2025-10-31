@@ -160,7 +160,7 @@ class ContinuousBatchingTest(unittest.TestCase):
             non_cb_attn_implementation = "sdpa"
         elif attn_implementation == "eager_paged":
             non_cb_attn_implementation = "eager"
-        elif attn_implementation == "paged_attention|kernels-community/flash-attn":
+        elif attn_implementation == "paged_attention|kernels-community/flash-attn2":
             non_cb_attn_implementation = "eager"
         else:
             raise ValueError(f"Invalid attention implementation: {attn_implementation}")
@@ -293,7 +293,7 @@ class ContinuousBatchingTest(unittest.TestCase):
             }
         }).get_expectation()  # fmt: skip
         self._continuous_batching_parity(
-            "meta-llama/Llama-3.1-8B", "paged_attention|kernels-community/flash-attn", expected_outputs
+            "meta-llama/Llama-3.1-8B", "paged_attention|kernels-community/flash-attn2", expected_outputs
         )
 
     @require_torch_gpu
@@ -306,7 +306,7 @@ class ContinuousBatchingTest(unittest.TestCase):
             }
         }).get_expectation()  # fmt: skip
         self._continuous_batching_parity(
-            "google/gemma-2-2b-it", "paged_attention|kernels-community/flash-attn", expected_outputs
+            "google/gemma-2-2b-it", "paged_attention|kernels-community/flash-attn2", expected_outputs
         )
 
     @require_torch_gpu
@@ -315,7 +315,7 @@ class ContinuousBatchingTest(unittest.TestCase):
     def test_continuous_batching_parity_qwen_flash(self) -> None:
         expected_outputs = {}
         self._continuous_batching_parity(
-            "Qwen/Qwen3-4B-Instruct-2507", "paged_attention|kernels-community/flash-attn", expected_outputs
+            "Qwen/Qwen3-4B-Instruct-2507", "paged_attention|kernels-community/flash-attn2", expected_outputs
         )
 
     @require_torch_gpu
@@ -324,7 +324,7 @@ class ContinuousBatchingTest(unittest.TestCase):
     def test_continuous_batching_parity_gpt_oss_flash(self) -> None:
         expected_outputs = {}
         self._continuous_batching_parity(
-            "openai/gpt-oss-20b", "paged_attention|kernels-community/flash-attn", expected_outputs
+            "openai/gpt-oss-20b", "paged_attention|kernels-community/flash-attn2", expected_outputs
         )
 
     def test_attn_implementation(self) -> None:
