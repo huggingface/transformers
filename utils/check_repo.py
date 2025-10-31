@@ -230,6 +230,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ErnieMForInformationExtraction",
     "FastSpeech2ConformerHifiGan",
     "FastSpeech2ConformerWithHifiGan",
+    "Fgclip2VisionModel",
+    "Fgclip2TextModel",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
