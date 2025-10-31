@@ -555,7 +555,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     audio_output = self.model.acoustic_tokenizer.decode(
                         scaled_latent.to(self.model.acoustic_tokenizer.device),
                         padding_cache=acoustic_cache,
-                        sample_mask=diffusion_indices.to(self.model.acoustic_tokenizer.device),
+                        batch_mask=diffusion_indices.to(self.model.acoustic_tokenizer.device),
                         use_cache=True
                     )
                 audio_chunk = audio_output.audio
@@ -578,7 +578,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     semantic_outputs = self.model.semantic_tokenizer.encode(
                         audio_chunk,
                         padding_cache=semantic_cache,
-                        sample_mask=diffusion_indices,
+                        batch_mask=diffusion_indices,
                         use_cache=True
                     )
                 semantic_features = semantic_outputs.latents
