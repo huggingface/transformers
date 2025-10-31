@@ -176,24 +176,16 @@ def add_offsets_to_mask_function(mask_function: Callable, q_offset: int, kv_offs
 
 
 def prepare_padding_mask(
-    attention_mask: Optional[torch.Tensor], kv_length: int, kv_offset: int, _slice: bool = True
+    attention_mask: Optional[torch.Tensor], kv_length: int, kv_offset: int
 ) -> Optional[torch.Tensor]:
     """
-    From the 2D attention mask, prepare the correct padding mask to use by potentially padding it, and slicing
-    according to the `kv_offset` if `_slice` is `True`.
+    From the 2D attention mask, prepare the correct padding mask to use by potentially padding it.
     """
     local_padding_mask = attention_mask
     if attention_mask is not None:
         # Pad it if necessary
         if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
-        # For flex, we should not slice them, only use an offset
-        if _slice:
-            # Equivalent to: `local_padding_mask = attention_mask[:, kv_offset : kv_offset + kv_length]`,
-            # but without data-dependent slicing (i.e. torch.compile friendly)
-            mask_indices = torch.arange(kv_length, device=local_padding_mask.device)
-            mask_indices += kv_offset
-            local_padding_mask = local_padding_mask[:, mask_indices]
     return local_padding_mask
 
 
@@ -404,9 +396,8 @@ def sdpa_mask(
     """
     q_length = cache_position.shape[0]
 
-    # Potentially pad the 2D mask, and slice it correctly
-    sdpa_needs_sclicing = (not _is_torch_greater_or_equal_than_2_6) and use_vmap
-    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=sdpa_needs_sclicing)
+    # Potentially pad the 2D mask
+    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
 
     # Under specific conditions, we can avoid materializing the mask
     #   1. Causal masks can rely on the `is_causal` argument
@@ -418,10 +409,7 @@ def sdpa_mask(
 
     # Potentially add the padding 2D mask
     if padding_mask is not None:
-        if sdpa_needs_sclicing:
-            padding_mask = padding_mask[:, None, None, :]
-        else:
-            mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
+        mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
     # but without data-dependent slicing (i.e. torch.compile friendly)
@@ -446,7 +434,7 @@ def sdpa_mask(
         with TransformGetItemToIndex():
             attention_mask = _vmap_expansion_sdpa(mask_function)(batch_arange, head_arange, cache_position, kv_arange)
 
-    # Option 3: Error out since it indicates that the user did something custom, which he shouldn't (torch<2.6)
+    # Option 3: Error out since it indicates that the user did something custom, which they shouldn't have (torch<2.6)
     else:
         raise ValueError(
             "The vmap functionality for mask creation is only supported from torch>=2.6. "
@@ -596,7 +584,7 @@ def flex_attention_mask(
         if not _is_torch_greater_or_equal_than_2_6 and pad_len > 0:
             attention_mask = torch.nn.functional.pad(attention_mask, value=0, pad=(0, pad_len))
 
-        padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
+        padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
 
     # Add the offsets on top (because flex interface only allows length, not start and end indices)
