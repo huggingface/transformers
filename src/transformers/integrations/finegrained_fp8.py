@@ -466,7 +466,7 @@ class FP8Expert(nn.Module):
 
     def linear(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
         if weight.element_size() > 1:
-            return F.linear(input, weight, self.bias)
+            return F.linear(input, weight, None)
         else:
             # Context manager used to switch among the available accelerators
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
