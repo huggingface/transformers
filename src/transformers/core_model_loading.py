@@ -103,7 +103,7 @@ class ConversionOps:
     # Reusable staging/scratch buffer to avoid reallocations.
     _buffer: Optional[torch.Tensor] = None
     # The inverse operation class, will be used when saving the checkpoint
-    _inverse_op: type[ConversionOps]
+    reverse_op: type[ConversionOps]
 
     def _ensure_buffer(
         self,
@@ -146,7 +146,7 @@ class ConversionOps:
 class Chunk(ConversionOps):
     """Split a tensor along ``dim`` into equally sized chunks or using explicit ``sizes``."""
 
-    _inverse_op: type[ConversionOps]
+    reverse_op: type[ConversionOps]
 
     def __init__(self, dim: int = 0, chunks: Optional[int] = None, sizes: Optional[Sequence[int]] = None):
         if chunks is None and sizes is None:
@@ -156,7 +156,7 @@ class Chunk(ConversionOps):
         self.dim = dim
         self.chunks = chunks
         self.sizes = list(sizes) if sizes is not None else None
-        self._inverse_op = Concatenate
+        self.reverse_op = Concatenate
 
     def convert(self, value: torch.Tensor) -> list[torch.Tensor]:
         if not isinstance(value, torch.Tensor):
@@ -169,11 +169,11 @@ class Chunk(ConversionOps):
 class Concatenate(ConversionOps):
     """Concatenate tensors along `dim` using a reusable buffer."""
 
-    _inverse_op: type[ConversionOps]
+    reverse_op: type[ConversionOps]
 
     def __init__(self, dim: int = 0):
         self.dim = dim
-        self._inverse_op = Chunk
+        self.reverse_op = Chunk
 
     @torch.no_grad
     def convert(self, value: Sequence[torch.Tensor]) -> torch.Tensor:
@@ -207,7 +207,7 @@ class MergeModulelist(Concatenate):
 
     def __init__(self, dim: int = 0):
         super().__init__(dim=dim)
-        self._inverse_op = SplitModulelist
+        self.reverse_op = SplitModulelist
 
     def convert(self, value: Sequence[torch.Tensor]) -> list[torch.Tensor]:
         merged = []
@@ -235,7 +235,7 @@ class SplitModulelist(ConversionOps):
             raise ValueError("`sizes` must be a sequence of non-empty sequences of integers.")
         self.sizes = [list(sub) for sub in sizes]
         self.dim = dim
-        self._inverse_op = MergeModulelist
+        self.reverse_op = MergeModulelist
 
     def convert(self, value: Sequence[torch.Tensor], *, context: dict[str, Any]) -> list[list[torch.Tensor]]:
         if not isinstance(value, Sequence):
