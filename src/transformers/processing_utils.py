@@ -831,6 +831,10 @@ class ProcessorMixin(PushToHubMixin):
             # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
             if attribute_name == "tokenizer":
                 attribute.save_pretrained(save_directory)
+            # if a model has multiple tokenizers, save the additional tokenizers in their own folders.
+            # Note that the additional tokenizers must have "tokenizer" in their attribute name.
+            elif "tokenizer" in attribute_name:
+                attribute.save_pretrained(os.path.join(save_directory, attribute_name))
             elif attribute._auto_class is not None:
                 custom_object_save(attribute, save_directory, config=attribute)
 
@@ -1455,10 +1459,14 @@ class ProcessorMixin(PushToHubMixin):
         sub_processors = cls.get_attributes()
         for sub_processor_type in sub_processors:
             if sub_processor_type not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in sub_processor_type:
-                sub_processor_type = "tokenizer"
-            if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
+                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+                sub_processor = auto_processor_class.from_pretrained(
+                    pretrained_model_name_or_path, subfolder=sub_processor_type, **kwargs
+                )
+            elif sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
-                args.append(auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+                sub_processor = auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            args.append(sub_processor)
 
         return args
 

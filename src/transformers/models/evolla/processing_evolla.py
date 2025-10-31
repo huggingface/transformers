@@ -16,14 +16,12 @@
 Processor class for EVOLLA.
 """
 
-import os
 from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
     ProcessorMixin,
 )
-from ..auto import AutoTokenizer
 
 
 PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]
@@ -196,28 +194,6 @@ class EvollaProcessor(ProcessorMixin):
 
     def protein_decode(self, *args, **kwargs):
         return self.protein_tokenizer.decode(*args, **kwargs)
-
-    # overwrite to save the protein tokenizer in a separate folder
-    # Adapted from instructblip.processing_instructblip.py (https://github.com/huggingface/transformers/blob/9b479a245b793cac2a8b2e87c6d8e81bb24e20c4/src/transformers/models/instructblip/processing_instructblip.py#L191-L221)
-    def save_pretrained(self, save_directory, **kwargs):
-        # only save the protein tokenizer in sub_dir
-        self.protein_tokenizer.save_pretrained(os.path.join(save_directory, "protein_tokenizer"))
-        return super().save_pretrained(save_directory, exclude_attributes=["protein_tokenizer"], **kwargs)
-
-    # overwrite to load the protein tokenizer from a separate folder
-    # Adapted from instructblip.processing_instructblip.py (https://github.com/huggingface/transformers/blob/9b479a245b793cac2a8b2e87c6d8e81bb24e20c4/src/transformers/models/instructblip/processing_instructblip.py#L191-L221)
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        processor = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # if return_unused_kwargs a tuple is returned where the second element is 'unused_kwargs'
-        if isinstance(processor, tuple):
-            processor = processor[0]
-        protein_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="protein_tokenizer")
-
-        processor.protein_tokenizer = protein_tokenizer
-
-        return processor
 
 
 __all__ = ["EvollaProcessor"]

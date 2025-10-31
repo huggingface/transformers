@@ -16,7 +16,6 @@
 Processor class for InstructBLIP. Largely copy of Blip2Processor with addition of a tokenizer for the Q-Former.
 """
 
-import os
 from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
@@ -30,7 +29,6 @@ from ...tokenization_utils_base import (
 )
 from ...utils import TensorType, logging
 from ...video_utils import VideoInput
-from ..auto import AutoTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -174,28 +172,6 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         video_processor_input_names = self.video_processor.model_input_names
         qformer_input_names = ["qformer_input_ids", "qformer_attention_mask"]
         return tokenizer_input_names + video_processor_input_names + qformer_input_names
-
-    # overwrite to save the Q-Former tokenizer in a separate folder
-    def save_pretrained(self, save_directory, **kwargs):
-        if os.path.isfile(save_directory):
-            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
-        os.makedirs(save_directory, exist_ok=True)
-        qformer_tokenizer_path = os.path.join(save_directory, "qformer_tokenizer")
-        self.qformer_tokenizer.save_pretrained(qformer_tokenizer_path)
-
-        return super().save_pretrained(save_directory, exclude_attributes=["qformer_tokenizer"], **kwargs)
-
-    # overwrite to load the Q-Former tokenizer from a separate folder
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        processor = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # if return_unused_kwargs a tuple is returned where the second element is 'unused_kwargs'
-        if isinstance(processor, tuple):
-            processor = processor[0]
-        qformer_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="qformer_tokenizer")
-        processor.qformer_tokenizer = qformer_tokenizer
-        return processor
 
 
 __all__ = ["InstructBlipVideoProcessor"]

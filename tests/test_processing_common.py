@@ -108,9 +108,11 @@ class ProcessorTesterMixin:
 
     def get_component(self, attribute, **kwargs):
         if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
-            attribute = "tokenizer"
-        auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
-        component = auto_processor_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
+            auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+            component = auto_processor_class.from_pretrained(self.tmpdirname, subfolder=attribute, **kwargs)  # noqa
+        else:
+            auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
+            component = auto_processor_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
         if "tokenizer" in attribute and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
             if component.pad_token_id is None:
@@ -228,9 +230,10 @@ class ProcessorTesterMixin:
             for attribute in processor_first.get_attributes():
                 if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
                     auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+                    attribute_reloaded = auto_processor_class.from_pretrained(tmpdirname, subfolder=attribute)
                 else:
                     auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
-                attribute_reloaded = auto_processor_class.from_pretrained(tmpdirname)
+                    attribute_reloaded = auto_processor_class.from_pretrained(tmpdirname)
                 attribute_first = getattr(processor_first, attribute)
 
                 # tokenizer repr contains model-path from where we loaded
