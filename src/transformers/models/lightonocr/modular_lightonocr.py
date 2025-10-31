@@ -212,7 +212,7 @@ class LightOnOCRProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        **kwargs,
+        **kwargs: Unpack[LightOnOCRProcessorKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You must provide either text or images")
