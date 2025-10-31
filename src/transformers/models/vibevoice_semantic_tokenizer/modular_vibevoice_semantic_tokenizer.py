@@ -147,6 +147,11 @@ class VibeVoiceStreamingConv1d(nn.Module):
         )
         # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L263C28-L263C72
         self.causal_padding = (kernel_size - 1) * dilation - (stride - 1)
+        if self.causal_padding < 0:
+            raise ValueError(
+                f"Invalid causal padding {self.causal_padding} for kernel_size={kernel_size}, "
+                f"dilation={dilation}, stride={stride}."
+            )
         self.layer_idx = layer_idx
 
     def forward(
@@ -157,23 +162,19 @@ class VibeVoiceStreamingConv1d(nn.Module):
     ) -> torch.Tensor:
         """
         Forward pass with optional streaming support via cache.
-        Original code: https://github.com/vibevoice-community/VibeVoice/blob/63a21e2b45e908be63765bf312a9ecfb3a588315/vibevoice/modular/modular_vibevoice_tokenizer.py#L327
-
-        Args:
-            hidden_states: Input tensor [batch_size, channels, time]
-            padding_cache: `VibeVoiceConv1dCache` object for maintaining convolution states
-            batch_mask: Indices identifying each sample for cache management
+        Original code: https://github.com/vibevoice-community/VibeVoice/blob/63a21e2b45e908be63765bf312a9ecfb3a588315/vibevoice/modular/modular_vibevoice_tokenizer.py#L296
         """
-        # Early return for no causal padding case
-        if self.causal_padding <= 0:
-            return self.conv(hidden_states)
 
         if padding_cache is not None:
             layer_padding = padding_cache.update(self.layer_idx, self.causal_padding, hidden_states, batch_mask)
         else:
             # non-streaming mode: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L365
             layer_padding = torch.zeros(
-                hidden_states.shape[0], hidden_states.shape[1], self.causal_padding, device=hidden_states.device, dtype=hidden_states.dtype
+                hidden_states.shape[0],
+                hidden_states.shape[1],
+                self.causal_padding,
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
             )
         hidden_states = torch.cat([layer_padding, hidden_states], dim=-1)
 
