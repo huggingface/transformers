@@ -31,6 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -257,6 +258,15 @@ class Qwen3VLMoeTextAttention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
 
+        rotary_kernel = lazy_load_kernel("rotary_emb")
+        self.rotary_fn = (
+            rotary_kernel.apply_rotary_transformers
+            if rotary_kernel is not None
+            and hasattr(rotary_kernel, "apply_rotary_transformers")
+            and rotary_kernel.apply_rotary_transformers is not None
+            else apply_rotary_pos_emb
+        )
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -274,7 +284,7 @@ class Qwen3VLMoeTextAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

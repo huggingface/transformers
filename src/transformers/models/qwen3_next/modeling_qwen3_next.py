@@ -350,6 +350,7 @@ class Qwen3NextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
+        # Initialize nn.Module (skip Qwen3MoeAttention.__init__ to avoid loading rotary kernel)
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -358,6 +359,7 @@ class Qwen3NextAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim * 2, bias=config.attention_bias
         )
@@ -370,10 +372,12 @@ class Qwen3NextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = Qwen3NextRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = Qwen3NextRMSNorm(
-            self.head_dim, eps=config.rms_norm_eps
-        )  # thus post q_norm does not need reshape
+        self.q_norm = Qwen3NextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Qwen3NextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
+        # qwen3_next uses partial rotary embeddings, which the rotary kernel doesn't support yet
+        # So we use the bamba apply_rotary_pos_emb function (imported at top) directly
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -397,7 +401,7 @@ class Qwen3NextAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
