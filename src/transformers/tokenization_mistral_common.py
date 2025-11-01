@@ -264,6 +264,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         self.model_max_length = model_max_length
         self.cleanup_tokenization_spaces = clean_up_tokenization_spaces
         self.deprecation_warnings = {}  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
+        self._all_special_tokens_ids = self._get_all_special_ids()
 
         if model_input_names is not None:
             if (
@@ -752,7 +753,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         return BatchEncoding(batch_outputs)
 
-    def _all_special_ids(self) -> set[int]:
+    def _get_all_special_ids(self) -> set[int]:
         if self._tokenizer_type == MistralTokenizerType.tekken:
             return {t["rank"] for t in self.tokenizer.instruct_tokenizer.tokenizer._all_special_tokens}
         elif self._tokenizer_type == MistralTokenizerType.spm:
@@ -787,9 +788,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 "`already_has_special_tokens` is not supported by `MistralCommonTokenizer` and should be `False`."
             )
 
-        all_special_ids = self._all_special_ids()  # cache the ids
-
-        special_tokens_mask = [1 if token in all_special_ids else 0 for token in token_ids_0]
+        special_tokens_mask = [1 if token in self._all_special_tokens_ids else 0 for token in token_ids_0]
         return special_tokens_mask
 
     def _batch_prepare_for_model(
