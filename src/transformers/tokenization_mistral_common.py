@@ -62,7 +62,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 Whether or not to add special tokens when encoding the sequences. This will use the underlying
                 `PretrainedTokenizerBase.build_inputs_with_special_tokens` function, which defines which tokens are
                 automatically added to the input ids. This is useful if you want to add `bos` or `eos` tokens
-                automatically.
+                automatically. When Tokenizer is loading with `finetuning` mode it adds both `bos` and `eos`. Else, for "test" mode it only adds `bos`.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
@@ -225,8 +225,11 @@ class MistralCommonTokenizer(PushToHubMixin):
         Args:
             tokenizer_path (`str` or `os.PathLike` or `Path`):
                 Path to the tokenizer file to load the `MistralTokenizer`.
-            mode (`ValidationMode`, *optional*, defaults to `ValidationMode.test`):
-                The mode to use for the tokenizer. This will be passed to the `MistralTokenizer` constructor.
+            mode (`Union[str, ValidationMode]`, *optional*, defaults to `ValidationMode.test`):
+                The mode to use for the tokenizer. This will be passed to the `MistralTokenizer` constructor. Possible values are:
+                - `"finetuning"` or `ValidationMode.finetuning`: The finetuning mode.
+                - `"test"` or `ValidationMode.test`: The test mode.
+                It changes how the tokenizer validates the input and prepares the request to the model.
             model_max_length (`int`, *optional*):
                 The maximum length (in number of tokens) for the inputs to the transformer model. When the tokenizer is
                 loaded with [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], this will be set to the
@@ -249,7 +252,8 @@ class MistralCommonTokenizer(PushToHubMixin):
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported to init `MistralCommonTokenizer`.")
 
         self._tokenizer_path = Path(tokenizer_path)
-        self.tokenizer: MistralTokenizer = MistralTokenizer.from_file(str(self._tokenizer_path), mode=mode)
+        self._mode = self._get_validation_mode(mode)
+        self.tokenizer: MistralTokenizer = MistralTokenizer.from_file(str(self._tokenizer_path), mode=self._mode)
         self._tokenizer_type = (
             MistralTokenizerType.tekken
             if isinstance(self.tokenizer.instruct_tokenizer.tokenizer, Tekkenizer)
@@ -260,6 +264,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         self.model_max_length = model_max_length
         self.cleanup_tokenization_spaces = clean_up_tokenization_spaces
         self.deprecation_warnings = {}  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
+        self._all_special_tokens_ids = self._get_all_special_ids()
 
         if model_input_names is not None:
             if (
@@ -273,6 +278,16 @@ class MistralCommonTokenizer(PushToHubMixin):
             self.model_input_names = model_input_names
 
         self._cache_get_vocab: Optional[dict[str, int]] = None
+
+    @property
+    def mode(self) -> ValidationMode:
+        """
+        `ValidationMode`: The mode used by the tokenizer. Possible values are:
+            - `"finetuning"` or `ValidationMode.finetuning`: The finetuning mode.
+            - `"test"` or `ValidationMode.test`: The test mode.
+            It changes how the tokenizer validates the input and prepares the request to the model.
+        """
+        return self._mode
 
     @property
     def bos_token_id(self) -> int:
@@ -617,9 +632,8 @@ class MistralCommonTokenizer(PushToHubMixin):
         """
         Converts a string into a sequence of tokens ids, using the tokenizer.
         """
-        tokens_ids = self.tokenizer.instruct_tokenizer.tokenizer.encode(
-            text, bos=add_special_tokens, eos=add_special_tokens
-        )
+        add_eos = add_special_tokens and self._mode == ValidationMode.finetuning
+        tokens_ids = self.tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=add_special_tokens, eos=add_eos)
         return tokens_ids
 
     def tokenize(self, text: TextInput, **kwargs) -> list[str]:
@@ -739,7 +753,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         return BatchEncoding(batch_outputs)
 
-    def _all_special_ids(self) -> set[int]:
+    def _get_all_special_ids(self) -> set[int]:
         if self._tokenizer_type == MistralTokenizerType.tekken:
             return {t["rank"] for t in self.tokenizer.instruct_tokenizer.tokenizer._all_special_tokens}
         elif self._tokenizer_type == MistralTokenizerType.spm:
@@ -774,9 +788,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 "`already_has_special_tokens` is not supported by `MistralCommonTokenizer` and should be `False`."
             )
 
-        all_special_ids = self._all_special_ids()  # cache the ids
-
-        special_tokens_mask = [1 if token in all_special_ids else 0 for token in token_ids_0]
+        special_tokens_mask = [1 if token in self._all_special_tokens_ids else 0 for token in token_ids_0]
         return special_tokens_mask
 
     def _batch_prepare_for_model(
@@ -1701,7 +1713,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         cls,
         pretrained_model_name_or_path: Union[str, os.PathLike],
         *init_inputs,
-        mode: ValidationMode = ValidationMode.test,
+        mode: Union[str, ValidationMode] = ValidationMode.test,
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
         local_files_only: bool = False,
@@ -1726,8 +1738,11 @@ class MistralCommonTokenizer(PushToHubMixin):
                 - A path to a *directory* containing the tokenizer config, for instance saved
                   using the [`MistralCommonTokenizer.tokenization_mistral_common.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-            mode (`ValidationMode`, *optional*, defaults to `ValidationMode.test`):
-                Validation mode for the `MistralTokenizer` tokenizer.
+            mode (`Union[str, ValidationMode]`, *optional*, defaults to `ValidationMode.test`):
+                Validation mode for the `MistralTokenizer` tokenizer. Possible values are:
+                - `"finetuning"` or `ValidationMode.finetuning`: The finetuning mode.
+                - `"test"` or `ValidationMode.test`: The test mode.
+                It changes how the tokenizer validates the input and prepare the request to the model.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the
                 standard cache should not be used.
@@ -1773,6 +1788,8 @@ class MistralCommonTokenizer(PushToHubMixin):
             raise ValueError(
                 f"Kwargs {list(set_kwargs - ignore_subset)} are not supported by `MistralCommonTokenizer.from_pretrained`."
             )
+
+        mode = cls._get_validation_mode(mode)
 
         if not os.path.isdir(pretrained_model_name_or_path):
             tokenizer_path = download_tokenizer_from_hf_hub(
@@ -1890,3 +1907,21 @@ class MistralCommonTokenizer(PushToHubMixin):
             )
 
         return (str(save_directory / self._tokenizer_path.name),)
+
+    @staticmethod
+    def _get_validation_mode(mode: Union[str, ValidationMode]) -> ValidationMode:
+        """Get the validation mode from a string or a ValidationMode."""
+        _invalid_mode_msg = (
+            f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are 'finetuning' or 'test'."
+        )
+        if isinstance(mode, str):
+            try:
+                mode = ValidationMode[mode]
+            except KeyError:
+                raise ValueError(_invalid_mode_msg)
+        elif not isinstance(mode, (str, ValidationMode)):
+            raise ValueError(_invalid_mode_msg)
+
+        if mode not in [ValidationMode.finetuning, ValidationMode.test]:
+            raise ValueError(_invalid_mode_msg)
+        return mode
