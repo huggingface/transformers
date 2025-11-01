@@ -499,6 +499,21 @@ class GatherParallel(TensorParallelLayer):
             dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
         return outputs
 
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
+        shard = [Replicate()]
+        parameter = param[...]
+        self.shard = shard
+        return parameter, shard
+
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
             module,
@@ -526,6 +541,23 @@ class IsolatedParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh=None):
         # TODO: figure out dynamo support for instance method and switch this to instance method
         return outputs
+
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
+        mesh = device_mesh or self.device_mesh
+        parameter = param[...]
+        if mesh is not None:
+            parameter = parameter / mesh.size()
+        self.shard = None
+        return parameter, None
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         param = param[...].to(param_casting_dtype)
@@ -571,15 +603,33 @@ class ReplicateParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
-    def shard_tensor(self, param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        return param[...].to(param_casting_dtype)
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
+        parameter = param[...]
+        shard = [Replicate()]
+        self.shard = shard
+        return parameter, shard
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        param = param[...].to(param_casting_dtype)
-        if to_contiguous:
-            param = param.contiguous()
-        param = DTensor.from_local(param, device_mesh, [Replicate()], run_check=False)
-        return param
+        parameter, shard = self.shard_tensor(
+            param,
+            param_type=param_type,
+            param_casting_dtype=param_casting_dtype,
+            to_contiguous=to_contiguous,
+            rank=rank,
+            device_mesh=device_mesh,
+        )
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+        return parameter
 
 
 class ColwiseParallel(TensorParallelLayer):
@@ -652,8 +702,20 @@ class ColwiseParallel(TensorParallelLayer):
 
 
 class PackedColwiseParallel(ColwiseParallel):
-    def shard_tensor(self, param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        return get_packed_weights(param, self.empty_param, device_mesh, rank, -2), [Shard(-2)]
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
+        device_mesh = device_mesh or self.device_mesh
+        empty_param = self.empty_param
+        rank = rank if rank is not None else self.rank
+        return get_packed_weights(param, empty_param, device_mesh, rank, -2), [Shard(-2)]
 
     def create_nn_parameter(
         self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh
@@ -706,10 +768,19 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
 
-    def shard_tensor(self, param, param_type=None, tensor_idx=None):
-        device_mesh = self.device_mesh
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
+        device_mesh = device_mesh or self.device_mesh
         empty_param = self.empty_param
-        rank = self.rank
+        rank = rank if rank is not None else self.rank
         if param_type == "bias":
             shard = [Replicate()]
             parameter = param[:]
@@ -790,8 +861,20 @@ class RowwiseParallel(TensorParallelLayer):
 
 
 class PackedRowwiseParallel(RowwiseParallel):
-    def shard_tensor(self, param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        return get_packed_weights(param, self.empty_param, device_mesh, rank, -1), [Shard(-1)]
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
+        device_mesh = device_mesh or self.device_mesh
+        empty_param = self.empty_param
+        rank = rank if rank is not None else self.rank
+        return get_packed_weights(param, empty_param, device_mesh, rank, -1), [Shard(-1)]
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
@@ -861,6 +944,21 @@ class SequenceParallel(TensorParallelLayer):
         self.sequence_sharding = (Shard(sequence_dim),)
         self.use_local_output = use_local_output
 
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
+        parameter = param[...]
+        shard = [Replicate()]
+        self.shard = shard
+        return parameter, shard
+
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         input_tensor = inputs[0]
@@ -899,7 +997,16 @@ class GroupedGemmParallel(TensorParallelLayer):
         super().__init__()
         self.use_dtensor = False
 
-    def shard_tensor(self, param, **kwargs):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         empty_param = self.empty_param
         ep_rank = self.rank
         device_mesh = self.device_mesh
@@ -910,8 +1017,9 @@ class GroupedGemmParallel(TensorParallelLayer):
                 f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
             )
         local_num_experts = global_num_experts // device_mesh.size()
-        param = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts]
-        return param
+        parameter = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts]
+        self.shard = None
+        return parameter, None
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         ep_rank = rank
@@ -999,8 +1107,19 @@ class RouterParallel(TensorParallelLayer):
         )  # masking class for one hot
         return router_scores, router_indices
 
-    def shard_tensor(self, param, *args, **kwargs):
-        return param[:], None
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
+        parameter = param[...]
+        self.shard = None
+        return parameter, None
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # TODO: i'd like for this to be the default
@@ -1144,6 +1263,9 @@ def shard_and_distribute_module(
     if current_shard_plan is not None:
         try:
             tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
+            tp_layer.empty_param = empty_param
+            tp_layer.device_mesh = device_mesh
+            tp_layer.rank = rank
             param = tp_layer.partition_tensor(
                 param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
             )
