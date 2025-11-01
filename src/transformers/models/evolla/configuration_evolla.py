@@ -203,7 +203,7 @@ class EvollaConfig(PreTrainedConfig):
         hidden_act: Optional[str] = "silu",  # llama activation function
         max_position_embeddings: Optional[int] = 8192,  # llama rope max length
         rms_norm_eps: Optional[int] = 1e-05,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,

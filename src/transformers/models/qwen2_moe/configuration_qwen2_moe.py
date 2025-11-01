@@ -150,7 +150,7 @@ class Qwen2MoeConfig(PreTrainedConfig):
         rms_norm_eps: Optional[int] = 1e-6,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         use_sliding_window: Optional[bool] = False,
         sliding_window: Optional[int] = 4096,
         max_window_layers: Optional[int] = 28,

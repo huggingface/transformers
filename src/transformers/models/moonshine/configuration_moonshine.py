@@ -141,7 +141,7 @@ class MoonshineConfig(PreTrainedConfig):
         initializer_range: Optional[float] = 0.02,
         decoder_start_token_id: Optional[int] = 1,
         use_cache: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         partial_rotary_factor: Optional[float] = 0.9,
         is_encoder_decoder: Optional[bool] = True,
         attention_bias: Optional[bool] = False,

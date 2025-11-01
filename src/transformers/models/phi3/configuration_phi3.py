@@ -139,7 +139,7 @@ class Phi3Config(PreTrainedConfig):
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         partial_rotary_factor: Optional[float] = 1.0,
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 32000,

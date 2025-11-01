@@ -134,7 +134,7 @@ class Qwen3Config(PreTrainedConfig):
         rms_norm_eps: Optional[int] = 1e-6,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         use_sliding_window: Optional[bool] = False,
         sliding_window: Optional[int] = 4096,

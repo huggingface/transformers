@@ -200,7 +200,7 @@ class MiniMaxConfig(PreTrainedConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         layer_types: Optional[list[str]] = None,
         block_size: Optional[int] = 256,
         full_attn_alpha_factor: Optional[int] = 1,

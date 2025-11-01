@@ -137,7 +137,7 @@ class ArceeConfig(LlamaConfig):
         bos_token_id: Optional[int] = 128000,
         eos_token_id: Optional[int] = 128001,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,

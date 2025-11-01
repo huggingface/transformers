@@ -137,7 +137,7 @@ class PhiConfig(PreTrainedConfig):
         layer_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         partial_rotary_factor: Optional[float] = 0.5,
         qk_layernorm: Optional[bool] = False,
         bos_token_id: Optional[int] = 1,

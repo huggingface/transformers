@@ -131,7 +131,7 @@ class Starcoder2Config(PreTrainedConfig):
         use_cache: Optional[bool] = True,
         bos_token_id: Optional[int] = 50256,
         eos_token_id: Optional[int] = 50256,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         sliding_window: Optional[int] = None,
         attention_dropout: Optional[float] = 0.0,
         residual_dropout: Optional[float] = 0.0,
