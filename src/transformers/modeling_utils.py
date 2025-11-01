@@ -4181,7 +4181,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
         adapter_kwargs = kwargs.pop("adapter_kwargs", {})
-
         adapter_name = kwargs.pop("adapter_name", "default")
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
@@ -4294,8 +4293,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model_type = getattr(config, "model_type", None)
         if model_type is not None:
             weight_conversions = get_checkpoint_conversion_mapping().get(
-                model_type, get_checkpoint_conversion_mapping()["legacy"]
+                model_type
             )
+            if weight_conversions is None:
+                weight_conversions = get_checkpoint_conversion_mapping()["legacy"]
 
         if gguf_file:
             if hf_quantizer is not None:
@@ -4354,8 +4355,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Potentially upcast some modules to avoid loosing precision
         model.upcast_modules_in_fp32(hf_quantizer, dtype)
+
         # Make sure to tie the weights correctly
-        model.tie_weights()
+        if model.config.tie_word_embeddings:
+            model.tie_weights()
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
@@ -4398,7 +4401,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weight_mapping=weight_conversions,
         )
 
-        model.tie_weights()  # make sure token embedding weights are still tied if needed
+        # model.tie_weights()  # make sure token embedding weights are still tied if needed ?????
         model.eval()  # Set model in evaluation mode to deactivate DropOut modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
