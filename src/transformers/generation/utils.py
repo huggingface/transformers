@@ -2169,14 +2169,16 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.disable_compile:
             return False
 
+        compile_config = generation_config.compile_config
+        cache = model_kwargs.get("past_key_values")
+
         # Base logic
-        valid_hardware = self.device.type == "cuda" or bool(
-            generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
+        valid_hardware = self.device.type == "cuda" or (
+            compile_config is not None and compile_config._compile_all_devices
         )
-        using_compilable_cache = (
-            isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
-        )
-        can_compile = valid_hardware and using_compilable_cache
+        using_static_cache = isinstance(cache, StaticCache)
+        using_dynamic_cache_with_explicit_compile = compile_config is not None and isinstance(cache, DynamicCache)
+        can_compile = valid_hardware and (using_static_cache or using_dynamic_cache_with_explicit_compile)
 
         # Exception 1: Some quantization methods do not support compilation
         if getattr(self, "hf_quantizer", None) is not None:
@@ -2194,7 +2196,7 @@ class GenerationMixin(ContinuousMixin):
 
         # Finally: if the user has manually specified compilation options, but compilation is not possible, let's warn
         # them
-        if generation_config.compile_config is not None and not can_compile:
+        if compile_config is not None and not can_compile:
             logger.warning_once(
                 "You have set `compile_config`, but we are unable to meet the criteria for compilation. Compilation "
                 "will be skipped."
@@ -2874,7 +2876,28 @@ class GenerationMixin(ContinuousMixin):
                 outputs = self(**model_inputs, return_dict=True)
                 is_prefill = False
             else:
-                outputs = model_forward(**model_inputs, return_dict=True)
+                if compile_forward:
+                    cache = model_inputs.get("past_key_values")
+                    if isinstance(cache, DynamicCache):
+                        # Mark the sequence_length dimension as dynamic
+                        cache.mark_dynamic_for_compile()
+                        attention_mask = model_inputs.get("attention_mask")
+                        if isinstance(attention_mask, dict):
+                            for mask in attention_mask.values():
+                                if isinstance(mask, torch.Tensor):
+                                    torch._dynamo.mark_dynamic(mask, 3)
+                        elif isinstance(attention_mask, torch.Tensor):
+                            torch._dynamo.mark_dynamic(mask, 3)
+
+                    # Mark `cumulative_length` as dynamic for sliding layers, if any. There isn’t a public/stable API for dynamic
+                    # *integers* yet, so we use `dynamic_sources`, which relies on string matching to identify tensors/ints.
+                    # This is brittle: if the attribute is renamed, this selector must be updated.  The torch.compile team is
+                    # discussing a SymInt-like API that would make this explicit and remove this string-matching workaround
+                    # Update this when the API is available
+                    with torch.compiler.config.patch(dynamic_sources=".*cumulative_length"):
+                        outputs = model_forward(**model_inputs, return_dict=True)
+                else:
+                    outputs = model_forward(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
