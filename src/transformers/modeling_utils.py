@@ -112,6 +112,7 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_xla_available,
+    is_torch_xpu_available,
     logging,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
@@ -2156,6 +2157,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 logger.info("Detect using FlashAttention2 on Ascend NPU.")
                 return True
 
+            if is_torch_xpu_available():
+                logger.info("Detect using kernels-community/flash-attn on XPU.")
+                return True
+
             if importlib.util.find_spec("flash_attn") is None:
                 raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
             else:
@@ -2379,6 +2384,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
             and not is_torch_npu_available()
+            and not is_torch_xpu_available()
         ):
             if attn_implementation.endswith("2"):
                 applicable_attn_implementation = "kernels-community/flash-attn"
@@ -2386,6 +2392,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
         if is_kernel(applicable_attn_implementation):
+            # XPU only supports flash-attn kernels
+            if is_torch_xpu_available() and "flash-attn3" in applicable_attn_implementation:
+                raise ValueError(
+                    f"XPU does not support `{applicable_attn_implementation}`. "
+                    "Please use `attn_implementation='flash_attention_2'` or "
+                    "`attn_implementation='kernels-community/flash-attn'` instead."
+                )
+
             try:
                 load_and_register_attn_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
