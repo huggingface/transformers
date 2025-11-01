@@ -60,6 +60,18 @@ AWQ_FUSED_MAPPINGS = {
         "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
         "use_alibi": False,
     },
+    "qwen2": {
+        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "mlp": ["gate_proj", "up_proj", "down_proj"],
+        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
+        "use_alibi": False,
+    },
+    "qwen3": {
+        "attention": ["q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm"],
+        "mlp": ["gate_proj", "up_proj", "down_proj"],
+        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
+        "use_alibi": False,
+    }
 }
 
 AWQ_SCALES_MAPPINGS = {
@@ -219,15 +231,18 @@ def get_modules_to_fuse(model, quantization_config):
         # Properly deal with the case where we have a multi-modal model as well (e.g. Llava)
         config = model.config.get_text_config(decoder=True)
 
-        # Handle hidden_size, num_attention_heads, num_key_value_heads on our own.
+        # Handle hidden_size, num_attention_heads, num_key_value_heads and rope_theta on our own.
         hidden_size = config.hidden_size
         num_attention_heads = config.num_attention_heads
         num_key_value_heads = getattr(config, "num_key_value_heads", num_attention_heads)
+        # The default value in autoawq is set to 10000.0
+        rope_theta = getattr(config, "rope_theta", 10000.0)
 
         # Fill `current_fused_mapping` with the expected values
         current_fused_mapping["hidden_size"] = hidden_size
         current_fused_mapping["num_attention_heads"] = num_attention_heads
         current_fused_mapping["num_key_value_heads"] = num_key_value_heads
+        current_fused_mapping["rope_theta"] = rope_theta
         current_fused_mapping["max_seq_len"] = quantization_config.fuse_max_seq_len
     else:
         raise ValueError(
@@ -261,6 +276,13 @@ def fuse_awq_modules(model, quantization_config):
         from awq.modules.fused.attn import QuantAttentionFused
         from awq.modules.fused.mlp import QuantFusedMLP
         from awq.modules.fused.norm import FasterTransformerRMSNorm
+
+        # hack QuantAttentionFused to modify the return value of forward function to avoid returning past_key_value
+        old_quant_attention_fused_forward = QuantAttentionFused.forward
+        def new_quant_attention_fused_forward(self, *args, **kwargs):
+            attn_output, attention_weight, _ = old_quant_attention_fused_forward(self, *args, **kwargs)
+            return attn_output, attention_weight
+        QuantAttentionFused.forward = new_quant_attention_fused_forward
     else:
         raise ValueError("Fusing is only supported for the AutoAWQ backend")
 
@@ -376,7 +398,7 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             The pytorch parent module that has layernorm modules to fuse
         modules_to_fuse (`list[str]`):
             The module fusing mapping. The dictionary has to contain a field `attention` with attention module names
-            in the correct order: q, k, v, o layer
+            in the correct order: q, k, v, o layer, (q_norm, k_norm) optional
         current_module_name (`str`):
             The current submodule name
         target_cls (`~autoawq.QuantAttentionFused`):
@@ -415,6 +437,14 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
         v_proj = getattr(module, modules_to_fuse["attention"][2])
         o_proj = getattr(module, modules_to_fuse["attention"][3])
 
+        # maybe there are q_norm and k_norm layers
+        if len(modules_to_fuse["attention"]) > 4:
+            q_norm = getattr(module, modules_to_fuse["attention"][4])
+            k_norm = getattr(module, modules_to_fuse["attention"][5])
+        else:
+            q_norm = None
+            k_norm = None
+
         bias = torch.cat([q_proj.bias, k_proj.bias, v_proj.bias], dim=0) if q_proj.bias is not None else None
 
         qkv_layer = linear_target_cls(
@@ -444,8 +474,9 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             previous_device,
             modules_to_fuse["max_seq_len"],
             use_alibi=modules_to_fuse["use_alibi"],
-            # The default value in autoawq is set to 10000.0
-            rope_theta=modules_to_fuse.get("rope_theta", 10000.0),
+            rope_theta=modules_to_fuse["rope_theta"],
+            q_norm=q_norm,
+            k_norm=k_norm,
         )
 
         fused_attention_layer.is_hf_transformers = True
@@ -454,7 +485,7 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
         parent = model.get_submodule(parent_name)
         setattr(parent, child_name, fused_attention_layer.to(previous_device))
 
-        del q_proj, k_proj, v_proj, o_proj
+        del q_proj, k_proj, v_proj, o_proj, q_norm, k_norm
         module_has_been_fused = True
 
     return module_has_been_fused
