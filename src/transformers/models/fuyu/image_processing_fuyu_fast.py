@@ -26,6 +26,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
+    pil_torch_interpolation_mapping,
 )
 from ...processing_utils import ImagesKwargs
 from ...utils import (
@@ -34,8 +35,8 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from ...image_utils import pil_torch_interpolation_mapping
 from .image_processing_fuyu import FuyuBatchFeature
+
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as F
@@ -452,22 +453,22 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         """
         if kwargs is None:
             kwargs = {}
-        
+
         if size is not None:
             size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
         if crop_size is not None:
             crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
         if pad_size is not None:
             pad_size = SizeDict(**get_size_dict(size=pad_size, param_name="pad_size"))
-        
+
         if patch_size is not None:
             patch_size = SizeDict(**get_size_dict(patch_size, param_name="patch_size"))
-        
+
         if isinstance(image_mean, list):
             image_mean = tuple(image_mean)
         if isinstance(image_std, list):
             image_std = tuple(image_std)
-        
+
         if data_format is None:
             data_format = ChannelDimension.FIRST
 
