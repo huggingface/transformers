@@ -483,7 +483,9 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         resample = kwargs.pop("resample", None)
         if resample is not None:
             kwargs["interpolation"] = (
-                pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+                pil_torch_interpolation_mapping[resample]
+                if isinstance(resample, (PILImageResampling, int))
+                else resample
             )
 
         return kwargs

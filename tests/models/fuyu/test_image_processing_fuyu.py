@@ -78,12 +78,18 @@ class FuyuImageProcessingTester:
         """Prepares a batch of images for testing"""
         if equal_resolution:
             image_inputs = [
-                np.random.randint(0, 256, (self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8)
+                np.random.randint(
+                    0, 256, (self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
+                )
                 for _ in range(self.batch_size)
             ]
         else:
-            heights = [h - (h % 30) for h in np.random.randint(self.min_resolution, self.max_resolution, self.batch_size)]
-            widths = [w - (w % 30) for w in np.random.randint(self.min_resolution, self.max_resolution, self.batch_size)]
+            heights = [
+                h - (h % 30) for h in np.random.randint(self.min_resolution, self.max_resolution, self.batch_size)
+            ]
+            widths = [
+                w - (w % 30) for w in np.random.randint(self.min_resolution, self.max_resolution, self.batch_size)
+            ]
 
             image_inputs = [
                 np.random.randint(0, 256, (self.num_channels, height, width), dtype=np.uint8)
@@ -195,10 +201,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.images[0][0],
-            encoding_fast.images[0][0]
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.images[0][0], encoding_fast.images[0][0])
 
     def test_slow_fast_equivalence_batched(self):
         """Override to handle Fuyu's custom output structure"""
@@ -253,7 +256,9 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
             self.skipTest(reason="Skipping slow/fast patch equivalence test")
 
         if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast patch equivalence test as one of the image processors is not defined")
+            self.skipTest(
+                reason="Skipping slow/fast patch equivalence test as one of the image processors is not defined"
+            )
 
         batch_size = 3
         channels = 3
@@ -284,8 +289,9 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
             sample_tensor = torch.from_numpy(sample_image).permute(2, 0, 1).float()
 
-            size_dict = SizeDict(height=self.image_processor_dict["size"]["height"],
-                               width=self.image_processor_dict["size"]["width"])
+            size_dict = SizeDict(
+                height=self.image_processor_dict["size"]["height"], width=self.image_processor_dict["size"]["width"]
+            )
             scaled_image = image_processor_fast.resize(sample_tensor, size=size_dict)
 
             self.assertEqual(scaled_image.shape[1], 180)
