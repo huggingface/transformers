@@ -1521,6 +1521,16 @@ if __name__ == "__main__":
                 token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id, commit_sha=ci_sha
             )
             other_workflow_run_ids.append(other_workflow_run_id)
+    # triggered via `issue_comment` for CI on pull requests (e.g. using the comment `run-slow:`)
+    elif os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment"]:
+        # TODO (ydshieh): Make this flexible once we implement `run-slow` for AMD CI and others.
+        # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
+        prev_workflow_id = "90575235"
+        # TODO (ydshieh): It's better to make sure using the last completed scheduled workflow run with the commit being a parent
+        #  of the PR's `merge_commit`.
+        prev_workflow_run_id = get_last_daily_ci_workflow_run_id(
+            token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=prev_workflow_id
+        )
     else:
         prev_workflow_run_id = os.environ["PREV_WORKFLOW_RUN_ID"]
         other_workflow_run_id = os.environ["OTHER_WORKFLOW_RUN_ID"]

@@ -80,7 +80,9 @@ jobs:
 
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+        run: |
+          git fetch origin ${{ inputs.commit_sha || github.sha }}
+          git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -174,7 +176,7 @@ jobs:
 
   collated_reports:
     name: Collated Reports
-    if: ${{ always() }}
+    if: ${{ always() && inputs.runner_type != '' }}
     needs: run_models_gpu
     uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
     with:
