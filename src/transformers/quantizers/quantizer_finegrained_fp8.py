@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Optional
 
+from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -156,12 +157,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
-        from ..integrations.finegrained_fp8 import replace_with_fp8_linear
-
+        # takes 2 fucking seconds
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
+        # while this one is 81ms :)
         model = replace_with_fp8_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,

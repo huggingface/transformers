@@ -408,7 +408,7 @@ def log_to_misc(
             values, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
             misc[layer_name] = (
-                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {values}"
+                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {len(values[0])}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
@@ -425,7 +425,7 @@ def set_param_for_module(
     layer_name: str,
     param_value: torch.Tensor,
     meta_model_state_dict: MutableMapping[str, Any],
-    empty_tensor: torch.Tensor,
+    empty_param: torch.Tensor,
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
     misc: MutableMapping[str, Any],
@@ -435,7 +435,7 @@ def set_param_for_module(
         module_path, _, param_name = layer_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
         param_value = param_value[0] if isinstance(param_value, list) else param_value[...]
-        ref = meta_model_state_dict.get(layer_name, empty_tensor)
+        ref = meta_model_state_dict.get(layer_name, empty_param)
         use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
         if not isinstance(param_value, torch.nn.Parameter):
             if distributed_operation is not None and use_dtensor:
@@ -533,8 +533,8 @@ def convert_and_load_state_dict_in_model(
         target_key = "|".join(new_target_key)
 
         for t in target_key.split("|"):
-            empty_tensor = meta_model_state_dict.get(t)
-            if empty_tensor is None:
+            empty_param = meta_model_state_dict.get(t)
+            if empty_param is None:
                 unexpected_keys.add(t)
                 continue
             if quantizer is not None and quantizer.param_needs_quantization(model, t):
@@ -558,13 +558,13 @@ def convert_and_load_state_dict_in_model(
         future = None
         if device_mesh:
             if matched_tp_pattern := match_glob(first_target_key, tp_plan_alt, tp_plan_by_group_name):
-                empty_tensor = meta_model_state_dict.get(first_target_key)
-                if getattr(converter, "distributed_operation", {}) == {}:
+                empty_param = meta_model_state_dict.get(first_target_key)
+                if getattr(converter, "distributed_operation", {}) is None:
                     tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                     converter.distributed_operation = tp_layer(
-                        device_mesh=device_mesh, rank=device_map[""].index, empty_tensor=empty_tensor.clone()
+                        device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
                     )
-                # VERY IMPORTANT: this tells us wether we collected stuffs or not.
+                    # VERY IMPORTANT: this tells us wether we collected stuffs or not.
                 shard_index = len(entry.collected_tensors[target_key].get(converter_key, []))
                 future = spawn_tp_materialize(
                     thread_pool,
@@ -625,7 +625,7 @@ def convert_and_load_state_dict_in_model(
                             k,
                             output_value,
                             meta_model_state_dict,
-                            empty_tensor,
+                            empty_param,
                             mismatch_keys,
                             missing_keys,
                             misc,

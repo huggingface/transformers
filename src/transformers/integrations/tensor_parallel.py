@@ -440,10 +440,15 @@ class TensorParallelLayer:
     rank = None
 
     # Used to compare the shape of the original tensor
-    empty_tensor = None
+    empty_param = None
 
     # Used to init the corresponding DTensor
     shard = None
+
+    def __init__(self, device_mesh=None, rank=None, empty_param=None):
+        self.rank = rank
+        self.device_mesh = device_mesh
+        self.empty_param = empty_param
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh): ...
@@ -473,12 +478,12 @@ class GatherParallel(TensorParallelLayer):
 
     def __init__(
         self,
-        *,
         input_layouts: Placement | None = None,
         output_layouts: Placement | None = None,
         use_local_output: bool = True,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.input_layouts = (input_layouts or Replicate(),)
         self.output_layouts = output_layouts
         self.desired_input_layouts = (Replicate(),)
@@ -581,8 +586,8 @@ class ReplicateParallel(TensorParallelLayer):
     This class is used to replicate computation in a TP layer (used in SP regions when we don't use sequence parallelism for example)
     """
 
-    def __init__(self, *, use_dtensor=True, use_local_output=True):
-        super().__init__()
+    def __init__(self, use_dtensor=True, use_local_output=True, **kwargs):
+        super().__init__(**kwargs)
         self.input_layouts = (Replicate(),)
         self.output_layouts = (Replicate(),)
         self.desired_input_layouts = (Replicate(),)
@@ -639,13 +644,13 @@ class ColwiseParallel(TensorParallelLayer):
 
     def __init__(
         self,
-        *,
         input_layouts: Placement | None = None,
         output_layouts: Placement | None = None,
         use_local_output: bool = True,
         use_dtensor=True,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.input_layouts = (input_layouts or Replicate(),)
         self.output_layouts = (output_layouts or Shard(-1),)
         self.desired_input_layouts = (Replicate(),)
@@ -756,13 +761,13 @@ class RowwiseParallel(TensorParallelLayer):
 
     def __init__(
         self,
-        *,
         input_layouts: Placement | None = None,
         output_layouts: Placement | None = None,
         use_local_output: bool = True,
         use_dtensor=True,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.input_layouts = (input_layouts or Shard(-1),)
         self.output_layouts = (output_layouts or Replicate(),)
         self.use_local_output = use_local_output
@@ -934,8 +939,8 @@ class SequenceParallel(TensorParallelLayer):
         to ensure that they are replicated.
     """
 
-    def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = False, use_dtensor=False):
-        super().__init__()
+    def __init__(self, sequence_dim: int = 1, use_local_output: bool = False, use_dtensor=False, **kwargs):
+        super().__init__(**kwargs)
         self.input_layouts = (Replicate(),)
         self.desired_input_layouts = (Shard(1),)
         self.output_layouts = (Replicate(),)
@@ -993,8 +998,8 @@ class GroupedGemmParallel(TensorParallelLayer):
     Applies Expert Parallelism to MoE experts by loading the correct experts on each device.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.use_dtensor = False
 
     def shard_tensor(
@@ -1041,8 +1046,8 @@ class RouterParallel(TensorParallelLayer):
     """
 
     def __init__(self, *args, **kwargs):
+        super().__init__(**kwargs)
         self.args = args
-        self.kwargs = kwargs
         self.use_dtensor = False
 
     @staticmethod

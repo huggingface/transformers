@@ -116,9 +116,9 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
-    from safetensors import safe_open
     from torch import nn
 
     from transformers import MODEL_MAPPING
@@ -1946,7 +1946,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
-            model = model_class(config) # we init the model without tie
+            model = model_class(config)  # we init the model without tie
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
                 with safe_open(f"{d}/model.safetensors", framework="pt") as f:
