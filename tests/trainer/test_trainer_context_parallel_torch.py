@@ -39,43 +39,13 @@ if is_torch_available():
     )
 
 
-class TestTrainerContextParallel(TestCasePlus):
-    """Test Trainer with context parallelism enabled via accelerate's ParallelismConfig."""
+class TestTrainerContextParallelTorch(TestCasePlus):
+    """Test Trainer with Torch context parallelism enabled via accelerate's ParallelismConfig."""
 
     @require_torch_multi_accelerator
     @require_accelerate
     @slow
     @run_first
-    def test_trainer(self):
-        """Test basic training with context parallelism enabled."""
-        output_dir = self.get_auto_remove_tmp_dir()
-        config_path = f"{self.test_file_dir}/context_parallel_config.yaml"
-
-        cmd = [
-            "accelerate",
-            "launch",
-            "--config_file",
-            config_path,
-            f"{self.test_file_dir}/test_trainer_context_parallel.py",
-            "--output_dir",
-            output_dir,
-            "--report_to",
-            "none",
-            "--max_steps",
-            "5",
-            "--per_device_train_batch_size",
-            "1",
-            "--logging_steps",
-            "1",
-            "--remove_unused_columns",
-            "False",
-        ]
-
-        execute_subprocess_async(cmd, env=self.get_env())
-
-    @require_torch_multi_accelerator
-    @require_accelerate
-    @slow
     def test_cp_equivalence(self):
         """Test that CP produces the same losses as without CP."""
         import os
@@ -83,7 +53,7 @@ class TestTrainerContextParallel(TestCasePlus):
         output_dir = self.get_auto_remove_tmp_dir()
 
         # Run with CP enabled (cp_size=2)
-        config_path_cp = f"{self.test_file_dir}/context_parallel_config.yaml"
+        config_path_cp = f"{self.test_file_dir}/context_parallel_torch_config.yaml"
         loss_file_cp = os.path.join(output_dir, "losses_cp.json")
 
         cmd_cp = [
@@ -91,7 +61,7 @@ class TestTrainerContextParallel(TestCasePlus):
             "launch",
             "--config_file",
             config_path_cp,
-            f"{self.test_file_dir}/test_trainer_context_parallel.py",
+            f"{self.test_file_dir}/test_trainer_context_parallel_torch.py",
             "--output_dir",
             os.path.join(output_dir, "with_cp"),
             "--report_to",
@@ -114,7 +84,7 @@ class TestTrainerContextParallel(TestCasePlus):
         execute_subprocess_async(cmd_cp, env=self.get_env())
 
         # Run without CP (FSDP with num_processes=1, no parallelism_config)
-        config_path_no_cp = f"{self.test_file_dir}/context_parallel_no_cp_config.yaml"
+        config_path_no_cp = f"{self.test_file_dir}/context_parallel_torch_no_cp_config.yaml"
         loss_file_no_cp = os.path.join(output_dir, "losses_no_cp.json")
 
         cmd_no_cp = [
@@ -122,7 +92,7 @@ class TestTrainerContextParallel(TestCasePlus):
             "launch",
             "--config_file",
             config_path_no_cp,
-            f"{self.test_file_dir}/test_trainer_context_parallel.py",
+            f"{self.test_file_dir}/test_trainer_context_parallel_torch.py",
             "--output_dir",
             os.path.join(output_dir, "without_cp"),
             "--report_to",
