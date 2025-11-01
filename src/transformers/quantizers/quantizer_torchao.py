@@ -245,13 +245,24 @@ class TorchAoHfQuantizer(HfQuantizer):
             return False
         elif any(param_name.endswith(f":{x}") for x in self.full_ao_keys):
             return True
-        else:
-            # we only quantize the weight of nn.Linear and nn.Embedding
-            module, tensor_name = get_module_from_name(model, param_name)
-            _QUANTIZABLE = [torch.nn.Linear]
-            if self.quantization_config.include_input_output_embeddings:
-                _QUANTIZABLE.append(torch.nn.Embedding)
-            return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
+        # Handle FqnToConfig, introduced in torchao 0.15.0+
+        elif (self.quantization_config._get_ao_version() >= version.parse("0.15.0")):
+            from torchao.quantization import FqnToConfig
+            from torchao.quantization.quant_api import _filter_fn_and_param_in_fqn_config
+
+            if isinstance(self.quantization_config.quant_type, FqnToConfig):
+                module, tensor_name = get_module_from_name(model, param_name)
+                module_fqn, param_name_fqn = param_name.rsplit(".", 1)
+                if _filter_fn_and_param_in_fqn_config(module, module_fqn, self.quantization_config.quant_type, None):
+                    return True
+
+        # Fallback here for ModuleFqnToConfig
+        # we only quantize the weight of nn.Linear and nn.Embedding
+        module, tensor_name = get_module_from_name(model, param_name)
+        _QUANTIZABLE = [torch.nn.Linear]
+        if self.quantization_config.include_input_output_embeddings:
+            _QUANTIZABLE.append(torch.nn.Embedding)
+        return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
     def create_quantized_param(
         self,
@@ -319,8 +330,50 @@ class TorchAoHfQuantizer(HfQuantizer):
                 model.tie_weights()
                 setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
 
+            # handle FqnToConfig, introduced in torchao 0.15.0+
+            if self.quantization_config._get_ao_version() >= version.Version("0.15.0"):
+                from torchao.quantization import FqnToConfig
+
+                config = self.quantization_config.get_apply_tensor_subclass()
+                if isinstance(config, FqnToConfig):
+                    module_fqn, param_val = param_name.rsplit(".", 1)
+                    c = None
+                    if param_name in config.module_fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "param fqn should not start with`re:`, which is used for specifying regex"
+                        )
+                        c = config.module_fqn_to_config[param_name]
+                    elif module_fqn in config.module_fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "module fqn should not start with`re:`, which is used for specifying regex"
+                        )
+                        c = config.module_fqn_to_config[module_fqn]
+                    # regx match module and param
+                    else:
+                        for maybe_module_fqn_pattern in config.module_fqn_to_config:
+                            if not maybe_module_fqn_pattern.startswith("re:"):
+                                continue
+                            # see if param matches first
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], param_name):
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
+                                # we'll apply the config for first fully matched pattern
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                        else:
+                            c = config.module_fqn_to_config.get("_default", None)
+                    
+                    if c is not None:
+                        # filter_fn: not filtering out any modules
+                        custom_fqn_config = FqnToConfig({
+                            param_val: c
+                        })
+                        quantize_(module, custom_fqn_config, filter_fn=None)
+                    return
+
             # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
-            if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
+            elif self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
                 from torchao.quantization import ModuleFqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
@@ -342,7 +395,6 @@ class TorchAoHfQuantizer(HfQuantizer):
                                 break
                         else:
                             c = config.module_fqn_to_config.get("_default", None)
-
                     if c is not None:
                         # filter_fn: not filtering out any modules
                         quantize_(module, c, filter_fn=lambda x, fqn: True)
