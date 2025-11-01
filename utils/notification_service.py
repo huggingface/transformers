@@ -40,6 +40,7 @@ job_to_test_map = {
     "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
+    "run_kernels_gpu": "Kernels",
 }
 
 # The values are used as the file names where to save the corresponding CI job results.
@@ -50,6 +51,7 @@ test_to_result_name = {
     "Examples directory": "example",
     "DeepSpeed": "deepspeed",
     "Quantization": "quantization",
+    "Kernels": "kernels",
 }
 
 NON_MODEL_TEST_MODULES = [
@@ -65,6 +67,7 @@ NON_MODEL_TEST_MODULES = [
     "utils",
     "fsdp",
     "quantization",
+    "kernels",
 ]
 
 
@@ -1301,6 +1304,7 @@ if __name__ == "__main__":
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
         "Examples directory": "run_examples_gpu_test_reports",
         "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
+        "Kernels": "run_kernels_gpu_test_reports",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):

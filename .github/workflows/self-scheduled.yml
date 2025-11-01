@@ -475,6 +475,70 @@ jobs:
           name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports
 
+  run_kernels_gpu:
+    if: ${{ inputs.job == 'run_kernels_gpu' }}
+    name: Kernel tests
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [aws-g5-4xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
+    container:
+      image: ${{ inputs.docker }}
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+
+      - name: Reinstall transformers in edit mode
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[testing]
+  
+      - name: Install kernels
+        working-directory: /transformers
+        run: python3 -m pip install -U kernels
+  
+      - name: NVIDIA-SMI
+        run: nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
+            machine_type=single-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+    
+      - name: Run kernel tests on GPU
+        working-directory: /transformers
+        run: |
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_kernels_gpu_test_reports tests/kernels/test_kernels.py
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_kernels_gpu_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.machine_type }}_run_kernels_gpu_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports
+
   run_extract_warnings:
     # Let's only do this for the job `run_models_gpu` to simplify the (already complex) logic.
     if: ${{ always() && inputs.job == 'run_models_gpu' }}
@@ -527,6 +591,7 @@ jobs:
       run_examples_gpu,
       run_torch_cuda_extensions_gpu,
       run_quantization_torch_gpu,
+      run_kernels_gpu,
       run_extract_warnings
     ]
     if: always() && !cancelled()
