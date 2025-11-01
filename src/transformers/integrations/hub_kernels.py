@@ -164,6 +164,7 @@ except ImportError:
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
+    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "clean-mamba-ssm"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, Optional[ModuleType]] = {}
@@ -235,7 +236,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] 
     if kernel_name in mapping and isinstance(mapping[kernel_name], ModuleType):
         return mapping[kernel_name]
     if kernel_name not in _HUB_KERNEL_MAPPING:
-        logger.warning(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
+        logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
     if _kernels_available:
@@ -243,8 +244,9 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] 
 
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
+            revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
-            kernel = get_kernel(repo_id, version=version)
+            kernel = get_kernel(repo_id, revision=revision, version=version)
             mapping[kernel_name] = kernel
         except FileNotFoundError:
             mapping[kernel_name] = None
