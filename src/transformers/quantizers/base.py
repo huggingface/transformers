@@ -71,6 +71,8 @@ class HfQuantizer(ABC):
         # -- Handle extra kwargs below --
         self.modules_to_not_convert = kwargs.pop("modules_to_not_convert", [])
         self.pre_quantized = kwargs.pop("pre_quantized", True)
+        # Track quantized parameters we create so they do not trigger reinitialization later on.
+        self._loaded_quantized_keys: set[str] = set()
 
         if not self.pre_quantized and self.requires_calibration:
             raise ValueError(
@@ -139,7 +141,45 @@ class HfQuantizer(ABC):
             missing_keys (`list[str]`, *optional*):
                 The list of missing keys in the checkpoint compared to the state dict of the model
         """
-        return missing_keys
+        filtered_keys = []
+        for key in missing_keys:
+            if key in self._loaded_quantized_keys:
+                continue
+
+            needs_quantization = False
+            try:
+                needs_quantization = self.param_needs_quantization(model, key)
+            except Exception:
+                # Some quantizers may raise if the key does not correspond to a handled parameter. Treat as non-quantized.
+                needs_quantization = False
+
+            if needs_quantization:
+                self._loaded_quantized_keys.add(key)
+                continue
+
+            filtered_keys.append(key)
+
+        return filtered_keys
+
+    def register_loaded_quantized_param(self, model: "PreTrainedModel", param_name: str) -> None:
+        """Mark a quantized parameter as loaded so it is not treated as missing and will not be reinitialized."""
+
+        self._loaded_quantized_keys.add(param_name)
+
+        if not is_torch_available():
+            # We cannot mutate torch objects if torch is unavailable.
+            return
+
+        try:
+            param_or_buffer = model.get_parameter_or_buffer(param_name)
+        except (AttributeError, ValueError, RuntimeError):
+            param_or_buffer = None
+
+        if param_or_buffer is not None:
+            try:
+                setattr(param_or_buffer, "_is_hf_initialized", True)
+            except Exception:
+                pass
 
     def update_expected_keys(self, model, expected_keys: list[str], loaded_keys: list[str]) -> list[str]:
         """
