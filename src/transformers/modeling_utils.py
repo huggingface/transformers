@@ -4293,7 +4293,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions: Optional[list[WeightConverter]] = None
         model_type = getattr(config, "model_type", None)
         if model_type is not None:
-            weight_conversions = get_checkpoint_conversion_mapping().get(model_type)
+            weight_conversions = get_checkpoint_conversion_mapping().get(
+                model_type, get_checkpoint_conversion_mapping()["legacy"]
+            )
 
         if gguf_file:
             if hf_quantizer is not None:

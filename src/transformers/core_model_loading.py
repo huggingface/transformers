@@ -156,7 +156,7 @@ class Chunk(ConversionOps):
         self.sizes = list(sizes) if sizes is not None else None
         self.reverse_op = Concatenate
 
-    def convert(self, value: torch.Tensor,*args, **kwargs) -> list[torch.Tensor]:
+    def convert(self, value: torch.Tensor, *args, **kwargs) -> list[torch.Tensor]:
         if not isinstance(value, torch.Tensor):
             raise TypeError("Chunk expects a torch.Tensor as input.")
         if self.sizes is not None:
@@ -274,7 +274,7 @@ class PermuteForRope(ConversionOps):
         pass
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
-        dim1 , dim2 = tensor.shape
+        dim1, dim2 = tensor.shape
         n_heads = self.config.getattr("num_attention_heads", 1)
 
         tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
@@ -349,7 +349,7 @@ PER_FILE_LIMIT = 4  # concurrent reads per file
 
 def _materialize_copy(x):
     # PyTorch: this runs in C and releases the GIL; good for threads.
-    return x[...]
+    return x[...].contiguous()
 
 
 def spawn_materialize(thread_pool, _file_semaphore, file_id, t) -> Future:

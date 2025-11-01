@@ -14,6 +14,11 @@
 # limitations under the License.
 
 from .core_model_loading import Concatenate, MergeModulelist, WeightConverter
+from .utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 def _build_checkpoint_conversion_mapping():
@@ -65,7 +70,39 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "legacy": [
+            WeightConverter(
+                source_keys="LayerNorm.gamma",
+                target_keys="LayerNorm.weight",
+            ),
+            WeightConverter(
+                source_keys="LayerNorm.beta",
+                target_keys="LayerNorm.bias",
+            ),
+        ],
     }
+    if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
+        mapping["legacy"] += [
+            WeightConverter(
+                source_keys="weight_g",
+                target_keys="parametrizations.weight.original0",
+            ),
+            WeightConverter(
+                source_keys="weight_v",
+                target_keys="parametrizations.weight.original1",
+            ),
+        ]
+    else:
+        mapping["legacy"] += [
+            WeightConverter(
+                source_keys="parametrizations.weight.original0",
+                target_keys="weight_g",
+            ),
+            WeightConverter(
+                source_keys="parametrizations.weight.original1",
+                target_keys="weight_v",
+            ),
+        ]
 
     mapping["phimoe"] = mapping["mixtral"].copy()
     mapping["deepseek_v2"] = mapping["qwen2_moe"].copy()

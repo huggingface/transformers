@@ -77,7 +77,7 @@ class DeepseekV2Experts(nn.Module):
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
 
             routing_weights = top_k_weights[token_idx, expert_idx].unsqueeze(-1)
-            current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
+            current_hidden_states = current_hidden_states * routing_weights
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
