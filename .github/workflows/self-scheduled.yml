@@ -34,14 +34,20 @@ on:
       runner_type:
         required: false
         type: string
-      models:
+      subdirs:
         default: ""
         required: false
         type: string
       pytest_marker:
         required: false
         type: string
-
+      pr_number:
+        required: false
+        type: string
+    outputs:
+      report:
+        description: "Content of the report of new failures"
+        value: ${{ jobs.check_new_failures.outputs.report }}
 
 env:
   HF_HOME: /mnt/cache
@@ -76,6 +82,7 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: |
+          git fetch origin ${{ inputs.commit_sha || github.sha }}
           git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Cleanup
@@ -95,7 +102,7 @@ jobs:
         working-directory: /transformers/tests
         run: |
           if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
-            echo "folder_slices=$(python3 ../utils/split_model_tests.py --models '${{ inputs.models }}' --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+            echo "folder_slices=$(python3 ../utils/split_model_tests.py --subdirs '${{ inputs.subdirs }}' --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
             echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
           elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
             echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
@@ -107,7 +114,7 @@ jobs:
         name: Identify quantization method to test
         working-directory: /transformers/tests
         run: |
-          echo "quantization_matrix=$(python3 -c 'import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); d = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))) ;  print(d)')" >> $GITHUB_OUTPUT
+          echo "quantization_matrix=$(python3 -c 'import ast; import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); subdirs = ast.literal_eval(${{ inputs.subdirs || '"None"' }}); quantization_tests = [x.removeprefix("quantization/") for x in subdirs] if subdirs is not None else quantization_tests; d = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))) ;  print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
         run: |
@@ -539,16 +546,17 @@ jobs:
     secrets: inherit
 
   check_new_failures:
-    if: ${{ always() && inputs.ci_event == 'Daily CI' && needs.send_results.result == 'success' }}
+    if: ${{ always() && needs.send_results.result == 'success' }}
     name: Check new failures
     needs: send_results
     uses: ./.github/workflows/check_failed_tests.yml
     with:
       docker: ${{ inputs.docker }}
-      start_sha: ${{ inputs.commit_sha || github.sha }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
       job: ${{ inputs.job }}
       slack_report_channel: ${{ inputs.slack_report_channel }}
       ci_event: ${{ inputs.ci_event }}
       report_repo_id: ${{ inputs.report_repo_id }}
+      pr_number: ${{ inputs.pr_number }}
 
     secrets: inherit
