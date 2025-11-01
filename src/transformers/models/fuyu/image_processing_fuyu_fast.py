@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,8 +34,8 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...image_utils import pil_torch_interpolation_mapping
 from .image_processing_fuyu import FuyuBatchFeature
-
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as F
@@ -437,16 +437,54 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
+        size: Optional[SizeDict] = None,
+        crop_size: Optional[SizeDict] = None,
+        pad_size: Optional[SizeDict] = None,
+        default_to_square: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        data_format: Optional[ChannelDimension] = None,
         patch_size: Optional[dict[str, int]] = None,
         **kwargs,
     ) -> dict:
         """
         Process Fuyu-specific kwargs before validation.
         """
-        kwargs = super()._further_process_kwargs(**kwargs)
+        if kwargs is None:
+            kwargs = {}
+        
+        if size is not None:
+            size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
+        if crop_size is not None:
+            crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
+        if pad_size is not None:
+            pad_size = SizeDict(**get_size_dict(size=pad_size, param_name="pad_size"))
+        
         if patch_size is not None:
             patch_size = SizeDict(**get_size_dict(patch_size, param_name="patch_size"))
+        
+        if isinstance(image_mean, list):
+            image_mean = tuple(image_mean)
+        if isinstance(image_std, list):
+            image_std = tuple(image_std)
+        
+        if data_format is None:
+            data_format = ChannelDimension.FIRST
+
+        kwargs["size"] = size
+        kwargs["crop_size"] = crop_size
+        kwargs["pad_size"] = pad_size
+        kwargs["image_mean"] = image_mean
+        kwargs["image_std"] = image_std
+        kwargs["data_format"] = data_format
         kwargs["patch_size"] = patch_size
+
+        resample = kwargs.pop("resample", None)
+        if resample is not None:
+            kwargs["interpolation"] = (
+                pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+            )
+
         return kwargs
 
 
