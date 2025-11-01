@@ -245,6 +245,11 @@ class GPT2Attention(nn.Module):
 
         is_causal = attention_mask is None and query_states.shape[-2] > 1 and not is_cross_attention
 
+        # For flash attention backends, we must keep causal behavior even when a 2D padding mask is provided
+        # (flash attention uses `is_causal` for the triangular mask and expects an optional 2D key padding mask)
+        if self.config._attn_implementation in {"flash_attention_2", "flash_attention_3"} and not is_cross_attention:
+            is_causal = query_states.shape[-2] > 1
+
         using_eager = self.config._attn_implementation == "eager"
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
