@@ -197,9 +197,10 @@ jobs:
 
   report:
     name: Check & Report
-    needs: [get-pr-number, create_run, model-ci, quantization-ci]
+    needs: [get-pr-number, check-timestamps, create_run, model-ci, quantization-ci]
     permissions:
       pull-requests: write
+      statuses: write
     if: ${{ always() && needs.create_run.result == 'success' }}
     runs-on: ubuntu-22.04
     steps:
@@ -285,9 +286,13 @@ jobs:
             # Check if both jobs were skipped or cancelled
             if [[ "${{ needs.model-ci.result }}" == "skipped" || "${{ needs.model-ci.result }}" == "cancelled" ]] && \
                [[ "${{ needs.quantization-ci.result }}" == "skipped" || "${{ needs.quantization-ci.result }}" == "cancelled" ]]; then
-              echo '⚠️ No test being reported (jobs are skipped or cancelled)!'            
+              echo '⚠️ No test being reported (jobs are skipped or cancelled)!'
+              echo "STATUS=error" >> $GITHUB_ENV
+
             # Check if either file has content
             elif [ -s model_ci.txt ] || [ -s quantization_ci.txt ]; then
+              echo "STATUS=failure" >> $GITHUB_ENV
+
               # Check if model_ci.txt has content
               if [ -s model_ci.txt ]; then
                 echo '### Model CI Report'
@@ -308,7 +313,8 @@ jobs:
                 echo ''
               fi
             else
-              echo '✅ All good!'
+              echo "STATUS=success" >> $GITHUB_ENV
+              echo '✅ No failing test specific to this PR 🎉 !'
             fi
           } > comment_body.txt
 
@@ -319,33 +325,11 @@ jobs:
             repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
             -F body=@comment_body.txt
 
-  update_run_status:
-    name: Update Check Run Status
-    needs: [check-timestamps, create_run, model-ci, quantization-ci]
-    permissions:
-      statuses: write
-    if: ${{ always() && needs.create_run.result == 'success' }}
-    runs-on: ubuntu-22.04
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      STATUS_OK: ${{ contains(fromJSON('["skipped", "success"]'), needs.model-ci.result) && contains(fromJSON('["skipped", "success"]'), needs.quantization-ci.result) }}
-    steps:
-      - name: Get `run_models_gpu` job status
-        run: |
-          echo "${{ needs.model-ci.result }}"
-          echo "${{ needs.quantization-ci.result }}"
-          echo $STATUS_OK
-          if [ "$STATUS_OK" = "true" ]; then
-            echo "STATUS=success" >> $GITHUB_ENV
-          else
-            echo "STATUS=failure" >> $GITHUB_ENV
-          fi
-
       - name: Update PR commit statuses
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          echo "${{ needs.model-ci.result }}"
-          echo "${{ env.STATUS }}"
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
