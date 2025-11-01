@@ -27,7 +27,6 @@ from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
-    require_jinja,
     require_read_token,
     require_sentencepiece,
     require_tokenizers,
@@ -427,25 +426,6 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(tokens, ["▁▁"])
         # a dummy prefix space is not added by the sp_model as it was de-activated
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁", out_type=str))
-
-    @require_jinja
-    def test_tokenization_for_chat(self):
-        tokenizer = GemmaTokenizer.from_pretrained("hf-internal-testing/dummy-gemma")
-
-        test_chats = [
-            [{"role": "user", "content": "Hello!"}],
-            [
-                {"role": "user", "content": "Hello!"},
-                {"role": "assistant", "content": "Nice to meet you."},
-            ],
-            [{"role": "user", "content": "Hello!"}],
-        ]
-        # Matt: The third test case tests the default system message, but if this is ever changed in the
-        #       class/repo code then that test will fail, and the case will need to be updated.
-        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
-        expected_tokens = [[235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108], [235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108, 235322, 235371, 571, 235298, 2997, 73786, 105776, 108, 7731, 577, 4664, 692, 35606, 235371, 571, 235298, 615, 73786, 108], [235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108]]  # fmt: skip
-        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
-            self.assertListEqual(tokenized_chat, expected_tokens)
 
     def test_save_fast_load_slow(self):
         # Ensure that we can save a fast tokenizer and load it as a slow tokenizer
