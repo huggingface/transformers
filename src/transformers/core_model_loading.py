@@ -349,7 +349,7 @@ PER_FILE_LIMIT = 4  # concurrent reads per file
 
 def _materialize_copy(x):
     # PyTorch: this runs in C and releases the GIL; good for threads.
-    return x[...].contiguous()
+    return x[...]
 
 
 def spawn_materialize(thread_pool, _file_semaphore, file_id, t) -> Future:
@@ -481,6 +481,7 @@ def convert_and_load_state_dict_in_model(
     """
     from .modeling_utils import str_to_torch_dtype
 
+    prefix = model.base_model_prefix
     tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
     device_map = device_map or {}  # {exact_target_key: device}
     keep_in_dtype = keep_in_dtype or {}  # {glob_pattern: dtype}
@@ -488,7 +489,7 @@ def convert_and_load_state_dict_in_model(
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
 
-    if model.config.tie_word_embeddings and isinstance(model._tied_weights_keys, list):
+    if isinstance(model._tied_weights_keys, list):
         for k in model._tied_weights_keys:
             missing_keys.discard(k)
 
@@ -522,7 +523,6 @@ def convert_and_load_state_dict_in_model(
             converter_key = entry_key = target_key = original_key
             entry = by_conversion_pattern.setdefault(converter_key, ConversionEntry(converter))
 
-        prefix = model.base_model_prefix
         new_target_key = []
         for t in target_key.split("|"):  # let's correct the keys
             if t.startswith(prefix) and meta_model_state_dict.get(t.replace(f"{prefix}.", "")) is not None:
