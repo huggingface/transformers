@@ -15,7 +15,7 @@
 # Run all tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py
 # Run specific config: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc"
 # Run multiple configs: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc or 4Proc"
-# Run spefic test: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallel2Proc::test_model_forward
+# Run spefic test: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallel2Proc::test_model_dense_forward_train
 # Run tests with a specific prefix: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallel2Proc -k "forward"
 import os
 import tempfile
@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
     import torch.multiprocessing as mp
 
 
@@ -53,14 +54,14 @@ def global_wrapper(rank, func, tp, port, func_args, func_kwargs):
 
     if torch.cuda.is_available():
         torch.cuda.set_device(rank)
-        torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
     else:
-        torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
-    func(*func_args, **func_kwargs)
+    func(rank, *func_args, **func_kwargs)
 
-    torch.distributed.barrier()
-    torch.distributed.destroy_process_group()
+    dist.barrier()
+    dist.destroy_process_group()
 
 
 def init_distributed(tp: int):
@@ -211,7 +212,7 @@ class TestTensorParallelProperties(TestCasePlus):
 
 
 # ====== TEST FUNCTIONS ======
-def _test_model_dense_forward_impl(mode):
+def _test_model_dense_forward_impl(rank, mode):
     """Implementation for comparing TP and non-TP model outputs."""
     model_id = "JackFram/llama-68m"
 
@@ -225,7 +226,7 @@ def _test_model_dense_forward_impl(mode):
 
     # Load TP model first to determine device
     model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    torch.distributed.barrier()
+    dist.barrier()
     if mode == "eval":
         model_tp.eval()
     else:
@@ -259,17 +260,17 @@ def _test_model_dense_forward_impl(mode):
         f"TP and non-TP model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
     )
 
-    torch.distributed.barrier()
+    dist.barrier()
 
 
-def _test_model_dense_backward_pass_impl():
+def _test_model_dense_backward_pass_impl(rank):
     """Implementation for comparing TP and non-TP model backward passes."""
     model_id = "JackFram/llama-68m"
 
     torch.manual_seed(0)
 
     model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
-    torch.distributed.barrier()
+    dist.barrier()
     model_tp.train()
 
     device = model_tp.device
@@ -296,14 +297,12 @@ def _test_model_dense_backward_pass_impl():
 
     # Compare gradients for matching parameters
     # Note: TP model may have sharded parameters (DTensors), so we slice the reference gradient to match
-    rank = torch.distributed.get_rank()
-
     for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
         if param.grad is not None and param_tp.grad is not None:
             grad = param.grad
             grad_tp = param_tp.grad
 
-            if isinstance(param_tp.data, torch.distributed.tensor.DTensor):
+            if isinstance(param_tp.data, dist.tensor.DTensor):
                 placement = param_tp.data.placements[0]
                 if hasattr(placement, "dim") and placement.dim is not None:
                     grad_shard = get_tensor_shard(grad, grad, param_tp.data.device_mesh, rank, placement.dim)
@@ -312,16 +311,16 @@ def _test_model_dense_backward_pass_impl():
             else:
                 grad_shard = grad
 
-            grad_tp_local = grad_tp.to_local() if isinstance(grad_tp, torch.distributed.tensor.DTensor) else grad_tp
+            grad_tp_local = grad_tp.to_local() if isinstance(grad_tp, dist.tensor.DTensor) else grad_tp
 
             assert torch.allclose(grad_shard.cpu(), grad_tp_local.cpu(), atol=1e-5, rtol=1e-5), (
                 f"Gradients differ for parameter {name}. Max diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().max().item()} | Min diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().min().item()}"
             )
 
-    torch.distributed.barrier()
+    dist.barrier()
 
 
-def _test_model_dense_forward_compile_impl(mode):
+def _test_model_dense_forward_compile_impl(rank, mode):
     """Implementation for comparing TP and non-TP model outputs with torch.compile."""
     model_id = "JackFram/llama-68m"
 
@@ -332,7 +331,7 @@ def _test_model_dense_forward_compile_impl(mode):
     inputs = tokenizer(prompt, return_tensors="pt")
 
     model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    torch.distributed.barrier()
+    dist.barrier()
     if mode == "eval":
         model_tp.eval()
     else:
@@ -364,14 +363,14 @@ def _test_model_dense_forward_compile_impl(mode):
         f"TP and non-TP model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
     )
 
-    torch.distributed.barrier()
+    dist.barrier()
 
 
-def _test_model_dense_save_impl(tmp_dir):
+def _test_model_dense_save_impl(rank, tmp_dir):
     """Implementation of test_model_save for distributed execution."""
     model_id = "JackFram/llama-68m"
 
-    if torch.distributed.is_initialized():
+    if dist.is_initialized():
         kwargs = {"tp_plan": "auto"}
         result_dir = f"{tmp_dir}/tp"
     else:
@@ -449,7 +448,7 @@ class TestTensorParallelBase(TestCasePlus):
             init_distributed(tp=self.nproc_per_node)(_test_model_dense_save_impl)(tmp_dir)
 
             # Then run without TP (non-distributed)
-            _test_model_dense_save_impl(tmp_dir)
+            _test_model_dense_save_impl(0, tmp_dir)
 
             non_tp_model_path = os.path.join(tmp_dir, "nontp")
             tp_model_path = os.path.join(tmp_dir, "tp")
