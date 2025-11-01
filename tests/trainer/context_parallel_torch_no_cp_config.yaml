@@ -1,8 +1,0 @@
-distributed_type: FSDP
-fsdp_config:
-  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
-  fsdp_state_dict_type: SHARDED_STATE_DICT
-  fsdp_transformer_layer_cls_to_wrap: LlamaDecoderLayer
-  fsdp_version: 2
-mixed_precision: bf16
-num_processes: 1

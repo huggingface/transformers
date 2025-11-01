@@ -14,6 +14,7 @@
 
 import json
 import sys
+from pathlib import Path
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -48,80 +49,96 @@ class TestTrainerContextParallelTorch(TestCasePlus):
     @run_first
     def test_cp_equivalence(self):
         """Test that CP produces the same losses as without CP."""
-        import os
 
-        output_dir = self.get_auto_remove_tmp_dir()
+        # Shared setup
+        world_size = 2
+        script_path = __file__
 
-        # Run with CP enabled (cp_size=2)
-        config_path_cp = f"{self.test_file_dir}/context_parallel_torch_config.yaml"
-        loss_file_cp = os.path.join(output_dir, "losses_cp.json")
+        # Step 1: Run with CP enabled (cp_size=world_size)
+        cp_yes_output_dir = Path(self.get_auto_remove_tmp_dir()).resolve()
+        cp_yes_config_path = cp_yes_output_dir / "context_parallel_config.yaml"
+        cp_yes_losses_path = cp_yes_output_dir / "cp_yes_losses.json"
 
-        cmd_cp = [
-            "accelerate",
-            "launch",
-            "--config_file",
-            config_path_cp,
-            f"{self.test_file_dir}/test_trainer_context_parallel_torch.py",
-            "--output_dir",
-            os.path.join(output_dir, "with_cp"),
-            "--report_to",
-            "none",
-            "--max_steps",
-            "10",
-            "--per_device_train_batch_size",
-            "1",
-            "--gradient_accumulation_steps",
-            "1",
-            "--logging_steps",
-            "1",
-            "--remove_unused_columns",
-            "False",
-            "--seed",
-            "42",
-            "--loss_output_file",
-            loss_file_cp,
-        ]
-        execute_subprocess_async(cmd_cp, env=self.get_env())
+        # Write config file inline (self-contained test)
+        with open(cp_yes_config_path, "w") as f:
+            f.write(
+                f"""distributed_type: FSDP
+fsdp_config:
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_state_dict_type: SHARDED_STATE_DICT
+  fsdp_version: 2
+mixed_precision: bf16
+num_processes: {world_size}
+parallelism_config:
+  parallelism_config_dp_replicate_size: 1
+  parallelism_config_dp_shard_size: 1
+  parallelism_config_tp_size: 1
+  parallelism_config_cp_size: {world_size}
+  parallelism_config_cp_comm_strategy: alltoall
+"""
+            )
 
-        # Run without CP (FSDP with num_processes=1, no parallelism_config)
-        config_path_no_cp = f"{self.test_file_dir}/context_parallel_torch_no_cp_config.yaml"
-        loss_file_no_cp = os.path.join(output_dir, "losses_no_cp.json")
+        cmd_cp_yes = f"""
+            accelerate launch
+            --config_file {cp_yes_config_path}
+            {script_path}
+            --output_dir {cp_yes_output_dir}
+            --report_to none
+            --max_steps 10
+            --per_device_train_batch_size 1
+            --gradient_accumulation_steps 1
+            --logging_steps 1
+            --remove_unused_columns False
+            --seed 42
+            --loss_output_file {cp_yes_losses_path}
+        """.split()
 
-        cmd_no_cp = [
-            "accelerate",
-            "launch",
-            "--config_file",
-            config_path_no_cp,
-            f"{self.test_file_dir}/test_trainer_context_parallel_torch.py",
-            "--output_dir",
-            os.path.join(output_dir, "without_cp"),
-            "--report_to",
-            "none",
-            "--max_steps",
-            "10",
-            "--per_device_train_batch_size",
-            "1",
-            "--gradient_accumulation_steps",
-            "1",
-            "--logging_steps",
-            "1",
-            "--remove_unused_columns",
-            "False",
-            "--seed",
-            "42",
-            "--loss_output_file",
-            loss_file_no_cp,
-        ]
-        execute_subprocess_async(cmd_no_cp, env=self.get_env())
+        execute_subprocess_async(cmd_cp_yes, env=self.get_env())
+
+        # Step 2: Run without CP (FSDP with num_processes=1, no parallelism_config)
+        cp_no_output_dir = Path(self.get_auto_remove_tmp_dir()).resolve()
+        cp_no_config_path = cp_no_output_dir / "context_parallel_config.yaml"
+        cp_no_losses_path = cp_no_output_dir / "cp_no_losses.json"
+
+        # Write config file inline (self-contained test)
+        with open(cp_no_config_path, "w") as f:
+            f.write(
+                """distributed_type: FSDP
+fsdp_config:
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_state_dict_type: SHARDED_STATE_DICT
+  fsdp_transformer_layer_cls_to_wrap: LlamaDecoderLayer
+  fsdp_version: 2
+mixed_precision: bf16
+num_processes: 1
+"""
+            )
+
+        cmd_cp_no = f"""
+            accelerate launch
+            --config_file {cp_no_config_path}
+            {script_path}
+            --output_dir {cp_no_output_dir}
+            --report_to none
+            --max_steps 10
+            --per_device_train_batch_size 1
+            --gradient_accumulation_steps 1
+            --logging_steps 1
+            --remove_unused_columns False
+            --seed 42
+            --loss_output_file {cp_no_losses_path}
+        """.split()
+
+        execute_subprocess_async(cmd_cp_no, env=self.get_env())
 
         # Compare losses - should be very close since CP just splits sequence computation
-        with open(loss_file_cp) as f:
-            losses_cp = json.load(f)
-        with open(loss_file_no_cp) as f:
-            losses_no_cp = json.load(f)
+        with open(cp_yes_losses_path) as f:
+            cp_yes_losses = json.load(f)
+        with open(cp_no_losses_path) as f:
+            cp_no_losses = json.load(f)
 
-        assert len(losses_cp) == len(losses_no_cp), (
-            f"Different number of losses: CP has {len(losses_cp)}, no-CP has {len(losses_no_cp)}"
+        assert len(cp_yes_losses) == len(cp_no_losses), (
+            f"Different number of losses: CP has {len(cp_yes_losses)}, no-CP has {len(cp_no_losses)}"
         )
 
         # CP should produce very similar results (small numerical differences expected)
@@ -129,17 +146,17 @@ class TestTrainerContextParallelTorch(TestCasePlus):
         # - Different gradient reduction patterns in distributed training
         # - BF16 mixed precision accumulated differences
         # - Sequence splitting and gathering in CP mode
-        losses_cp_tensor = torch.tensor(losses_cp)
-        losses_no_cp_tensor = torch.tensor(losses_no_cp)
+        cp_yes_losses_tensor = torch.tensor(cp_yes_losses)
+        cp_no_losses_tensor = torch.tensor(cp_no_losses)
 
         # Use torch.testing.assert_close with rtol=2% and atol=0.02
         # Testing shows actual differences are typically <1.5%
         torch.testing.assert_close(
-            losses_cp_tensor,
-            losses_no_cp_tensor,
+            cp_yes_losses_tensor,
+            cp_no_losses_tensor,
             rtol=2e-2,  # 2% relative tolerance
             atol=2e-2,  # 0.02 absolute tolerance
-            msg=f"CP losses {losses_cp} do not match non-CP losses {losses_no_cp}",
+            msg=f"CP losses {cp_yes_losses} do not match non-CP losses {cp_no_losses}",
         )
 
 
