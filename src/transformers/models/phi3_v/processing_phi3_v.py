@@ -1,0 +1,180 @@
+# coding=utf-8
+# Copyright 2025 Microsoft and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import re
+from typing import Optional, Union
+
+import torch
+
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+
+class Phi3VProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {"padding": False, "max_length": 4096},
+        "common_kwargs": {"return_tensors": "pt"},
+    }
+
+
+class Phi3VProcessor(ProcessorMixin):
+    r"""
+    Constructs a Phi3V processor which wraps a Phi3V Image Processor and a Llama tokenizer into a single processor.
+
+    [`Phi3VProcessor`] offers all the functionalities of [`Phi3VImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`~Phi3VProcessor.__call__`] and [`~Phi3VProcessor.decode`] for more information.
+
+    Args:
+        image_processor ([`Phi3VImageProcessor`]):
+            The image processor is a required input.
+        tokenizer ([`LlamaTokenizerFast`]):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+    """
+
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
+
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        image_token="<|image|>",
+        **kwargs,
+    ):
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    def __call__(
+        self,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: Optional[ImageInput] = None,
+        videos=None,
+        audio=None,
+        **kwargs: Unpack[Phi3VProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
+        Phi3VImageProcessor's [`~Phi3VImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
+
+        Args:
+            text (`str`, `list[str]`, `list[list[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        """
+
+        output_kwargs = self._merge_kwargs(
+            Phi3VProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
+
+        if text is None and images is None:
+            raise ValueError("You must specify either text or images.")
+
+        image_proc_out = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+        num_image_tokens_list = image_proc_out["num_img_tokens"]
+        max_length = output_kwargs["text_kwargs"]["max_length"]
+        padding = output_kwargs["text_kwargs"]["padding"]
+
+        print(num_image_tokens_list)
+
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
+            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        # Replace the image token with expanded image tokens.
+        tokenized_prompts = []
+        image_token_counter = 0
+        for prompt in text:
+            prompt_splits = re.split(r"(\<\|image\|\>)", prompt)
+
+            tokenized_outputs = []
+            for split in prompt_splits:
+                if split == "<|image|>":
+                    if image_token_counter >= len(num_image_tokens_list):
+                        raise ValueError("More image placeholders in the text than images provided.")
+                    image_tokens = [self.image_token_id] * num_image_tokens_list[image_token_counter]
+                    tokenized_outputs.extend(image_tokens)
+                    image_token_counter += 1
+                else:
+                    text_tokens = self.tokenizer(split)["input_ids"]
+                    tokenized_outputs.extend(text_tokens)
+
+            tokenized_prompts.append(tokenized_outputs)
+
+        max_length = min(max_length, max([len(tokenized_input) for tokenized_input in tokenized_prompts]))
+        pad_token_id = self.tokenizer.pad_token_id
+        padded_input_ids = []
+        attention_masks = []
+
+        for prompt_tokens in tokenized_prompts:
+            # Truncate the sequence to max_length
+            if len(prompt_tokens) > max_length:
+                prompt_tokens = prompt_tokens[:max_length]
+
+            # Left Pad sequence to max_length
+            if padding:
+                prompt_tokens = [pad_token_id] * (max_length - len(prompt_tokens)) + prompt_tokens
+            attention_mask = [1 if token != pad_token_id else 0 for token in prompt_tokens]
+
+            padded_input_ids.append(prompt_tokens)
+            attention_masks.append(attention_mask)
+
+        input_ids = torch.tensor(padded_input_ids, dtype=torch.long)
+        attention_mask = torch.tensor(attention_masks, dtype=torch.long)
+
+        data = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": image_proc_out["pixel_values"],
+            "image_sizes": image_proc_out["image_shapes"],
+        }
+
+        return BatchFeature(data=data)
+
+
+__all__ = ["Phi3VProcessor"]
