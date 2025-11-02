@@ -9,18 +9,12 @@ import os
 from typing import Any, Union
 
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+from ..modernbert import ModernBertConfig
+from ..siglip import SiglipConfig
 
 
-def collect_arg_in_candidates(config, candidates, default=None) -> Any:
-    """Gets the first available argument in a config given a list of candidate names."""
-    for c in candidates:
-        if hasattr(config, c):
-            return getattr(config, c)
-        elif c in config:
-            return config[c]
-    if default is not None:
-        return default
-    raise ValueError(f"No matching arguments found in candidates. Candidates: {candidates}, Config: {config}")
+logger = logging.get_logger(__name__)
 
 
 class ModernVBertTextConfig(PretrainedConfig):
@@ -37,7 +31,7 @@ class ModernVBertTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_model_name,
+        text_model_name="jhu-clsp/ettin-encoder-150m",
         hidden_size=768,
         num_hidden_layers=22,
         intermediate_size=1152,
@@ -61,23 +55,17 @@ class ModernVBertTextConfig(PretrainedConfig):
         text_model_name,
         **kwargs,
     ):
-        text_config = AutoConfig.from_pretrained(text_model_name, trust_remote_code=True)
+        text_config = ModernBertConfig.from_pretrained(text_model_name)
         if hasattr(text_config, "text_config"):
             text_config = text_config.text_config
 
-        hidden_size = collect_arg_in_candidates(text_config, ["hidden_size", "embed_dim"])
-        num_hidden_layers = collect_arg_in_candidates(text_config, ["num_hidden_layers", "num_hidden_blocks"])
-        intermediate_size = collect_arg_in_candidates(text_config, ["intermediate_size", "mlp_dim"])
-        mlp_bias = collect_arg_in_candidates(text_config, ["mlp_bias", "mlp_hidden_bias"], default=False)
-        vocab_size = collect_arg_in_candidates(text_config, ["vocab_size"])
-
         return cls(
             text_model_name=text_model_name,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            intermediate_size=intermediate_size,
-            mlp_bias=mlp_bias,
-            vocab_size=vocab_size,
+            hidden_size=text_config.hidden_size,
+            num_hidden_layers=text_config.num_hidden_layers,
+            intermediate_size=text_config.intermediate_size,
+            mlp_bias=text_config.mlp_bias,
+            vocab_size=text_config.vocab_size,
             **kwargs,
         )
 
@@ -100,7 +88,7 @@ class ModernVBertVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vision_model_name,
+        vision_model_name="google/siglip2-base-patch16-512",
         embed_dim=768,
         image_size=512,
         patch_size=16,
@@ -124,23 +112,17 @@ class ModernVBertVisionConfig(PretrainedConfig):
         vision_model_name,
         **kwargs,
     ):
-        vision_config = AutoConfig.from_pretrained(vision_model_name, trust_remote_code=True)
+        vision_config = SiglipConfig.from_pretrained(vision_model_name)
         if hasattr(vision_config, "vision_config"):
             vision_config = vision_config.vision_config
 
-        embed_dim = collect_arg_in_candidates(vision_config, ["embed_dim", "hidden_size"])
-        image_size = collect_arg_in_candidates(vision_config, ["image_size", "img_size"])
-        patch_size = collect_arg_in_candidates(vision_config, ["patch_size"])
-        num_hidden_layers = collect_arg_in_candidates(vision_config, ["num_hidden_layers", "num_hidden_blocks"])
-        intermediate_size = collect_arg_in_candidates(vision_config, ["intermediate_size", "mlp_dim"])
-
         return cls(
             vision_model_name=vision_model_name,
-            embed_dim=embed_dim,
-            image_size=image_size,
-            patch_size=patch_size,
-            num_hidden_layers=num_hidden_layers,
-            intermediate_size=intermediate_size,
+            embed_dim=vision_config.hidden_size,
+            image_size=vision_config.image_size,
+            patch_size=vision_config.patch_size,
+            num_hidden_layers=vision_config.num_hidden_layers,
+            intermediate_size=vision_config.intermediate_size,
             **kwargs,
         )
 
@@ -201,8 +183,8 @@ class ModernVBertConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: Union[PretrainedConfig, dict[str, Any]],
-        vision_config: Union[PretrainedConfig, dict[str, Any]],
+        text_config: Union[PretrainedConfig, dict[str, Any]] = None,
+        vision_config: Union[PretrainedConfig, dict[str, Any]] = None,
         image_token_id: int = 50407,
         vocab_size=50368,
         use_cache=True,
@@ -222,11 +204,21 @@ class ModernVBertConfig(PretrainedConfig):
         self.scale_factor = pixel_shuffle_factor
         self.additional_vocab_size = additional_vocab_size
 
-        if isinstance(text_config, dict):
+        if text_config is None:
+            logger.warning(
+                "You are instantiating a ModernVBertConfig without providing a text_config. Defaulting to jhu-clsp/ettin-encoder-150m."
+            )
+            text_config = ModernVBertTextConfig.from_base_model("jhu-clsp/ettin-encoder-150m")
+        elif isinstance(text_config, dict):
             text_config = ModernVBertTextConfig.from_dict(text_config)
         self.text_config = text_config
 
-        if isinstance(vision_config, dict):
+        if vision_config is None:
+            logger.warning(
+                "You are instantiating a ModernVBertConfig without providing a vision_config. Defaulting to google/siglip2-base-patch16-512."
+            )
+            vision_config = ModernVBertVisionConfig.from_base_model("google/siglip2-base-patch16-512")
+        elif isinstance(vision_config, dict):
             vision_config = ModernVBertVisionConfig.from_dict(vision_config)
         self.vision_config = vision_config
 
