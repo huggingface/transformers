@@ -143,6 +143,7 @@ class GPTSw3Tokenizer(SentencePieceBackend):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            special_tokens_pattern="none",
             **kwargs,
         )
 

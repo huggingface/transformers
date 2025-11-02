@@ -18,7 +18,7 @@ import pickle
 from typing import Optional
 
 from ...tokenization_utils_base import BatchEncoding
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
 from ...utils import logging
 
 

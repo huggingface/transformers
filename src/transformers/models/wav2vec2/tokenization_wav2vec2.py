@@ -177,6 +177,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             word_delimiter_token=word_delimiter_token,
             replace_word_delimiter_char=replace_word_delimiter_char,
             target_lang=target_lang,
+            special_tokens_pattern="none",
             **kwargs,
         )
 
