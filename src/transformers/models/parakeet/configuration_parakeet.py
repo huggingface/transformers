@@ -44,6 +44,8 @@ class ParakeetEncoderConfig(PreTrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler.
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the attention layers.
+        convolution_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in convolutions of the conformer's convolution module.
         conv_kernel_size (`int`, *optional*, defaults to 9):
             The kernel size of the convolution layers in the Conformer block.
         subsampling_factor (`int`, *optional*, defaults to 8):
@@ -102,6 +104,7 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         intermediate_size=4096,
         hidden_act="silu",
         attention_bias=True,
+        convolution_bias=True,
         conv_kernel_size=9,
         subsampling_factor=8,
         subsampling_conv_channels=256,
@@ -128,6 +131,7 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.attention_bias = attention_bias
+        self.convolution_bias = convolution_bias
 
         if (conv_kernel_size - 1) % 2 != 0:
             raise ValueError(f"conv_kernel_size must be odd, got {conv_kernel_size}")
