@@ -660,10 +660,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # Tokenize non-added tokens
         result = []
+        all_special_tokens_set = set(self.all_special_tokens)
         for token in tokens:
             if not token:
                 continue
-            if token in no_split_token:
+            if token in no_split_token or token in all_special_tokens_set:
                 result.append(token)
             else:
                 result.extend(self._tokenize(token))
@@ -1348,3 +1349,361 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 index += 1
 
         return (vocab_file, merge_file)
+
+
+    # def pad(
+    #     self,
+    #     encoded_inputs: Union[
+    #         BatchEncoding,
+    #         list[BatchEncoding],
+    #         dict[str, EncodedInput],
+    #         dict[str, list[EncodedInput]],
+    #         list[dict[str, EncodedInput]],
+    #     ],
+    #     padding: Union[bool, str, PaddingStrategy] = True,
+    #     max_length: Optional[int] = None,
+    #     pad_to_multiple_of: Optional[int] = None,
+    #     padding_side: Optional[str] = None,
+    #     return_attention_mask: Optional[bool] = None,
+    #     return_tensors: Optional[Union[str, TensorType]] = None,
+    #     verbose: bool = True,
+    # ) -> BatchEncoding:
+    #     """
+    #     Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
+    #     in the batch.
+
+    #     Padding side (left/right) padding token ids are defined at the tokenizer level (with `self.padding_side`,
+    #     `self.pad_token_id` and `self.pad_token_type_id`).
+
+    #     Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the
+    #     text followed by a call to the `pad` method to get a padded encoding.
+
+    #     <Tip>
+
+    #     If the `encoded_inputs` passed are dictionary of numpy arrays, or PyTorch tensors, the
+    #     result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
+    #     PyTorch tensors, you will lose the specific device of your tensors however.
+
+    #     </Tip>
+
+    #     Args:
+    #         encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `dict[str, list[int]]`, `dict[str, list[list[int]]` or `list[dict[str, list[int]]]`):
+    #             Tokenized inputs. Can represent one input ([`BatchEncoding`] or `dict[str, list[int]]`) or a batch of
+    #             tokenized inputs (list of [`BatchEncoding`], *dict[str, list[list[int]]]* or *list[dict[str,
+    #             list[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+    #             collate function.
+
+    #             Instead of `list[int]` you can have tensors (numpy arrays, or PyTorch tensors), see
+    #             the note above for the return type.
+    #         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+    #              Select a strategy to pad the returned sequences (according to the model's padding side and padding
+    #              index) among:
+
+    #             - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
+    #               sequence if provided).
+    #             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+    #               acceptable input length for the model if that argument is not provided.
+    #             - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different
+    #               lengths).
+    #         max_length (`int`, *optional*):
+    #             Maximum length of the returned list and optionally padding length (see above).
+    #         pad_to_multiple_of (`int`, *optional*):
+    #             If set will pad the sequence to a multiple of the provided value.
+
+    #             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+    #             `>= 7.5` (Volta).
+    #         padding_side (`str`, *optional*):
+    #             The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+    #             Default value is picked from the class attribute of the same name.
+    #         return_attention_mask (`bool`, *optional*):
+    #             Whether to return the attention mask. If left to the default, will return the attention mask according
+    #             to the specific tokenizer's default, defined by the `return_outputs` attribute.
+
+    #             [What are attention masks?](../glossary#attention-mask)
+    #         return_tensors (`str` or [`~utils.TensorType`], *optional*):
+    #             If set, will return tensors instead of list of python integers. Acceptable values are:
+
+    #             - `'pt'`: Return PyTorch `torch.Tensor` objects.
+    #             - `'np'`: Return Numpy `np.ndarray` objects.
+    #         verbose (`bool`, *optional*, defaults to `True`):
+    #             Whether or not to print more information and warnings.
+    #     """
+    #     if self.__class__.__name__.endswith("Fast"):
+    #         if not self.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False):
+    #             logger.warning_advice(
+    #                 f"You're using a {self.__class__.__name__} tokenizer. Please note that with a fast tokenizer,"
+    #                 " using the `__call__` method is faster than using a method to encode the text followed by a call"
+    #                 " to the `pad` method to get a padded encoding."
+    #             )
+    #             self.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
+
+    #     # If we have a list of dicts, let's convert it in a dict of lists
+    #     # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
+    #     if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
+    #         encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
+
+    #     # The model's main input name, usually `input_ids`, has been passed for padding
+    #     if self.model_input_names[0] not in encoded_inputs:
+    #         raise ValueError(
+    #             "You should supply an encoding or a list of encodings to this method "
+    #             f"that includes {self.model_input_names[0]}, but you provided {list(encoded_inputs.keys())}"
+    #         )
+
+    #     required_input = encoded_inputs[self.model_input_names[0]]
+
+    #     if required_input is None or (isinstance(required_input, Sized) and len(required_input) == 0):
+    #         if return_attention_mask:
+    #             encoded_inputs["attention_mask"] = []
+    #         return encoded_inputs
+
+    #     # If we have PyTorch/NumPy tensors/arrays as inputs, we cast them as python objects
+    #     # and rebuild them afterwards if no return_tensors is specified
+    #     # Note that we lose the specific device the tensor may be on for PyTorch
+
+    #     first_element = required_input[0]
+    #     if isinstance(first_element, (list, tuple)):
+    #         # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
+    #         for item in required_input:
+    #             if len(item) != 0:
+    #                 first_element = item[0]
+    #                 break
+    #     # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
+    #     if not isinstance(first_element, (int, list, tuple)):
+    #         if is_torch_tensor(first_element):
+    #             return_tensors = "pt" if return_tensors is None else return_tensors
+    #         elif isinstance(first_element, np.ndarray):
+    #             return_tensors = "np" if return_tensors is None else return_tensors
+    #         else:
+    #             raise ValueError(
+    #                 f"type of {first_element} unknown: {type(first_element)}. "
+    #                 "Should be one of a python, numpy, or pytorch object."
+    #             )
+
+    #         for key, value in encoded_inputs.items():
+    #             encoded_inputs[key] = to_py_obj(value)
+
+    #     # Convert padding_strategy in PaddingStrategy
+    #     padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
+    #         padding=padding, max_length=max_length, verbose=verbose
+    #     )
+
+    #     required_input = encoded_inputs[self.model_input_names[0]]
+    #     if required_input and not isinstance(required_input[0], (list, tuple)):
+    #         encoded_inputs = self._pad(
+    #             encoded_inputs,
+    #             max_length=max_length,
+    #             padding_strategy=padding_strategy,
+    #             pad_to_multiple_of=pad_to_multiple_of,
+    #             padding_side=padding_side,
+    #             return_attention_mask=return_attention_mask,
+    #         )
+    #         return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
+
+    #     batch_size = len(required_input)
+    #     assert all(len(v) == batch_size for v in encoded_inputs.values()), (
+    #         "Some items in the output dictionary have a different batch size than others."
+    #     )
+
+    #     if padding_strategy == PaddingStrategy.LONGEST:
+    #         max_length = max(len(inputs) for inputs in required_input)
+    #         padding_strategy = PaddingStrategy.MAX_LENGTH
+
+    #     batch_outputs = {}
+    #     for i in range(batch_size):
+    #         inputs = {k: v[i] for k, v in encoded_inputs.items()}
+    #         outputs = self._pad(
+    #             inputs,
+    #             max_length=max_length,
+    #             padding_strategy=padding_strategy,
+    #             pad_to_multiple_of=pad_to_multiple_of,
+    #             padding_side=padding_side,
+    #             return_attention_mask=return_attention_mask,
+    #         )
+
+    #         for key, value in outputs.items():
+    #             if key not in batch_outputs:
+    #                 batch_outputs[key] = []
+    #             batch_outputs[key].append(value)
+
+    #     return BatchEncoding(batch_outputs, tensor_type=return_tensors)
+
+    # def create_token_type_ids_from_sequences(
+    #     self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    # ) -> list[int]:
+    #     """
+    #     Create the token type IDs corresponding to the sequences passed. [What are token type
+    #     IDs?](../glossary#token-type-ids)
+
+    #     Should be overridden in a subclass if the model has a special way of building those.
+
+    #     Args:
+    #         token_ids_0 (`list[int]`): The first tokenized sequence.
+    #         token_ids_1 (`list[int]`, *optional*): The second tokenized sequence.
+
+    #     Returns:
+    #         `list[int]`: The token type ids.
+    #     """
+    #     cls_len = int(getattr(self, "cls_token_id", None) is not None)
+    #     sep_len = int(getattr(self, "sep_token_id", None) is not None)
+
+    #     if token_ids_1 is None:
+    #         return [0] * (cls_len + len(token_ids_0) + sep_len)
+
+    #     return [0] * (cls_len + len(token_ids_0) + sep_len) + [1] * (len(token_ids_1) + sep_len)
+
+    # def build_inputs_with_special_tokens(
+    #     self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    # ) -> list[int]:
+    #     """
+    #     Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+    #     adding special tokens.
+
+    #     This implementation does not add special tokens and this method should be overridden in a subclass.
+
+    #     Args:
+    #         token_ids_0 (`list[int]`): The first tokenized sequence.
+    #         token_ids_1 (`list[int]`, *optional*): The second tokenized sequence.
+
+    #     Returns:
+    #         `list[int]`: The model input with special tokens.
+    #     """
+    #     if token_ids_1 is None:
+    #         return token_ids_0
+    #     return token_ids_0 + token_ids_1
+
+    # def prepare_for_model(
+    #     self,
+    #     ids: list[int],
+    #     pair_ids: Optional[list[int]] = None,
+    #     add_special_tokens: bool = True,
+    #     padding: Union[bool, str, PaddingStrategy] = False,
+    #     truncation: Union[bool, str, TruncationStrategy, None] = None,
+    #     max_length: Optional[int] = None,
+    #     stride: int = 0,
+    #     pad_to_multiple_of: Optional[int] = None,
+    #     padding_side: Optional[str] = None,
+    #     return_tensors: Optional[Union[str, TensorType]] = None,
+    #     return_token_type_ids: Optional[bool] = None,
+    #     return_attention_mask: Optional[bool] = None,
+    #     return_overflowing_tokens: bool = False,
+    #     return_special_tokens_mask: bool = False,
+    #     return_offsets_mapping: bool = False,
+    #     return_length: bool = False,
+    #     verbose: bool = True,
+    #     prepend_batch_axis: bool = False,
+    #     **kwargs,
+    # ) -> BatchEncoding:
+    #     """
+    #     Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
+    #     adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
+    #     manages a moving window (with user defined stride) for overflowing tokens. Please Note, for *pair_ids*
+    #     different than `None` and *truncation_strategy = longest_first* or `True`, it is not possible to return
+    #     overflowing tokens. Such a combination of arguments will raise an error.
+
+    #     Args:
+    #         ids (`list[int]`):
+    #             Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
+    #             `convert_tokens_to_ids` methods.
+    #         pair_ids (`list[int]`, *optional*):
+    #             Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
+    #             and `convert_tokens_to_ids` methods.
+    #     """
+
+    #     # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
+    #     padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+    #         padding=padding,
+    #         truncation=truncation,
+    #         max_length=max_length,
+    #         pad_to_multiple_of=pad_to_multiple_of,
+    #         verbose=verbose,
+    #         **kwargs,
+    #     )
+
+    #     pair = pair_ids is not None
+    #     len_ids = len(ids)
+    #     len_pair_ids = len(pair_ids) if pair else 0
+
+    #     if return_token_type_ids and not add_special_tokens:
+    #         raise ValueError(
+    #             "Asking to return token_type_ids while setting add_special_tokens to False "
+    #             "results in an undefined behavior. Please set add_special_tokens to True or "
+    #             "set return_token_type_ids to None."
+    #         )
+
+    #     if (
+    #         return_overflowing_tokens
+    #         and truncation_strategy == TruncationStrategy.LONGEST_FIRST
+    #         and pair_ids is not None
+    #     ):
+    #         raise ValueError(
+    #             "Not possible to return overflowing tokens for pair of sequences with the "
+    #             "`longest_first`. Please select another truncation strategy than `longest_first`, "
+    #             "for instance `only_second` or `only_first`."
+    #         )
+
+    #     # Load from model defaults
+    #     if return_token_type_ids is None:
+    #         return_token_type_ids = "token_type_ids" in self.model_input_names
+    #     if return_attention_mask is None:
+    #         return_attention_mask = "attention_mask" in self.model_input_names
+
+    #     encoded_inputs = {}
+
+    #     # Compute the total size of the returned encodings
+    #     total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+
+    #     # Truncation: Handle max sequence length
+    #     overflowing_tokens = []
+    #     if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+    #         ids, pair_ids, overflowing_tokens = self.truncate_sequences(
+    #             ids,
+    #             pair_ids=pair_ids,
+    #             num_tokens_to_remove=total_len - max_length,
+    #             truncation_strategy=truncation_strategy,
+    #             stride=stride,
+    #         )
+
+    #     if return_overflowing_tokens:
+    #         encoded_inputs["overflowing_tokens"] = overflowing_tokens
+    #         encoded_inputs["num_truncated_tokens"] = total_len - max_length
+
+    #     # Add special tokens
+    #     if add_special_tokens:
+    #         sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
+    #         token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
+    #     else:
+    #         sequence = ids + pair_ids if pair else ids
+    #         token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
+
+    #     # Build output dictionary
+    #     encoded_inputs["input_ids"] = sequence
+    #     if return_token_type_ids:
+    #         encoded_inputs["token_type_ids"] = token_type_ids
+    #     if return_special_tokens_mask:
+    #         if add_special_tokens:
+    #             encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+    #         else:
+    #             encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
+
+    #     # Check lengths
+    #     self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
+
+    #     # Padding
+    #     if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
+    #         encoded_inputs = self.pad(
+    #             encoded_inputs,
+    #             max_length=max_length,
+    #             padding=padding_strategy.value,
+    #             pad_to_multiple_of=pad_to_multiple_of,
+    #             padding_side=padding_side,
+    #             return_attention_mask=return_attention_mask,
+    #         )
+
+    #     if return_length:
+    #         encoded_inputs["length"] = len(encoded_inputs["input_ids"])
+
+    #     batch_outputs = BatchEncoding(
+    #         encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+    #     )
+
+    #     return batch_outputs

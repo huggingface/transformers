@@ -25,11 +25,10 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase,
-    BloomTokenizer,
-):
+class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "bigscience/tokenizer"
     slow_tokenizer_class = None
+    rust_tokenizer_class = TokenizersBackend
     tokenizer_class = TokenizersBackend
     test_slow_tokenizer = False
     from_pretrained_vocab_key = "tokenizer_file"
@@ -43,7 +42,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase,
     def setUpClass(cls):
         super().setUpClass()
         
-        tokenizer = BloomTokenizer.from_pretrained("bigscience/tokenizer")
+        tokenizer = TokenizersBackend.from_pretrained("bigscience/tokenizer")
         tokenizer.save_pretrained(cls.tmpdirname)
         cls.tokenizers_list = [
             (cls.rust_tokenizer_class, cls.tmpdirname, {})

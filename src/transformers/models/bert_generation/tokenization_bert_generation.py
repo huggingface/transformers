@@ -95,6 +95,7 @@ class BertGenerationTokenizer(SentencePieceBackend):
             pad_token=pad_token,
             sep_token=sep_token,
             sp_model_kwargs=self.sp_model_kwargs,
+            special_tokens_pattern="none",
             **kwargs,
         )
 

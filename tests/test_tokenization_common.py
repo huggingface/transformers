@@ -51,6 +51,12 @@ from transformers.tokenization_utils_tokenizers import TokenizersExtractor
 from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
 from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
 
+NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilingual"]
+
+SMALL_TRAINING_CORPUS = [
+    ["This is the first sentence.", "This is the second one."],
+    ["This sentence (contains #) over symbols and numbers 12 3.", "But not this one."],
+]
 
 input_string = """This is a test 😊
 I was born in 92000, and this is falsé.
@@ -792,8 +798,8 @@ Hey how are you doing"""
     def test_sequence_ids(self):
         tokenizer = self.get_tokenizer()
 
-        if tokenizer.backend == "custom":
-            self.skipTest(reason="Custom backend tokenizer")
+        if tokenizer.backend != "tokenizers":
+            self.skipTest(reason="Tokenizers backend tokenizer")
 
         seq_0 = "Test this method."
         seq_1 = "With these inputs."
@@ -1030,7 +1036,7 @@ Hey how are you doing"""
         for tokenizer, pretrained_name, _ in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_tokenizer(pretrained_name)
-                if tokenizer_r.backend == "custom":
+                if tokenizer_r.backend != "tokenizers":
                     self.skipTest(reason="Custom backend tokenizer")
 
                 self._check_no_pad_token_padding(tokenizer_r, conversations)
@@ -1211,7 +1217,7 @@ Hey how are you doing"""
         for tokenizer, pretrained_name, _ in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_tokenizer(pretrained_name)
-                if tokenizer_r.backend == "custom":
+                if tokenizer_r.backend != "tokenizers":
                     self.skipTest(reason="Custom backend tokenizer")
 
                 # Find where to truncate, as the amount of tokens is different for different tokenizers and I want the

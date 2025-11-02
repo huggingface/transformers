@@ -139,3 +139,5 @@ class BertTokenizer(TokenizersBackend):
 
 
 __all__ = ["BertTokenizer"]
+
+BertTokenizerFast = BertTokenizer

@@ -65,6 +65,7 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
+            special_tokens_pattern="none",
             **kwargs,
         )
         self.add_prefix_space = add_prefix_space

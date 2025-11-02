@@ -23,7 +23,6 @@ from transformers import (
     AddedToken,
     AutoTokenizer,
     PreTrainedTokenizerFast,
-    SpecialTokensMixin,
 )
 from transformers.convert_slow_tokenizer import MoshiConverter
 from transformers.testing_utils import (
@@ -44,7 +43,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = ["kmhf/hf-moshiko"]
-    rust_tokenizer_class = PreTrainedTokenizerFast
+    tokenizer_class = PreTrainedTokenizerFast
 
     test_slow_tokenizer = False
     test_rust_tokenizer = True
@@ -233,7 +232,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(new_tokenizer.cls_token_id, cls_id)
 
         # Create a new mapping from the special tokens defined in the original tokenizer
-        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
+        special_tokens_list = []
         special_tokens_list.remove("additional_special_tokens")
         special_tokens_map = {}
         for token in special_tokens_list:

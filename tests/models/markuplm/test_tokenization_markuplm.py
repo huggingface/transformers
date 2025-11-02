@@ -25,7 +25,7 @@ from parameterized import parameterized
 from transformers import (
     AddedToken,
     MarkupLMTokenizerFast,
-    SpecialTokensMixin,
+    PreTrainedTokenizerBase,
     is_mlx_available,
     is_torch_available,
     logging,
@@ -1356,7 +1356,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(new_tokenizer.cls_token_id, cls_id)
 
         # Create a new mapping from the special tokens defined in the original tokenizer
-        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
+        special_tokens_list = PreTrainedTokenizerBase.SPECIAL_TOKENS_ATTRIBUTES.copy()
         special_tokens_list.remove("additional_special_tokens")
         special_tokens_map = {}
         for token in special_tokens_list:

@@ -75,6 +75,9 @@ class SentencePieceBackend(PreTrainedTokenizer):
         # Initialize total_vocab_size before parent __init__ (which may call _add_tokens -> len(self))
         self.total_vocab_size = self.sp_model.get_piece_size()
 
+        # Add sp_model_kwargs back to kwargs so it gets stored in init_kwargs
+        kwargs["sp_model_kwargs"] = self.sp_model_kwargs
+
         # Call parent class __init__ (PreTrainedTokenizer)
         # This handles tokens_trie, _added_tokens_decoder, _added_tokens_encoder,
         # token_type_ids_pattern, special_tokens_pattern, and adds special tokens

@@ -20,6 +20,8 @@ from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...tokenization_utils_base import generate_merges
 from ...utils import logging
 
+from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors
+
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}

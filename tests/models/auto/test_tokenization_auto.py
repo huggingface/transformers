@@ -27,10 +27,9 @@ from transformers import (
     AutoTokenizer,
     BertConfig,
     BertTokenizer,
-    BertTokenizerFast,
+    BertTokenizer,
     CTRLTokenizer,
     GPT2Tokenizer,
-    GPT2TokenizerFast,
     PreTrainedTokenizerFast,
     RobertaTokenizer,
     RobertaTokenizerFast,
@@ -79,7 +78,7 @@ class AutoTokenizerTest(unittest.TestCase):
         for model_name in ["openai-community/gpt2", "openai-community/gpt2-medium"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
-            self.assertIsInstance(tokenizer, (GPT2Tokenizer, GPT2TokenizerFast))
+            self.assertIsInstance(tokenizer, (GPT2Tokenizer))
             self.assertGreater(len(tokenizer), 0)
 
     def test_tokenizer_from_pretrained_identifier(self):
@@ -127,7 +126,7 @@ class AutoTokenizerTest(unittest.TestCase):
             shutil.copy("./tests/fixtures/merges.txt", os.path.join(tmp_dir, "merges.txt"))
 
             tokenizer = AutoTokenizer.from_pretrained(tmp_dir, tokenizer_type="gpt2")
-            self.assertIsInstance(tokenizer, GPT2TokenizerFast)
+            self.assertIsInstance(tokenizer)
 
     def test_tokenizer_from_type_incorrect_name(self):
         with pytest.raises(ValueError):

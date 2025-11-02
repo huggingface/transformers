@@ -192,6 +192,7 @@ class BlenderbotTokenizer(TokenizersBackend):
             pad_token=pad_token,
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
+            special_tokens_pattern="none",
             **kwargs,
         )
 

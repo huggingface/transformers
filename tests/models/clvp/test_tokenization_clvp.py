@@ -19,7 +19,8 @@ import unittest
 
 from transformers import ClvpTokenizer
 
-from ...test_tokenization_common import TokenizerTesterMixin, slow
+from ...test_tokenization_common import TokenizerTesterMixin
+from transformers.testing_utils import slow
 
 
 class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):

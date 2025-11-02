@@ -675,7 +675,7 @@ class LukeTokenizer(PreTrainedTokenizer):
                 **kwargs,
             )
         else:
-            return self.encode_plus(
+            return self._encode_plus(
                 text=text,
                 text_pair=text_pair,
                 entity_spans=entity_spans,

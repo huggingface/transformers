@@ -27,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = ByT5Tokenizer
+    from_pretrained_id = "google/byt5-small"
     test_rust_tokenizer = False
 
     @classmethod

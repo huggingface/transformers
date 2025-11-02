@@ -60,6 +60,7 @@ class MgpstrTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
+            special_tokens_pattern="none",
             **kwargs,
         )
 

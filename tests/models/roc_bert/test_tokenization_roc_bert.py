@@ -207,7 +207,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."
-                tokens = tokenizer_r.encode_plus(
+                tokens = tokenizer_r(
                     sentence,
                     return_attention_mask=False,
                     return_token_type_ids=False,
@@ -316,6 +316,6 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     tokens_ids, tokens_shape_ids, tokens_proun_ids, add_special_tokens=True
                 )
 
-                input_dict = tokenizer.encode_plus(string_sequence, add_special_tokens=True)
+                input_dict = tokenizer(string_sequence, add_special_tokens=True)
 
                 self.assertEqual(input_dict, prepared_input_dict)
