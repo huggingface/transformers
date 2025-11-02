@@ -40,10 +40,10 @@ import os
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--models",
+        "--subdirs",
         type=str,
         default="",
-        help="the list of pre-computed model names.",
+        help="the list of pre-computed model names (directory names under `tests/models`) or directory names under `tests` (except `models`).",
     )
     parser.add_argument(
         "--num_splits",
@@ -60,9 +60,18 @@ if __name__ == "__main__":
     d1.remove("models")
     d = d2 + d1
 
-    if args.models != "":
-        model_tests = ast.literal_eval(args.models)
-        d = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
+    if args.subdirs != "":
+        model_tests = ast.literal_eval(args.subdirs)
+        # We handle both cases with and without prefix because `push-important-models.yml` returns the list without
+        # the prefix (i.e. `models`) but `utils/pr_slow_ci_models.py` (called by `self-comment-ci.yml`) returns the
+        # list with the prefix (`models`) and some directory names under `tests`.
+        d = []
+        for x in model_tests:
+            if os.path.isdir(x):
+                d.append(x)
+            if os.path.isdir(f"models/{x}"):
+                d.append(f"models/{x}")
+        d = sorted(d)
 
     num_jobs = len(d)
     num_jobs_per_splits = num_jobs // args.num_splits
