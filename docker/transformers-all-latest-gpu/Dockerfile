@@ -67,7 +67,7 @@ RUN set -e; \
 
 RUN python3 -m pip install --no-cache-dir -U timm
 
-RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git || echo "Don't install detectron2 with nightly torch"
+RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir --no-build-isolation git+https://github.com/facebookresearch/detectron2.git || echo "Don't install detectron2 with nightly torch"
 
 RUN python3 -m pip install --no-cache-dir pytesseract
 
