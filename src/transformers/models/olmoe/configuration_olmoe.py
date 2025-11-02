@@ -104,6 +104,7 @@ class OlmoeConfig(PreTrainedConfig):
 
     model_type = "olmoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_local_experts": "num_experts"}
 
     def __init__(
         self,

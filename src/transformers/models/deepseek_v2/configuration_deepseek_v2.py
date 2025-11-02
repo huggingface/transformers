@@ -127,8 +127,7 @@ class DeepseekV2Config(PreTrainedConfig):
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.gate_up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {

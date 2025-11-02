@@ -876,7 +876,7 @@ class PreTrainedConfig(PushToHubMixin):
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
                 self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict)
+                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
                 else self.quantization_config
             )
         self.dict_dtype_to_str(serializable_config_dict)
@@ -910,7 +910,7 @@ class PreTrainedConfig(PushToHubMixin):
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
                 self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict)
+                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
                 else self.quantization_config
             )
         self.dict_dtype_to_str(output)

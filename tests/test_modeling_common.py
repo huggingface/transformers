@@ -116,6 +116,7 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
@@ -1924,7 +1925,7 @@ class ModelTesterMixin:
                         v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                     )
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                self.assertEqual(infos["missing_keys"], set())
 
                 # Checking the tensor sharing are correct
                 ptrs = defaultdict(list)
@@ -1945,9 +1946,11 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
-            model = model_class(config)
+            model = model_class(config)  # we init the model without tie
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
+                with safe_open(f"{d}/model.safetensors", framework="pt") as f:
+                    serialized_keys = f.keys()
 
                 model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
                 # Checking the state dicts are correct
@@ -1957,8 +1960,10 @@ class ModelTesterMixin:
                     torch.testing.assert_close(
                         v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                     )
+                    if k not in serialized_keys:
+                        print(f"Key {k} was actually not serialized")
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                self.assertEqual(infos["missing_keys"], set())
 
     def test_tied_weights_keys(self):
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2485,17 +2490,17 @@ class ModelTesterMixin:
                         new_model = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
                     new_model.to(torch_device)
                     inputs = self._prepare_for_class(inputs_dict, model_class)
                     logits = new_model(**inputs).logits
-                    self.assertEqual(logits.shape[1], 42)
+                    self.assertEqual(logits.shape[1], 2)  # we still want to load :)
 
                     with CaptureLogger(logger) as cl:
                         new_model_without_prefix = AutoModel.from_pretrained(
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
                     input_ids = ids_tensor((2, 8), 10)
                     new_model_without_prefix.to(torch_device)
                     if self.is_encoder_decoder:
@@ -2536,7 +2541,7 @@ class ModelTesterMixin:
 
                     with CaptureLogger(logger) as cl:
                         new_model = model_class.from_pretrained(tmp_dir, num_labels=42, ignore_mismatched_sizes=True)
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
 
                     # Find the name of the module with the mismatched size
                     top_linear_modules = [
@@ -3895,7 +3900,125 @@ class ModelTesterMixin:
                     ):
                         self.assertEqual(k1, k2)
                         self.assertEqual(v1.dtype, v2.dtype)
-                        self.assertTrue((v1 == v2).all())
+                    self.assertTrue((v1 == v2).all())
+
+
+@require_torch
+def test_weight_conversion_operations_roundtrip():
+    import torch
+
+    from transformers.core_model_loading import (
+        Chunk,
+        Concatenate,
+        Fp8Dequantize,
+        Fp8Quantize,
+        MergeModuleList,
+        Shard,
+        WeightConversion,
+        convert_state_dict,
+    )
+
+    state_dict = {
+        "experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+        "experts.1.w1.weight": torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+        "experts.0.w3.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+        "experts.1.w3.weight": torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+        "self_attn.q_proj.weight": torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        "self_attn.k_proj.weight": torch.tensor([[5.0, 6.0], [7.0, 8.0]]),
+        "self_attn.v_proj.weight": torch.tensor([[9.0, 10.0], [11.0, 12.0]]),
+        "self_attn.out_proj.weight": torch.arange(12.0).reshape(6, 2),
+        "mlp.w2.weight": torch.tensor([[1.0, 0.0], [0.0, 1.0]]),
+    }
+
+    forward_mapping = [
+        WeightConversion(
+            ["experts.*.w1.weight", "experts.*.w3.weight"],
+            "experts.gate_up_proj.weight",
+            [MergeModuleList(dim=0), Concatenate(dim=0), Fp8Quantize(block_size=(1, 1))],
+        ),
+        WeightConversion(
+            ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+            "self_attn.qkv_proj.weight",
+            Concatenate(dim=0),
+        ),
+        WeightConversion(
+            "self_attn.out_proj.weight",
+            ["self_attn.out_proj.weight.shard0", "self_attn.out_proj.weight.shard1"],
+            Shard(dim=0, world_size=2, return_all=True),
+        ),
+        WeightConversion("mlp.w2.weight", "mlp.down_proj.weight"),
+    ]
+
+    converted_state, _ = convert_state_dict(None, state_dict, forward_mapping, tp_plan=None, quantization_config=None)
+
+    expected_qkv = torch.cat(
+        (
+            state_dict["self_attn.q_proj.weight"],
+            state_dict["self_attn.k_proj.weight"],
+            state_dict["self_attn.v_proj.weight"],
+        ),
+        dim=0,
+    )
+    torch.testing.assert_close(converted_state["self_attn.qkv_proj.weight"], expected_qkv)
+
+    reconstructed_out_proj = torch.cat(
+        (converted_state["self_attn.out_proj.weight.shard0"], converted_state["self_attn.out_proj.weight.shard1"]),
+        dim=0,
+    )
+    torch.testing.assert_close(reconstructed_out_proj, state_dict["self_attn.out_proj.weight"])
+    torch.testing.assert_close(converted_state["mlp.down_proj.weight"], state_dict["mlp.w2.weight"])
+
+    inverse_mapping = [
+        WeightConversion(
+            ["experts.gate_up_proj.weight", "experts.gate_up_proj.scale"],
+            "experts.gate_up_proj.dequantized",
+            Fp8Dequantize(block_size=(1, 1)),
+        ),
+        WeightConversion(
+            "experts.gate_up_proj.dequantized",
+            ["experts.w1.concat", "experts.w3.concat"],
+            Chunk(dim=0, sizes=[4, 4]),
+        ),
+        WeightConversion(
+            "experts.w1.concat",
+            ["experts.0.w1.weight", "experts.1.w1.weight"],
+            Chunk(dim=0, sizes=[2, 2]),
+        ),
+        WeightConversion(
+            "experts.w3.concat",
+            ["experts.0.w3.weight", "experts.1.w3.weight"],
+            Chunk(dim=0, sizes=[2, 2]),
+        ),
+        WeightConversion(
+            "self_attn.qkv_proj.weight",
+            [
+                "self_attn.q_proj.weight",
+                "self_attn.k_proj.weight",
+                "self_attn.v_proj.weight",
+            ],
+            Chunk(dim=0, sizes=[2, 2, 2]),
+        ),
+        WeightConversion(
+            ["self_attn.out_proj.weight.shard0", "self_attn.out_proj.weight.shard1"],
+            "self_attn.out_proj.weight",
+            Concatenate(dim=0),
+        ),
+        WeightConversion("mlp.down_proj.weight", "mlp.w2.weight"),
+    ]
+
+    roundtrip_state, _ = convert_state_dict(
+        None, converted_state, inverse_mapping, tp_plan=None, quantization_config=None
+    )
+
+    torch.testing.assert_close(roundtrip_state["experts.0.w1.weight"], state_dict["experts.0.w1.weight"])
+    torch.testing.assert_close(roundtrip_state["experts.1.w1.weight"], state_dict["experts.1.w1.weight"])
+    torch.testing.assert_close(roundtrip_state["experts.0.w3.weight"], state_dict["experts.0.w3.weight"])
+    torch.testing.assert_close(roundtrip_state["experts.1.w3.weight"], state_dict["experts.1.w3.weight"])
+    torch.testing.assert_close(roundtrip_state["self_attn.q_proj.weight"], state_dict["self_attn.q_proj.weight"])
+    torch.testing.assert_close(roundtrip_state["self_attn.k_proj.weight"], state_dict["self_attn.k_proj.weight"])
+    torch.testing.assert_close(roundtrip_state["self_attn.v_proj.weight"], state_dict["self_attn.v_proj.weight"])
+    torch.testing.assert_close(roundtrip_state["self_attn.out_proj.weight"], state_dict["self_attn.out_proj.weight"])
+    torch.testing.assert_close(roundtrip_state["mlp.w2.weight"], state_dict["mlp.w2.weight"])
 
 
 global_rng = random.Random()

@@ -30,7 +30,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralExperts,
     MixtralForCausalLM,
-    MixtralMLP,
     MixtralModel,
     MixtralPreTrainedModel,
     MixtralRotaryEmbedding,
@@ -84,10 +83,6 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
 
 
 class PhimoeAttention(LlamaAttention):
-    pass
-
-
-class PhimoeMLP(MixtralMLP):
     pass
 
 
@@ -276,30 +271,29 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
     )
 
 
-class PhimoeExperts(MixtralExperts, nn.ModuleList):
-    def __init__(self, config: PhimoeConfig):
-        nn.ModuleList.__init__(self)
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(PhimoeMLP(config))
+class PhimoeExperts(MixtralExperts):
+    pass
 
 
-class PhimoeRouter(nn.Linear):
+class PhimoeTopKRouter(nn.Linear):
     def __init__(self, config: PhimoeConfig):
         super().__init__(config.hidden_size, config.num_local_experts, bias=False)
-        self.top_k = config.num_experts_per_tok
-        self.hidden_dim = config.hidden_size
         self.router_jitter_noise = config.router_jitter_noise
-        self.input_jitter_noise = config.router_jitter_noise
+        self.input_jitter_noise = config.input_jitter_noise
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.training and self.input_jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
             )
         router_logits = super().forward(hidden_states)
-        return router_logits
+        routing_weights, selected_experts = sparsemixer(
+            router_logits,
+            jitter_eps=self.router_jitter_noise,
+            training=self.training,
+        )
+        routing_weights = torch.zeros_like(router_logits).scatter_(1, selected_experts, routing_weights)
+        return routing_weights, selected_experts
 
 
 class PhimoeSparseMoeBlock(nn.Module):
@@ -320,18 +314,9 @@ class PhimoeSparseMoeBlock(nn.Module):
         self.ffn_dim = config.intermediate_size
         self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
-        self.router_jitter_noise = config.router_jitter_noise
-        self.gate = PhimoeRouter(config)
+        self.router = PhimoeTopKRouter(config)
         self.experts = PhimoeExperts(config)
         self.input_jitter_noise = config.input_jitter_noise
-
-    def route_tokens_to_experts(self, router_logits):
-        routing_weights, selected_experts = sparsemixer(
-            router_logits,
-            jitter_eps=self.router_jitter_noise,
-            training=self.training,
-        )
-        return routing_weights, selected_experts
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -342,8 +327,7 @@ class PhimoeSparseMoeBlock(nn.Module):
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        router_logits = self.gate(hidden_states)
-        routing_weights, selected_experts = self.route_tokens_to_experts(router_logits)
+        routing_weights, selected_experts = self.router(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -354,7 +338,7 @@ class PhimoeDecoderLayer(MixtralDecoderLayer):
 
 class PhimoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(PhimoeTopKRouter, layer_name="mlp.router", index=0),
         "hidden_states": PhimoeDecoderLayer,
         "attentions": PhimoeAttention,
     }
