@@ -301,7 +301,10 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
         ("parakeet_ctc", "ParakeetCTCConfig"),
+        ("parakeet_tdt", "ParakeetTDTConfig"),
         ("parakeet_encoder", "ParakeetEncoderConfig"),
+        ("parakeet_tdt_decoder", "ParakeetTDTDecoderConfig"),
+        ("parakeet_tdt_joint", "ParakeetTDTJointConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -759,7 +762,10 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("paligemma", "PaliGemma"),
         ("parakeet", "Parakeet"),
         ("parakeet_ctc", "Parakeet"),
+        ("parakeet_tdt", "ParakeetTDT"),
         ("parakeet_encoder", "ParakeetEncoder"),
+        ("parakeet_tdt_decoder", "ParakeetTDTDecoder"),
+        ("parakeet_tdt_joint", "ParakeetTDTJoint"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
@@ -1002,7 +1008,10 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
+        ("parakeet_tdt_decoder", "parakeet"),
+        ("parakeet_tdt_joint", "parakeet"),
         ("parakeet_ctc", "parakeet"),
+        ("parakeet_tdt", "parakeet"),
     ]
 )
 
