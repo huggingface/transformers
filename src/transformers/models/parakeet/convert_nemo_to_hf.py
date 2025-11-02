@@ -24,10 +24,10 @@ import yaml
 from tokenizers import AddedToken
 
 from transformers import (
-    ParakeetEncoderConfig,
     ParakeetCTCConfig,
+    ParakeetEncoder,
+    ParakeetEncoderConfig,
     ParakeetFeatureExtractor,
-    ParakeetEncoder,    
     ParakeetForCTC,
     ParakeetProcessor,
     ParakeetTokenizerFast,
@@ -225,7 +225,7 @@ def convert_encoder_config(nemo_config):
         "dropout_pre_encoder",
         "reduction",
         "reduction_factor",
-        "reduction_position"
+        "reduction_position",
     ]
     encoder_config_keys_mapping = {
         "d_model": "hidden_size",
@@ -240,7 +240,7 @@ def convert_encoder_config(nemo_config):
         "dropout_emb": "dropout_positions",
         "dropout_att": "attention_dropout",
         "xscaling": "scale_input",
-        'use_bias': 'attention_bias',
+        "use_bias": "attention_bias",
     }
     converted_encoder_config = {}
 
@@ -249,6 +249,9 @@ def convert_encoder_config(nemo_config):
             continue
         if key in encoder_config_keys_mapping:
             converted_encoder_config[encoder_config_keys_mapping[key]] = value
+            # NeMo uses 'use_bias' for both attention and convolution bias, but HF separates them
+            if key == "use_bias":
+                converted_encoder_config["convolution_bias"] = value
         else:
             raise ValueError(f"Key {key} not found in encoder_config_keys_mapping")
 
@@ -295,6 +298,7 @@ def write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_re
     ParakeetForCTC.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
+
 def write_encoder_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id=None):
     """Write encoder model using encoder config and converted state dict."""
     # Filter to only encoder weights (exclude CTC head if present)
@@ -304,10 +308,10 @@ def write_encoder_model(encoder_config, converted_state_dict, output_dir, push_t
         if k.startswith("encoder.")
     }
 
-    print(f"Loading the checkpoint in a Parakeet Encoder model (for TDT).")
+    print("Loading the checkpoint in a Parakeet Encoder model (for TDT).")
     with torch.device("meta"):
         model = ParakeetEncoder(encoder_config)
-    
+
     model.load_state_dict(encoder_state_dict, strict=True, assign=True)
     print("Checkpoint loaded successfully.")
     del model.config._name_or_path
@@ -325,6 +329,7 @@ def write_encoder_model(encoder_config, converted_state_dict, output_dir, push_t
     ParakeetEncoder.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
+
 def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id=None):
     """Main model conversion function."""
     # Step 1: Convert encoder config (shared across all model types)
@@ -341,6 +346,7 @@ def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_i
         write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id)
     else:
         raise ValueError(f"Model type {model_type} not supported.")
+
 
 def main(
     hf_repo_id,
@@ -361,7 +367,9 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--hf_repo_id", required=True, help="Model repo on huggingface.co")
-    parser.add_argument("--model_type", required=True, choices=["encoder", "ctc"], help="Model type (`encoder`, `ctc`)")
+    parser.add_argument(
+        "--model_type", required=True, choices=["encoder", "ctc"], help="Model type (`encoder`, `ctc`)"
+    )
     parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
     parser.add_argument("--push_to_repo_id", help="Repository ID to push the model to on the Hub")
     args = parser.parse_args()
