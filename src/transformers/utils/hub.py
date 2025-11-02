@@ -44,8 +44,7 @@ from huggingface_hub import (
     snapshot_download,
     try_to_load_from_cache,
 )
-from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
-from huggingface_hub.utils import (
+from huggingface_hub.errors import (
     EntryNotFoundError,
     GatedRepoError,
     HfHubHTTPError,
@@ -53,6 +52,9 @@ from huggingface_hub.utils import (
     OfflineModeIsEnabled,
     RepositoryNotFoundError,
     RevisionNotFoundError,
+)
+from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
+from huggingface_hub.utils import (
     build_hf_headers,
     get_session,
     hf_raise_for_status,
