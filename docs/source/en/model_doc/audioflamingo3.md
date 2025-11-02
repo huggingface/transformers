@@ -233,6 +233,23 @@ texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
 print(texts)
 ```
 
+➡️ transcription shortcut
+
+```python
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+MODEL_ID = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(MODEL_ID)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
+
+inputs = processor.apply_transcription_request(audio="https://audioflamingo3.github.io/static/long_speech/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav").to(model.device)
+
+generated = model.generate(**inputs)
+transcription = processor.batch_decode(generated[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+
+print(transcription[0])
+```
+
 ## How the model works
 
 ### Architecture
@@ -261,12 +278,27 @@ This design guarantees a 1:1 match between placeholder positions in the text and
 
 ## Usage patterns
 
+### Transcription shortcut
+
+For automatic speech recognition you can skip writing the default instruction each time and call
+[`~transformers.AudioFlamingo3Processor.apply_transcription_request`]:
+
+```python
+inputs = processor.apply_transcription_request(audio=audio_array)
+```
+
+Pass `prompt="Transcribe the input speech."` (or a list of prompts for batched audio) to customize the instruction while
+keeping the audio placeholder handling.
+
+`audio` accepts in-memory arrays, local file paths, or URLs. Any processor kwargs (`text_kwargs`, `audio_kwargs`, etc.)
+are forwarded, so you can tweak padding or tensor formats just like when calling `processor(...)`.
+
 ### Single-turn prompts (recommended)
 
 You can omit `<sound>` entirely and let the processor insert the expanded tokens:
 
 ```python
-prompt = "Transcribe the input speech."
+prompt = "Describe the melody in detail."
 inputs = processor(text=prompt, audio=audio_array)
 ```
 
