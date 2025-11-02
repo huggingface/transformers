@@ -12,11 +12,15 @@
 
 Audio Flamingo 3 (AF3) is a fully open large audio–language model designed for robust understanding and reasoning over speech, environmental sounds, and music. AF3 pairs a Whisper-style audio encoder with a causal language model and performs replace-in-place audio–text fusion: the processor aligns post-pool audio frames to a dedicated placeholder token (written as `<sound>` in code) and the model replaces those token slots with projected audio embeddings during the forward pass.
 
+The model checkpoint is available at: [nvidia/audio-flamingo-3-hf](https://huggingface.co/nvidia/audio-flamingo-3-hf)
+
 Highlights:
 
 - Unified audio encoder across speech, sound, and music.
-- Long-audio support via windowing and post-pool alignment (up to 10 minutes).
+- **Long-audio support via windowing and post-pool alignment (up to 10 minutes maximum).** The model processes audio in 30-second windows with a hard limit of 20 windows (10 minutes total). Audio longer than 10 minutes will be truncated.
 - Deterministic fusion that preserves sequence length by replacing `<sound>` tokens with audio embeddings.
+
+This model was contributed by [Lasha Koroshinadze](https://github.com/lashahub) and [Eric Bezzam](https://github.com/ebezzam).
 
 ### Paper
 
@@ -283,9 +287,11 @@ Notes:
 
 ## Long audio and windowing
 
-* The feature extractor’s `chunk_length` and `sampling_rate` determine window size.
-  The default setup processes approximately 30-second windows at 16 kHz mono.
-* The processor caps the total number of windows per sample to a practical limit (about 10 minutes by default).
+**Important: Maximum audio length is 10 minutes.** Audio longer than this will be truncated.
+
+* The feature extractor's `chunk_length` and `sampling_rate` determine window size.
+  The default setup processes 30-second windows at 16 kHz mono.
+* **The processor enforces a hard limit of 20 windows per sample, resulting in a maximum of 10 minutes of audio (20 windows × 30 seconds).**
 * For each window:
 
   * `mel_len` is the padded mel length.

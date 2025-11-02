@@ -526,9 +526,9 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         ```python
         >>> from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-        >>> MODEL_ID = "nvidia/audio-flamingo-3"
+        >>> MODEL_ID = "nvidia/audio-flamingo-3-hf"
         >>> processor = AutoProcessor.from_pretrained(MODEL_ID)
-        >>> model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto").eval()
+        >>> model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
 
         >>> conversations = [
         >>>     [
@@ -536,7 +536,10 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         >>>             "role": "user",
         >>>             "content": [
         >>>                 {"type": "text", "text": "Transcribe the input speech."},
-        >>>                 {"type": "audio", "path": "audio_1.wav"},
+        >>>                 {
+        >>>                     "type": "audio",
+        >>>                     "path": "https://audioflamingo3.github.io/static/long_speech/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
+        >>>                 },
         >>>             ],
         >>>         }
         >>>     ],
@@ -544,27 +547,30 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         >>>         {
         >>>             "role": "user",
         >>>             "content": [
-        >>>                 {"type": "text", "text": "Describe the song."},
-        >>>                 {"type": "audio", "path": "audio_2.wav"},
+        >>>                 {
+        >>>                     "type": "text",
+        >>>                     "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
+        >>>                 },
+        >>>                 {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/FPSbCAANfbJLVSwD.mp3"},
         >>>             ],
         >>>         }
-        >>>     ]
+        >>>     ],
         >>> ]
 
         >>> batch = processor.apply_chat_template(
         >>>     conversations,
         >>>     tokenize=True,
         >>>     add_generation_prompt=True,
-        >>>     sampling_rate=getattr(processor.feature_extractor, "sampling_rate", 16000),
+        >>>     return_dict=True,
         >>> ).to(model.device)
 
-        >>> gen_ids = model.generate(**batch, max_new_tokens=512)
+        >>> gen_ids = model.generate(**batch)
 
         >>> inp_len = batch["input_ids"].shape[1]
         >>> new_tokens = gen_ids[:, inp_len:]
-        >>> texts = processor.batch_decode(new_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        >>> texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
         >>> print(texts)
-        ["Transcription of the input speech: Good morning everyone...", "The song is an orchestral piece..."]
+        ["The spoken content of the audio is...", "The track's calming and meditative feel can be attributed to..."]
         ```"""
 
         if inputs_embeds is None:
