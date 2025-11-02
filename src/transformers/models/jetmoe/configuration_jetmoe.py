@@ -120,7 +120,7 @@ class JetMoeConfig(PreTrainedConfig):
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        rms_norm_eps: Optional[int] = 1e-6,
+        rms_norm_eps: Optional[float] = 1e-6,
         initializer_range: Optional[float] = 0.01,
         attention_dropout: Optional[float] = 0.0,
         **kwargs,
