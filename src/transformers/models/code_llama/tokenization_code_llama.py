@@ -17,7 +17,7 @@ from tokenizers import Tokenizer, decoders, normalizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...tokenization_utils_base import generate_merges
+from ...tokenization_utils_base import generate_merges, _get_prepend_scheme
 from ...utils import logging
 
 from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors
@@ -165,6 +165,8 @@ class CodeLlamaTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
             replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
         )
+
+        sequence = []
         
         if self.add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]

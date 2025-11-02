@@ -1,8 +1,8 @@
-from transformers import BertTokenizerFast
+from transformers import BertTokenizer
 
 from .custom_tokenization import CustomTokenizer
 
 
-class CustomTokenizerFast(BertTokenizerFast):
+class CustomTokenizerFast(BertTokenizer):
     slow_tokenizer_class = CustomTokenizer
     pass
