@@ -14,7 +14,9 @@ from torch.nn import CrossEntropyLoss
 
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPoolingAndCrossAttentions, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
-from ..auto.modeling_auto import AutoModel, AutoModelForMaskedLM
+from ...utils import auto_docstring
+from ..modernbert import ModernBertConfig, ModernBertForMaskedLM, ModernBertModel
+from ..siglip import SiglipVisionConfig, SiglipVisionModel
 from .configuration_modernvbert import ModernVBertConfig
 
 
@@ -225,6 +227,7 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+@auto_docstring
 class ModernVBertModel(ModernVBertPreTrainedModel):
     def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
@@ -243,24 +246,20 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
     @staticmethod
     def init_vision_model(config: ModernVBertConfig):
-        vision_model_config = AutoConfig.from_pretrained(
+        vision_model_config = SiglipVisionConfig.from_pretrained(
             config.vision_config.vision_model_name,
             _attn_implementation=config._attn_implementation,
         )
-        vision_model = AutoModel.from_config(
-            vision_model_config,
-            trust_remote_code=True,
-        )
+        vision_model = SiglipVisionModel(vision_model_config)
         return getattr(vision_model, "vision_model", vision_model)
 
     @staticmethod
     def init_language_model(config: ModernVBertConfig):
-        text_model_config = AutoConfig.from_pretrained(
+        text_model_config = ModernBertConfig.from_pretrained(
             config.text_config.text_model_name,
             _attn_implementation=config._attn_implementation,
-            trust_remote_code=True,
         )
-        text_model = AutoModel.from_config(text_model_config, trust_remote_code=True)
+        text_model = ModernBertModel(text_model_config)
         embed_layer = DecoupledEmbedding(
             num_embeddings=text_model_config.vocab_size,
             num_additional_embeddings=config.additional_vocab_size,
@@ -331,6 +330,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
         return torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -386,8 +386,8 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 class ModernVBertLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        pretrained_config = AutoConfig.from_pretrained(config.text_config.text_model_name, trust_remote_code=True)
-        pretrained_model = AutoModelForMaskedLM.from_config(pretrained_config, trust_remote_code=True)
+        pretrained_config = ModernBertConfig.from_pretrained(config.text_config.text_model_name)
+        pretrained_model = ModernBertForMaskedLM(pretrained_config)
         self.head = pretrained_model.head
         self.decoder = pretrained_model.decoder
 
@@ -395,6 +395,7 @@ class ModernVBertLMHead(nn.Module):
         return self.decoder(self.head(hidden_states))
 
 
+@auto_docstring
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -409,6 +410,7 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
         self.lm_head.to(self.dtype)
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

@@ -1,33 +1,40 @@
+import copy
+import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
-from ...modeling_utils import PreTrainedModel
-from ..auto.modeling_auto import AutoModel, AutoModelForMaskedLM
-from ..auto.configuration_auto import AutoConfig
-from ...modeling_outputs import (
-    BaseModelOutput,
-    MaskedLMOutput,
-    BaseModelOutputWithPoolingAndCrossAttentions
-)
 
-from ..smolvlm import SmolVLMProcessor, SmolVLMImageProcessor, SmolVLMImageProcessorFast
+from ...configuration_utils import PretrainedConfig
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPoolingAndCrossAttentions, MaskedLMOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, logging
+from ..modernbert import ModernBertConfig, ModernBertForMaskedLM, ModernBertModel
+from ..siglip import SiglipConfig, SiglipVisionConfig, SiglipVisionModel
+from ..smolvlm import SmolVLMImageProcessor, SmolVLMImageProcessorFast, SmolVLMProcessor
 from ..smolvlm.video_processing_smolvlm import SmolVLMVideoProcessor
+
+
+logger = logging.get_logger(__name__)
+
 
 class ModernVBertVideoProcessor(SmolVLMVideoProcessor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+
 class ModernVBertImageProcessor(SmolVLMImageProcessor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+
 class ModernVBertImageProcessorFast(SmolVLMImageProcessorFast):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
 
 class ModernVBertProcessor(SmolVLMProcessor):
     image_processor_class = ModernVBertImageProcessor
@@ -36,27 +43,6 @@ class ModernVBertProcessor(SmolVLMProcessor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-import copy
-import os
-from typing import Any, Dict, Union
-
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-logger = logging.get_logger(__name__)
-
-def collect_arg_in_candidates(config, candidates, default=None) -> Any:
-    """Gets the first available argument in a config given a list of candidate names."""
-    for c in candidates:
-        if hasattr(config, c):
-            return getattr(config, c)
-        elif c in config:
-            return config[c]
-    if default is not None:
-        return default
-    raise ValueError(
-        f"No matching arguments found in candidates. Candidates: {candidates}, Config: {config}"
-    )
 
 class ModernVBertTextConfig(PretrainedConfig):
     r"""
@@ -67,11 +53,12 @@ class ModernVBertTextConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     """
+
     model_type = "modernvbert_text"
 
     def __init__(
         self,
-        text_model_name,
+        text_model_name="jhu-clsp/ettin-encoder-150m",
         hidden_size=768,
         num_hidden_layers=22,
         intermediate_size=1152,
@@ -95,25 +82,20 @@ class ModernVBertTextConfig(PretrainedConfig):
         text_model_name,
         **kwargs,
     ):
-        text_config = AutoConfig.from_pretrained(text_model_name, trust_remote_code=True)
+        text_config = ModernBertConfig.from_pretrained(text_model_name)
         if hasattr(text_config, "text_config"):
             text_config = text_config.text_config
 
-        hidden_size = collect_arg_in_candidates(text_config, ["hidden_size", "embed_dim"])
-        num_hidden_layers = collect_arg_in_candidates(text_config, ["num_hidden_layers", "num_hidden_blocks"])
-        intermediate_size = collect_arg_in_candidates(text_config, ["intermediate_size", "mlp_dim"])
-        mlp_bias = collect_arg_in_candidates(text_config, ["mlp_bias", "mlp_hidden_bias"], default=False)
-        vocab_size = collect_arg_in_candidates(text_config, ["vocab_size"])
-
         return cls(
             text_model_name=text_model_name,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            intermediate_size=intermediate_size,
-            mlp_bias=mlp_bias,
-            vocab_size=vocab_size,
+            hidden_size=text_config.hidden_size,
+            num_hidden_layers=text_config.num_hidden_layers,
+            intermediate_size=text_config.intermediate_size,
+            mlp_bias=text_config.mlp_bias,
+            vocab_size=text_config.vocab_size,
             **kwargs,
         )
+
 
 class ModernVBertVisionConfig(PretrainedConfig):
     r"""
@@ -124,6 +106,7 @@ class ModernVBertVisionConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     """
+
     model_type = "modernvbert_vision"
 
     attribute_map = {
@@ -132,7 +115,7 @@ class ModernVBertVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vision_model_name,
+        vision_model_name="google/siglip2-base-patch16-512",
         embed_dim=768,
         image_size=512,
         patch_size=16,
@@ -156,23 +139,17 @@ class ModernVBertVisionConfig(PretrainedConfig):
         vision_model_name,
         **kwargs,
     ):
-        vision_config = AutoConfig.from_pretrained(vision_model_name, trust_remote_code=True)
+        vision_config = SiglipConfig.from_pretrained(vision_model_name)
         if hasattr(vision_config, "vision_config"):
             vision_config = vision_config.vision_config
 
-        embed_dim = collect_arg_in_candidates(vision_config, ["embed_dim", "hidden_size"])
-        image_size = collect_arg_in_candidates(vision_config, ["image_size", "img_size"])
-        patch_size = collect_arg_in_candidates(vision_config, ["patch_size"])
-        num_hidden_layers = collect_arg_in_candidates(vision_config, ["num_hidden_layers", "num_hidden_blocks"])
-        intermediate_size = collect_arg_in_candidates(vision_config, ["intermediate_size", "mlp_dim"])
-
         return cls(
             vision_model_name=vision_model_name,
-            embed_dim=embed_dim,
-            image_size=image_size,
-            patch_size=patch_size,
-            num_hidden_layers=num_hidden_layers,
-            intermediate_size=intermediate_size,
+            embed_dim=vision_config.hidden_size,
+            image_size=vision_config.image_size,
+            patch_size=vision_config.patch_size,
+            num_hidden_layers=vision_config.num_hidden_layers,
+            intermediate_size=vision_config.intermediate_size,
             **kwargs,
         )
 
@@ -233,8 +210,8 @@ class ModernVBertConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: Union[PretrainedConfig, Dict[str, Any]],
-        vision_config: Union[PretrainedConfig, Dict[str, Any]],
+        text_config: Union[PretrainedConfig, dict[str, Any]] = None,
+        vision_config: Union[PretrainedConfig, dict[str, Any]] = None,
         image_token_id: int = 50407,
         vocab_size=50368,
         use_cache=True,
@@ -254,11 +231,21 @@ class ModernVBertConfig(PretrainedConfig):
         self.scale_factor = pixel_shuffle_factor
         self.additional_vocab_size = additional_vocab_size
 
-        if isinstance(text_config, dict):
+        if text_config is None:
+            logger.warning(
+                "You are instantiating a ModernVBertConfig without providing a text_config. Defaulting to jhu-clsp/ettin-encoder-150m."
+            )
+            text_config = ModernVBertTextConfig.from_base_model("jhu-clsp/ettin-encoder-150m")
+        elif isinstance(text_config, dict):
             text_config = ModernVBertTextConfig.from_dict(text_config)
         self.text_config = text_config
 
-        if isinstance(vision_config, dict):
+        if vision_config is None:
+            logger.warning(
+                "You are instantiating a ModernVBertConfig without providing a vision_config. Defaulting to google/siglip2-base-patch16-512."
+            )
+            vision_config = ModernVBertVisionConfig.from_base_model("google/siglip2-base-patch16-512")
+        elif isinstance(vision_config, dict):
             vision_config = ModernVBertVisionConfig.from_dict(vision_config)
         self.vision_config = vision_config
 
@@ -299,6 +286,7 @@ class ModernVBertConfig(PretrainedConfig):
             vision_config=vision_model_config,
             **kwargs,
         )
+
 
 class DecoupledEmbedding(nn.Embedding):
     # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/sparse.html#Embedding
@@ -383,7 +371,7 @@ class DecoupledEmbedding(nn.Embedding):
         # for successful lookup replace input_ids with 0, the results of these will be discarded anyway
         input_ids[additional_vocab_indices] = 0
         full_vector = F.embedding(input_ids, self.weight)
-        full_vector[additional_vocab_indices] = additional_embeddings      # overwrite the records with high indices
+        full_vector[additional_vocab_indices] = additional_embeddings  # overwrite the records with high indices
         return full_vector
 
 
@@ -410,10 +398,11 @@ class ModernVBertBaseModelOutput(BaseModelOutput):
             sequence_length, hidden_size)`.
             image_hidden_states of the model produced by the vision encoder
     """
+
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -423,7 +412,7 @@ class ModernVBertMaskedLMOutput(MaskedLMOutput):
     Args:
         loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
             Masked language modeling (MLM) loss.
-        logits (`torch.FloatTensor`): 
+        logits (`torch.FloatTensor`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
@@ -439,15 +428,17 @@ class ModernVBertMaskedLMOutput(MaskedLMOutput):
             sequence_length, hidden_size)`.
             image_hidden_states of the model produced by the vision encoder
     """
+
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class ModernVBertSimpleMLP(nn.Module):
     """A simple linear projection layer to project the vision hidden states to the text hidden states."""
+
     def __init__(self, input_size, output_size):
         super().__init__()
         self.proj = nn.Linear(input_size, output_size, bias=False)
@@ -461,6 +452,7 @@ class ModernVBertConnector(nn.Module):
     Connector module for ModernVBERT. It performs a pixel shuffle operation followed by a linear projection to match the text model's hidden size.
     Based on https://pytorch.org/docs/stable/generated/torch.nn.PixelShuffle.html
     """
+
     def __init__(self, config):
         super().__init__()
         self.scale_factor = config.pixel_shuffle_factor
@@ -503,6 +495,7 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+@auto_docstring
 class ModernVBertModel(ModernVBertPreTrainedModel):
     def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
@@ -521,27 +514,20 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
     @staticmethod
     def init_vision_model(config: ModernVBertConfig):
-        vision_model_config = AutoConfig.from_pretrained(
+        vision_model_config = SiglipVisionConfig.from_pretrained(
             config.vision_config.vision_model_name,
             _attn_implementation=config._attn_implementation,
         )
-        vision_model = AutoModel.from_config(
-            vision_model_config, 
-            trust_remote_code=True,
-        )
+        vision_model = SiglipVisionModel(vision_model_config)
         return getattr(vision_model, "vision_model", vision_model)
 
     @staticmethod
     def init_language_model(config: ModernVBertConfig):
-        text_model_config = AutoConfig.from_pretrained(
+        text_model_config = ModernBertConfig.from_pretrained(
             config.text_config.text_model_name,
             _attn_implementation=config._attn_implementation,
-            trust_remote_code=True,
         )
-        text_model = AutoModel.from_config(
-            text_model_config, 
-            trust_remote_code=True
-        )
+        text_model = ModernBertModel(text_model_config)
         embed_layer = DecoupledEmbedding(
             num_embeddings=text_model_config.vocab_size,
             num_additional_embeddings=config.additional_vocab_size,
@@ -551,7 +537,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         )
         text_model.set_input_embeddings(embed_layer)
         return text_model
-    
+
     def enable_input_require_grads(self):
         """
         Enables the gradients for the input embeddings.
@@ -612,6 +598,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
         return torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -624,7 +611,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -663,11 +650,12 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             image_hidden_states=image_hidden_states,
         )
 
+
 class ModernVBertLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        pretrained_config = AutoConfig.from_pretrained(config.text_config.text_model_name, trust_remote_code=True)
-        pretrained_model = AutoModelForMaskedLM.from_config(pretrained_config, trust_remote_code=True)
+        pretrained_config = ModernBertConfig.from_pretrained(config.text_config.text_model_name)
+        pretrained_model = ModernBertForMaskedLM(pretrained_config)
         self.head = pretrained_model.head
         self.decoder = pretrained_model.decoder
 
@@ -675,6 +663,7 @@ class ModernVBertLMHead(nn.Module):
         return self.decoder(self.head(hidden_states))
 
 
+@auto_docstring
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -689,6 +678,7 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
         self.lm_head.to(self.dtype)
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -702,7 +692,7 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, ModernVBertMaskedLMOutput]:
+    ) -> Union[tuple, ModernVBertMaskedLMOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
