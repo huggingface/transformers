@@ -3,6 +3,8 @@ import json
 import logging
 from typing import Any
 
+from transformers.utils.import_utils import is_flash_attn_2_available
+
 
 KERNELIZATION_AVAILABLE = False
 try:
@@ -17,6 +19,16 @@ logger = logging.getLogger(__name__)
 
 class BenchmarkConfig:
     """Configuration for a single benchmark scenario."""
+
+    all_attn_implementations = [
+        ("flash_attention_2", None),
+        ("eager", None),
+        ("sdpa", "math"),
+        ("sdpa", "flash_attention"),
+        ("flex_attention", None),
+    ]
+
+    all_compiled_modes = [None, "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"]
 
     def __init__(
         self,
@@ -59,6 +71,13 @@ class BenchmarkConfig:
     def check_validity(self, skip_validity_check: bool = False) -> None:
         if skip_validity_check:
             return
+        # Check FA is installed
+        if self.attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            logger.warning(
+                "Flash attention does not support compile mode. Defaulting to SDPA w/ flash attention backend."
+            )
+            self.attn_implementation = "sdpa"
+            self.sdpa_backend = "flash_attention"
         # Flash attention does not support compile mode, so we turn it off # FIXME: it would be better to support it
         is_fa = self.attn_implementation == "flash_attention_2"
         is_fa |= self.attn_implementation == "sdpa" and self.sdpa_backend == "flash_attention"
@@ -161,34 +180,6 @@ def cross_generate_configs(
                 )
                 configs.append(config)
     return configs
-
-
-def generate_all_configs(
-    warmup_iterations: int = 5,
-    measurement_iterations: int = 20,
-    batch_size: int = 1,
-    sequence_length: int = 128,
-    num_tokens_to_generate: int = 128,
-    gpu_monitoring: bool = True,
-) -> list[BenchmarkConfig]:
-    all_attn_implementations = [
-        ("flash_attention_2", None),
-        ("eager", None),
-        ("sdpa", "math"),
-        ("sdpa", "flash_attention"),
-        ("flex_attention", None),
-    ]
-    return cross_generate_configs(
-        attn_impl_and_sdpa_backend=all_attn_implementations,
-        compiled_mode=[None, "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
-        kernelized=[False, KERNELIZATION_AVAILABLE],
-        warmup_iterations=warmup_iterations,
-        measurement_iterations=measurement_iterations,
-        batch_size=batch_size,
-        sequence_length=sequence_length,
-        num_tokens_to_generate=num_tokens_to_generate,
-        gpu_monitoring=gpu_monitoring,
-    )
 
 
 def generate_main_configs(
