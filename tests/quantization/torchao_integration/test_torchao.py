@@ -54,7 +54,6 @@ if is_torchao_available():
         IntxWeightOnlyConfig,
         MappingType,
         ModuleFqnToConfig,
-        FqnToConfig,
         PerAxis,
     )
     from torchao.quantization.autoquant import AQMixin
@@ -63,6 +62,8 @@ if is_torchao_available():
         from torchao.dtypes import Int4CPULayout
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0"):
         from torchao.dtypes import Int4XPULayout
+    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.15.0"):
+        from torchao.quantization import FqnToConfig
 
 
 def check_torchao_int4_wo_quantized(test_module, qlayer):
@@ -700,6 +701,8 @@ class TorchAoSerializationTest(unittest.TestCase):
 @require_torchao
 @require_torchao_version_greater_or_equal("0.14.0")
 class TorchAoSafeSerializationTest(TorchAoSerializationTest):
+    # placeholder
+    quant_scheme = Float8WeightOnlyConfig()
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
@@ -835,10 +838,9 @@ class TorchAoSerializationFP8AcceleratorTest(TorchAoSerializationTest):
 
         from torchao.quantization import Float8WeightOnlyConfig
 
+        super().setUpClass()
         cls.quant_scheme = Float8WeightOnlyConfig()
         cls.quant_scheme_kwargs = {}
-
-        super().setUpClass()
 
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
@@ -857,10 +859,9 @@ class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
 
         from torchao.quantization import Int8DynamicActivationInt4WeightConfig
 
+        super().setUpClass()
         cls.quant_scheme = Int8DynamicActivationInt4WeightConfig()
         cls.quant_scheme_kwargs = {}
-
-        super().setUpClass()
 
         cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
