@@ -351,8 +351,8 @@ class FP8Linear(nn.Linear):
                 weight = self.weight._local_tensor.contiguous()
                 scale_inv = self.weight_scale_inv._local_tensor.contiguous()
             else:
-                weight = self.weight
-                scale_inv = self.weight_scale_inv
+                weight = self.weight.contiguous()
+                scale_inv = self.weight_scale_inv.contiguous()
             # Context manager used to switch among the available accelerators
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             torch_accelerator_module = getattr(torch, device_type, torch.cuda)
@@ -371,6 +371,7 @@ class FP8Linear(nn.Linear):
             torch_accelerator_module.synchronize()
             if self.bias is not None:
                 output = output + self.bias
+            output = torch.nan_to_num(output, nan=0.0)
             return output.to(dtype=input.dtype)
 
 
@@ -438,17 +439,17 @@ class FP8Expert(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-
         num_experts = top_k_weights.shape[1]
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             if expert_idx == num_experts:
                 continue
-            with torch.no_grad():
-                _, token_idx = torch.where(expert_mask[expert_idx])
-            # current_state = hidden_states[token_idx]
+            _, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states.index_select(0, token_idx)
             gate, up = self.linear(
                 current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scales_inv[expert_idx]

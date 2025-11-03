@@ -151,23 +151,22 @@ class MixtralExperts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-
         num_experts = top_k_weights.shape[1]
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1).permute(2, 1, 0)
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             if expert_idx == num_experts:
                 continue
-            with torch.no_grad():
-                _, token_idx = torch.where(expert_mask[expert_idx])
+            _, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-
-            routing_weights = top_k_weights[token_idx, expert_idx].unsqueeze(-1)
-            current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, expert_idx, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
@@ -205,7 +204,7 @@ class MixtralSparseMoeBlock(nn.Module):
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         top_k_weights, top_k_index = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights.to(hidden_states.dtype))
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
 
