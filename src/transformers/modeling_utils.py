@@ -33,7 +33,7 @@ from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Optional, TypeVar, Union, get_type_hints
+from typing import Any, List, Optional, Tuple, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -1738,7 +1738,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(self._keep_in_fp32_modules, list):
             self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules, torch.float32))
         if isinstance(self._keep_in_fp32_modules_strict, list):
-            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict.keys(), torch.float32))
+            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict, torch.float32))
 
         self._no_split_modules = self._no_split_modules or []
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
@@ -2570,14 +2570,30 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._init_weights(module)
         module._is_hf_initialized = True
 
+    def _init_parameter(self, parameter: nn.Parameter, parameter_name: str, module: nn.Module, module_name: str):
+        """
+        Initialize a standalone parameter registered on a module.
+
+        The default implementation only targets parameters that are registered directly on the current
+        `PreTrainedModel` (i.e. `module is self`). Sub-classes can override this method if they need finer control
+        based on the parameter name or owning module.
+        """
+        if module is not self:
+            return
+
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range or 0.02
+        else:
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        parameter.data.normal_(mean=0.0, std=std)
+
     @torch.no_grad()
     def initialize_weights(self):
         """
-        This is equivalent to calling `self.apply(self._initialize_weights)`, but correctly handles composite models.
-        This function dynamically dispatches the correct `init_weights` function to the modules as we advance in the
-        module graph along the recursion. It can handle an arbitrary number of sub-models. Without it, every composite
-        model would have to recurse a second time on all sub-models explicitly in the outer-most `_init_weights`, which
-        is extremely error prone and inefficient.
+        Iteratively initialize the modules and parameters of the model without relying on recursive helpers.
+        The traversal keeps track of the owning `PreTrainedModel` so that composite architectures dispatch to the
+        correct `_init_weights` definition while also giving access to parameter names.
 
         Note that the `torch.no_grad()` decorator is very important as well, as most of our `_init_weights` do not use
         `torch.nn.init` functions (which are all no_grad by default), but simply do in-place ops such as
@@ -2594,6 +2610,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     else:
                         module.smart_apply(fn)
                 fn(self)
+                for name, param in self.named_parameters(recurse=False):
+                    if param is None:
+                        continue
+                    fn(param)
+
                 return self
 
             torch.nn.Module.smart_apply = smart_apply
@@ -4358,8 +4379,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             model = cls(config, *model_args, **model_kwargs)
 
         # Make sure to tie the weights correctly
-        if model.config.tie_word_embeddings:
-            model.tie_weights()
+        # if model.config.tie_word_embeddings:
+        model.tie_weights()
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
