@@ -469,9 +469,9 @@ def convert_and_load_state_dict_in_model(
     weight_mapping,
     tp_plan,
     quantizer,
-    dtype=torch.float32,
+    dtype=None,
     device_map=None,
-    keep_in_dtype=None,
+    dtype_plan=None,
     device_mesh=None,
     profile: bool = False,
 ):
@@ -484,7 +484,7 @@ def convert_and_load_state_dict_in_model(
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}  # {glob_pattern: plan_obj_or_key}
     device_map = device_map or {}  # {exact_target_key: device}
-    keep_in_dtype = keep_in_dtype or {}  # {glob_pattern: dtype}
+    dtype_plan = dtype_plan or {}  # {glob_pattern: dtype}
     weight_mapping = weight_mapping or {}  # {glob_pattern: WeightConverter}
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
@@ -504,7 +504,7 @@ def convert_and_load_state_dict_in_model(
     source_to_target = {sk: k for k in weight_mapping for sk in k.source_keys}
     weight_pattern_alt, weight_pattern_by_group_name = build_glob_alt(_patterns)
     tp_plan_alt, tp_plan_by_group_name = build_glob_alt(list(tp_plan.keys()))
-    dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(keep_in_dtype.keys()))
+    dtype_policy_alt, dtype_policy_by_group_name = build_glob_alt(list(dtype_plan.keys()))
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     # 1. Create the conversion entries
@@ -537,6 +537,7 @@ def convert_and_load_state_dict_in_model(
             if empty_tensor is None:
                 unexpected_keys.add(t)
                 continue
+
             if quantizer is not None and quantizer.param_needs_quantization(model, t):
                 if quantizer.__class__.__name__ == "FineGrainedFP8HfQuantizer":
                     from .integrations.finegrained_fp8 import Fp8Quantize
@@ -547,12 +548,12 @@ def convert_and_load_state_dict_in_model(
             else:
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
                 if matched_dtype_pattern is not None:
-                    dtype = keep_in_dtype[matched_dtype_pattern]
+                    dtype = dtype_plan[matched_dtype_pattern]
                 tensor_dtype = (
                     tensor.dtype if isinstance(tensor, torch.Tensor) else str_to_torch_dtype[tensor.get_dtype()]
                 )
                 if dtype != tensor_dtype and dtype is not None:
-                    converter.operations.append(Cast(dtype))
+                    converter.operations.append(Cast(dtype)) # can this be slow as well?
 
         first_target_key = target_key.split("|")[0]
         future = None

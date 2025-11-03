@@ -1561,7 +1561,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # to also prevent bfloat16 casting, use the _keep_in_fp32_modules_strict flag
     _keep_in_fp32_modules_strict = None
 
-    _dtype_per_modules: Optional[dict[str, torch.dtype]] = None
+    dtype_plan: Optional[dict[str, torch.dtype]] = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1727,14 +1727,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
+
         # Overwrite the class attribute to make it an instance attribute, so models like
         # `InstructBlipForConditionalGeneration` can dynamically update it without modifying the class attribute
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
+        self.dtype_plan = {}
 
-        if isinstance(self._keep_in_fp32_modules, dict):
-            self._dtype_per_modules = dict.fromkeys(self._keep_in_fp32_modules.keys(), torch.float32)
+        if isinstance(self._keep_in_fp32_modules, list):
+            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules, torch.float32))
+        if isinstance(self._keep_in_fp32_modules_strict, list):
+            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict.keys(), torch.float32))
 
         self._no_split_modules = self._no_split_modules or []
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
@@ -4353,12 +4357,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
-        # Potentially upcast some modules to avoid loosing precision
-        model.upcast_modules_in_fp32(hf_quantizer, dtype)
-
         # Make sure to tie the weights correctly
         if model.config.tie_word_embeddings:
             model.tie_weights()
+
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
@@ -4502,7 +4504,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             device_map = {"": "cpu"}
         keys = sorted(device_map.keys(), key=len, reverse=True)
         tp_plan = getattr(model, "_tp_plan", None)
-        keep_in_dtype = None  # TODO use keep_in
         error_msgs = []
         misc = {}
 
@@ -4544,7 +4545,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 hf_quantizer,
                 dtype,
                 device_map,
-                keep_in_dtype,
+                model.dtype_plan,
                 device_mesh=device_mesh,
             )
             end = time.perf_counter()
@@ -4575,7 +4576,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tp_device = list(device_map.values())[0]
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
-            for buffer in model.buffers():
+            for buffer in model.buffers(): # TODO to avaoid this buffer could be added to the ckpt
                 if buffer.device != tp_device:
                     buffer.data = buffer.to(tp_device)
 
@@ -4606,7 +4607,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict
         )
-        logger.warn(f"Loading the checkpoint files into the model took {end - start}")
+        logger.warning(f"Loading the checkpoint files into the model took {end - start}")
         log_state_dict_report(
             model=model,
             pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -4947,36 +4948,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def eval(self):
         return self.train(False)
-
-    def upcast_modules_in_fp32(self, hf_quantizer: HfQuantizer | None, dtype: torch.dtype) -> None:
-        """
-        Upcast modules defined in `_keep_in_fp32_modules` and `_keep_in_fp32_modules_strict` in fp32, if
-        `dtype` is different than fp32.
-        """
-        # If the dtype is already fp32, we can skip
-        if dtype == torch.float32:
-            return
-
-        keep_in_fp32_modules = []
-        # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
-        # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
-        # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
-        if self._keep_in_fp32_modules is not None and (
-            dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
-        ):
-            keep_in_fp32_modules.extend(self._keep_in_fp32_modules)
-
-        if self._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
-            keep_in_fp32_modules.extend(self._keep_in_fp32_modules_strict)
-
-        if len(keep_in_fp32_modules) > 0:
-            # We need to match exact layers, so we add either `.` on each side, or start/end of string
-            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
-            for name, param in self.named_parameters():
-                if keep_in_fp32_regex.search(name):
-                    # param = param.to(torch.float32) does not work here as only in the local scope.
-                    param.data = param.data.to(torch.float32)
-
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
 if PreTrainedModel.push_to_hub.__doc__ is not None:

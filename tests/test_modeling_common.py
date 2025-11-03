@@ -2581,7 +2581,7 @@ class ModelTesterMixin:
                         self.assertEqual(k1, k2)
                         # Each param except the mismatched ones must be exactly similar
                         if not any(k1.startswith(mismatched_module) for mismatched_module in mismatched_modules):
-                            self.assertTrue((v1 == v2).all())
+                            torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
                         # Check that the dims are indeed mismatched between old and new models
                         else:
                             # The old model should have `num_labels=3` (here it's the first dim of shape, as Linear layers
@@ -3900,7 +3900,8 @@ class ModelTesterMixin:
                     ):
                         self.assertEqual(k1, k2)
                         self.assertEqual(v1.dtype, v2.dtype)
-                    self.assertTrue((v1 == v2).all())
+                    torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
+
 
 
 @require_torch

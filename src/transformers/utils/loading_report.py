@@ -212,7 +212,6 @@ def log_state_dict_report(
             rows.append([k, status, _details])
 
     if not rows:
-        logger.warn(f"Initializing {model.__class__.__name__} from {pretrained_model_name_or_path} had no issues")
         return
 
     headers = ["Key", "Status"]
