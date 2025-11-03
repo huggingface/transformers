@@ -127,7 +127,10 @@ def convert_colqwen2_weights_to_hf(
     # Load the untrained model
     vlm_name_or_path = getattr(config.vlm_config, "_name_or_path", None)
     if vlm_name_or_path and "2.5" in str(vlm_name_or_path):
-        print("Detected colqwen2.5 adapters in vlm_config; loading base model %s and merging PEFT weights." % vlm_name_or_path)
+        print(
+            "Detected colqwen2.5 adapters in vlm_config; loading base model %s and merging PEFT weights."
+            % vlm_name_or_path
+        )
         base_model = AutoModel.from_pretrained(
             vlm_name_or_path,
             device_map="cpu",
