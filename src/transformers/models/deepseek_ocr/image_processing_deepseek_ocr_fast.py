@@ -1,268 +1,352 @@
-import math
-from typing import Optional, Sequence, Union
+# Copyright 2025 DeepSeek-AI and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
+import math
+from typing import Optional, Union
+
+import numpy as np
 import torch
-from torchvision.transforms import InterpolationMode
+
+# TODO protect this import
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+from torchvision import transforms
 from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2.functional import to_pil_image
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
     Unpack,
 )
-from ...image_utils import ImageInput, SizeDict
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, logging
+from ...utils import TensorType, auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
 class DeepseekOcrImageProcessorKwargs(ImagesKwargs, total=False):
-    size: dict
-    do_resize: bool
-    do_rescale: bool
-    rescale_factor: float
-    do_normalize: bool
-    image_mean: Union[float, Sequence[float]]
-    image_std: Union[float, Sequence[float]]
-    return_tensors: Union[str, TensorType]
-    disable_grouping: bool
-    do_pad: bool
-    base_size: int
-    patch_size_side: int
+    r"""
+    patch_size (`int`, *optional*):
+        The size of the patch.
+    base_size (`int`, *optional*):
+        The base size for the global image view.
+    dynamic_hd (`int`, *optional*):
+        The maximum number of crops per image.
+    """
+
     patch_size: int
-    downsample_ratio: int
-    max_tiles: int
+    base_size: int
+    dynamic_hd: int
 
 
+@auto_docstring
 class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
-    """
-    Torch-based image processor used for DeepSeek OCR.
-
-    It prepares one global view per image and a variable number of local crops.
-    Each view is resized to the backbone ``base_size`` so the vision tower can
-    be executed in batches on GPU.
-    """
-
-    resample = InterpolationMode.BICUBIC
-    do_resize = False
+    resample = PILImageResampling.BICUBIC
+    size = {"height": 1024, "width": 1024}
+    base_size = {"height": 1024, "width": 1024}
+    patch_size = 16
+    dynamic_hd = 36
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_resize = True
     do_rescale = True
     do_normalize = True
-    do_pad = True
-    size = {"height": 1024, "width": 1024}
-    image_mean = (0.5, 0.5, 0.5)
-    image_std = (0.5, 0.5, 0.5)
-    base_size = 1024
-    patch_size_side = 640
-    patch_size = 16
-    downsample_ratio = 4
-    max_tiles = 9
+    do_convert_rgb = True
     valid_kwargs = DeepseekOcrImageProcessorKwargs
+    model_input_names = ["pixel_values", "image_attention_mask", "image_spatial_crop"]
 
     def __init__(self, **kwargs: Unpack[DeepseekOcrImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-        self.base_size = self._resolve_scalar(self.base_size)
-        self.patch_size_side = self._resolve_scalar(self.patch_size_side)
-        self.patch_size = int(self.patch_size)
-        self.downsample_ratio = int(self.downsample_ratio)
-        self.max_tiles = int(self.max_tiles)
-        self.do_pad = getattr(self, "do_pad", True)
-
-        self._vision_grid = math.ceil((self.base_size // self.patch_size) / self.downsample_ratio)
-
-    @staticmethod
-    def _resolve_scalar(value: Union[int, dict, SizeDict]) -> int:
-        if isinstance(value, SizeDict):
-            return int(value.height if value.height is not None else value.width)
-        if isinstance(value, dict):
-            height = value.get("height")
-            if height is not None:
-                return int(height)
-            width = value.get("width")
-            if width is not None:
-                return int(width)
-        return int(value)
-
-    @staticmethod
-    def _square_pad(image: torch.Tensor, fill: torch.Tensor) -> torch.Tensor:
-        c, h, w = image.shape
-        if h == w:
-            return image
-        size = max(h, w)
-        padded = torch.broadcast_to(fill, (c, size, size)).clone()
-        top = (size - h) // 2
-        left = (size - w) // 2
-        padded[:, top : top + h, left : left + w] = image
-        return padded
-
-    @staticmethod
-    def _find_best_grid(width: int, height: int, max_tiles: int) -> tuple[int, int]:
-        aspect_ratio = width / height
-        candidates = [
-            (i, j)
-            for tiles in range(2, max_tiles + 1)
-            for i in range(1, tiles + 1)
-            for j in range(1, tiles + 1)
-            if 1 < i * j <= max_tiles
-        ]
+    def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height, image_size):
+        best_ratio_diff = float("inf")
         best_ratio = (1, 1)
-        best_diff = float("inf")
-        for cols, rows in candidates:
-            ratio = cols / rows
-            diff = abs(aspect_ratio - ratio)
-            if diff < best_diff or (diff == best_diff and cols * rows > best_ratio[0] * best_ratio[1]):
-                best_diff = diff
-                best_ratio = (cols, rows)
+        area = width * height
+        for ratio in target_ratios:
+            target_aspect_ratio = ratio[0] / ratio[1]
+            ratio_diff = abs(aspect_ratio - target_aspect_ratio)
+            if ratio_diff < best_ratio_diff:
+                best_ratio_diff = ratio_diff
+                best_ratio = ratio
+            elif ratio_diff == best_ratio_diff:
+                if area > 0.5 * image_size * image_size * ratio[0] * ratio[1]:
+                    best_ratio = ratio
         return best_ratio
 
-    def _dynamic_preprocess(self, image: torch.Tensor, patch_side: int) -> tuple[list[torch.Tensor], tuple[int, int]]:
-        c, h, w = image.shape
-        if max(h, w) <= patch_side:
-            return [], (1, 1)
+    def dynamic_preprocess(self, image, patch_image_size, max_num=36, min_num=2):
+        """
+        Dynamically preprocess images with aspect ratio handling.
 
-        cols, rows = self._find_best_grid(w, h, self.max_tiles)
-        if cols == 1 and rows == 1:
-            return [], (1, 1)
+        Returns:
+            processed_images: list of preprocessed image tensors
+            target_aspect_ratio: tuple (width_crops, height_crops)
+        """
+        if not isinstance(image, Image.Image):
+            image = to_pil_image(image)
 
-        target_w = cols * patch_side
-        target_h = rows * patch_side
-        resized = F.resize(
-            image,
-            size=[target_h, target_w],
-            interpolation=self.resample,
-            antialias=True,
+        orig_width, orig_height = image.size
+        aspect_ratio = orig_width / orig_height
+
+        target_ratios = {
+            (i, j)
+            for n in range(min_num, max_num + 1)
+            for i in range(1, n + 1)
+            for j in range(1, n + 1)
+            if i * j <= max_num and i * j >= min_num
+        }
+        target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
+
+        target_aspect_ratio = self.find_closest_aspect_ratio(
+            aspect_ratio, target_ratios, orig_width, orig_height, patch_image_size
         )
 
-        crops: list[torch.Tensor] = []
-        for row in range(rows):
-            for col in range(cols):
-                top = row * patch_side
-                left = col * patch_side
-                crops.append(resized[:, top : top + patch_side, left : left + patch_side])
-        return crops, (cols, rows)
+        target_width = patch_image_size * target_aspect_ratio[0]
+        target_height = patch_image_size * target_aspect_ratio[1]
+        blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
 
-    def _prepare_views(
+        resized_img = image.resize((target_width, target_height), resample=self.resample)
+
+        processed_images = []
+        for i in range(blocks):
+            box = (
+                (i % (target_width // patch_image_size)) * patch_image_size,
+                (i // (target_width // patch_image_size)) * patch_image_size,
+                ((i % (target_width // patch_image_size)) + 1) * patch_image_size,
+                ((i // (target_width // patch_image_size)) + 1) * patch_image_size,
+            )
+            split_img = resized_img.crop(box)
+            processed_images.append(split_img)
+
+        return processed_images, target_aspect_ratio
+
+    def pad_to_max_num_crops(self, images, max_crops=5):
+        """Pad images tensor to max_crops."""
+        B, _, H, W = images.shape
+        if B < max_crops:
+            pad = torch.zeros(max_crops - B, 3, H, W, dtype=images.dtype, device=images.device)
+            images = torch.cat([images, pad], dim=0)
+        return images
+
+    @auto_docstring
+    def preprocess(
         self,
-        image: torch.Tensor,
-        interpolation: Optional[InterpolationMode],
-    ) -> tuple[list[torch.Tensor], tuple[int, int], tuple[int, int]]:
-        image = image.to(dtype=torch.float32)
-        c, h, w = image.shape
-        original_size = (h, w)
-
-        if self.do_pad:
-            background = torch.tensor(self.image_mean, dtype=torch.float32, device=image.device).view(-1, 1, 1)
-            padded = self._square_pad(image, background.to(dtype=image.dtype))
-        else:
-            padded = image
-        global_view = F.resize(
-            padded,
-            size=[self.base_size, self.base_size],
-            interpolation=interpolation or self.resample,
-            antialias=True,
-        )
-
-        local_crops, (cols, rows) = self._dynamic_preprocess(image, self.patch_size_side)
-        resized_locals: list[torch.Tensor] = []
-        if cols * rows > 1 and local_crops:
-            for patch in local_crops:
-                resized = F.resize(
-                    patch,
-                    size=[self.base_size, self.base_size],
-                    interpolation=interpolation or self.resample,
-                    antialias=True,
-                )
-                resized_locals.append(resized)
-
-        views = [global_view] + resized_locals
-        spatial_crop = (cols, rows) if resized_locals else (1, 1)
-        return views, spatial_crop, original_size
+        images: ImageInput,
+        **kwargs: Unpack[DeepseekOcrImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
-        do_resize: bool,
+        images: list["torch.Tensor"],
         size: SizeDict,
-        interpolation: Optional[InterpolationMode],
-        do_center_crop: bool,
-        crop_size: SizeDict,
+        base_size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        patch_size: int,
+        dynamic_hd: int,
         do_rescale: bool,
-        rescale_factor: float,
+        rescale_factor: Optional[float],
         do_normalize: bool,
-        image_mean: Optional[Union[float, Sequence[float]]],
-        image_std: Optional[Union[float, Sequence[float]]],
-        do_pad: Optional[bool],
-        pad_size: Optional[SizeDict],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
-    ) -> BatchFeature:
-        if not images:
-            raise ValueError("No images were provided to the processor.")
+    ):
+        if not isinstance(size, SizeDict):
+            size = SizeDict(**size)
+        if not isinstance(base_size, SizeDict):
+            base_size = SizeDict(**base_size)
+        patch_image_size = size.height
+        base_image_size = base_size.height
+        downsample_ratio = 4
 
-        flat_images: list[torch.Tensor] = []
-        for img in images:
-            if isinstance(img, (list, tuple)):
-                flat_images.extend(img)
+        images_transformed = []
+        images_spatial_crop = []
+        images_tokens = []
+
+        to_tensor = transforms.ToTensor()
+        normalize = transforms.Normalize(mean=self.image_mean, std=self.image_std)
+        mean_fill = tuple(int(x * 255) for x in self.image_mean)
+
+        for image in images:
+            if not isinstance(image, Image.Image):
+                image = to_pil_image(image)
+            if hasattr(ImageOps, "exif_transpose"):
+                image = ImageOps.exif_transpose(image)
+            if self.do_convert_rgb and image.mode != "RGB":
+                image = image.convert("RGB")
+
+            orig_width, orig_height = image.size
+            # max_dim = max(orig_width, orig_height)
+            # min_dim = min(orig_width, orig_height)
+
+            if orig_width <= patch_image_size and orig_height <= patch_image_size:
+                crop_ratio = [1, 1]
+                images_crop_raw = []
             else:
-                flat_images.append(img)
+                images_crop_raw, crop_ratio = self.dynamic_preprocess(image, patch_image_size, max_num=dynamic_hd)
 
-        if not flat_images:
-            raise ValueError("No valid images were provided to the processor.")
+            interp_mode = interpolation if interpolation is not None else self.resample
+            if isinstance(interp_mode, F.InterpolationMode):
+                interp_mode = getattr(PILImageResampling, interp_mode.name)
+            global_view = ImageOps.pad(image, (base_image_size, base_image_size), method=interp_mode, color=mean_fill)
+            if base_image_size != patch_image_size:
+                global_view = global_view.resize((patch_image_size, patch_image_size), interp_mode)
 
-        device = flat_images[0].device
-        views_per_image: list[list[torch.Tensor]] = []
-        spatial_crops: list[tuple[int, int]] = []
-        original_sizes: list[tuple[int, int]] = []
+            global_view = normalize(to_tensor(global_view)).to(torch.bfloat16)
 
-        interp = interpolation or self.resample
-        for image in flat_images:
-            views, crop_shape, orig_size = self._prepare_views(image, interp)
-            views_per_image.append(views)
-            spatial_crops.append(crop_shape)
-            original_sizes.append(orig_size)
+            width_crop_num, height_crop_num = crop_ratio
 
-        max_views = max(len(sample_views) for sample_views in views_per_image)
-        channel = views_per_image[0][0].shape[0]
-        pixel_values = torch.zeros(
-            (len(images), max_views, channel, self.base_size, self.base_size),
-            dtype=torch.float32,
-            device=device,
-        )
-        valid_counts = torch.zeros(len(images), dtype=torch.long, device=device)
+            if width_crop_num > 1 or height_crop_num > 1:
+                processed_crops = []
+                for crop in images_crop_raw:
+                    crop_tensor = normalize(to_tensor(crop)).to(torch.bfloat16)
+                    processed_crops.append(crop_tensor)
 
-        for idx, sample_views in enumerate(views_per_image):
-            count = len(sample_views)
-            valid_counts[idx] = count
-            stacked = torch.stack(sample_views, dim=0)
-            pixel_values[idx, :count] = stacked
+                crops_tensor = torch.stack(processed_crops, dim=0)
+            else:
+                processed_crops = []
+                crops_tensor = torch.empty(0, dtype=torch.bfloat16)
 
-        if do_rescale:
-            pixel_values = pixel_values * rescale_factor
+            num_queries_base = math.ceil((base_image_size // 16) / downsample_ratio)
+            num_queries = math.ceil((patch_image_size // 16) / downsample_ratio)
 
-        if do_normalize:
-            mean = torch.as_tensor(image_mean if image_mean is not None else self.image_mean, dtype=pixel_values.dtype, device=pixel_values.device)
-            std = torch.as_tensor(image_std if image_std is not None else self.image_std, dtype=pixel_values.dtype, device=pixel_values.device)
-            pixel_values = (pixel_values - mean.view(1, 1, -1, 1, 1)) / std.view(1, 1, -1, 1, 1)
+            tokenized_image_len = (num_queries_base + 1) * num_queries_base + 1
+            if width_crop_num > 1 or height_crop_num > 1:
+                tokenized_image_len += (num_queries * width_crop_num + 1) * (num_queries * height_crop_num)
 
-        # zero-out padded views so they are ignored downstream
-        if max_views > 1:
-            view_ids = torch.arange(max_views, device=device)
-            mask = view_ids.unsqueeze(0) >= valid_counts.unsqueeze(1)
-            pixel_values = pixel_values.masked_fill(mask.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1), 0)
+            if crops_tensor.numel() > 0:
+                hd_images = torch.cat([crops_tensor, global_view.unsqueeze(0)], dim=0)
+            else:
+                hd_images = global_view.unsqueeze(0)
 
-        if pixel_values.dtype != torch.bfloat16:
-            pixel_values = pixel_values.to(dtype=torch.bfloat16)
+            max_crops = hd_images.size(0)
+            hd_images = self.pad_to_max_num_crops(hd_images, max_crops)
+
+            images_transformed.append(hd_images)
+            images_spatial_crop.append([width_crop_num, height_crop_num])
+            images_tokens.append(tokenized_image_len)
+
+        max_crops = max(img.size(0) for img in images_transformed)
+        images_transformed = [self.pad_to_max_num_crops(im, max_crops) for im in images_transformed]
+        images_transformed = torch.stack(images_transformed, dim=0)
+        images_spatial_crop = torch.tensor(images_spatial_crop, dtype=torch.long)
 
         data = {
-            "pixel_values": pixel_values,
-            "image_spatial_crop": torch.tensor(spatial_crops, dtype=torch.long, device=device),
-            "image_sizes": torch.tensor(original_sizes, dtype=torch.long, device=device),
+            "pixel_values": images_transformed,
+            "image_spatial_crop": images_spatial_crop,
+            "num_img_tokens": images_tokens,
         }
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def extract_coordinates_and_label(self, ref_text, image_width, image_height):
+        """Extract bounding box coordinates and label from model output."""
+        try:
+            label_type = ref_text[1]
+            cor_list = eval(ref_text[2])
+        except Exception as e:
+            logger.warning(f"Failed to extract coordinates: {e}")
+            return None
+
+        return (label_type, cor_list)
+
+    def visualize_results(self, image, ref_texts, output_path):
+        """
+        Visualize results by drawing bounding boxes on the image.
+
+        Args:
+            image: PIL Image
+            ref_texts: list of reference texts from model output
+            output_path: path to save the visualization
+
+        Returns:
+            PIL Image with bounding boxes drawn
+        """
+        image_width, image_height = image.size
+
+        img_draw = image.copy()
+        draw = ImageDraw.Draw(img_draw)
+
+        overlay = Image.new("RGBA", img_draw.size, (0, 0, 0, 0))
+        draw2 = ImageDraw.Draw(overlay)
+
+        try:
+            font = ImageFont.load_default()
+        except Exception:
+            font = None
+
+        img_idx = 0
+
+        for i, ref in enumerate(ref_texts):
+            try:
+                result = self.extract_coordinates_and_label(ref, image_width, image_height)
+                if result:
+                    label_type, points_list = result
+
+                    color = (
+                        np.random.randint(0, 200),
+                        np.random.randint(0, 200),
+                        np.random.randint(0, 255),
+                    )
+                    color_a = color + (20,)
+
+                    for points in points_list:
+                        x1, y1, x2, y2 = points
+
+                        x1 = int(x1 / 999 * image_width)
+                        y1 = int(y1 / 999 * image_height)
+                        x2 = int(x2 / 999 * image_width)
+                        y2 = int(y2 / 999 * image_height)
+
+                        if label_type == "image":
+                            try:
+                                cropped = image.crop((x1, y1, x2, y2))
+                                cropped.save(f"{output_path}/images/{img_idx}.jpg")
+                            except Exception as e:
+                                logger.warning(f"Failed to save cropped image: {e}")
+                            img_idx += 1
+
+                        try:
+                            if label_type == "title":
+                                draw.rectangle([x1, y1, x2, y2], outline=color, width=4)
+                                draw2.rectangle([x1, y1, x2, y2], fill=color_a, outline=(0, 0, 0, 0), width=1)
+                            else:
+                                draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
+                                draw2.rectangle([x1, y1, x2, y2], fill=color_a, outline=(0, 0, 0, 0), width=1)
+
+                            text_x = x1
+                            text_y = max(0, y1 - 15)
+
+                            if font:
+                                text_bbox = draw.textbbox((0, 0), label_type, font=font)
+                                text_width = text_bbox[2] - text_bbox[0]
+                                text_height = text_bbox[3] - text_bbox[1]
+                                draw.rectangle(
+                                    [text_x, text_y, text_x + text_width, text_y + text_height],
+                                    fill=(255, 255, 255, 30),
+                                )
+                                draw.text((text_x, text_y), label_type, font=font, fill=color)
+                        except Exception as e:
+                            logger.warning(f"Failed to draw bounding box: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to process reference: {e}")
+                continue
+
+        img_draw.paste(overlay, (0, 0), overlay)
+        return img_draw
 
 
 __all__ = ["DeepseekOcrImageProcessorFast"]
