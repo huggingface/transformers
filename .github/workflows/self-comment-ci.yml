@@ -195,7 +195,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check report
-        run: echo "${{ needs.model-ci.outputs.report }}"
+        run: |
+          echo "${{ needs.model-ci.result }}"
+          echo "${{ needs.model-ci.outputs.report }}"
 
   report:
     name: Check & Report
