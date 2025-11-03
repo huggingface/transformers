@@ -1641,6 +1641,12 @@ class EmbeddingAccessMixin:
             self.lm_head = new_embeddings
 
 
+def _get_lowest_module(module):
+    if len(list(module.children())) == 0:
+        return module
+    return _get_lowest_module(list(module.children())[0])
+
+
 class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
@@ -2575,11 +2581,36 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
 
+        vision_module_attributes = [
+            "vision_tower",
+            "vision_model",
+            "visual",
+            "vision_encoder",
+            "image_encoder",
+        ]
+
+        vision_module = None
+        for attribute_name in vision_module_attributes:
+            if hasattr(self, attribute_name):
+                vision_module = getattr(self, attribute_name)
+            elif hasattr(self, "model") and hasattr(self.model, attribute_name):
+                vision_module = getattr(self.model, attribute_name)
+
+            if vision_module is not None:
+                break
+
+        if vision_module is not None:
+            self._vision_require_grads_hook = _get_lowest_module(vision_module).register_forward_hook(
+                make_inputs_require_grads
+            )
+
     def disable_input_require_grads(self):
         """
         Removes the `_require_grads_hook`.
         """
         self._require_grads_hook.remove()
+        if hasattr(self, "_vision_require_grads_hook"):
+            self._vision_require_grads_hook.remove()
 
     def get_decoder(self):
         """
