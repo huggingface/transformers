@@ -188,6 +188,15 @@ jobs:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
     secrets: inherit
 
+  check_report:
+    name: Check report
+    needs: [get-pr-number, check-timestamps, create_run, model-ci, quantization-ci]
+    if: ${{ always() && needs.create_run.result == 'success' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check report
+        run: echo "${{ needs.model-ci.outputs.report }}"
+
   report:
     name: Check & Report
     needs: [get-pr-number, check-timestamps, create_run, model-ci, quantization-ci]

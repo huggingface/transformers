@@ -560,3 +560,11 @@ jobs:
       pr_number: ${{ inputs.pr_number }}
 
     secrets: inherit
+
+  check_report:
+    name: Check report
+    runs-on: ubuntu-22.04
+    needs: check_new_failures
+    steps:
+      - name: Install transformers
+        run: echo "${{ needs.check_new_failures.outputs.report }}"
