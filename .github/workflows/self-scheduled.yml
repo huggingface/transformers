@@ -60,7 +60,7 @@ env:
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
-  NUM_SLICES: 1
+  NUM_SLICES: 2
 
 jobs:
   setup:
