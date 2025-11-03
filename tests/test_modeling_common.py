@@ -23,7 +23,7 @@ import tempfile
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
-
+from copy import deepcopy
 import numpy as np
 import pytest
 from packaging import version
@@ -254,14 +254,11 @@ def _test_eager_matches_sdpa_inference(
             if hasattr(config, "use_mask_token") or "use_mask_token" in inspect.signature(model.__init__).parameters:
                 model_from_pretrained_kwargs["use_mask_token"] = True
 
-            # TODO: remove this try/except, models should have a shared API
-            try:
-                model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="sdpa")
-            except ValueError:
-                model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs)
+            model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="sdpa")
             model_sdpa = model_sdpa.eval().to(torch_device)
 
-            model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
+            model_eager = deepcopy(model_sdpa)
+            model_eager.set_attn_implementation("eager")
             model_eager = model_eager.eval().to(torch_device)
 
         set_model_for_less_flaky_test(model_eager)
