@@ -20,22 +20,24 @@ from typing import Optional, Union
 import torch
 
 from ...image_processing_utils import get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
-    ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
-    pil_torch_interpolation_mapping,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
+    auto_docstring,
     is_torchvision_available,
     logging,
     requires_backends,
 )
-from .image_processing_fuyu import FuyuBatchFeature
+from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list_of_list_of_images
 
 
 if is_torchvision_available():
@@ -45,52 +47,19 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class FuyuImagesKwargs(ImagesKwargs, total=False):
-    """Keyword arguments for Fuyu image processing."""
-
-    patch_size: Optional[SizeDict]
-
-
+@auto_docstring
 class FuyuImageProcessorFast(BaseImageProcessorFast):
-    """
-    Fast image processor for Fuyu using PyTorch and TorchVision for GPU acceleration.
-    This class handles the image processing part before the main FuyuForCausalLM. In particular, it handles:
-    - Processing Images:
-        Taking a batch of images as input. If the images are variable-sized, it resizes them based on the desired patch
-        dimensions. The image output is always img_h, img_w of (1080, 1920)
-        Then, it patches up these images using the patchify_image function.
-    - Creating Image Input IDs:
-        For each patch, a placeholder ID is given to identify where these patches belong in a token sequence. For
-        variable-sized images, each line of patches is terminated with a newline ID.
-    - Image Patch Indices:
-        For each image patch, the code maintains an index where these patches should be inserted in a token stream.
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image to `size`.
-        size (`dict[str, int]`, *optional*, defaults to `{"height": 1080, "width": 1920}`):
-            Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to `size`.
-        padding_value (`float`, *optional*, defaults to 1.0):
-            The value to pad the image with.
-        padding_mode (`str`, *optional*, defaults to `"constant"`):
-            The padding mode to use when padding the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float`, *optional*, defaults to 0.5):
-            The mean to use when normalizing the image.
-        image_std (`float`, *optional*, defaults to 0.5):
-            The standard deviation to use when normalizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image.
-        rescale_factor (`float`, *optional*, defaults to `1 / 255`):
-            The factor to use when rescaling the image.
-        patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 30, "width": 30}`):
-            Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
-    """
-
+    do_resize = True
+    size = {"height": 1080, "width": 1920}
+    resample = PILImageResampling.BILINEAR
+    do_pad = True
+    padding_value = 1.0
+    padding_mode = "constant"
+    do_normalize = True
+    image_mean = 0.5
+    image_std = 0.5
+    do_rescale = True
+    rescale_factor = 1 / 255
     model_input_names = [
         "images",
         "image_input_ids",
@@ -100,35 +69,13 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
     ]
     valid_kwargs = FuyuImagesKwargs
 
-    def __init__(
+    def _prepare_images_structure(
         self,
-        do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_pad: bool = True,
-        padding_value: float = 1.0,
-        padding_mode: str = "constant",
-        do_normalize: bool = True,
-        image_mean: Union[float, list[float]] = 0.5,
-        image_std: Union[float, list[float]] = 0.5,
-        do_rescale: bool = True,
-        rescale_factor: float = 1 / 255,
-        patch_size: Optional[dict[str, int]] = None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.do_resize = do_resize
-        self.size = size if size is not None else {"height": 1080, "width": 1920}
-        self.resample = resample
-        self.do_pad = do_pad
-        self.padding_value = padding_value
-        self.padding_mode = padding_mode
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if isinstance(image_mean, list) else [image_mean]
-        self.image_std = image_std if isinstance(image_std, list) else [image_std]
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.patch_size = patch_size if patch_size is not None else {"height": 30, "width": 30}
+        images: ImageInput,
+        expected_ndims: int = 3,
+    ) -> ImageInput:
+        images = self.fetch_images(images)
+        return make_list_of_list_of_images(images)
 
     def resize(
         self,
@@ -165,98 +112,79 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         new_height = int(image_height * optimal_scale_factor)
         new_width = int(image_width * optimal_scale_factor)
 
-        return F.resize(image, [new_height, new_width], interpolation=interpolation, antialias=antialias)
-
-    def pad_image(
-        self,
-        image: torch.Tensor,
-        size: SizeDict,
-        constant_values: float = 1.0,
-        padding_mode: str = "constant",
-        **kwargs,
-    ) -> torch.Tensor:
-        """
-        Pad an image to `(size["height"], size["width"])` with padding added to bottom and right.
-
-        Args:
-            image (`torch.Tensor`):
-                Image to pad.
-            size (`SizeDict`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            constant_values (`float`, *optional*, defaults to 1.0):
-                The constant value to use for padding.
-            padding_mode (`str`, *optional*, defaults to "constant"):
-                The padding mode to use.
-        """
-        image_height, image_width = image.shape[-2:]
-        target_height, target_width = size.height, size.width
-        padding_bottom = target_height - image_height
-        padding_right = target_width - image_width
-        if padding_bottom == 0 and padding_right == 0:
-            return image
-        # F.pad expects (left, top, right, bottom) but we only pad bottom and right
-        padding = (0, 0, padding_right, padding_bottom)
-        return F.pad(image, padding, fill=constant_values, padding_mode=padding_mode)
+        return super().resize(
+            image, SizeDict(height=new_height, width=new_width), interpolation=interpolation, antialias=antialias
+        )
 
     def _preprocess(
         self,
-        images: list[torch.Tensor],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: Optional[bool],
-        pad_size: Optional[SizeDict],
+        padding_value: Optional[float],
+        padding_mode: Optional[str],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
-        patch_size: Optional[SizeDict] = None,
         **kwargs,
     ) -> FuyuBatchFeature:
-        """
-        Preprocess images for Fuyu model.
-        """
-        # Store original image sizes before any transformations
-        original_image_sizes = [get_image_size(img, channel_dim=ChannelDimension.FIRST) for img in images]
-        # Resize images if needed
-        resized_images = []
-        for img in images:
+        # Group images by size for batched resizing
+        original_image_sizes = [batch_image[0].shape[-2:] for batch_image in images if batch_image]
+        grouped_images, grouped_images_index = group_images_by_shape(
+            images, disable_grouping=disable_grouping, is_nested=True
+        )
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
             if do_resize:
-                img = self.resize(img, size=size, interpolation=interpolation)
-            resized_images.append(img)
-        # Get sizes after resize
-        image_sizes = [get_image_size(img, channel_dim=ChannelDimension.FIRST) for img in resized_images]
-        image_unpadded_heights = [[h] for h, w in image_sizes]
-        image_unpadded_widths = [[w] for h, w in image_sizes]
-        # Calculate scale factors (scale_h == scale_w due to aspect ratio preservation)
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
+
+        image_sizes = [batch_image[0].shape[-2:] for batch_image in resized_images if batch_image]
+        image_unpadded_heights = [[image_size[0]] for image_size in image_sizes]
+        image_unpadded_widths = [[image_size[1]] for image_size in image_sizes]
         image_scale_factors = [
             [resized_size[0] / original_size[0]]
             for original_size, resized_size in zip(original_image_sizes, image_sizes)
         ]
-        # Pad images
-        processed_images = []
-        for img in resized_images:
-            if do_pad:
-                img = self.pad_image(
-                    img, size=size, constant_values=self.padding_value, padding_mode=self.padding_mode
-                )
-            # Rescale and normalize
-            img = self.rescale_and_normalize(img, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            processed_images.append(img)
-        # Wrap each image in a list to maintain expected structure for Fuyu
-        batch_images = [[img] for img in processed_images]
-        data = {
-            "images": batch_images,
-            "image_unpadded_heights": image_unpadded_heights,
-            "image_unpadded_widths": image_unpadded_widths,
-            "image_scale_factors": image_scale_factors,
-        }
-        return FuyuBatchFeature(data=data, tensor_type=return_tensors)
+        if do_pad:
+            resized_images = self.pad(
+                resized_images,
+                pad_size=size,
+                fill_value=padding_value,
+                padding_mode=padding_mode,
+                disable_grouping=disable_grouping,
+                is_nested=True,
+            )
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(
+            resized_images, disable_grouping=disable_grouping, is_nested=True
+        )
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+
+        return FuyuBatchFeature(
+            data={
+                "images": processed_images,
+                "image_unpadded_heights": image_unpadded_heights,
+                "image_unpadded_widths": image_unpadded_widths,
+                "image_scale_factors": image_scale_factors,
+            },
+            tensor_type=return_tensors,
+        )
 
     def get_num_patches(self, image_height: int, image_width: int, patch_size: Optional[SizeDict] = None) -> int:
         """
@@ -438,56 +366,16 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        crop_size: Optional[SizeDict] = None,
-        pad_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Optional[ChannelDimension] = None,
         patch_size: Optional[dict[str, int]] = None,
         **kwargs,
     ) -> dict:
         """
         Process Fuyu-specific kwargs before validation.
         """
-        if kwargs is None:
-            kwargs = {}
-
-        if size is not None:
-            size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
-        if crop_size is not None:
-            crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
-        if pad_size is not None:
-            pad_size = SizeDict(**get_size_dict(size=pad_size, param_name="pad_size"))
-
+        kwargs = super()._further_process_kwargs(**kwargs)
         if patch_size is not None:
             patch_size = SizeDict(**get_size_dict(patch_size, param_name="patch_size"))
-
-        if isinstance(image_mean, list):
-            image_mean = tuple(image_mean)
-        if isinstance(image_std, list):
-            image_std = tuple(image_std)
-
-        if data_format is None:
-            data_format = ChannelDimension.FIRST
-
-        kwargs["size"] = size
-        kwargs["crop_size"] = crop_size
-        kwargs["pad_size"] = pad_size
-        kwargs["image_mean"] = image_mean
-        kwargs["image_std"] = image_std
-        kwargs["data_format"] = data_format
         kwargs["patch_size"] = patch_size
-
-        resample = kwargs.pop("resample", None)
-        if resample is not None:
-            kwargs["interpolation"] = (
-                pil_torch_interpolation_mapping[resample]
-                if isinstance(resample, (PILImageResampling, int))
-                else resample
-            )
-
         return kwargs
 
 

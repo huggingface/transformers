@@ -3,14 +3,19 @@ import unittest
 
 import httpx
 import numpy as np
+import pytest
+from packaging import version
 
-from transformers import is_torch_available, is_vision_available
 from transformers.image_utils import SizeDict
 from transformers.testing_utils import (
     require_torch,
+    require_torch_accelerator,
     require_torchvision,
     require_vision,
+    slow,
+    torch_device,
 )
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin
 
@@ -222,6 +227,27 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         for slow_img, fast_img in zip(encoding_slow.images, encoding_fast.images):
             self._assert_slow_fast_tensors_equivalence(slow_img[0], fast_img[0])
 
+    @slow
+    @require_torch_accelerator
+    @require_vision
+    @pytest.mark.torch_compile_test
+    def test_can_compile_fast_image_processor(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping compilation test as fast image processor is not defined")
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        torch.compiler.reset()
+        input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
+        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        image_processor = torch.compile(image_processor, mode="reduce-overhead")
+        output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+        self._assert_slow_fast_tensors_equivalence(
+            output_eager.images[0][0], output_compiled.images[0][0], atol=1e-4, rtol=1e-4, mean_atol=1e-5
+        )
+
     def test_image_processor_properties(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**self.image_processor_dict)
@@ -367,8 +393,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         small_image = torch.rand(3, 100, 100)
         size_dict = SizeDict(height=180, width=360)
 
-        padded = image_processor_fast.pad_image(small_image, size=size_dict, constant_values=1.0)
-
+        padded = image_processor_fast.pad([small_image], pad_size=size_dict, fill_value=1.0)[0]
         self.assertEqual(padded.shape[1], 180)
         self.assertEqual(padded.shape[2], 360)
 
