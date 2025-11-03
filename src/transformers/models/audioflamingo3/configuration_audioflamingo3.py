@@ -38,19 +38,19 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of mel features used per input features. Should correspond to the value used in the
             `AudioFlamingo3Processor` class.
-        encoder_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of encoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 20):
+        num_attention_heads (`int`, *optional*, defaults to 20):
             Number of attention heads for each attention layer in the Transformer encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 5120):
+        intermediate_size (`int`, *optional*, defaults to 5120):
             Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
+        layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556)
             for more details.
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        d_model (`int`, *optional*, defaults to 1280):
+        hidden_size (`int`, *optional*, defaults to 1280):
             Dimensionality of the layers.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
@@ -61,7 +61,7 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by dividing by sqrt(d_model).
+            Scale embeddings by dividing by sqrt(hidden_size).
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
 
@@ -143,6 +143,10 @@ class AudioFlamingo3Config(PretrainedConfig):
             The config object or dictionary of the text backbone.
         audio_token_id (`int`, *optional*, defaults to 151669):
             The audio token index to encode the audio prompt.
+        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            Activation function used in the projector.
+        projector_bias (`bool`, *optional*, defaults to `True`):
+            Whether to include bias terms in the projector.
 
     Example:
 
