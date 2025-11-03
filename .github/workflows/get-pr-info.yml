@@ -39,6 +39,9 @@ on:
       PR_MERGE_COMMIT_SHA:
         description: "The sha of the merge commit for the pull request (created by GitHub) in the base repository"
         value: ${{ jobs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
+      PR_MERGE_COMMIT_BASE_SHA:
+        description: "The sha of the parent commit of the the merge commit on the target branch in the base repository"
+        value: ${{ jobs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
       PR_HEAD_COMMIT_DATE:
         description: "The date of the head sha of the pull request branch in the head repository"
         value: ${{ jobs.get-pr-info.outputs.PR_HEAD_COMMIT_DATE }}
@@ -74,6 +77,7 @@ jobs:
       PR_BASE_REF: ${{ steps.pr_info.outputs.base_ref }}
       PR_HEAD_SHA: ${{ steps.pr_info.outputs.head_sha }}
       PR_BASE_SHA: ${{ steps.pr_info.outputs.base_sha }}
+      PR_MERGE_COMMIT_BASE_SHA: ${{ steps.pr_info.outputs.merge_commit_base_sha }}
       PR_MERGE_COMMIT_SHA: ${{ steps.pr_info.outputs.merge_commit_sha }}
       PR_HEAD_COMMIT_DATE: ${{ steps.pr_info.outputs.head_commit_date }}
       PR_MERGE_COMMIT_DATE: ${{ steps.pr_info.outputs.merge_commit_date }}
@@ -122,6 +126,7 @@ jobs:
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('head_sha', pr.head.sha);
             core.setOutput('base_sha', pr.base.sha);
+            core.setOutput('merge_commit_base_sha', merge_commit.parents[0].sha);
             core.setOutput('merge_commit_sha', pr.merge_commit_sha);
             core.setOutput('pr', pr);
 
@@ -140,6 +145,10 @@ jobs:
               merge_commit: merge_commit,
               commit: merge_commit.commit,
               date: merge_commit.commit.committer.date
+            });
+
+            console.log('PR Info:', {
+              pr_info: pr
             });
 
       - name: Convert dates to timestamps
