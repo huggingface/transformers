@@ -807,7 +807,7 @@ class ContinuousBatchingManager:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
-    def stop(self, block: bool = False, timeout: Optional[float] = None) -> None:
+    def stop(self, block: bool = True, timeout: Optional[float] = None) -> None:
         """Signal the background thread to stop.
 
         Args:
