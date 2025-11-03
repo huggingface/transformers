@@ -34,6 +34,8 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        cls.from_pretrained_id = "studio-ousia/mluke-base"
+        cls.tokenizer_class = MLukeTokenizer
 
         cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
 

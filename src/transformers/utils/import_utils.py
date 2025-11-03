@@ -2191,6 +2191,19 @@ class _LazyModule(ModuleType):
                     f"Could not import module '{name}'. Are this object's requirements defined correctly?"
                 ) from e
         else:
+            # V5: If a *TokenizerFast symbol is requested but not present in the import structure,
+            # try to resolve to the corresponding non-Fast symbol's module if available.
+            if name.endswith("TokenizerFast"):
+                fallback_name = name[:-4]
+                if fallback_name in self._class_to_module:
+                    try:
+                        fb_module = self._get_module(self._class_to_module[fallback_name])
+                        value = getattr(fb_module, fallback_name)
+                        setattr(self, fallback_name, value)
+                        setattr(self, name, value)
+                        return value
+                    except Exception:
+                        pass
             value = None
             for key, values in self._explicit_import_shortcut.items():
                 if name in values:
