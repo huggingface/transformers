@@ -13,9 +13,6 @@ ARG PYTORCH='2.8.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 
-# This needs to be compatible with the above `PYTORCH`. Let's use cpu version for now.
-ARG TORCHCODEC='0.7.0'
-
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
 RUN python3 -m pip install --no-cache-dir --upgrade pip
@@ -27,9 +24,7 @@ RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; 
 RUN echo torch=$VERSION
 # `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
 # Currently, let's just use their latest releases (when `torch` is installed with a release version)
-RUN set -e; \
-    python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA; \
-    python3 -m pip install --no-cache-dir -U torchcodec==${TORCHCODEC}.* --extra-index-url https://download.pytorch.org/whl/cpu;
+RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
