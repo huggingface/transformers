@@ -489,10 +489,6 @@ def convert_and_load_state_dict_in_model(
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
 
-    if isinstance(model._tied_weights_keys, list):
-        for k in model._tied_weights_keys:
-            missing_keys.discard(k)
-
     misc = {}
     mismatch_keys = set()
     unexpected_keys = set()

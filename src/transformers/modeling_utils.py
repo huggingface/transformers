@@ -4624,7 +4624,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         device_mesh,
                     )
 
-        # Remove potential model-specific exceptions from the warnings
+        # Remove tied weights keys and etc
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict
         )
@@ -4902,8 +4902,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.initialize_weights()
 
     def _adjust_missing_and_unexpected_keys(
-        self, missing_keys: list[str], unexpected_keys: list[str], loading_task_model_from_base_state_dict: bool
-    ) -> tuple[list[str], list[str]]:
+        self, missing_keys: set[str], unexpected_keys: set[str], loading_task_model_from_base_state_dict: bool
+    ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
         """
@@ -4912,7 +4912,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns
         has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())
         additional_unexpected_patterns = [r"rotary_emb\.inv_freq"] if has_inv_freq_buffers else []
-
+        if isinstance(self._tied_weights_keys, list):
+            for k in self._tied_weights_keys:
+                missing_keys.discard(k)
         missing_patterns = self._keys_to_ignore_on_load_missing or []
         unexpected_patterns = (self._keys_to_ignore_on_load_unexpected or []) + additional_unexpected_patterns
         ignore_missing_regex, ignore_unexpected_regex = None, None
@@ -4923,17 +4925,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Clean-up missing keys
         if ignore_missing_regex is not None:
-            missing_keys = [key for key in missing_keys if ignore_missing_regex.search(key) is None]
+            missing_keys = {key for key in missing_keys if ignore_missing_regex.search(key) is None}
 
         # Clean-up unexpected keys
         if ignore_unexpected_regex is not None:
-            unexpected_keys = [key for key in unexpected_keys if ignore_unexpected_regex.search(key) is None]
+            unexpected_keys = {key for key in unexpected_keys if ignore_unexpected_regex.search(key) is None}
 
         # Note: only the unexpected keys should remove the added prefix here, to correctly display the original name
         # in the warnings. For missing keys, we should show the prefix in the warning as it's part of the final model
         if loading_task_model_from_base_state_dict:
             _prefix = f"{self.base_model_prefix}."
-            unexpected_keys = [k.removeprefix(_prefix) for k in unexpected_keys]
+            unexpected_keys = {k.removeprefix(_prefix) for k in unexpected_keys}
 
         return missing_keys, unexpected_keys
 
