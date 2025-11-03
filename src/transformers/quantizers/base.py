@@ -117,6 +117,7 @@ class HfQuantizer(ABC):
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
+        self.metadata = {}
 
         # -- Handle extra kwargs below --
         self.modules_to_not_convert = kwargs.pop("modules_to_not_convert", [])
@@ -391,10 +392,6 @@ class HfQuantizer(ABC):
     def get_state_dict_and_metadata(self, model, safe_serialization=False):
         """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
         return None, {}
-
-    def update_state_dict_with_metadata(self, state_dict, metadata):
-        """Update state dict with metadata. Default behaviour returns state_dict"""
-        return state_dict
 
     @abstractmethod
     def is_serializable(self, safe_serialization=None): ...
