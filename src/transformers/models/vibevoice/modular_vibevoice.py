@@ -16,6 +16,7 @@
 from dataclasses import dataclass
 from typing import Optional, Union
 
+import math
 import torch
 import torch.distributed as dist
 import torch.nn as nn
@@ -151,17 +152,27 @@ class TimestepEmbedder(nn.Module):
         self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.frequency_embedding_size = config.frequency_embedding_size
 
+    # Original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_diffusion_head.py#L66    
+    @staticmethod
+    def timestep_embedding(timesteps, dim, max_period=10000):
+        half = dim // 2
+        
+        # NOTE (ebezzam) Use Llama's device handling pattern
+        device_type = timesteps.device.type if isinstance(timesteps.device.type, str) and timesteps.device.type != "mps" else "cpu"
+        
+        with torch.autocast(device_type=device_type, enabled=False):  # NOTE (ebezzam) Force float32 like Llama
+            freqs = torch.exp(
+                -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
+            ).to(timesteps.device)
+            args = timesteps[:, None].float() * freqs[None]
+            embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+            
+        if dim % 2:
+            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+        return embedding.to(timesteps.dtype)
+
     def forward(self, timesteps):
-        # NOTE (ebezzam) using diffuser method like below instead of their custom method: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_diffusion_head.py#L66
-        requires_backends(self, ["diffusers"])
-        t_freq = diffusers.models.embeddings.get_timestep_embedding(
-            timesteps=timesteps,
-            embedding_dim=self.frequency_embedding_size,
-            flip_sin_to_cos=True,
-            downscale_freq_shift=0,
-            scale=1.0,
-            max_period=10000,
-        ).to(timesteps.dtype)
+        t_freq = self.timestep_embedding(timesteps, dim=self.frequency_embedding_size)
         return self.layer_2(self.act(self.layer_1(t_freq)))
 
 
