@@ -65,7 +65,7 @@ conversation = [
         "role": "user",
         "content": [
             {"type": "text", "text": "Transcribe the input speech."},
-            {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/WhDJDIviAOg_120_10.mp3"},
+            {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/WhDJDIviAOg_120_10.mp3"},
         ],
     }
 ]
@@ -102,7 +102,7 @@ conversation = [
                 "type": "text",
                 "text": "Instruction: How does the tone of female speech change throughout the audio? Choose the correct option among the options below: (A) Sad to happy (B) Happy to sad (C) Neutral to happy (D) Happy to neutral.",
             },
-            {"type": "audio", "path": "https://audioflamingo3.github.io/static/long_audio/000000786159.31.wav"},
+            {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/000000786159.31.wav"},
         ],
     },
     {
@@ -178,7 +178,7 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/WhDJDIviAOg_120_10.mp3"},
+            {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/WhDJDIviAOg_120_10.mp3"},
         ],
     }
 ]
@@ -215,7 +215,7 @@ conversations = [
                 {"type": "text", "text": "Transcribe the input speech."},
                 {
                     "type": "audio",
-                    "path": "https://audioflamingo3.github.io/static/long_speech/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
+                    "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
                 },
             ],
         }
@@ -228,7 +228,7 @@ conversations = [
                     "type": "text",
                     "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
                 },
-                {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/FPSbCAANfbJLVSwD.mp3"},
+                {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/FPSbCAANfbJLVSwD.mp3"},
             ],
         }
     ],
@@ -258,7 +258,7 @@ MODEL_ID = "nvidia/audio-flamingo-3-hf"
 processor = AutoProcessor.from_pretrained(MODEL_ID)
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(MODEL_ID, device_map="auto")
 
-inputs = processor.apply_transcription_request(audio="https://audioflamingo3.github.io/static/long_speech/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav").to(model.device)
+inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav").to(model.device)
 
 generated = model.generate(**inputs)
 transcription = processor.batch_decode(generated[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)

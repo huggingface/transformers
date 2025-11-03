@@ -144,7 +144,7 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://audioflamingo3.github.io/static/emergent/Dogs%20barking%20in%20sync%20with%20the%20music.wav",
+                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
                     },
                 ],
             }
@@ -158,7 +158,7 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_transcription_request_single(self):
         processor = AutoProcessor.from_pretrained(self.checkpoint)
 
-        audio_url = "https://audioflamingo3.github.io/static/long_speech/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav"
+        audio_url = "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav"
         helper_outputs = processor.apply_transcription_request(audio=audio_url)
 
         conversation = [

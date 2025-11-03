@@ -265,7 +265,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://audioflamingo3.github.io/static/emergent/Dogs%20barking%20in%20sync%20with%20the%20music.wav",
+                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
                     },
                 ],
             }
@@ -310,7 +310,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://audioflamingo3.github.io/static/emergent/Dogs%20barking%20in%20sync%20with%20the%20music.wav",
+                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
                         },
                     ],
                 }
@@ -325,7 +325,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://audioflamingo3.github.io/static/emergent/Unlikely%20existence%20of%20banjo%20and%20rain%20sounds%20at%20the%20same%20time%20in%20the%20training%20data.wav",
+                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/unlikely_existence_of_banjo_and_rain_sounds_at_the_same_time_in_the_training_data.wav",
                         },
                     ],
                 }
