@@ -1,13 +1,15 @@
 from typing import TYPE_CHECKING, Optional
 
-from ..integrations.finegrained_fp8 import replace_with_fp8_linear
-from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging, is_triton_available
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
 
 if is_torch_available():
     import torch
+
+if is_triton_available():
+    from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
