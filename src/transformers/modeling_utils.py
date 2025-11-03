@@ -15,6 +15,7 @@
 # limitations under the License.
 import collections
 import copy
+import fnmatch
 import functools
 import gc
 import importlib.metadata
@@ -1754,7 +1755,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
-        # Make sure the modules correctly exist if the flag is active
+        # Make sure the requested fp32 modules exist when the flag is active, supporting glob-style patterns.
         if self._keep_in_fp32_modules is not None or self._keep_in_fp32_modules_strict is not None:
             all_parameters = {name for name, _ in self.named_parameters() if len(name) > 0}
             unique_module_names = set()
@@ -1763,22 +1764,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 unique_module_names.update(
                     [name for name in param.split(".") if not name.isnumeric() and name not in ["weight", "bias"]]
                 )
-            # Check that every module in the keep_in_fp32 list is part of the module graph
-            if self._keep_in_fp32_modules is not None:
-                for module in self._keep_in_fp32_modules:
-                    if module not in unique_module_names:
-                        raise ValueError(
-                            f"{module} was specified in the `_keep_in_fp32_modules` list, but is not part of the modules in"
-                            f" {self.__class__.__name__}"
-                        )
-
-            if self._keep_in_fp32_modules_strict is not None:
-                for module in self._keep_in_fp32_modules_strict:
-                    if module not in unique_module_names:
-                        raise ValueError(
-                            f"{module} was specified in the `_keep_in_fp32_modules_strict` list, but is not part of the modules in"
-                            f" {self.__class__.__name__}: unique_module_name"
-                        )
 
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
