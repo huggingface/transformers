@@ -892,6 +892,7 @@ class ContinuousBatchingManager:
         if self.batch_processor is not None:
             self.batch_processor.scheduler.set_request_cancellation(request_id)
 
+    # TODO:handle benchmarking properly when updating / fixing the requeue logic
     def get_result(
         self, request_id: Optional[str] = None, timeout: Optional[float] = None
     ) -> Optional[GenerationOutput]:
@@ -907,6 +908,7 @@ class ContinuousBatchingManager:
             return None
         try:
             result = self.output_queue.get(block=True, timeout=timeout)
+            # NOTE: requeue logic here
             if request_id is not None and result.request_id != request_id:
                 self.output_queue.put(result)
                 return None
@@ -1094,6 +1096,7 @@ class ContinuousMixin:
             num_kv_cuda_graphs=num_kv_cuda_graphs,
         )
 
+    # TODO: support streaming
     @traced
     @torch.inference_mode()
     def generate_batch(
@@ -1150,7 +1153,7 @@ class ContinuousMixin:
                         result = manager.get_result(timeout=1)
                         if result:
                             req_id = result.request_id
-                            if result.status == RequestStatus.FINISHED:
+                            if result.is_finished():
                                 results[req_id] = result
                                 finished_count += 1
                                 pbar.update(1)
