@@ -20,7 +20,7 @@ from ..utils import logging
 from ..utils.export_config import DynamoConfig
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 from .base import HfExporter
-from .utils import patch_masks_for_export, register_dynamic_cache_export_support
+from .utils import patch_masks_for_export, register_dynamic_cache_for_export
 
 
 if is_torch_available():
@@ -60,7 +60,7 @@ class DynamoExporter(HfExporter):
         dynamic_shapes = self.export_config.dynamic_shapes
 
         if isinstance(model, GenerationMixin) and model.config.use_cache:
-            register_dynamic_cache_export_support()
+            register_dynamic_cache_for_export()
 
             # NOTE: for now i'm creating it here reduces to reduce user burden
             kwargs["past_key_values"] = model(**kwargs).past_key_values
