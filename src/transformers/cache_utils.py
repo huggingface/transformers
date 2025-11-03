@@ -88,6 +88,7 @@ class DynamicLayer(CacheLayerMixin):
     """
 
     is_sliding = False
+    is_compileable = True
 
     def lazy_initialization(self, key_states: torch.Tensor):
         self.dtype, self.device = key_states.dtype, key_states.device
@@ -163,6 +164,12 @@ class DynamicLayer(CacheLayerMixin):
             self.keys = self.keys[indices, ...]
             self.values = self.values[indices, ...]
 
+    def mark_dynamic_for_compile(self):
+        """Marks the seq length of KV tensors dynamic for torch.compile."""
+        if self.get_seq_length() > 0:
+            torch._dynamo.mark_dynamic(self.keys, 2)
+            torch._dynamo.mark_dynamic(self.values, 2)
+
 
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
@@ -175,6 +182,9 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def __init__(self, sliding_window: int):
         super().__init__()
         self.sliding_window = sliding_window
+        # Note: torch.compile has a recompilation when this value is updated. To circumvent it, we use a compile
+        # trick based on this variable name, while waiting for a more stable torch.symint like API from torch
+        # Thus this should not be renamed, or the model compilation should be updated accordingly
         self.cumulative_length = 0
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
 
@@ -377,6 +387,9 @@ class StaticSlidingWindowLayer(StaticLayer):
     def __init__(self, max_cache_len: int, sliding_window: int):
         effective_max_cache_len = min(sliding_window, max_cache_len)
         super().__init__(max_cache_len=effective_max_cache_len)
+        # Note: torch.compile has a recompilation when this value is updated. To circumvent it, we use a compile
+        # trick based on this variable name, while waiting for a more stable torch.symint like API from torch
+        # Thus this should not be renamed, or the model compilation should be updated accordingly
         self.cumulative_length = 0
 
     def update(
@@ -999,6 +1012,28 @@ class DynamicCache(Cache):
     def __iter__(self):
         for layer in self.layers:
             yield layer.keys, layer.values, getattr(layer, "_sliding_window_tensor", None)
+
+    def add_torch_size_checks(self):
+        """
+        Insert torch._checks size asserts to assist torch.compile dynamic shape infra to reuse same symbolic shape
+        for different layers in the DynamiCache. Here, we collect the layers that are of same type, and add checks
+        on them.
+        """
+        # We need to separate each type of layers in the Cache, i.e. sliding layers or not
+        dynamic_dim_per_type = {}
+        for layer in self.layers:
+            if layer.__class__ not in dynamic_dim_per_type:
+                dynamic_dim = layer.keys.size(2)
+                dynamic_dim_per_type[layer.__class__] = dynamic_dim
+            else:
+                dynamic_dim = dynamic_dim_per_type[layer.__class__]
+            torch._check(layer.keys.size(2) == dynamic_dim)
+            torch._check(layer.keys.values(2) == dynamic_dim)
+
+    def mark_dynamic_for_compile(self):
+        """Set the `seq_length` dim of each layer as dynamic for dynamo tracing."""
+        for layer in self.layers:
+            layer.mark_dynamic_for_compile()
 
 
 class StaticCache(Cache):
