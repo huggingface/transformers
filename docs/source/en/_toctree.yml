@@ -119,6 +119,8 @@
     title: Tools
   - local: transformers_as_backend
     title: Inference server backends
+  - local: continuous_batching
+    title: Continuous Batching
   title: Inference
 - isExpanded: false
   sections:
