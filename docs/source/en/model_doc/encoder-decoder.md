@@ -164,3 +164,49 @@ print("Translated text:", translated_text)
 [[autodoc]] EncoderDecoderModel
     - forward
     - from_encoder_decoder_pretrained
+
+## How to Create an EncoderDecoderModel
+
+You can create an Encoder-Decoder model by combining a pretrained encoder and decoder using `from_encoder_decoder_pretrained()`:
+
+```python
+from transformers import EncoderDecoderModel, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+    "bert-base-uncased",
+    "bert-base-uncased"
+)
+
+# Save the model and tokenizer
+model.save_pretrained("./my_encoder_decoder_model")
+tokenizer.save_pretrained("./my_encoder_decoder_model")
+
+
+## Fine-tuning an EncoderDecoderModel
+
+Fine-tune the model like any other encoder-decoder architecture (e.g., BART, T5):
+
+```python
+from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments
+
+training_args = Seq2SeqTrainingArguments(
+    output_dir="./results",
+    evaluation_strategy="epoch",
+    learning_rate=2e-5,
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=4,
+    num_train_epochs=3,
+    weight_decay=0.01,
+)
+
+trainer = Seq2SeqTrainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,   # your dataset here
+    eval_dataset=eval_dataset
+)
+
+trainer.train()
+
+⚠️ Warning: Ensure that config values such as decoder_start_token_id, pad_token_id, and vocab_size are correctly aligned between the encoder and decoder configurations. Mis-setting these can lead to dimension mismatches or generation errors (see issue #15479).
