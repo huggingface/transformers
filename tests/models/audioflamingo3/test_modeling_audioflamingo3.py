@@ -237,6 +237,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
+        cleanup(torch_device, gc_collect=True)
         cls.checkpoint = "nvidia/audio-flamingo-3-hf"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
 
@@ -270,11 +271,15 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
             }
         ]
 
-        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint, device_map=torch_device)
+        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
+            self.checkpoint,
+            device_map=torch_device,
+            dtype=torch.float32,
+        ).eval()
 
         batch = self.processor.apply_chat_template(
             conversation, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(torch_device)
+        ).to(model.device)
         seq = model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
@@ -327,11 +332,15 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
             ],
         ]
 
-        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint, device_map=torch_device)
+        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
+            self.checkpoint,
+            device_map=torch_device,
+            dtype=torch.float32,
+        ).eval()
 
         batch = self.processor.apply_chat_template(
             conversations, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(torch_device)
+        ).to(model.device)
         seq = model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
