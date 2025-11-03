@@ -1,9 +1,8 @@
 # src/transformers/quantizers/quantizer_sinq.py
 from __future__ import annotations
 import importlib
-from typing import Dict, List, Set, Tuple, Optional
-import time
-from contextlib import contextmanager
+import os
+from typing import Dict, List, Set, Tuple, Optional, Any, Callable
 
 import torch
 import torch.nn as nn
@@ -18,12 +17,96 @@ try:
 except Exception:  # pragma: no cover
     logger = None
 
+# ------------------------------------------------------------------------------------
+# HF I/O autopatch (lazy import)
+# ------------------------------------------------------------------------------------
+
+_PATCHED_HF_IO: bool = False          # True once patch is applied (idempotent)
+_patch_func: Optional[Callable] = None
+_unpatch_func: Optional[Callable] = None
+
+def _env_truthy(name: str, default: str = "1") -> bool:
+    v = os.getenv(name, default)
+    return str(v).strip().lower() not in ("0", "false", "no", "off", "")
+
+def _resolve_patchers(cfg: Optional[SinqConfig]) -> None:
+    """
+    Lazily import a module that exports:
+      - patch_hf_pretrained_io()
+      - unpatch_hf_pretrained_io()
+    Priority:
+      1) cfg.hf_io_module (if provided)
+      2) env SINQ_HF_IO_MODULE (default: "sinq.hf_io")
+    We DO NOT mark failure as final; future calls may succeed (avoids one-shot dead-end).
+    """
+    global _patch_func, _unpatch_func
+    if _patch_func is not None and _unpatch_func is not None:
+        return  # already resolved successfully
+
+    module_name = None
+    if cfg is not None and getattr(cfg, "hf_io_module", None):
+        module_name = cfg.hf_io_module
+    if module_name is None:
+        module_name = os.getenv("SINQ_HF_IO_MODULE", "sinq.hf_io")
+
+    try:
+        mod = importlib.import_module(module_name)
+        _patch_func = getattr(mod, "patch_hf_pretrained_io", None)
+        _unpatch_func = getattr(mod, "unpatch_hf_pretrained_io", None)
+        if _patch_func is None:
+            raise AttributeError(f"{module_name} lacks patch_hf_pretrained_io")
+        if _unpatch_func is None and logger:
+            logger.info(f"[SINQ] {module_name} has no unpatch function; continuing.")
+    except Exception as e:
+        # leave funcs as None so we can retry next time
+        if logger:
+            logger.debug(f"[SINQ] Could not resolve HF I/O patchers from {module_name}: {e}")
+
+def _maybe_patch_hf_io(auto: Optional[bool], cfg: Optional[SinqConfig]) -> bool:
+    """
+    Ensure the HF I/O patch is applied.
+    Returns True if HF is (now or already) patched; False if disabled or still unavailable.
+    """
+    global _PATCHED_HF_IO, _patch_func
+
+    if _PATCHED_HF_IO:
+        return True  # already patched
+
+    # Decide whether we're allowed to patch
+    enabled = auto if auto is not None else _env_truthy("SINQ_PATCH_HF_IO", "1")
+    if not enabled:
+        if logger:
+            logger.info("[SINQ] Autopatch disabled (config/env).")
+        return False
+
+    # Try to resolve patchers now (lazy)
+    _resolve_patchers(cfg)
+    if _patch_func is None:
+        if logger:
+            logger.info("[SINQ] HF I/O patchers not found yet; will retry later.")
+        return False
+
+    # Apply once
+    try:
+        _patch_func()
+        _PATCHED_HF_IO = True
+        if logger:
+            logger.info("[SINQ] Applied HF I/O patch (save/load/push routed conditionally to SINQ).")
+        return True
+    except Exception as e:
+        if logger:
+            logger.warning(f"[SINQ] Failed to apply HF I/O patch: {e}")
+        return False
+
+
+# ------------------------------------------------------------------------------------
+# SINQ dynamic import
+# ------------------------------------------------------------------------------------
 _SINQ_IMPORTED = False
 
-# Import all the relevant functions and classes from SINQ Official repository
 def _import_sinq():
     """
-    Import from the SINQ package.
+    Import from the SINQ package (lazy).
     """
     global _SINQ_IMPORTED, SINQLinear, sinq_base_quant_config_fn
     global awq_get_simple_calibration_data, awq_get_calib_dataset, awq_collect_activations
@@ -33,13 +116,16 @@ def _import_sinq():
         raise ImportError("The 'sinq' package is not installed. Please `pip install sinq` to use SinqConfig.")
 
     from sinq.sinqlinear import SINQLinear, sinq_base_quant_config as sinq_base_quant_config_fn
-
     from sinq.awq import get_simple_calibration_data as awq_get_simple_calibration_data
     from sinq.awq import get_calib_dataset as awq_get_calib_dataset
     from sinq.awq import collect_activations as awq_collect_activations
+
     _SINQ_IMPORTED = True
 
 
+# ------------------------------------------------------------------------------------
+# Quantizer implementation
+# ------------------------------------------------------------------------------------
 class _SinqLoadTimeLinear(nn.Module):
     """
     Placeholder exposing weight/bias for state_dict loading and storing SINQ settings.
@@ -64,6 +150,7 @@ class _SinqLoadTimeLinear(nn.Module):
         self._compute_dtype = compute_dtype
         self._device_str = device_str
 
+
 class SinqHfQuantizer(HfQuantizer):
     """
     Hugging Face Quantizer integration for SINQ
@@ -79,10 +166,14 @@ class SinqHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    # Check that the environment is ok
+    # Check that the environment is ok (and attempt HF I/O autopatch)
     def validate_environment(self, dtype=None, device_map=None, weights_only=None, **kwargs) -> None:
         _import_sinq()
+
         cfg: SinqConfig = self.quantization_config
+        # 🚀 Try autopatch here
+        _maybe_patch_hf_io(getattr(cfg, "auto_patch_io", None), cfg)
+
         if getattr(cfg, "dtype", "auto") not in ("auto", "bfloat16", "float16", "float32"):
             raise ValueError(f"Unsupported dtype: {cfg.dtype}")
         if not torch.cuda.is_available():
@@ -125,8 +216,12 @@ class SinqHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model: nn.Module, **kwargs) -> Tuple[nn.Module, dict]:
         _import_sinq()
-        print("[SINQ] pre-load hook running")  # temp trace
+
+        # 🔁 Second chance autopatch (in case environment ran before patchers were importable)
         cfg: SinqConfig = self.quantization_config
+        _maybe_patch_hf_io(getattr(cfg, "auto_patch_io", None), cfg)
+
+        print("[SINQ] pre-load hook running")  # temp trace
         sinq_quant_dict = self._build_sinq_quant_dict(cfg)
         compute_dtype = self.update_dtype(None)
         to_skip = set(cfg.modules_to_not_convert or [])
@@ -175,21 +270,14 @@ class SinqHfQuantizer(HfQuantizer):
                 else:
                     _gather(child, full, m)
 
-
         _gather(model)
 
         # === Resolve tokenizer (and print model_id) for BOTH SINQ and A-SINQ ===
         def _resolve_tokenizer_and_model_id(model, kwargs, logger):
-            """
-            Try to derive model_id and instantiate a tokenizer.
-            Always prints model_id to stdout, and logs if logger is available.
-            Returns (tokenizer_or_none, model_id_or_none).
-            """
             tok = kwargs.get("tokenizer", None)
             model_id = None
             cache_dir = kwargs.get("cache_dir", None)
             try:
-                # Derive model_id from multiple sources
                 if hasattr(model, "config") and hasattr(model.config, "_name_or_path"):
                     model_id = model.config._name_or_path
                 if model_id is None:
@@ -197,12 +285,10 @@ class SinqHfQuantizer(HfQuantizer):
                 if model_id is None and "config" in kwargs and hasattr(kwargs["config"], "_name_or_path"):
                     model_id = getattr(kwargs["config"], "_name_or_path", None)
 
-                # Print/log what we found (even if None)
                 print(f"[SinqHfQuantizer] Detected model_id = {model_id}", flush=True)
                 if logger:
                     logger.info(f"Detected model_id = {model_id}")
 
-                # If no tokenizer was provided and we have a model_id, try to load one
                 if tok is None and model_id is not None:
                     try:
                         from transformers import AutoTokenizer
@@ -227,35 +313,26 @@ class SinqHfQuantizer(HfQuantizer):
         layer_acts: Dict[str, torch.Tensor] = {}
         if method == "asinq":
             # Swap placeholders -> dense Linear so hooks see real nn.Linear.
-            # Construct directly on device and copy non-blocking from (pinned) CPU tensors.
             for full, ph, parent in placeholders:
-                # Build the Linear on the 'meta' device to avoid allocating any real storage.
-                with torch.inference_mode():  # slightly stricter than no_grad for inference
+                with torch.inference_mode():
                     dense = nn.Linear(
                         ph.in_features,
                         ph.out_features,
                         bias=(ph.bias is not None),
-                        device=torch.device("meta"),                      # <-- no real allocation
-                        dtype=ph._compute_dtype                           # e.g. bf16 to cut size
+                        device=torch.device("meta"),
+                        dtype=ph._compute_dtype
                     )
-
-                    # Move the real tensors once, with final dtype/device, then attach as Parameters.
                     w = ph.weight.detach().to(device, dtype=ph._compute_dtype, non_blocking=True)
                     dense.weight = nn.Parameter(w, requires_grad=False)
-
                     if ph.bias is not None:
                         b = ph.bias.detach().to(device, dtype=ph._compute_dtype, non_blocking=True)
                         dense.bias = nn.Parameter(b, requires_grad=False)
-
                 setattr(parent, full.split(".")[-1], dense)
 
+            model.to(dtype=torch.bfloat16, device=device)
 
-            model.to(dtype=torch.bfloat16, device=device)  # cast for calibration path
-            #model.to(dtype=torch.bfloat16, device=torch.device("cpu"))
-
-            # Ensure PAD exists (e.g., many Qwen configs)
             if tokenizer is not None and getattr(tokenizer, "pad_token_id", None) is None and getattr(tokenizer, "eos_token_id", None) is not None:
-                tokenizer.pad_token = tokenizer.eos_token  # sets pad_token_id too
+                tokenizer.pad_token = tokenizer.eos_token
 
             calib = None
             if tokenizer is not None:
@@ -280,28 +357,21 @@ class SinqHfQuantizer(HfQuantizer):
                         super().__init__()
                         self._base = base
                         self._pad = pad_id
-
                     def forward(self, x):
                         attn = (x != self._pad).to(x.device)
                         return self._base(input_ids=x, attention_mask=attn)
-
                     @property
                     def device(self):
                         try:
                             return next(self._base.parameters()).device
                         except StopIteration:
                             return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
                     def named_modules(self, *args, **kwargs):
                         return self._base.named_modules(*args, **kwargs)
-
                     def eval(self):
-                        self._base.eval()
-                        return self
-
+                        self._base.eval(); return self
                     def train(self, mode: bool = True):
-                        self._base.train(mode)
-                        return self
+                        self._base.train(mode); return self
 
                 wrapped = _WrapHF(model, pad_id)
 
@@ -315,10 +385,6 @@ class SinqHfQuantizer(HfQuantizer):
                     if logger: logger.warning("No calibration data produced; falling back to SINQ.")
                     layer_acts = {}
 
-            if logger and layer_acts:
-                pass  # optional coverage logging could go here
-
-        # Helper: robustly look up activations by exact or suffix match
         def _lookup_acts(name: str) -> Optional[torch.Tensor]:
             if not layer_acts:
                 return None
@@ -332,11 +398,8 @@ class SinqHfQuantizer(HfQuantizer):
         num_asinq = 0
         for full, ph, parent in placeholders:
             cur = getattr(parent, full.split(".")[-1])
-
-            # If already swapped earlier (A-SINQ prep), `cur` is nn.Linear on device.
-            # Otherwise, build directly on device and non-blocking copy from pinned CPU tensors.
             if isinstance(cur, nn.Linear):
-                    dense = cur
+                dense = cur
             else:
                 with torch.no_grad():
                     dense = nn.Linear(ph.in_features, ph.out_features, bias=(ph.bias is not None), device=device)
@@ -353,7 +416,6 @@ class SinqHfQuantizer(HfQuantizer):
 
             acts = _lookup_acts(full) if method == "asinq" else None
 
-            # If A-SINQ requested but this layer has no activations, fallback this layer to SINQ
             quant_dict = ph._sinq_quant_dict
             if method == "asinq" and acts is None:
                 quant_dict = {k: (v.copy() if isinstance(v, dict) else v) for k, v in quant_dict.items()}
@@ -368,12 +430,12 @@ class SinqHfQuantizer(HfQuantizer):
                 compute_dtype=ph._compute_dtype,
                 device=ph._device_str,
                 use_unpack_kernel=False,
-                layer_activations=acts,  # Tensor for A-SINQ layers, None for SINQ fallback
+                layer_activations=acts,
             )
             setattr(parent, full.split(".")[-1], sinq)
 
+        final_dtype = self.update_dtype(None)
         try:
-            final_dtype = self.update_dtype(None)  # bf16/fp16/fp32 depending on cfg and hardware
             if hasattr(model, "device") and (model.device) == torch.device("cpu"):
                 print("I'm resetting the device to cuda")
                 model = model.to(dtype=final_dtype, device=torch.device("cuda"))
@@ -387,6 +449,5 @@ class SinqHfQuantizer(HfQuantizer):
             total = len(placeholders)
             if total > 0:
                 logger.info(f"A-SINQ applied to {num_asinq}/{total} Linear layers ({100.0 * num_asinq / total:.1f}%).")
-                print("[A-SINQ] layers with acts:", sorted(layer_acts.keys())[:5], "…", flush=True)
 
         return model
