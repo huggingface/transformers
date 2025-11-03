@@ -3903,7 +3903,6 @@ class ModelTesterMixin:
                     torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
 
 
-
 @require_torch
 def test_weight_conversion_operations_roundtrip():
     import torch

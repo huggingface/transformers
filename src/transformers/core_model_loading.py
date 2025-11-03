@@ -553,7 +553,7 @@ def convert_and_load_state_dict_in_model(
                     tensor.dtype if isinstance(tensor, torch.Tensor) else str_to_torch_dtype[tensor.get_dtype()]
                 )
                 if dtype != tensor_dtype and dtype is not None:
-                    converter.operations.append(Cast(dtype)) # can this be slow as well?
+                    converter.operations.append(Cast(dtype))  # can this be slow as well?
 
         first_target_key = target_key.split("|")[0]
         future = None
