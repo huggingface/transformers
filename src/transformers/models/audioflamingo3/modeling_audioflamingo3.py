@@ -369,7 +369,8 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         )
 
         # Conv front-end
-        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
+        # TODO (ebezzam) remove after pushing new weights?
+        inputs_embeds = nn.functional.gelu(self.conv1(input_features.to(self.conv1.weight.dtype)))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
 
@@ -432,10 +433,10 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _keep_in_fp32_modules_strict = ["embed_positions"]
+    _tied_weights_keys = None
+    _tp_plan = None
+    _pp_plan = None
+    _keep_in_fp32_modules_strict = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -443,6 +444,9 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.multi_modal_projector = AudioFlamingo3MultiModalProjector(config)
+        # Similar to Qwen2Audio
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
         # Initialize weights and apply final processing
         self.post_init()

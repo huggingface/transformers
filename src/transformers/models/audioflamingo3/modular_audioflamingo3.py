@@ -25,7 +25,10 @@ from ...masking_utils import eager_mask, padding_mask_function
 from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder, Qwen2AudioPreTrainedModel
+from ..qwen2_audio.modeling_qwen2_audio import (
+    Qwen2AudioEncoder,
+    Qwen2AudioPreTrainedModel,
+)
 from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration, VoxtralMultiModalProjector
 from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
 from .configuration_audioflamingo3 import AudioFlamingo3Config
@@ -86,7 +89,8 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         )
 
         # Conv front-end
-        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
+        # TODO (ebezzam) remove after pushing new weights?
+        inputs_embeds = nn.functional.gelu(self.conv1(input_features.to(self.conv1.weight.dtype)))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
 
@@ -134,6 +138,17 @@ class AudioFlamingo3MultiModalProjector(VoxtralMultiModalProjector):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
+    _tied_weights_keys = None
+    _tp_plan = None
+    _pp_plan = None
+    _keep_in_fp32_modules_strict = None
+
+    def __init__(self, config):
+        super().__init__(config)
+        # Similar to Qwen2Audio
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+
     def get_audio_features(
         self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
     ) -> torch.FloatTensor:

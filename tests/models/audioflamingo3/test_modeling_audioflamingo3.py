@@ -274,7 +274,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
             self.checkpoint,
             device_map=torch_device,
-            dtype=torch.float32,
+            dtype=torch.bfloat16,
         ).eval()
 
         batch = self.processor.apply_chat_template(
@@ -335,7 +335,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
             self.checkpoint,
             device_map=torch_device,
-            dtype=torch.float32,
+            dtype=torch.bfloat16,
         ).eval()
 
         batch = self.processor.apply_chat_template(
