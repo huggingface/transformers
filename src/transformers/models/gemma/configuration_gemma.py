@@ -131,7 +131,7 @@ class GemmaConfig(PreTrainedConfig):
         eos_token_id: Optional[int] = 1,
         bos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         use_bidirectional_attention: Optional[bool] = None,
