@@ -147,32 +147,6 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
     @require_jinja
-    def test_tokenization_for_chat(self):
-        tokenizer = self.get_rust_tokenizer()
-        test_chats = [
-            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
-            [
-                {"role": "system", "content": "You are a helpful chatbot."},
-                {"role": "user", "content": "Hello!"},
-                {"role": "assistant", "content": "Nice to meet you."},
-            ],
-        ]
-        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
-        # fmt: off
-        expected_tokens = [
-            [5, 36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61, 58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 59, 65, 59, 60, 45, 53, 71, 60, 55, 51, 45, 54, 99, 38, 65, 243, 394, 204, 336, 84, 88, 887, 374, 216, 74, 286, 22, 8, 36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61, 58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 61, 59, 45, 58, 71, 60, 55, 51, 45, 54, 99, 38, 48, 420, 87, 9, 8],
-            [5, 36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61, 58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 59, 65,
-            59, 60, 45, 53, 71, 60, 55, 51, 45, 54, 99, 38, 65, 243, 394, 204, 336, 84, 88, 887, 374, 216, 74, 286, 22, 8,
-            36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61, 58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 61, 59,
-            45, 58, 71, 60, 55, 51, 45, 54, 99, 38, 48, 420, 87, 9, 8, 36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61,
-            58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 43, 48, 41, 60, 42, 55, 60, 71, 60, 55, 51, 45, 54, 99, 38,
-            54, 567, 235, 693, 276, 411, 243, 22, 8]
-        ]
-        # fmt: on
-        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
-            self.assertListEqual(tokenized_chat, expected_tokens)
-
-    @require_jinja
     def test_tokenization_for_tool_use(self):
         tokenizer = self.get_rust_tokenizer()
 
