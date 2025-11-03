@@ -18,6 +18,7 @@
 import copy
 from dataclasses import dataclass
 from enum import Enum
+from os import PathLike
 from typing import Any
 
 from ..utils import logging
@@ -102,9 +103,9 @@ class DynamoConfig(ExportConfigMixin):
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
+    sample_inputs: dict[str, Any] | None = None
 
     strict: bool = False
-    sample_inputs: dict[str, Any] | None = None
     dynamic_shapes: dict[str, Any] | None = None
 
 
@@ -121,7 +122,13 @@ class OnnxConfig(ExportConfigMixin):
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
-
-    opset_version: int = 23
-    output_file: str = "model.onnx"
     sample_inputs: dict[str, Any] | None = None
+
+    f: str | PathLike | None = None
+    dynamic_shapes: dict[str, Any] | None = None
+    opset_version: int | None = None
+    external_data: bool = True
+    optimize: bool = True
+    export_params: bool = True
+    keep_initializers_as_inputs: bool = False
+    do_constant_folding: bool = True
