@@ -1,7 +1,7 @@
 import os
 import unittest
-
 from unittest.mock import patch
+
 from transformers.testing_utils import require_kernels
 
 
@@ -15,6 +15,7 @@ class HubKernelsTests(unittest.TestCase):
         with patch.dict(os.environ, {'USE_HUB_KERNELS': 'ON'}):
             # Re-import to ensure the environment variable takes effect
             import importlib
+
             from transformers.integrations import hub_kernels
             importlib.reload(hub_kernels)
 
@@ -30,6 +31,7 @@ class HubKernelsTests(unittest.TestCase):
         with patch.dict(os.environ, env_without_hub_kernels, clear=True):
             # Re-import to ensure the environment variable change takes effect
             import importlib
+
             from transformers.integrations import hub_kernels
             importlib.reload(hub_kernels)
 
@@ -43,6 +45,7 @@ class HubKernelsTests(unittest.TestCase):
         with patch.dict(os.environ, {'USE_HUB_KERNELS': 'ON'}):
             # Re-import to ensure the environment variable takes effect
             import importlib
+
             from transformers.integrations import hub_kernels
             importlib.reload(hub_kernels)
 
@@ -58,19 +61,20 @@ class HubKernelsTests(unittest.TestCase):
         with patch.dict(os.environ, {'USE_HUB_KERNELS': 'OFF'}):
             # Re-import to ensure the environment variable takes effect
             import importlib
+
             from transformers.integrations import hub_kernels
             importlib.reload(hub_kernels)
-            
+
             # Call the function with a test layer name
             decorator = hub_kernels.use_kernel_forward_from_hub("DummyLayer")
-            
+
             # Verify that the kernels function was never called
             mocked_use_kernel_forward.assert_not_called()
-            
+
             # Verify that we get a no-op decorator
             class FooClass:
                 pass
-            
+
             result = decorator(FooClass)
             self.assertIs(result, FooClass)
 
@@ -84,12 +88,13 @@ class HubKernelsTests(unittest.TestCase):
         with patch.dict(os.environ, env_without_hub_kernels, clear=True):
             # Re-import to ensure the environment variable change takes effect
             import importlib
+
             from transformers.integrations import hub_kernels
             importlib.reload(hub_kernels)
-            
+
             # Call the function with a test layer name
             hub_kernels.use_kernel_forward_from_hub("FooLayer")
-            
+
             # Verify that the kernels function was called once with the correct argument
             mocked_use_kernel_forward.assert_called_once_with("FooLayer")
 
@@ -101,12 +106,13 @@ class HubKernelsTests(unittest.TestCase):
         with patch.dict(os.environ, {'USE_HUB_KERNELS': 'ON'}):
             # Re-import to ensure the environment variable change takes effect
             import importlib
+
             from transformers.integrations import hub_kernels
             importlib.reload(hub_kernels)
-            
+
             # Call the function with a test layer name
             hub_kernels.use_kernel_forward_from_hub("FooLayer")
-            
+
             # Verify that the kernels function was called once with the correct argument
             mocked_use_kernel_forward.assert_called_once_with("FooLayer")
 
