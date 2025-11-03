@@ -52,7 +52,7 @@ jobs:
             commit_id=$GITHUB_SHA
           fi
           commit_msg=$(git show -s --format=%s | cut -c1-70)
-          python3 benchmark_v2/run_benchmarks.py -b 32 -s 128 -n 256 --branch-name "$BRANCH_NAME" --commit-id "$commit_id" --commit-message "$commit_msg" --model-id "$MODEL_ID" --log-level INFO --push-result-to-dataset "$DATASET_ID"
+          python3 benchmark_v2/run_benchmarks.py -b 32 -s 128 -n 256 --cross-generate --branch-name "$BRANCH_NAME" --commit-id "$commit_id" --commit-message "$commit_msg" --model-id "$MODEL_ID" --log-level INFO --push-result-to-dataset "$DATASET_ID"
         env:
           HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
           PUSH_TO_HUB_TOKEN: ${{ secrets.PUSH_TO_HUB_TOKEN }}
