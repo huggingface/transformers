@@ -258,8 +258,14 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "Transcribe the input speech."},
-                    {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/WhDJDIviAOg_120_10.mp3"},
+                    {
+                        "type": "text",
+                        "text": "What is surprising about the relationship between the barking and the music?",
+                    },
+                    {
+                        "type": "audio",
+                        "path": "https://audioflamingo3.github.io/static/emergent/Dogs%20barking%20in%20sync%20with%20the%20music.wav",
+                    },
                 ],
             }
         ]
@@ -290,10 +296,13 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Transcribe the input speech."},
+                        {
+                            "type": "text",
+                            "text": "What is surprising about the relationship between the barking and the music?",
+                        },
                         {
                             "type": "audio",
-                            "path": "https://audioflamingo3.github.io/static/long_speech/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
+                            "path": "https://audioflamingo3.github.io/static/emergent/Dogs%20barking%20in%20sync%20with%20the%20music.wav",
                         },
                     ],
                 }
@@ -304,9 +313,12 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "text",
-                            "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
+                            "text": "What makes this combination of acoustic and ambient sounds unlikely to appear together?",
                         },
-                        {"type": "audio", "path": "https://audioflamingo3.github.io/static/chat/FPSbCAANfbJLVSwD.mp3"},
+                        {
+                            "type": "audio",
+                            "path": "https://audioflamingo3.github.io/static/emergent/Unlikely%20existence%20of%20banjo%20and%20rain%20sounds%20at%20the%20same%20time%20in%20the%20training%20data.wav",
+                        },
                     ],
                 }
             ],
