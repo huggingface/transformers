@@ -235,10 +235,10 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     Slow tests against the public checkpoint to validate processor-model alignment and in-place fusion.
     """
 
-    def setUp(self):
-        self.checkpoint = "nvidia/audio-flamingo-3-hf"
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint)
-        self.model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint, device_map=torch_device)
+    @classmethod
+    def setUp(cls):
+        cls.checkpoint = "nvidia/audio-flamingo-3-hf"
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -269,10 +269,13 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
+
+        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint, device_map=torch_device)
+
         batch = self.processor.apply_chat_template(
             conversation, tokenize=True, add_generation_prompt=True, return_dict=True
         ).to(torch_device)
-        seq = self.model.generate(**batch)
+        seq = model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
 
@@ -323,10 +326,13 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 }
             ],
         ]
+
+        model = AudioFlamingo3ForConditionalGeneration.from_pretrained(self.checkpoint, device_map=torch_device)
+
         batch = self.processor.apply_chat_template(
             conversations, tokenize=True, add_generation_prompt=True, return_dict=True
         ).to(torch_device)
-        seq = self.model.generate(**batch)
+        seq = model.generate(**batch)
         inp_len = batch["input_ids"].shape[1]
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
 
