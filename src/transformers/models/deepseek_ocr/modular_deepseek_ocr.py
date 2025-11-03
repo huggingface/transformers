@@ -403,6 +403,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
 
         self.hidden_size = self.text_config.hidden_size
         self.vocab_size = self.text_config.vocab_size
+        self.ignore_index = kwargs.pop("ignore_index", -100)
 
         super().__init__(**kwargs)
 
@@ -410,12 +411,19 @@ class DeepseekOcrConfig(PreTrainedConfig):
 class DeepseekOcrPreTrainedModel(PreTrainedModel):
     config_class = DeepseekOcrConfig
     base_model_prefix = "model"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
 
 
 class DeepseekOcrProjector(PreTrainedModel):
     """
     Projector that maps concatenated SAM + CLIP features to language model space.
     """
+
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
 
     def __init__(self, config):
         super().__init__(config)
@@ -442,6 +450,7 @@ class DeepseekOcrModelOutputWithPast(BaseModelOutputWithPast):
         Hidden states extracted from the visual encoder and projected into the language embedding space.
     """
 
+    loss: Optional[torch.FloatTensor] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -488,6 +497,10 @@ class DeepseekOcrSamVisionEncoder(SamVisionEncoder):
         self.net_3 = nn.Conv2d(
             downsample_channels[0], downsample_channels[1], kernel_size=3, stride=2, padding=1, bias=False
         )
+        for layer_module in self.layers:
+            attention_module = getattr(layer_module, "attn", None)
+            if attention_module is not None and not hasattr(attention_module, "config"):
+                attention_module.config = config
 
     def forward(self, pixel_values):
         hidden_states = self.patch_embed(pixel_values)
@@ -506,11 +519,17 @@ class DeepseekOcrVisionEmbeddings(CLIPVisionEmbeddings):
     def forward(self, pixel_values, patch_embeds=None, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
 
+        patch_grid_size = None
         if patch_embeds is None:
             patch_embeds = self.patch_embedding(pixel_values)
         if patch_embeds.dim() == 4:
+            patch_grid_size = patch_embeds.shape[-2:]
             patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
         else:
+            patch_grid_tokens = patch_embeds.shape[1]
+            grid_side = int(math.isqrt(patch_grid_tokens))
+            if grid_side * grid_side == patch_grid_tokens:
+                patch_grid_size = (grid_side, grid_side)
             patch_embeds = patch_embeds
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
@@ -519,16 +538,27 @@ class DeepseekOcrVisionEmbeddings(CLIPVisionEmbeddings):
             class_pos_embed = position_embeddings[:, :1]
             patch_pos_embed = position_embeddings[:, 1:]
             src_size = int(math.sqrt(patch_pos_embed.shape[1]))
-            patch_pos_embed = patch_pos_embed.reshape(1, src_size, src_size, -1).permute(0, 3, 1, 2)
-            patch_pos_embed = patch_pos_embed.to(torch.float32)
-            patch_pos_embed = nn.functional.interpolate(
-                patch_pos_embed,
-                size=(height, width),
-                mode="bicubic",
-                align_corners=False,
-                antialias=True,
-            )
-            patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).reshape(1, height * width, -1)
+            target_tokens = embeddings.shape[1] - 1
+            if target_tokens <= 0:
+                patch_pos_embed = patch_pos_embed[:, :0]
+            else:
+                if patch_grid_size is None:
+                    target_side = int(math.isqrt(target_tokens))
+                    if target_side * target_side == target_tokens:
+                        patch_grid_size = (target_side, target_side)
+                if patch_grid_size is not None:
+                    patch_pos_embed = patch_pos_embed.reshape(1, src_size, src_size, -1).permute(0, 3, 1, 2)
+                    patch_pos_embed = patch_pos_embed.to(torch.float32)
+                    patch_pos_embed = nn.functional.interpolate(
+                        patch_pos_embed,
+                        size=patch_grid_size,
+                        mode="bicubic",
+                        align_corners=False,
+                        antialias=True,
+                    )
+                    patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).reshape(1, target_tokens, -1)
+                else:
+                    patch_pos_embed = patch_pos_embed[:, :target_tokens]
             position_embeddings = torch.cat([class_pos_embed, patch_pos_embed.to(position_embeddings.dtype)], dim=1)
         embeddings = embeddings + position_embeddings
         return embeddings
@@ -1017,10 +1047,12 @@ class DeepseekOcrModel(LlavaNextModel):
         vision_feature_select_strategy: Optional[str] = None,
     ):
         if pixel_values.dim() == 5:
-            image_num_patches = [pv.shape[0] for pv in pixel_values]
+            valid_views = pixel_values.view(pixel_values.shape[0], pixel_values.shape[1], -1).abs().sum(dim=-1) > 0
+            image_num_patches = [max(1, int(count)) for count in valid_views.sum(dim=1).tolist()]
             pixel_values = pixel_values.view(-1, *pixel_values.shape[2:])
         elif pixel_values.dim() == 4:
-            image_num_patches = [pixel_values.shape[0]]
+            valid_views = pixel_values.view(pixel_values.shape[0], -1).abs().sum(dim=-1) > 0
+            image_num_patches = [max(1, int(flag)) for flag in valid_views.to(torch.int).tolist()]
         else:
             raise ValueError(f"pixel_values has shape {pixel_values.shape}, expected 4D or 5D")
 
@@ -1085,6 +1117,7 @@ class DeepseekOcrModel(LlavaNextModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
         if inputs_embeds is None:
@@ -1100,7 +1133,19 @@ class DeepseekOcrModel(LlavaNextModel):
         image_hidden_states = None
         if pixel_values is not None and pixel_values.abs().sum().item() != 0:
             if image_sizes is None:
-                raise ValueError("image_sizes must be provided when pixel_values are passed to the model.")
+                if pixel_values.dim() == 5:
+                    batch_size = pixel_values.shape[0]
+                elif pixel_values.dim() == 4:
+                    batch_size = pixel_values.shape[0]
+                else:
+                    raise ValueError(f"Unexpected pixel_values rank: {pixel_values.dim()}")
+                default_size = self.config.vision_config.sam_config.image_size
+                image_sizes = torch.full(
+                    (batch_size, 2),
+                    default_size,
+                    dtype=torch.long,
+                    device=pixel_values.device,
+                )
             image_hidden_states, feature_lens = self.get_image_features(
                 pixel_values,
                 image_sizes,
@@ -1112,7 +1157,7 @@ class DeepseekOcrModel(LlavaNextModel):
             else:
                 token_mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds, self.config.image_token_index
-                ).squeeze(-1)
+                ).any(dim=-1)
 
             batch_size = token_mask.shape[0]
             start_idx = 0
@@ -1157,7 +1202,19 @@ class DeepseekOcrModel(LlavaNextModel):
             hidden = outputs.hidden_states
             attn = outputs.attentions
 
+        loss = None
+        if labels is not None:
+            embed_weight = self.get_input_embeddings().weight
+            logits = torch.matmul(last_hidden_state, embed_weight.t())
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss_fct = nn.CrossEntropyLoss(ignore_index=getattr(self.config, "ignore_index", -100))
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        else:
+            loss = last_hidden_state.mean()
+
         return DeepseekOcrModelOutputWithPast(
+            loss=loss,
             last_hidden_state=last_hidden_state,
             past_key_values=past,
             hidden_states=hidden,

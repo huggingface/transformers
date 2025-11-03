@@ -426,6 +426,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
 
         self.hidden_size = self.text_config.hidden_size
         self.vocab_size = self.text_config.vocab_size
+        self.ignore_index = kwargs.pop("ignore_index", -100)
 
         super().__init__(**kwargs)
 
