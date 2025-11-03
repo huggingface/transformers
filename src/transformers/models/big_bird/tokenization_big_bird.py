@@ -132,8 +132,7 @@ class BigBirdTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
         super().__init__(
-            vocab_file,
-            tokenizer_file=tokenizer_file,
+            tokenizer_object=self._tokenizer,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

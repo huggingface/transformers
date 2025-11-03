@@ -2158,10 +2158,30 @@ class _LazyModule(ModuleType):
             try:
                 module = self._get_module(self._class_to_module[name])
                 value = getattr(module, name)
-            except (ModuleNotFoundError, RuntimeError) as e:
-                raise ModuleNotFoundError(
-                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                ) from e
+            except (ModuleNotFoundError, RuntimeError, AttributeError) as e:
+                # V5: If trying to import a *TokenizerFast symbol, transparently fall back to the
+                # non-Fast symbol from the same module when available. This lets us keep only one
+                # backend tokenizer class while preserving legacy public names.
+                if name.endswith("TokenizerFast"):
+                    fallback_name = name[:-4]
+                    # Prefer importing the module that declares the fallback symbol if known
+                    try:
+                        if fallback_name in self._class_to_module:
+                            fb_module = self._get_module(self._class_to_module[fallback_name])
+                            fallback_value = getattr(fb_module, fallback_name)
+                        else:
+                            module = self._get_module(self._class_to_module[name])
+                            fallback_value = getattr(module, fallback_name)
+                        setattr(self, fallback_name, fallback_value)
+                        value = fallback_value
+                    except Exception:
+                        raise ModuleNotFoundError(
+                            f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                        ) from e
+                else:
+                    raise ModuleNotFoundError(
+                        f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                    ) from e
 
         elif name in self._modules:
             try:
@@ -2388,7 +2408,7 @@ def create_import_structure_from_path(module_path):
                 'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
             },
             frozenset({'tokenizers'}): {
-                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+                'tokenization_albert_fast': {'AlbertTokenizer'}
             },
         },
         'align': {
@@ -2564,7 +2584,7 @@ def spread_import_structure(nested_import_structure):
                 'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
             },
             frozenset({'tokenizers'}): {
-                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+                'tokenization_albert_fast': {'AlbertTokenizer'}
             },
         },
         'align': {
@@ -2585,7 +2605,7 @@ def spread_import_structure(nested_import_structure):
 
     {
         frozenset({'tokenizers'}): {
-            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+            'albert.tokenization_albert_fast': {'AlbertTokenizer'}
         },
         frozenset(): {
             'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
@@ -2686,7 +2706,7 @@ def define_import_structure(module_path: str, prefix: Optional[str] = None) -> I
 
     {
         frozenset({'tokenizers'}): {
-            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+            'albert.tokenization_albert_fast': {'AlbertTokenizer'}
         },
         frozenset(): {
             'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},

@@ -174,4 +174,6 @@ class AlbertTokenizer(TokenizersBackend):
         )
 
 
-__all__ = ["AlbertTokenizer"]
+AlbertTokenizerFast = AlbertTokenizer
+
+__all__ = ["AlbertTokenizer", "AlbertTokenizerFast"]

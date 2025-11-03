@@ -891,6 +891,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return [self.bos_token_id] + token_ids_0
             return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
 
+        elif self.special_tokens_pattern == "bos_eos":
+            # [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
+            if token_ids_1 is None:
+                return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+            return [self.bos_token_id] + token_ids_0 + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
+
         elif self.special_tokens_pattern == "cls_double_sep":
             # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
             if token_ids_1 is None:
@@ -962,6 +968,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if token_ids_1 is None:
                 return [1] + ([0] * len(token_ids_0))
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
+
+        elif self.special_tokens_pattern == "bos_eos":
+            # [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
+            if token_ids_1 is None:
+                return [1] + ([0] * len(token_ids_0)) + [1]
+            return [1] + ([0] * len(token_ids_0)) + [1] + [1] + ([0] * len(token_ids_1)) + [1]
 
         elif self.special_tokens_pattern == "cls_double_sep":
             # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
