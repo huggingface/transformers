@@ -28,10 +28,7 @@ from ...generation import (
     LogitsProcessorList,
     StoppingCriteriaList,
 )
-from ...generation.logits_process import (
-    HiggsAudioEOSDelayPatternLogitsProcessor,
-    HiggsAudioSuppressTokensAtBeginLogitsProcessor,
-)
+from ...generation.logits_process import HiggsAudioDelayPatternLogitsProcessor
 from ...generation.streamers import BaseStreamer
 from ...generation.utils import GenerateNonBeamOutput
 from ...utils import logging
@@ -85,25 +82,17 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             logits_processor = kwargs.get("logits_processor")
 
         logits_processor.append(
-            HiggsAudioSuppressTokensAtBeginLogitsProcessor(
-                begin_token_id=self.config.audio_bos_token_id,
+            HiggsAudioDelayPatternLogitsProcessor(
+                delay_pattern=[el + 1 for el in range(self.config.num_codebooks)],
+                audio_bos_token_id=self.config.audio_bos_token_id,
+                audio_eos_token_id=self.config.audio_delay_token_id,
+                audio_stream_bos_id=self.config.audio_stream_bos_id,
+                audio_stream_eos_id=self.config.eos_token_id,
                 num_codebooks=self.config.num_codebooks,
                 codebook_size=self.config.codebook_size,
-                audio_stream_bos_id=self.config.audio_stream_bos_id,
-                device=kwargs.get("device"),
             )
         )
-        logits_processor.append(
-            HiggsAudioEOSDelayPatternLogitsProcessor(
-                delay_pattern=list(range(self.config.num_codebooks)),
-                eos_token_id=self.config.audio_stream_eos_id,
-                max_generation_len=kwargs.get("generation_config").max_length,
-                device=kwargs.get("device"),
-                audio_eos_token_id=self.config.audio_eos_start_delay_token_id,
-            )
-        )
-
-        return super()._get_logits_processor(*args, **kwargs)
+        return logits_processor
 
     def _sample(
         self,

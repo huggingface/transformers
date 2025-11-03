@@ -3231,185 +3231,103 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class HiggsAudioSuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
+class HiggsAudioDelayPatternLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] that suppresses all tokens except the audio stream BOS token in codebooks
-    that haven't started yet based on a delay pattern. This is used for multi-codebook audio generation
-    where codebooks start generating at different positions relative to a begin token.
+    [`LogitsProcessor`] for Higgs Audio text-to-speech model to handle codebook delay pattern.
 
     <Tip warning={true}>
 
     This logits processor is exclusively compatible with
-    [HiggsAudio](https://huggingface.co/docs/transformers/main/en/model_doc/higgs_audio).
+    [HiggsAudio](https://huggingface.co/docs/transformers/main/en/model_doc/higgs_audio)
 
     </Tip>
 
     Args:
-        begin_token_id (`int`):
-            The id of the token that marks the beginning of audio generation.
-        num_codebooks (`int`):
-            The number of audio codebooks.
-        codebook_size (`int`):
-            The vocabulary size of each codebook.
-        audio_stream_bos_id (`int`):
-            The id of the audio stream beginning-of-sequence token that is allowed during the delay pattern.
-        device (`str`, *optional*, defaults to `"cpu"`):
-            The device to allocate the tensors on.
-
-    Examples:
-
-    ```python
-    >>> from transformers import AutoProcessor, HiggsAudioForConditionalGeneration
-    >>> import torch
-
-    >>> processor = AutoProcessor.from_pretrained("ylacombe/higgs-audio-llama3.2-1B")
-    >>> model = HiggsAudioForConditionalGeneration.from_pretrained("ylacombe/higgs-audio-llama3.2-1B")
-
-    >>> # The processor will suppress tokens in codebooks that haven't started yet
-    >>> inputs = processor(text="Hello, how are you?", return_tensors="pt")
-    >>> outputs = model.generate(**inputs, max_new_tokens=100)
-    ```
-    """
-
-    def __init__(
-        self,
-        begin_token_id: int,
-        num_codebooks: int,
-        codebook_size: int,
-        audio_stream_bos_id: int,
-        device: str = "cpu",
-    ):
-        self.begin_token_id = begin_token_id
-        self.num_codebooks = num_codebooks
-        self.codebook_size = codebook_size
-        self.audio_stream_bos_id = audio_stream_bos_id
-        self.device = device
-
-    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # Reshape scores for easier codebook indexing [B, C, V]
-        scores = scores.reshape(-1, self.num_codebooks, self.codebook_size)
-
-        # Find the last position of begin_token_id for each batch
-        batch_size = input_ids.shape[0]
-        current_after_begin = torch.zeros(batch_size, dtype=torch.long, device=input_ids.device)
-
-        for batch_idx in range(batch_size):
-            begin_positions = (input_ids[batch_idx] == self.begin_token_id).nonzero(as_tuple=True)
-            if len(begin_positions[0]) > 0:
-                last_begin_pos = begin_positions[0].max().item()
-                current_after_begin[batch_idx] = input_ids.shape[-1] - last_begin_pos - 1
-            else:
-                current_after_begin[batch_idx] = input_ids.shape[-1]
-
-        # Create delay pattern mask: codebooks that haven't started yet
-        delay_pattern_mask = (
-            torch.arange(self.num_codebooks, device=input_ids.device)[None, :] >= current_after_begin[:, None]
-        )
-
-        # Create a mask for all tokens except audio_stream_bos_id
-        vocab_mask = torch.ones(self.codebook_size, dtype=torch.bool, device=scores.device)
-        vocab_mask[self.audio_stream_bos_id] = False
-
-        # Apply the delay pattern mask: suppress all tokens except audio_stream_bos_id in delayed codebooks
-        scores_processed = scores.clone()
-        for batch_idx in range(batch_size):
-            for codebook_idx in range(self.num_codebooks):
-                if delay_pattern_mask[batch_idx, codebook_idx]:
-                    scores_processed[batch_idx, codebook_idx, vocab_mask] = -float("inf")
-
-        # Reshape back to [B * C, V]
-        return scores_processed.reshape(-1, self.codebook_size)
-
-
-class HiggsAudioEOSDelayPatternLogitsProcessor(LogitsProcessor):
-    r"""
-    [`LogitsProcessor`] that handles EOS token generation with delay patterns for multi-codebook
-    audio generation. When one codebook generates an EOS token or reaches maximum length, this
-    processor forces other codebooks to generate EOS tokens according to their delay pattern.
-
-    <Tip warning={true}>
-
-    This logits processor is exclusively compatible with
-    [HiggsAudio](https://huggingface.co/docs/transformers/main/en/model_doc/higgs_audio).
-
-    </Tip>
-
-    Args:
-        delay_pattern (`list[int]`):
-            The delay pattern for each codebook. For example, [0, 1, 2, 3] means codebook 0 has no delay,
-            codebook 1 has a delay of 1, etc.
-        eos_token_id (`int`):
-            The id of the *end-of-sequence* token for audio codebooks.
-        max_generation_len (`int`):
-            The maximum generation length.
-        device (`str`, *optional*, defaults to `"cpu"`):
-            The device to allocate the tensors on.
-        audio_eos_token_id (`int`, *optional*):
-            The id of a special audio EOS token that can trigger the delay pattern. If not provided,
-            only the standard `eos_token_id` will trigger it.
-
-    Examples:
-
-    ```python
-    >>> from transformers import AutoProcessor, HiggsAudioForConditionalGeneration
-    >>> import torch
-
-    >>> processor = AutoProcessor.from_pretrained("ylacombe/higgs-audio-llama3.2-1B")
-    >>> model = HiggsAudioForConditionalGeneration.from_pretrained("ylacombe/higgs-audio-llama3.2-1B")
-
-    >>> # The processor will handle EOS generation with proper delay patterns
-    >>> inputs = processor(text="Hello, how are you?", return_tensors="pt")
-    >>> outputs = model.generate(**inputs, max_new_tokens=100)
-    ```
+        delay_pattern (list[int]):
+            The delay pattern for the audio bos and eos tokens.
+        audio_bos_token_id (int):
+            The id of the audio bos token.
+        audio_eos_token_id (int):
+            The id of the audio eos token.
+        audio_stream_bos_id (int):
+            The id of the audio stream bos token.
+        audio_stream_eos_id (int):
+            The id of the audio stream eos token.
+        num_codebooks (int):
+            The number of codebooks in the audio stream.
+        codebook_size (int):
+            The size of each codebook in the audio stream.
     """
 
     def __init__(
         self,
         delay_pattern: list[int],
-        eos_token_id: int,
-        max_generation_len: int,
-        device: str = "cpu",
-        audio_eos_token_id: Optional[int] = None,
+        audio_bos_token_id: int,
+        audio_eos_token_id: int,
+        audio_stream_bos_id: int,
+        audio_stream_eos_id: int,
+        num_codebooks: int,
+        codebook_size: int,
     ):
-        self.num_channels = len(delay_pattern)
-        self.active_batches = None
-        self.delay_pattern = torch.tensor(delay_pattern, device=device, dtype=torch.int)[None, :]
-        self.eos_token_id = eos_token_id
-        self.max_generation_len = max_generation_len - max(delay_pattern) - 1
-        self.device = device
-        self.audio_eos_token_id = audio_eos_token_id if audio_eos_token_id is not None else eos_token_id
+        self.delay_pattern = torch.tensor(delay_pattern)
+        self.audio_bos_token_id = audio_bos_token_id
+        self.audio_eos_token_id = audio_eos_token_id 
+        self.audio_stream_bos_id = audio_stream_bos_id
+        self.audio_stream_eos_id = audio_stream_eos_id
+        self.num_codebooks = num_codebooks
+        self.codebook_size = codebook_size
+        self.bos_delay_pattern = None
+        self.eos_delay_pattern = None
+        self.vocab_mask_bos = torch.arange(codebook_size) != audio_stream_bos_id
+        self.vocab_mask_eos = torch.arange(codebook_size) != audio_stream_eos_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # Reshape for easier channel indexing [B, C, V]
-        scores = scores.reshape(-1, self.num_channels, scores.shape[-1])
+        scores = scores.reshape(-1, self.num_codebooks, self.codebook_size)
+        batch_size = scores.shape[0]
 
-        # Initialize / expand values on first iteration
-        if self.active_batches is None:
-            self.delay_pattern = self.delay_pattern.repeat(scores.shape[0], 1)
-            self.active_batches = torch.zeros(size=(scores.shape[0],), device=self.device, dtype=torch.bool)
+        # Initialize bos delay pattern:
+        # we take for reference the last audio bos token position for each batch if present
+        if self.bos_delay_pattern is None:
+            self.bos_delay_pattern = self.delay_pattern.repeat(batch_size, 1)
 
-        # Check if eos has been generated in any batch
-        channel_generated_eos = input_ids[:, -1] == self.audio_eos_token_id
-        reached_max_len = input_ids.shape[1] == self.max_generation_len
+            audio_bos_idxs = (input_ids == self.audio_bos_token_id).nonzero()
+            if len(audio_bos_idxs) > 0:
+                batch_idxs = audio_bos_idxs[:, 0]
+                is_last = torch.cat([batch_idxs[1:] != batch_idxs[:-1], batch_idxs.new_ones(1, dtype=torch.bool)])
+                max_bos_idxs = audio_bos_idxs[is_last]
+        
+                current_after_bos = (input_ids.shape[-1] - max_bos_idxs[:, 1] - 1).unsqueeze(-1)
+                unique_batch_idxs = batch_idxs.unique().to(self.bos_delay_pattern.device)
+                self.bos_delay_pattern[unique_batch_idxs] = (
+                    self.bos_delay_pattern[unique_batch_idxs] - current_after_bos.to(self.bos_delay_pattern.device)
+                ).clamp(min=0)
 
-        # Update active batches
-        self.active_batches |= channel_generated_eos
-        self.active_batches |= reached_max_len
+        # Initialize eos delay pattern:
+        # we take for reference the first audio eos token position for each batch if present
+        if self.eos_delay_pattern is None:
+            self.eos_delay_pattern = self.delay_pattern.repeat(batch_size, 1)
 
-        # Find channels that need to force eos (delay <= 1 to force on next or current step)
-        forced_eos_channels = self.active_batches[:, None] & (self.delay_pattern <= 1)
-        idx_bsz, idx_channel = forced_eos_channels.nonzero(as_tuple=True)
+            audio_eos_idxs = (input_ids == self.audio_eos_token_id).nonzero()
+            if len(audio_eos_idxs) > 0:
+                batch_idxs = audio_eos_idxs[:, 0]
+                is_first = torch.cat([batch_idxs[1:] != batch_idxs[:-1], batch_idxs.new_ones(1, dtype=torch.bool)])
+                min_eos_idxs = audio_eos_idxs[is_first]
 
-        # Force eos if delay is kicking in
-        scores[idx_bsz, idx_channel, :] = -float("inf")
-        scores[idx_bsz, idx_channel, self.eos_token_id] = 0.0
+                current_before_eos = (min_eos_idxs[:, 1]).unsqueeze(-1)
+                unique_batch_idxs = batch_idxs.unique()
+                self.eos_delay_pattern[unique_batch_idxs] = (
+                    self.eos_delay_pattern[unique_batch_idxs] - current_before_eos.to(self.eos_delay_pattern.device)
+                ).clamp(min=0)
 
-        # Reshape back to [B * C, V]
-        scores = scores.reshape(-1, scores.shape[-1])
+        # at each generation step, we decrement the bos delay pattern until all zeros
+        row_mask = self.bos_delay_pattern > 0
+        scores[(row_mask[..., None] & self.vocab_mask_bos).to(scores.device)] = -float("inf")
+        self.bos_delay_pattern[row_mask] -= 1
+        
+        # when the audio eos token is generated, we decrement the eos delay pattern until all zeros
+        self.eos_delay_pattern[input_ids[:, -1].to(self.eos_delay_pattern.device) == self.audio_eos_token_id] -= 1
+        row_mask = self.eos_delay_pattern <= 0
+        scores[(row_mask[..., None] & self.vocab_mask_eos).to(scores.device)] = -float("inf")
 
-        # Update amount of delay left for each channel
-        self.delay_pattern -= self.active_batches[:, None].int()
-
-        return scores
+        return scores.reshape(-1, self.codebook_size)
