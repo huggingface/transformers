@@ -13,4 +13,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .text2text_generation import Text2TextGenerationPipeline, SummarizationPipeline, TranslationPipeline
+from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
