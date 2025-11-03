@@ -2588,11 +2588,13 @@ class ModelTesterMixin:
                         ]
                     # Usually we have only 1, but swiftformer and deit have 2 Linear layers using `num_labels`
                     mismatched_modules = [name for name, module in top_linear_modules if module.out_features == 42]
-                    assert dict(new_model.named_parameters()).keys() == dict(model.named_parameters()).keys()
-                    for k1 in dict(new_model.named_parameters()):
+                    old = model.named_parameters()
+                    new = new_model.named_parameters()
+                    assert dict(old).keys() == dict(new).keys()
+                    for k1 in new.keys():
                         k2 = k1
-                        v1 = new_model[k1]
-                        v2 = new_model[k2]
+                        v1 = old[k1]
+                        v2 = new[k2]
                         # Each param except the mismatched ones must be exactly similar
                         if not any(k1.startswith(mismatched_module) for mismatched_module in mismatched_modules):
                             torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
