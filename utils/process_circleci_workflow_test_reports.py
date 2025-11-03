@@ -11,102 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import annotations
 import argparse
 import json
 import os
-import re
-from collections import Counter, defaultdict
 
 import requests
-
-
-def parse_failure_lines(text: str) -> list[dict]:
-    """Extract failed test entries with basic metadata."""
-    failures = []
-    if not text:
-        return failures
-
-    for raw_line in text.splitlines():
-        if not raw_line.startswith("FAILED "):
-            continue
-        entry = raw_line[len("FAILED ") :].strip()
-        test_id, _, reason = entry.partition(" - ")
-        test_id = test_id.strip()
-        reason = reason.strip()
-        base_file = test_id.split("::")[0]
-        model = None
-        if base_file.startswith("tests/models/"):
-            parts = base_file.split("/")
-            if len(parts) >= 3:
-                model = parts[2]
-        failures.append({"test": test_id, "reason": reason or "Unknown reason", "base_file": base_file, "model": model})
-
-    return failures
-
-
-def parse_failures_long(text: str) -> list[str]:
-    """Split the full stack trace report into separate stack traces."""
-    if not text:
-        return []
-
-    stacktraces = []
-    current_chunk = None
-    for line in text.splitlines():
-        if line.startswith("="):
-            continue
-        if re.match(r"_+\s.*\s_+$", line):
-            if current_chunk:
-                chunk_text = "\n".join(current_chunk).strip()
-                if chunk_text:
-                    stacktraces.append(chunk_text)
-            current_chunk = []
-            continue
-        if current_chunk is not None:
-            current_chunk.append(line)
-    if current_chunk:
-        chunk_text = "\n".join(current_chunk).strip()
-        if chunk_text:
-            stacktraces.append(chunk_text)
-
-    return stacktraces
-
-
-def update_reason_map(reason_map: dict, entry: dict) -> None:
-    """Aggregate failure data per reason."""
-    reason = entry["reason"]
-    data = reason_map.setdefault(
-        reason, {"count": 0, "models": set(), "tests": set(), "stacktrace": None}
-    )
-    data["count"] += 1
-    if entry["model"]:
-        data["models"].add(entry["model"])
-    data["tests"].add(entry["test"])
-    if data["stacktrace"] is None and entry.get("stacktrace"):
-        data["stacktrace"] = entry["stacktrace"]
-
-
-def serialize_reason_map(reason_map: dict) -> list[dict]:
-    """Prepare reason map for JSON serialization."""
-    serialized = []
-    for reason, data in reason_map.items():
-        serialized.append(
-            {
-                "reason": reason,
-                "failures": data["count"],
-                "models": sorted(data["models"]),
-                "tests": sorted(data["tests"]),
-                "stacktrace": data["stacktrace"] or "",
-            }
-        )
-    serialized.sort(key=lambda x: x["failures"], reverse=True)
-    return serialized
-
-
-def serialize_counter(counter: Counter) -> list[dict]:
-    items = [{"file": file_path, "failures": count} for file_path, count in counter.items()]
-    items.sort(key=lambda x: x["failures"])
-    return items
 
 
 if __name__ == "__main__":
@@ -123,9 +32,7 @@ if __name__ == "__main__":
 
     os.makedirs("outputs", exist_ok=True)
 
-    global_failure_counts: Counter[str] = Counter()
-    global_reason_map: dict[str, dict] = {}
-
+    workflow_summary = {}
     # for each job, download artifacts
     for job in jobs:
         project_slug = job["project_slug"]
@@ -137,65 +44,42 @@ if __name__ == "__main__":
             os.makedirs(job["name"], exist_ok=True)
             os.makedirs(f"outputs/{job['name']}", exist_ok=True)
 
-            node_reports: dict[int, dict[str, str]] = defaultdict(dict)
+            job_test_summaries = {}
             for artifact in job_artifacts:
-                if not artifact["path"].startswith("reports/"):
-                    continue
-                node_index = artifact["node_index"]
-                url = artifact["url"]
-                if artifact["path"].endswith("/summary_short.txt"):
-                    resp = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
-                    node_reports[node_index]["summary_short"] = resp.text
-                elif artifact["path"].endswith("/failures_line.txt"):
-                    resp = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
-                    node_reports[node_index]["failures_line"] = resp.text
-                elif artifact["path"].endswith("/failures_long.txt"):
-                    resp = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
-                    node_reports[node_index]["failures_long"] = resp.text
+                if artifact["path"].startswith("reports/") and artifact["path"].endswith("/summary_short.txt"):
+                    node_index = artifact["node_index"]
+                    url = artifact["url"]
+                    r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+                    test_summary = r.text
+                    job_test_summaries[node_index] = test_summary
 
-            job_failure_counts: Counter[str] = Counter()
-            job_reason_map: dict[str, dict] = {}
+            summary = {}
+            for node_index, node_test_summary in job_test_summaries.items():
+                for line in node_test_summary.splitlines():
+                    if line.startswith("PASSED "):
+                        test = line[len("PASSED ") :]
+                        summary[test] = "passed"
+                    elif line.startswith("FAILED "):
+                        test = line[len("FAILED ") :].split()[0]
+                        summary[test] = "failed"
+            # failed before passed
+            summary = dict(sorted(summary.items(), key=lambda x: (x[1], x[0])))
+            workflow_summary[job["name"]] = summary
 
-            for node_index, reports in node_reports.items():
-                failure_lines = reports.get("failures_line") or reports.get("summary_short", "")
-                failures = parse_failure_lines(failure_lines)
-                stacktraces = parse_failures_long(reports.get("failures_long", ""))
-                for idx, failure in enumerate(failures):
-                    if idx < len(stacktraces):
-                        failure["stacktrace"] = stacktraces[idx]
-                    else:
-                        failure["stacktrace"] = None
-                    job_failure_counts[failure["base_file"]] += 1
-                    global_failure_counts[failure["base_file"]] += 1
-                    update_reason_map(job_reason_map, failure)
-                    update_reason_map(global_reason_map, failure)
-
-            if job_failure_counts:
-                print(f"Failure counts for job {job['name']}:")
-                for item in serialize_counter(job_failure_counts):
-                    print(f"{item['file']} : {item['failures']} failures")
-            else:
-                print(f"No failures detected for job {job['name']}.")
-
-            job_output = {
-                "failures_per_file": serialize_counter(job_failure_counts),
-                "failure_reasons": serialize_reason_map(job_reason_map),
-            }
-
+            # collected version
             with open(f"outputs/{job['name']}/test_summary.json", "w") as fp:
-                json.dump(job_output, fp, indent=4)
+                json.dump(summary, fp, indent=4)
 
-    if global_failure_counts:
-        print("Aggregated failure counts across all processed jobs:")
-        for item in serialize_counter(global_failure_counts):
-            print(f"{item['file']} : {item['failures']} failures")
-    else:
-        print("No failures detected across all processed jobs.")
+    new_workflow_summary = {}
+    for job_name, job_summary in workflow_summary.items():
+        for test, status in job_summary.items():
+            if test not in new_workflow_summary:
+                new_workflow_summary[test] = {}
+            new_workflow_summary[test][job_name] = status
 
-    aggregated_output = {
-        "failures_per_file": serialize_counter(global_failure_counts),
-        "failure_reasons": serialize_reason_map(global_reason_map),
-    }
+    for test, result in new_workflow_summary.items():
+        new_workflow_summary[test] = dict(sorted(result.items()))
+    new_workflow_summary = dict(sorted(new_workflow_summary.items()))
 
     with open("outputs/test_summary.json", "w") as fp:
-        json.dump(aggregated_output, fp, indent=4)
+        json.dump(new_workflow_summary, fp, indent=4)
