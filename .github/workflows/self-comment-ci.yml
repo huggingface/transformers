@@ -77,7 +77,7 @@ jobs:
 
       - name: Get models to test
         env:
-          PR_COMMENT: "run-slow: audioflamingo3, vit"
+          PR_COMMENT: "run-slow: audioflamingo3"
         run: |
           python -m pip install GitPython
           python utils/pr_slow_ci_models.py --message "$PR_COMMENT" | tee output.txt
