@@ -2525,7 +2525,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `nn.Parameter`, this method should also be overridden in order to initialize it correctly.
         """
         if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
+            std = self.config.initializer_range or 0.02
         else:
             # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
@@ -2541,6 +2541,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 module.weight.data.normal_(mean=0.0, std=std)
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
+            elif isinstance(module, nn.Parameter):
+                module.data.normal_(mean=0.0, std=std)
             elif isinstance(module, nn.MultiheadAttention):
                 # This uses torch's original init
                 module._reset_parameters()

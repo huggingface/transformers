@@ -324,8 +324,8 @@ class Ernie4_5_MoeExperts(nn.Module):
         self.use_bias = config.use_bias
         self.act_fn = ACT2FN[config.hidden_act]
 
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, self.intermediate_dim))
         if self.use_bias:
             self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim))
             self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
