@@ -149,7 +149,7 @@ class Ernie4_5_MoeExperts(nn.Module):
 class Ernie4_5_MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.linear = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
+        self.weight = nn.Parameter(torch.zeros(config.hidden_size, config.moe_num_experts, dtype=torch.float32))
         self.moe_statics = Ernie4_5_MoeStatics(config)
         self.top_k = config.moe_k
         self.norm_min = config.moe_norm_min
@@ -162,7 +162,7 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
         )
 
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            router_logits = self.linear(hidden_states.float())
+            router_logits = F.linear(hidden_states.float(), self.weight)
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
             _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
@@ -179,7 +179,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         self.hidden_dim = config.hidden_size
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
-        self.router = Ernie4_5_MoeTopKRouter(config)
+        self.gate = Ernie4_5_MoeTopKRouter(config)
         self.experts = Ernie4_5_MoeExperts(config)
 
         self.shared_experts = None
@@ -193,7 +193,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        routing_weights, selected_experts = self.router(hidden_states)
+        routing_weights, selected_experts = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
 
         if self.shared_experts is not None:
