@@ -256,9 +256,11 @@ def _test_eager_matches_sdpa_inference(
 
             model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="sdpa")
             model_sdpa = model_sdpa.eval().to(torch_device)
-
-            model_eager = deepcopy(model_sdpa)
-            model_eager.set_attn_implementation("eager")
+            try:
+                model_eager = deepcopy(model_sdpa)
+                model_eager.set_attn_implementation("eager")
+            except Exception as _:
+                model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
             model_eager = model_eager.eval().to(torch_device)
 
         set_model_for_less_flaky_test(model_eager)
