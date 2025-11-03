@@ -254,8 +254,13 @@ def _test_eager_matches_sdpa_inference(
             if hasattr(config, "use_mask_token") or "use_mask_token" in inspect.signature(model.__init__).parameters:
                 model_from_pretrained_kwargs["use_mask_token"] = True
 
-            model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="sdpa")
+            # TODO: remove this try/except, models should have a shared API
+            try:
+                model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="sdpa")
+            except ValueError:
+                model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs)
             model_sdpa = model_sdpa.eval().to(torch_device)
+
             try:
                 model_eager = deepcopy(model_sdpa)
                 model_eager.set_attn_implementation("eager")
