@@ -78,7 +78,7 @@ class Text2TextGenerationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         if self.return_name == "generated":  # Check this isn't summarization/translation instead
-            logging.warning_once(
+            logger.warning_once(
                 "The `Text2TextGenerationPipeline` is deprecated and no longer maintained. For most "
                 "purposes, we recommend using newer models with causal pipelines like "
                 "`TextGenerationPipeline` or `ImageTextToTextPipeline`."
@@ -261,7 +261,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     return_name = "summary"
 
     def __init__(self, *args, **kwargs):
-        logging.warning_once(
+        logger.warning_once(
             "The `SummarizationPipeline` is deprecated and no longer maintained. For most "
             "summarization tasks, we recommend appropriately prompting modern general-purpose LLMs "
             "via pipelines like `TextGenerationPipeline` or `ImageTextToTextPipeline`."
@@ -338,7 +338,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     return_name = "translation"
 
     def __init__(self, *args, **kwargs):
-        logging.warning_once(
+        logger.warning_once(
             "The `TranslationPipeline` is deprecated and no longer maintained. For most "
             "translation tasks, we recommend appropriately prompting modern general-purpose LLMs "
             "via pipelines like `TextGenerationPipeline` or `ImageTextToTextPipeline`."
