@@ -544,12 +544,14 @@ def convert_and_load_state_dict_in_model(
             else:
                 matched_dtype_pattern = match_glob(t, dtype_policy_alt, dtype_policy_by_group_name)
                 if matched_dtype_pattern is not None:
-                    dtype = dtype_plan[matched_dtype_pattern]
+                    _dtype = dtype_plan[matched_dtype_pattern]
+                else:
+                    _dtype = dtype
                 tensor_dtype = (
                     tensor.dtype if isinstance(tensor, torch.Tensor) else str_to_torch_dtype[tensor.get_dtype()]
                 )
-                if dtype != tensor_dtype and dtype is not None:
-                    converter.operations.append(Cast(dtype))  # can this be slow as well?
+                if _dtype != tensor_dtype and _dtype is not None:
+                    converter.operations.append(Cast(_dtype))  # can this be slow as well?
 
         first_target_key = target_key.split("|")[0]
         future = None

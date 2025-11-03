@@ -781,10 +781,11 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
 
                 for name, param in model.named_parameters():
-                    if any(n in model_class._keep_in_fp32_modules for n in name.split(".")):
-                        self.assertTrue(param.dtype == torch.float32)
-                    else:
-                        self.assertTrue(param.dtype == torch.float16, name)
+                    with self.subTest(name):
+                        if re.match("|".join(model_class._keep_in_fp32_modules), name):
+                            self.assertTrue(param.dtype == torch.float32)
+                        else:
+                            self.assertTrue(param.dtype == torch.float16, name)
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
