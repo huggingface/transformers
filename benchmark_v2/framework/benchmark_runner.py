@@ -23,7 +23,6 @@ from transformers import (
     GenerationConfig,
     GenerationMixin,
 )
-from transformers.generation.continuous_batching.requests import RequestStatus
 from transformers.generation.streamers import BaseStreamer
 
 from .benchmark_config import BenchmarkConfig
