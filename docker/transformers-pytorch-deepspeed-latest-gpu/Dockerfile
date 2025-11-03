@@ -12,6 +12,9 @@ RUN apt -y update
 RUN apt install -y libaio-dev
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
+# This needs to be compatible with the above `PYTORCH`. Let's use cpu version for now.
+ARG TORCHCODEC='0.7.0'
+
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
@@ -21,7 +24,10 @@ RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]' 'p
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
-RUN python3 -m pip uninstall -y torch torchvision torchaudio && python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/$CUDA
+RUN set -e; \
+    python3 -m pip uninstall -y torch torchvision torchaudio torchcodec && python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA; \
+    python3 -m pip install --no-cache-dir -U torchcodec==${TORCHCODEC}.* --extra-index-url https://download.pytorch.org/whl/cpu;
+
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
