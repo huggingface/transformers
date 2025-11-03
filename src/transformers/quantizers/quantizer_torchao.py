@@ -245,30 +245,32 @@ class TorchAoHfQuantizer(HfQuantizer):
             return False
         elif any(param_name.endswith(f":{x}") for x in self.full_ao_keys):
             return True
-                
-        # Fallback here for ModuleFqnToConfig
-        # we only quantize the weight of nn.Linear and nn.Embedding
-        module, tensor_name = get_module_from_name(model, param_name)
-        _QUANTIZABLE = [torch.nn.Linear]
-        if self.quantization_config.include_input_output_embeddings:
-            _QUANTIZABLE.append(torch.nn.Embedding)
+        else:
+            # we only quantize the weight of nn.Linear and nn.Embedding
+            module, tensor_name = get_module_from_name(model, param_name)
+            _QUANTIZABLE = [torch.nn.Linear]
+            if self.quantization_config.include_input_output_embeddings:
+                _QUANTIZABLE.append(torch.nn.Embedding)
 
-        # Handle FqnToConfig, introduced in torchao 0.15.0+
-        if (self.quantization_config._get_ao_version() >= version.parse("0.15.0")):
-            from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
+            # Handle FqnToConfig, introduced in torchao 0.15.0+
+            if self.quantization_config._get_ao_version() >= version.parse("0.15.0"):
+                from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
 
-            from torchao.quantization.quant_api import _module_param_matches_fqn_config
+                from torchao.quantization.quant_api import _module_param_matches_fqn_config
 
-            if isinstance(self.quantization_config.quant_type, FqnToConfig):
-                module_fqn, param_name_fqn = param_name.rsplit(".", 1)
-                if (
-                    fqn_matches_fqn_config(module_fqn, self.quantization_config.quant_type) or
-                    fqn_matches_fqn_config(param_name, self.quantization_config.quant_type) or 
-                    ("_default" in self.quantization_config.quant_type.fqn_to_config and isinstance(module, tuple(_QUANTIZABLE)))
-                ):
-                    return True
+                if isinstance(self.quantization_config.quant_type, FqnToConfig):
+                    module_fqn, param_name_fqn = param_name.rsplit(".", 1)
+                    if (
+                        fqn_matches_fqn_config(module_fqn, self.quantization_config.quant_type)
+                        or fqn_matches_fqn_config(param_name, self.quantization_config.quant_type)
+                        or (
+                            "_default" in self.quantization_config.quant_type.fqn_to_config
+                            and isinstance(module, tuple(_QUANTIZABLE))
+                        )
+                    ):
+                        return True
 
-        return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
+            return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
     def create_quantized_param(
         self,
@@ -369,11 +371,9 @@ class TorchAoHfQuantizer(HfQuantizer):
                                 break
                         else:
                             c = config.module_fqn_to_config.get("_default", None)
-                    
+
                     if c is not None:
-                        custom_fqn_config = FqnToConfig({
-                            param_val: c
-                        })
+                        custom_fqn_config = FqnToConfig({param_val: c})
                         quantize_(module, custom_fqn_config, filter_fn=None)
                     return
 
@@ -435,7 +435,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                 model,
                 qtensor_class_list=ALL_AUTOQUANT_CLASS_LIST,
                 set_inductor_config=False,
-                **self.quantization_config.quant_type_kwargs
+                **self.quantization_config.quant_type_kwargs,
             )
             return model
         return
