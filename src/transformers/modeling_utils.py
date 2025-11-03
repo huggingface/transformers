@@ -2610,10 +2610,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     else:
                         module.smart_apply(fn)
                 fn(self)
-                for name, param in self.named_parameters(recurse=False):
-                    if param is None:
-                        continue
-                    fn(param)
+                if not isinstance(self, nn.Parameter):
+                    for name, param in self.named_parameters(recurse=False):
+                        if param is None:
+                            continue
+                        fn(param)
 
                 return self
 
