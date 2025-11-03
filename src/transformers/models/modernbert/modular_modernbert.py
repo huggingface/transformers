@@ -1014,6 +1014,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     inputs_embeds, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
                         inputs=inputs_embeds, attention_mask=attention_mask
                     )
+            if position_ids is None:
+                position_ids = indices.unsqueeze(0)
         else:
             if position_ids is None:
                 position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
