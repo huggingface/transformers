@@ -21,8 +21,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_openpangu_dense import *
-    from .modeling_openpangu_dense import *
+    from .configuration_openpangu import *
+    from .modeling_openpangu import *
 else:
     import sys
 
