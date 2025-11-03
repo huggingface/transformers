@@ -22,8 +22,6 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
     PILImageResampling,
     SizeDict,
 )
@@ -37,39 +35,54 @@ from .image_processing_glpn import GLPNImageProcessorKwargs
 
 @auto_docstring
 class GLPNImageProcessorFast(BaseImageProcessorFast):
-    """
-    Fast image processor for GLPN using the Torch/TorchVision backend.
-
-    Performs:
-    - Crop H,W down to the nearest multiple of `size_divisor` (default 32)
-    - Rescale [0,255] → [0,1]
-    - (No normalization by default)
-    """
-
     do_resize = True
     do_rescale = True
-    do_normalize = False
+    rescale_factor = 1 / 255
     resample = PILImageResampling.BILINEAR
     size_divisor = 32
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
-    interpolation = F.InterpolationMode.BILINEAR
     valid_kwargs = GLPNImageProcessorKwargs
 
-    def __init__(self, **kwargs) -> None:
-        if "ensure_multiple_of" in kwargs and "size_divisor" not in kwargs:
-            kwargs = dict(kwargs)
-            kwargs["size_divisor"] = kwargs.pop("ensure_multiple_of")
-        # ensure resample default for validation
-        kwargs.setdefault("resample", PILImageResampling.BILINEAR)
-        kwargs.setdefault("size", {"height": 480, "width": 640})
-        super().__init__(**kwargs)
+    def _validate_preprocess_kwargs(self, **kwargs):
+        # pop `do_resize` to not raise an error as `size` is not None
+        kwargs.pop("do_resize", None)
+        return super()._validate_preprocess_kwargs(**kwargs)
+
+    def resize(
+        self,
+        image: "torch.Tensor",
+        size_divisor: int,
+        interpolation: Optional["F.InterpolationMode"] = None,
+        antialias: bool = True,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """
+        Resize an image to `(size["height"], size["width"])`.
+
+        Args:
+            image (`torch.Tensor`):
+                Image to resize.
+            size (`SizeDict`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+                `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
+            antialias (`bool`, *optional*, defaults to `True`):
+                Whether to use antialiasing.
+
+        Returns:
+            `torch.Tensor`: The resized image.
+        """
+        height, width = image.shape[-2:]
+        # Rounds the height and width down to the closest multiple of size_divisor
+        new_h = height // size_divisor * size_divisor
+        new_w = width // size_divisor * size_divisor
+        return super().resize(
+            image, SizeDict(height=new_h, width=new_w), interpolation=interpolation, antialias=antialias
+        )
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
-        size: Optional[dict] = None,
         size_divisor: Optional[int] = None,
         interpolation: Optional["F.InterpolationMode"] = None,
         do_rescale: bool = True,
@@ -82,69 +95,20 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         resample: Optional[PILImageResampling] = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        GLPN fast preprocessing:
-        - crop to floored multiple of size_divisor
-        - rescale [0,1]
-        - normalize (off by default)
-        """
-        # avoid validation error: inject dummy size/resample for validate_preprocess_arguments
-
-        if resample is None and interpolation is None:
-            resample = self.resample
-
         grouped_images, grouped_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_groups = {}
-        sd = size_divisor if size_divisor is not None else self.size_divisor
 
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                # Calculate target size (nearest multiple of size_divisor)
-                _, _, h, w = stacked_images.shape
-                new_h = (h // sd) * sd
-                new_w = (w // sd) * sd
-
-                if (new_h, new_w) != (h, w):
-                    target_size = SizeDict(height=new_h, width=new_w)
-                    stacked_images = self.resize(
-                        stacked_images, size=target_size, interpolation=interpolation, antialias=True
-                    )
+                stacked_images = self.resize(stacked_images, size_divisor=size_divisor, interpolation=interpolation)
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_groups[shape] = stacked_images
 
-        reordered = reorder_images(processed_groups, grouped_index)
-
-        # Pad to max size if there are heterogeneous shapes
-        shapes = {tuple(img.shape) for img in reordered}
-        if len(shapes) > 1:
-            reordered = self.pad(reordered, pad_size=None)
-
-        processed = torch.stack(reordered, dim=0) if return_tensors else reordered
-
-        return BatchFeature(data={"pixel_values": processed}, tensor_type=return_tensors)
-
-    # ensure only slow keys are serialized
-    def to_dict(self):
-        output_dict = super().to_dict()
-
-        keys_to_keep = {
-            "image_processor_type",
-            "_processor_class",
-            "do_resize",
-            "size_divisor",
-            "resample",
-            "do_rescale",
-            "default_to_square",
-            "data_format",
-        }
-
-        for key in list(output_dict.keys()):
-            if key not in keys_to_keep:
-                output_dict[key] = None
-
-        return output_dict
+        processed_images = reorder_images(processed_groups, grouped_index)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_depth_estimation(self, outputs, target_sizes=None):
         """

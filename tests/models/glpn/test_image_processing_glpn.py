@@ -177,41 +177,24 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
         self.image_processing_class.num_channels = 3
 
-    def test_slow_fast_equivalence(self):
-        # Verify that the fast (torchvision) and slow (PIL) paths give identical pixel outputs
-        if self.fast_image_processing_class is None:
-            self.skipTest("TorchVision not available")
-
-        # Random RGB test image
-        image = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-        slow = self.image_processing_class(**self.image_processor_dict)
-        fast = self.fast_image_processing_class(**self.image_processor_dict)
-
-        out_slow = slow(images=image, return_tensors="pt")["pixel_values"]
-        out_fast = fast(images=image, return_tensors="pt")["pixel_values"]
-
-        torch.testing.assert_close(out_slow, out_fast, atol=1e-7, rtol=1e-5)
-
+    # override as glpn image processors don't support heterogeneous batching
+    @require_vision
+    @require_torch
     def test_slow_fast_equivalence_batched(self):
-        # Verify that fast and slow processors handle batched heterogeneous images identically
-        if self.fast_image_processing_class is None:
-            self.skipTest("TorchVision not available")
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        # Create batch of images with different resolutions
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        slow = self.image_processing_class(**self.image_processor_dict)
-        fast = self.fast_image_processing_class(**self.image_processor_dict)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        out_slow = slow(images=image_inputs, return_tensors="pt")["pixel_values"]
-        out_fast = fast(images=image_inputs, return_tensors="pt")["pixel_values"]
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        # Check shapes match (padding should make them equal)
-        self.assertEqual(out_slow.shape, out_fast.shape)
-
-        # Check pixel values are close
-        torch.testing.assert_close(out_slow, out_fast, atol=1e-1, rtol=1e-3)
-        self.assertLessEqual(torch.mean(torch.abs(out_slow - out_fast)).item(), 5e-3)
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     def test_post_process_depth_equivalence(self):
         # Check that both processors produce equivalent post-processed depth maps

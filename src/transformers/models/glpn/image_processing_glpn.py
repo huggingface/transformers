@@ -89,12 +89,14 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor: int = 32,
         resample=PILImageResampling.BILINEAR,
         do_rescale: bool = True,
+        rescale_factor: Optional[float] = 1 / 255,
         **kwargs,
     ) -> None:
         self.do_resize = do_resize
         self.do_rescale = do_rescale
         self.size_divisor = size_divisor
         self.resample = resample
+        self.rescale_factor = rescale_factor
         super().__init__(**kwargs)
 
     def resize(
@@ -155,6 +157,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor: Optional[int] = None,
         resample=None,
         do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -194,6 +197,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
 
@@ -230,30 +234,13 @@ class GLPNImageProcessor(BaseImageProcessor):
             ]
 
         if do_rescale:
-            images = [self.rescale(image, scale=1 / 255, input_data_format=input_data_format) for image in images]
+            images = [
+                self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images
+            ]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
-
-        if return_tensors:
-            shapes = {tuple(img.shape) for img in images}
-            if len(shapes) > 1:
-                max_height = max(img.shape[-2] for img in images)
-                max_width = max(img.shape[-1] for img in images)
-
-                padded_images = []
-                for img in images:
-                    h, w = img.shape[-2:]
-                    pad_h = max_height - h
-                    pad_w = max_width - w
-                    if pad_h > 0 or pad_w > 0:
-                        # Pad bottom and right to reach max dimensions
-                        # np.pad format: ((before, after), ...) for each dimension
-                        # For (C, H, W) format: no padding on channels, pad height and width
-                        img = np.pad(img, ((0, 0), (0, pad_h), (0, pad_w)), mode="constant", constant_values=0)
-                    padded_images.append(img)
-                images = padded_images
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
