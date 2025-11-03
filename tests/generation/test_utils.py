@@ -2056,7 +2056,6 @@ class GenerationTesterMixin:
 
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
-                import pdb;pdb.set_trace()
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
     def test_eager_padding_matches_padding_free_with_position_ids(self):

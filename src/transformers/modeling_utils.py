@@ -33,7 +33,7 @@ from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, List, Optional, Tuple, TypeVar, Union, get_type_hints
+from typing import Any, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
