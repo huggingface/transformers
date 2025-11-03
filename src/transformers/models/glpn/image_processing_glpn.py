@@ -78,6 +78,8 @@ class GLPNImageProcessor(BaseImageProcessor):
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Can be
             overridden by `do_rescale` in `preprocess`.
+        rescale_factor (`float`, *optional*, defaults to `1 / 255`):
+            The scaling factor to apply to the pixel values. Can be overridden by `rescale_factor` in `preprocess`.
     """
 
     model_input_names = ["pixel_values"]
