@@ -757,9 +757,16 @@ class ModelTesterMixin:
             new_model = model_class.from_pretrained(
                 pretrained_model_name_or_path=None, config=config, state_dict=state_dict
             )
-            assert model.state_dict().keys() == new_model.state_dict().keys()
-            for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(p1.shape == p2.shape)
+            new_state_dict = new_model.state_dict()
+            assert state_dict.keys() == new_state_dict.keys()
+            keys = state_dict.keys()
+            for k in keys:
+                p1, p2 = new_state_dict[k], state_dict[k]
+                torch.testing.assert_close(p1, p2)
+            new_params =  dict(new_model.named_parameters())
+            for k,v in list(model.named_parameters()):
+                with self.subTest(k):
+                    torch.testing.assert_close(v, new_params[k], msg=f"failed on {k}")
 
     def test_keep_in_fp32_modules(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
