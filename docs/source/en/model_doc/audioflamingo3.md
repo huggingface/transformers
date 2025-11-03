@@ -36,7 +36,7 @@ Highlights:
 - **Long-audio support via windowing and post-pool alignment (up to 10 minutes maximum).** The model processes audio in 30-second windows with a hard limit of 20 windows (10 minutes total). Audio longer than 10 minutes will be truncated.
 - Deterministic fusion that preserves sequence length by replacing `<sound>` tokens with audio embeddings.
 
-This model was contributed by [Lasha Koroshinadze](https://github.com/lashahub) and [Eric Bezzam](https://github.com/ebezzam).
+This model was contributed by [Lasha Koroshinadze](https://hf.co/lashahub) and [Eric Bezzam](https://hf.co/bezzam).
 
 ### Paper
 
