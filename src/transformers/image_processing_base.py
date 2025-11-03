@@ -364,7 +364,7 @@ class ImageProcessingMixin(PushToHubMixin):
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
         # remove _from_auto from kwargs before updating the image processor dict
         kwargs.pop("_from_auto", None)
-        image_processor_dict.update(kwargs)
+        image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         image_processor = cls(**image_processor_dict)
 
         # Remove kwargs that are used to initialize the image processor attributes
