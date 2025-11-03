@@ -565,6 +565,9 @@ jobs:
     name: Check report
     runs-on: ubuntu-22.04
     needs: check_new_failures
+    if: always()
     steps:
       - name: Install transformers
-        run: echo "${{ needs.check_new_failures.outputs.report }}"
+        run: |
+          echo "${{ needs.check_new_failures.result }}"
+          echo "${{ needs.check_new_failures.outputs.report }}"
