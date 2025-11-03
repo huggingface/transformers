@@ -396,10 +396,10 @@ class FP8Expert(nn.Module):
         Wd_out, Wd_in = self.hidden_dim, self.intermediate_dim
 
         self.gate_up_proj = nn.Parameter(
-            torch.empty(self.num_experts, Wg_out, Wg_in, dtype=FP8Expert.dtype, device=device)
+            torch.zeros(self.num_experts, Wg_out, Wg_in, dtype=FP8Expert.dtype, device=device)
         )
         self.down_proj = nn.Parameter(
-            torch.empty(self.num_experts, Wd_out, Wd_in, dtype=FP8Expert.dtype, device=device)
+            torch.zeros(self.num_experts, Wd_out, Wd_in, dtype=FP8Expert.dtype, device=device)
         )
 
         # Create inverse scale tiles only when using 1-byte types (fp8)
@@ -410,14 +410,14 @@ class FP8Expert(nn.Module):
             gu_scale_o = _ceil_div(Wg_out, bo)
             gu_scale_i = _ceil_div(Wg_in, bi)
             self.gate_up_proj_scales_inv = nn.Parameter(
-                torch.empty(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32, device=device)
+                torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32, device=device)
             )
 
             # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
             dp_scale_o = _ceil_div(Wd_out, bo)
             dp_scale_i = _ceil_div(Wd_in, bi)
             self.down_proj_scales_inv = nn.Parameter(
-                torch.empty(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32, device=device)
+                torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32, device=device)
             )
         else:
             # Match FP8Linear behavior when not using 1-byte weights
