@@ -21,8 +21,14 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from ...generation import BaseStreamer, GenerationConfig, GenerationMixin, LogitsProcessor, LogitsProcessorList
-from ...modeling_outputs import ModelOutput
+from ...generation import (
+    BaseStreamer,
+    GenerateDecoderOnlyOutput,
+    GenerationConfig,
+    GenerationMixin,
+    LogitsProcessor,
+    LogitsProcessorList,
+)
 from ...utils import logging
 
 
@@ -30,17 +36,19 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class VibeVoiceGenerationOutput(ModelOutput):
+class VibeVoiceGenerateOutput(GenerateDecoderOnlyOutput):
     """
-    Output type for VibeVoice generation.
-    
+    Outputs of VibeVoiceForConditionalGeneration.generate.
+
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. 
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         speech_outputs (`List[torch.FloatTensor]`, *optional*):
-            List of generated speech waveforms or latents for each speech segment.
+            List of generated speech waveforms for each speech segment.
+        reach_max_step_sample (`torch.BoolTensor`, *optional*):
+            Boolean tensor indicating which samples reached maximum generation steps.
     """
-    sequences: torch.LongTensor = None
     speech_outputs: Optional[list[torch.FloatTensor]] = None
     reach_max_step_sample: Optional[torch.BoolTensor] = None
 
@@ -204,30 +212,31 @@ class VibeVoiceGenerationMixin(GenerationMixin):
     def _build_generate_config_model_kwargs(self, generation_config, inputs, tokenizer, return_processors=False, **kwargs):
         if generation_config is None:
             generation_config = GenerationConfig(
-                bos_token_id=tokenizer.bos_token_id,
-                eos_token_id=tokenizer.eos_token_id,
-                pad_token_id = tokenizer.pad_token_id
+                # bos_token_id=tokenizer.bos_token_id,
+                # eos_token_id=tokenizer.eos_token_id,
+                # pad_token_id = tokenizer.pad_token_id
             )
         else:
             generation_config = GenerationConfig(
                 **generation_config,
-                bos_token_id=tokenizer.bos_token_id,
-                eos_token_id=tokenizer.eos_token_id,
-                pad_token_id = tokenizer.pad_token_id
+                # bos_token_id=tokenizer.bos_token_id,
+                # eos_token_id=tokenizer.eos_token_id,
+                # pad_token_id = tokenizer.pad_token_id
             )
 
         generation_config, model_kwargs = self._prepare_generation_config(
             generation_config,
             True,
-            speech_start_id=tokenizer.speech_start_id,
-            speech_end_id=tokenizer.speech_end_id,
-            speech_diffusion_id=tokenizer.speech_diffusion_id,
+            # speech_start_id=tokenizer.speech_start_id,
+            # speech_end_id=tokenizer.speech_end_id,
+            # speech_diffusion_id=tokenizer.speech_diffusion_id,
             **kwargs
         )
-        generation_config.speech_start_id = tokenizer.speech_start_id
-        generation_config.speech_end_id = tokenizer.speech_end_id
-        generation_config.speech_diffusion_id = tokenizer.speech_diffusion_id
 
+        # generation_config.speech_start_id = tokenizer.speech_start_id
+        # generation_config.speech_end_id = tokenizer.speech_end_id
+        # generation_config.speech_diffusion_id = tokenizer.speech_diffusion_id
+        
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(inputs, generation_config.bos_token_id, model_kwargs)
         batch_size = inputs_tensor.shape[0]
         device = self.device
@@ -282,21 +291,39 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         speech_input_mask: Optional[torch.BoolTensor] = None,   # TODO rename, this is to know where is speech in script
         cfg_scale: float = 1.0,
         **kwargs,
-    ) -> Union[torch.LongTensor, VibeVoiceGenerationOutput]:
+    ) -> Union[torch.LongTensor, VibeVoiceGenerateOutput]:
         """
-        Generates sequences of token ids and optionally speech outputs.
+        Generates sequences of token ids and speech outputs for VibeVoice models.
         
+        This method implements VibeVoice-specific generation that combines text generation with diffusion-based
+        speech synthesis. It supports streaming audio generation and classifier-free guidance for high-quality
+        speech output.
+
         Args:
-            All standard generation arguments from GenerationMixin
-            negative_prompt_ids: Negative prompt for CFG in speech generation
-            negative_prompt_attention_mask: Attention mask for negative prompt
-            speech_tensors: Input speech for voice cloning
-            speech_masks: Masks for speech tensors  
-            speech_input_mask: Positions to insert speech embeddings
-            cfg_scale: CFG scale for speech generation
- 
+            inputs (`torch.Tensor`, *optional*):
+                The sequence used as a prompt for the model.
+            generation_config (`GenerationConfig`, *optional*):
+                The generation configuration to be used as base parametrization for the generation call.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                Custom logits processors that complement the default logits processors.
+            audio_streamer (`AudioStreamer`, *optional*):
+                Streamer object for real-time audio generation streaming.
+            speech_tensors (`torch.FloatTensor`, *optional*):
+                Input speech tensors for voice cloning or conditioning.
+            speech_masks (`torch.BoolTensor`, *optional*):
+                Masks for speech tensors to ignore padded parts.
+            speech_input_mask (`torch.BoolTensor`, *optional*):
+                Mask indicating positions where speech tokens should be inserted.
+            cfg_scale (`float`, *optional*, defaults to 1.0):
+                Classifier-free guidance scale for speech generation quality control.
+            **kwargs:
+                Additional model-specific kwargs that will be forwarded to the model.
+
         Returns:
-            Generated token sequences and optionally speech outputs
+            [`VibeVoiceGenerateOutput`] or `torch.LongTensor`: A [`VibeVoiceGenerateOutput`] (if 
+            `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a 
+            `torch.LongTensor` containing the generated token sequences. When speech synthesis
+            is performed, also includes the generated audio waveforms.
         """
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
@@ -304,7 +331,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         max_length_times = kwargs.pop("max_length_times", 2)
 
         if kwargs.get('max_new_tokens') is None:
-            kwargs['max_new_tokens'] = self.config.decoder_config.max_position_embeddings - kwargs['input_ids'].shape[-1]
+            kwargs['max_new_tokens'] = self.config.text_config.max_position_embeddings - kwargs['input_ids'].shape[-1]
 
         generation_config, model_kwargs, input_ids, logits_processor = self._build_generate_config_model_kwargs(
             generation_config, inputs, tokenizer, return_processors=True, **kwargs
@@ -328,7 +355,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         correct_cnt = torch.zeros(batch_size, dtype=torch.long, device=device)
         is_prefill = True
         inputs_embeds = None
-        verbose = kwargs.get("verbose", False)
 
         # Initialize audio chunks storage for each sample
         audio_chunks = [[] for _ in range(batch_size)]
@@ -355,7 +381,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         max_step_per_sample = torch.min(generation_config.max_length - initial_length_per_sample, (max_length_times * initial_length_per_sample).long())
         reach_max_step_sample = torch.zeros(batch_size, dtype=torch.bool, device=device)
 
-        # Create progress iterator if verbose
+        # Create progress iterator
         # TODO (ebezzam) remove from final?
         if kwargs.get("show_progress_bar", True):
             progress_bar = tqdm(range(max_steps), desc="Generating", leave=False)
@@ -367,8 +393,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             # Check if audio_streamer has been ended (stopped externally)
             if audio_streamer is not None and hasattr(audio_streamer, 'finished_flags'):
                 if any(audio_streamer.finished_flags):
-                    if verbose:
-                        print(f"Audio generation stopped externally at step {step + 1}")
                     break
 
             if finished_tags.all():
@@ -432,8 +456,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 new_eos_indices = eos_indices[~finished_tags[eos_indices]]
                 if new_eos_indices.numel() > 0:
                     finished_tags[new_eos_indices] = True
-                    if verbose:
-                        print(f"Samples {new_eos_indices.tolist()} reached EOS token at step {step + 1}.", flush=True)
+                    # TODO (ebezzam) for debugging, remove for final
+                    print(f"Samples {new_eos_indices.tolist()} reached EOS token at step {step + 1}.", flush=True)
                     if audio_streamer is not None:
                         audio_streamer.end(new_eos_indices)
 
@@ -443,13 +467,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             if new_max_length_indices.numel() > 0:
                 finished_tags[new_max_length_indices] = True
                 reach_max_step_sample[new_max_length_indices] = True
-                if verbose:
-                    print(f"Samples {new_max_length_indices.tolist()} reached max generation length at step {step + 1}.", flush=True)
                 if audio_streamer is not None:
                     audio_streamer.end(new_max_length_indices)
-
-            # speech_end
-            diffusion_end_indices = (next_tokens == generation_config.speech_end_id).nonzero(as_tuple=False).squeeze(1)
 
             # speech_begin
             diffusion_start_indices = torch.arange(batch_size, device=device)[~finished_tags & (next_tokens == generation_config.speech_start_id)]
@@ -609,7 +628,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 # If no audio was generated for this sample, append None
                 final_audio_outputs.append(None)
 
-        return VibeVoiceGenerationOutput(
+        return VibeVoiceGenerateOutput(
             sequences=input_ids,
             speech_outputs=final_audio_outputs,
             reach_max_step_sample=reach_max_step_sample,
