@@ -2588,8 +2588,8 @@ class ModelTesterMixin:
                         ]
                     # Usually we have only 1, but swiftformer and deit have 2 Linear layers using `num_labels`
                     mismatched_modules = [name for name, module in top_linear_modules if module.out_features == 42]
-                    old = model.named_parameters()
-                    new = new_model.named_parameters()
+                    old = dict(model.named_parameters())
+                    new = dict(new_model.named_parameters())
                     assert dict(old).keys() == dict(new).keys()
                     for k1 in new.keys():
                         k2 = k1
