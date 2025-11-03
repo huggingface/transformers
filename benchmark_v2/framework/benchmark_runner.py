@@ -276,6 +276,7 @@ class BenchmarkRunner:
                 "config": config,
             }
 
+    # TODO: refactor `generate_batch` to handle streaming so we can use it here
     def time_generate_batch(
         self,
         max_new_tokens: int,
@@ -285,10 +286,9 @@ class BenchmarkRunner:
             gpu_monitor.start()
         config = GenerationConfig(
             max_new_tokens=max_new_tokens,
-            use_cuda_graphs=False,
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
-            do_sample=False,
+            do_sample=True,
         )
         manager = self.model.init_continuous_batching(config)
         manager.start()
@@ -301,11 +301,11 @@ class BenchmarkRunner:
         num_requests = len(inputs)
         finished_requests = 0
         while finished_requests < num_requests:
-            timestamps.append(time.perf_counter() - wall_time_0)
             # NOTE: I don't like having the extra if stmt here, but hopefully won't degrade perf too much
             result = manager.get_result()
             if result:
-                if result.status == RequestStatus.FINISHED:
+                timestamps.append(time.perf_counter() - wall_time_0)
+                if result.is_finished():
                     finished_requests += 1
                 if first_req_id is None:
                     first_req_id = result.request_id
