@@ -59,7 +59,7 @@ from .base import (
     get_default_model_and_revision,
     load_model,
 )
-from .deprecated.text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
+from .deprecated import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
