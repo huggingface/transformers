@@ -139,7 +139,7 @@ class CohereConfig(PreTrainedConfig):
         bos_token_id: Optional[int] = 5,
         eos_token_id: Optional[int] = 255001,
         tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         use_qk_norm: Optional[bool] = False,

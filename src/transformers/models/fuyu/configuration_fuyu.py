@@ -118,7 +118,7 @@ class FuyuConfig(PreTrainedConfig):
         layer_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         qk_layernorm: Optional[bool] = True,
         hidden_dropout: Optional[float] = 0.0,
         attention_dropout: Optional[float] = 0.0,
