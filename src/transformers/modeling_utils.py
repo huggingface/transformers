@@ -4281,10 +4281,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
-        # Make sure to tie the weights correctly
-        # if model.config.tie_word_embeddings:
-        model.tie_weights()
-
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
@@ -4292,7 +4288,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             hf_quantizer.preprocess_model(
                 model=model,
                 device_map=device_map,
-                keep_in_fp32_modules=model._keep_in_fp32_modules,
+                keep_in_fp32_modules=model._keep_in_fp32_modules, # TODO prob no longer needed?
                 config=config,
                 checkpoint_files=checkpoint_files,
                 use_kernels=use_kernels,
@@ -4327,13 +4323,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weight_mapping=weight_conversions,
         )
 
-        model.tie_weights()  # make sure token embedding weights are still tied if needed ?????
         model.eval()  # Set model in evaluation mode to deactivate DropOut modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
-        if model.can_generate() and hasattr(model, "adjust_generation_fn"):
+        if model.can_generate() and hasattr(model, "adjust_generation_fn") and trust_remote_code:
             model.adjust_generation_fn(
                 generation_config,
                 from_auto_class,
@@ -4344,17 +4339,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 **kwargs,
             )
 
-        # for device_map="auto" : dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
-        # harm performances). TODO: replace with native PP
+        # for device_map="auto" : dispatch model with hooks on all devices if necessary
         if device_map is not None and device_mesh is None:
             accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers)
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
-            hf_quantizer.postprocess_model(model, config=config)  # usually a no-op
+            hf_quantizer.postprocess_model(model, config=config)  # usually a no-op but sometimes needed
 
         if _adapter_model_path is not None:
-            adapter_kwargs["key_mapping"] = key_mapping  # TODO: Dynamic weight loader for adapters
+            adapter_kwargs["key_mapping"] = weight_conversions  # TODO: Dynamic weight loader for adapters
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
@@ -4489,6 +4483,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
 
+        # TODO last TODO here is to tie the weights once and only. If they are missing and False, and if true
+        
+        # TODO TODO TODO
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
         miss_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
@@ -4817,6 +4814,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         additional_unexpected_patterns = [r"rotary_emb\.inv_freq"] if has_inv_freq_buffers else []
         tied_param_names = "|".join(model._tied_weights_keys or [])
         if tied_param_names:
+            model.tie_weights()
             if model.config.tie_word_embeddings:
                 for k in missing_keys.copy():
                     if re.match(tied_param_names, k):
