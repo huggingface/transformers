@@ -343,19 +343,30 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_features_mask: Optional[torch.Tensor] = None,
     ):
         r"""
         Args:
             input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
                 Log-Mel features extracted from raw audio. Use the processor/feature extractor to compute and pad
                 these features from waveform input.
-            attention_mask (`torch.FloatTensor` of shape `(batch_size, 1, S, S)`, *optional*):
-                Unlike Whisper, the attention_mask is used within the encoder layers. They represent
-                pre-pool attention masks on the time axis, with `0` on valid positions and `-inf` on
-                padded positions (added to attention logits). If `None`, full attention is used. Here `S` is the
-                sequence length after the conv front-end (typically `ceil(T_mel/2)`).
+            input_features_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding feature indices. Unlike Whisper, this mask is used
+                within the encoder layers to create attention masks on the time axis, with `1` for valid positions
+                and `0` for padded positions. If `None`, full attention is used. The mask is applied after the
+                conv front-end downsampling (resulting in sequence length `ceil(T_mel/2)`).
         """
+
+        # Prepare attention mask for transformer layers
+        batch_size = input_features.shape[0]
+        seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
+        encoder_attention_mask = eager_mask(
+            batch_size=batch_size,
+            cache_position=torch.arange(seq_len, device=input_features.device),
+            kv_length=seq_len,
+            mask_function=padding_mask_function(input_features_mask),
+            dtype=self.conv1.weight.dtype,
+        )
 
         # Conv front-end
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
@@ -371,7 +382,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         for layer in self.layers:
             drop = self.training and torch.rand([]) < self.layerdrop
             if not drop:
-                hidden_states = layer(hidden_states, attention_mask)[0]
+                hidden_states = layer(hidden_states, encoder_attention_mask)[0]
 
         # AvgPool (time/2) + LayerNorm
         hidden_states = hidden_states.permute(0, 2, 1)
@@ -473,19 +484,9 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             `torch.FloatTensor`:
                 The audio embeddings.
         """
-        # Prepare attention mask for transformer layers
-        batch_size = input_features.shape[0]
-        seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
-        encoder_attention_mask = eager_mask(
-            batch_size=batch_size,
-            cache_position=torch.arange(seq_len, device=input_features.device),
-            kv_length=seq_len,
-            mask_function=padding_mask_function(input_features_mask),
-            dtype=self.audio_tower.conv1.weight.dtype,
-        )
 
         # Encode audio
-        encoder_output = self.audio_tower(input_features, attention_mask=encoder_attention_mask)
+        encoder_output = self.audio_tower(input_features, input_features_mask=input_features_mask)
         audio_embeds = self.multi_modal_projector(encoder_output.last_hidden_state)
 
         # Mask according to avg pooling (which is after attention blocks)
