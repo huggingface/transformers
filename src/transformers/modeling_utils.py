@@ -15,7 +15,6 @@
 # limitations under the License.
 import collections
 import copy
-import fnmatch
 import functools
 import gc
 import importlib.metadata
@@ -697,63 +696,6 @@ def _load_state_dict_into_meta_model(
 
     return disk_offload_index
 
-
-def load_shard_file(args):
-    (
-        shard_file,
-        state_dict,
-        disk_only_shard_files,
-        is_quantized,
-        device_map,
-        hf_quantizer,
-        key_renaming_mapping,
-        weights_only,
-        model,
-        reverse_key_renaming_mapping,
-        disk_offload_folder,
-        disk_offload_index,
-        device_mesh,
-    ) = args
-
-    # Skip the load for shards that only contain disk-offloaded weights
-    if shard_file in disk_only_shard_files:
-        return [], disk_offload_index
-
-    map_location = "cpu"
-    if shard_file.endswith(".safetensors") and not (is_deepspeed_zero3_enabled() and not is_quantized):
-        map_location = "meta"
-
-    # If shard_file is "", we use the existing state_dict instead of loading it
-    if shard_file != "":
-        state_dict = load_state_dict(
-            shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
-        )
-
-    # Fix the key names
-    state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
-
-
-def load_shard_files_with_threadpool(args_list):
-    num_workers = int(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
-
-    # Do not spawn anymore workers than you need
-    num_workers = min(len(args_list), num_workers)
-
-    logger.info(f"Loading model weights in parallel with {num_workers} workers...")
-
-    error_msgs = []
-
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        with logging.tqdm(total=len(args_list), desc="Loading checkpoint shards") as pbar:
-            futures = [executor.submit(load_shard_file, arg) for arg in args_list]
-            for future in as_completed(futures):
-                _error_msgs, disk_offload_index = future.result()
-
-                error_msgs += _error_msgs
-
-                pbar.update(1)
-
-    return error_msgs, disk_offload_index
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
@@ -1755,15 +1697,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
-        # Make sure the requested fp32 modules exist when the flag is active, supporting glob-style patterns.
-        if self._keep_in_fp32_modules is not None or self._keep_in_fp32_modules_strict is not None:
-            all_parameters = {name for name, _ in self.named_parameters() if len(name) > 0}
-            unique_module_names = set()
-            # Get all unique module names in the module graph, without the prefixes
-            for param in all_parameters:
-                unique_module_names.update(
-                    [name for name in param.split(".") if not name.isnumeric() and name not in ["weight", "bias"]]
-                )
 
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
@@ -2544,7 +2477,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if hasattr(module, "bias") and module.bias is not None:
                     module.bias.data.zero_()
         except Exception as e:
-            logger.warning_once(f"Failed to init: {str(e)}")
+            logger.warning(f"Failed to init: {str(e)}")
 
     def _initialize_weights(self, module):
         """
@@ -2555,30 +2488,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._init_weights(module)
         module._is_hf_initialized = True
 
-    def _init_parameter(self, parameter: nn.Parameter, parameter_name: str, module: nn.Module, module_name: str):
-        """
-        Initialize a standalone parameter registered on a module.
-
-        The default implementation only targets parameters that are registered directly on the current
-        `PreTrainedModel` (i.e. `module is self`). Sub-classes can override this method if they need finer control
-        based on the parameter name or owning module.
-        """
-        if module is not self:
-            return
-
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range or 0.02
-        else:
-            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-
-        parameter.data.normal_(mean=0.0, std=std)
-
     @torch.no_grad()
     def initialize_weights(self):
         """
-        Iteratively initialize the modules and parameters of the model without relying on recursive helpers.
-        The traversal keeps track of the owning `PreTrainedModel` so that composite architectures dispatch to the
-        correct `_init_weights` definition while also giving access to parameter names.
+        This is equivalent to calling `self.apply(self._initialize_weights)`, but correctly handles composite models.
+        This function dynamically dispatches the correct `init_weights` function to the modules as we advance in the
+        module graph along the recursion. It can handle an arbitrary number of sub-models. Without it, every composite
+        model would have to recurse a second time on all sub-models explicitly in the outer-most `_init_weights`, which
+        is extremely error prone and inefficient.
 
         Note that the `torch.no_grad()` decorator is very important as well, as most of our `_init_weights` do not use
         `torch.nn.init` functions (which are all no_grad by default), but simply do in-place ops such as
@@ -4839,9 +4756,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 value = torch.empty_like(param, dtype=dtype, device="cpu")
                 if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
-                else:
-                    # hf_quantizer.create_quantized_param(self, value, key, "cpu")
-                    pass
 
     def _initialize_missing_keys(self, missing_keys: list[str], is_quantized: bool) -> None:
         """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
