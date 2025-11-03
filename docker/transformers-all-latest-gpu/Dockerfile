@@ -13,7 +13,7 @@ ARG PYTORCH='2.9.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 
-# This needs to be compatible with the above `PYTORCH`.
+# This needs to be compatible with the above `PYTORCH`. Let's use cpu version for now.
 ARG TORCHCODEC='0.8.0'
 
 ARG FLASH_ATTN='false'
