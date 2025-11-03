@@ -161,7 +161,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         use_bias: Optional[int] = False,
         moe_intermediate_size: Optional[int] = 1536,
         moe_k: Optional[int] = 6,

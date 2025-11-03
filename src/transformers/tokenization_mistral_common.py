@@ -1378,7 +1378,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = False,
+        return_dict: bool = True,
         **kwargs,
     ) -> Union[str, list[int], list[str], list[list[int]], BatchEncoding]:
         """
@@ -1864,8 +1864,6 @@ class MistralCommonTokenizer(PushToHubMixin):
         Returns:
             A tuple of `str`: The files saved.
         """
-        # `save_jinja_files`` must be skipped to be able to save from a processor
-        kwargs.pop("save_jinja_files", None)
         if kwargs:
             raise ValueError(
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.save_pretrained`."

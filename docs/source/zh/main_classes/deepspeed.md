@@ -1206,7 +1206,7 @@ DeepSpeed支持`LRRangeTest`、`OneCycle`、`WarmupLR`和`WarmupDecayLR`学习�
 - 通过 `--lr_scheduler_type constant_with_warmup` 实现 `WarmupLR`
 - 通过 `--lr_scheduler_type linear` 实现 `WarmupDecayLR`。这也是 `--lr_scheduler_type` 的默认值，因此，如果不配置调度器，这将是默认配置的调度器。
 
-如果在配置文件中不配置 `scheduler` 条目，[`Trainer`] 将使用 `--lr_scheduler_type`、`--learning_rate` 和 `--warmup_steps` 或 `--warmup_ratio` 的值来配置其🤗 Transformers 版本。
+如果在配置文件中不配置 `scheduler` 条目，[`Trainer`] 将使用 `--lr_scheduler_type`、`--learning_rate` 和 `--warmup_steps` 的值来配置其🤗 Transformers 版本。
 
 以下是 `WarmupLR` 的自动配置示例：
 
@@ -1227,7 +1227,7 @@ DeepSpeed支持`LRRangeTest`、`OneCycle`、`WarmupLR`和`WarmupDecayLR`学习�
 
 - `warmup_min_lr` 的值为 `0`。
 - `warmup_max_lr` 的值为 `--learning_rate`。
-- `warmup_num_steps` 的值为 `--warmup_steps`（如果提供）。否则，将使用 `--warmup_ratio` 乘以训练步骤的数量，并四舍五入。
+- `warmup_num_steps` 的值为 `--warmup_steps`（如果提供）。
 - `total_num_steps` 的值为 `--max_steps` 或者如果没有提供，将在运行时根据环境、数据集的大小和其他命令行参数（对于 `WarmupDecayLR` 来说需要）自动推导。
 
 当然，您可以接管任何或所有的配置值，并自行设置这些值：

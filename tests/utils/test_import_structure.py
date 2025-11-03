@@ -132,7 +132,7 @@ class TestImportStructures(unittest.TestCase):
             "models": {
                 frozenset(): {"dummy_config": {"DummyConfig"}},
                 "albert": {
-                    frozenset(): {"configuration_albert": {"AlbertConfig", "AlbertOnnxConfig"}},
+                    frozenset(): {"configuration_albert": {"AlbertConfig"}},
                     frozenset({"torch"}): {
                         "modeling_albert": {
                             "AlbertForMaskedLM",
@@ -174,7 +174,7 @@ class TestImportStructures(unittest.TestCase):
             frozenset(): {
                 "dummy_non_model": {"DummyObject"},
                 "models.dummy_config": {"DummyConfig"},
-                "models.albert.configuration_albert": {"AlbertConfig", "AlbertOnnxConfig"},
+                "models.albert.configuration_albert": {"AlbertConfig"},
                 "models.llama.configuration_llama": {"LlamaConfig"},
                 "models.deprecated.transfo_xl.configuration_transfo_xl": {"TransfoXLConfig"},
                 "models.deprecated.transfo_xl.tokenization_transfo_xl": {"TransfoXLCorpus", "TransfoXLTokenizer"},
