@@ -208,6 +208,7 @@ class MinistralIntegrationTest(unittest.TestCase):
 
         self.assertEqual(export_generated_text, eager_generated_text)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @slow
     def test_past_sliding_window_generation(self):
