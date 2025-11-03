@@ -61,8 +61,15 @@ class DynamoExporter(HfExporter):
 
         if isinstance(model, GenerationMixin) and model.config.use_cache:
             register_dynamic_cache_for_export()
-            # NOTE: for now i'm creating it here reduces to reduce user burden
-            kwargs["past_key_values"] = model(**kwargs).past_key_values
+
+            if "past_key_values" not in kwargs:
+                logger.info(
+                    "OnnxExporter detected an auto-regressive model with use_cache=True but no past_key_values in sample_inputs. "
+                    "Generating a dummy past_key_values for export requires running a forward pass which may be time-consuming. "
+                    "You can also provide past_key_values in sample_inputs to avoid this step."
+                )
+                # NOTE: for now i'm creating it here to reduce user burden
+                kwargs["past_key_values"] = model(**kwargs).past_key_values
 
         if self.export_config.dynamic and dynamic_shapes is None:
             # assigns AUTO to all axes to let torch.onnx decide
