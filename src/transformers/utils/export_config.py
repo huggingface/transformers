@@ -44,47 +44,31 @@ class ExportConfigMixin:
     export_format: ExportFormat
 
     @classmethod
-    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
+    def from_dict(cls, config_dict):
         """
         Instantiates a [`ExportConfigMixin`] from a Python dictionary of parameters.
 
         Args:
             config_dict (`dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object.
-            return_unused_kwargs (`bool`,*optional*, defaults to `False`):
-                Whether or not to return a list of unused keyword arguments. Used for `from_pretrained` method in
-                `PreTrainedModel`.
-            kwargs (`dict[str, Any]`):
-                Additional parameters from which to initialize the configuration object.
 
         Returns:
             [`ExportConfigMixin`]: The configuration object instantiated from those parameters.
         """
         config = cls(**config_dict)
-
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-
-        if return_unused_kwargs:
-            return config, kwargs
-        else:
-            return config
+        return config
 
     def to_dict(self) -> dict[str, Any]:
         """
-        Serializes this instance to a Python dictionary. Returns:
+        Serializes this instance to a Python dictionary.
+
+        Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return copy.deepcopy(self.__dict__)
 
     def __iter__(self):
-        """allows `dict(obj)` for situations where obj may be a dict or an ExportConfigMixin instance."""
-        for attr, value in copy.deepcopy(self.__dict__).items():
+        for attr, value in self.to_dict().items():
             yield attr, value
 
 
