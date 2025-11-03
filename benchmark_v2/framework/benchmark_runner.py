@@ -296,7 +296,7 @@ class BenchmarkRunner:
         timestamps = []
         wall_time_0 = time.perf_counter()
         inputs = self.inputs["input_ids"].tolist()
-        manager.add_requests(inputs, max_new_tokens=max_new_tokens, stream=True)
+        manager.add_requests(inputs, max_new_tokens=max_new_tokens, streaming=True)
         first_req_id = None
         num_requests = len(inputs)
         finished_requests = 0
