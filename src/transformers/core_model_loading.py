@@ -572,7 +572,7 @@ def convert_and_load_state_dict_in_model(
                     shard_index,
                 )
 
-        if future is None:  # If not TP, async materialize the tensors. TODO probably need a check for To() op.
+        if future is None:  # If not TP, async materialize the tensors. TODO handle disk offload?
             future = spawn_materialize(thread_pool, _file_semaphore, file_id, tensor)
         entry.collected_tensors[target_key].setdefault(converter_key, []).append(future)
 

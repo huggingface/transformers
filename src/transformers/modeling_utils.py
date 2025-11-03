@@ -1777,7 +1777,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if module not in unique_module_names:
                         raise ValueError(
                             f"{module} was specified in the `_keep_in_fp32_modules_strict` list, but is not part of the modules in"
-                            f" {self.__class__.__name__}"
+                            f" {self.__class__.__name__}: unique_module_name"
                         )
 
         self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
@@ -4425,7 +4425,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weight_mapping=weight_conversions,
         )
 
-        # model.tie_weights()  # make sure token embedding weights are still tied if needed ?????
+        model.tie_weights()  # make sure token embedding weights are still tied if needed ?????
         model.eval()  # Set model in evaluation mode to deactivate DropOut modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
@@ -4508,6 +4508,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
+
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys())
         if logger.level >= logging.WARNING:
@@ -4549,6 +4550,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         device = device_map.get("", "cpu")
                         if isinstance(device, torch.device):
                             device = device.index  # safetensors only
+                    if device == "disk":
+                        device = "cpu" # we read to cpu to then write to disk
                     file_pointer = safe_open(
                         os.path.join(checkpoint_files[0].rsplit("/", 1)[0], v), framework="pt", device=device
                     )
